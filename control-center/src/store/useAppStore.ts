@@ -84,7 +84,7 @@ interface Store extends AppState {
   selectBest: () => void;
 
   // groups
-  addGroup: (name: string) => void;
+  addGroup: (name: string) => string;
   renameGroup: (id: string, name: string) => void;
   removeGroup: (id: string) => void;
 
@@ -562,7 +562,9 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     addGroup(name) {
-      patch((s) => ({ groups: [...s.groups, { id: uid(), name }] }));
+      const id = uid();
+      patch((s) => ({ groups: [...s.groups, { id, name }] }));
+      return id;
     },
     renameGroup(id, name) {
       patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
