@@ -59,6 +59,16 @@ const zh = {
   "activity.pingComplete": "测速完成 · {count} 个配置",
   "activity.bestSelected": "已选最优配置 · {remarks}",
   "activity.backupRestored": "备份已恢复",
+  "activity.speedTestComplete": "测速完成 · {count} 个配置",
+  "activity.unreachableRemoved": plural("count", {
+    one: "已删除 # 个不可达配置",
+    other: "已删除 # 个不可达配置",
+  }),
+  "activity.duplicatesRemoved": plural("count", {
+    one: "已删除 # 个重复",
+    other: "已删除 # 个重复",
+  }),
+  "activity.assetDownloaded": "资源已更新 · {name}",
   "time.now": "刚刚",
   "time.ago": "{n}{unit}前",
   "time.unit.s": "秒",

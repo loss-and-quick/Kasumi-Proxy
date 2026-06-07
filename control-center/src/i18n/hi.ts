@@ -62,6 +62,13 @@ const hi = {
   "activity.pingComplete": "पिंग पूर्ण · {count} प्रोफ़ाइलें",
   "activity.bestSelected": "सर्वश्रेष्ठ प्रोफ़ाइल चुनी · {remarks}",
   "activity.backupRestored": "बैकअप पुनर्स्थापित",
+  "activity.speedTestComplete": "स्पीड टेस्ट पूर्ण · {count} प्रोफ़ाइलें",
+  "activity.unreachableRemoved": plural("count", {
+    one: "# अपहुँच प्रोफ़ाइल हटाई",
+    other: "# अपहुँच प्रोफ़ाइलें हटाई",
+  }),
+  "activity.duplicatesRemoved": plural("count", { one: "# डुप्लिकेट हटाया", other: "# डुप्लिकेट हटाए" }),
+  "activity.assetDownloaded": "संसाधन अपडेट · {name}",
   "time.now": "अभी",
   "time.ago": "{n}{unit} पहले",
   "time.unit.s": "से",

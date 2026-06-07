@@ -60,6 +60,16 @@ const vi = {
   "activity.pingComplete": "Ping hoàn tất · {count} hồ sơ",
   "activity.bestSelected": "Đã chọn hồ sơ tốt nhất · {remarks}",
   "activity.backupRestored": "Đã khôi phục bản sao lưu",
+  "activity.speedTestComplete": "Kiểm tra tốc độ xong · {count} hồ sơ",
+  "activity.unreachableRemoved": plural("count", {
+    one: "Đã xóa # hồ sơ không thể kết nối",
+    other: "Đã xóa # hồ sơ không thể kết nối",
+  }),
+  "activity.duplicatesRemoved": plural("count", {
+    one: "Đã xóa # bản trùng",
+    other: "Đã xóa # bản trùng",
+  }),
+  "activity.assetDownloaded": "Đã cập nhật tài nguyên · {name}",
   "time.now": "vừa xong",
   "time.ago": "{n}{unit} trước",
   "time.unit.s": "s",

@@ -64,6 +64,16 @@ const en = {
   "activity.pingComplete": "Ping complete · {count} profiles",
   "activity.bestSelected": "Best profile selected · {remarks}",
   "activity.backupRestored": "Backup restored",
+  "activity.speedTestComplete": "Speed test complete · {count} profiles",
+  "activity.unreachableRemoved": plural("count", {
+    one: "Removed # unreachable profile",
+    other: "Removed # unreachable profiles",
+  }),
+  "activity.duplicatesRemoved": plural("count", {
+    one: "Removed # duplicate",
+    other: "Removed # duplicates",
+  }),
+  "activity.assetDownloaded": "Asset updated · {name}",
   "time.now": "now",
   "time.ago": "{n}{unit} ago",
   "time.unit.s": "s",

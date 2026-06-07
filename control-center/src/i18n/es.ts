@@ -63,6 +63,16 @@ const es = {
   "activity.pingComplete": "Ping completado · {count} perfiles",
   "activity.bestSelected": "Mejor perfil seleccionado · {remarks}",
   "activity.backupRestored": "Copia de seguridad restaurada",
+  "activity.speedTestComplete": "Test de velocidad completo · {count} perfiles",
+  "activity.unreachableRemoved": plural("count", {
+    one: "Eliminado # perfil inalcanzable",
+    other: "Eliminados # perfiles inalcanzables",
+  }),
+  "activity.duplicatesRemoved": plural("count", {
+    one: "Eliminado # duplicado",
+    other: "Eliminados # duplicados",
+  }),
+  "activity.assetDownloaded": "Recurso actualizado · {name}",
   "time.now": "ahora",
   "time.ago": "hace {n}{unit}",
   "time.unit.s": "s",
