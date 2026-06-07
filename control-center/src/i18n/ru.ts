@@ -113,6 +113,8 @@ const ru = {
   "profiles.filterAll": "Все",
   "profiles.sortName": "Имя",
   "profiles.sortPing": "Пинг",
+  "profiles.filterGroup": "Группа",
+  "profiles.filterSort": "Сортировка",
   "profiles.bulkSelected": "Выбрано:",
   "profiles.bulkPing": "Пинговать выбранные",
   "profiles.bulkShare": "Поделиться выбранными",

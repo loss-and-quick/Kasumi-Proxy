@@ -161,6 +161,8 @@ const ar = {
   "profiles.filterAll": "الكل",
   "profiles.sortName": "الاسم",
   "profiles.sortPing": "Ping",
+  "profiles.filterGroup": "المجموعة",
+  "profiles.filterSort": "الترتيب",
   "profiles.bulkSelected": "المحدد:",
   "profiles.bulkPing": "اختبار Ping للمحدد",
   "profiles.bulkShare": "مشاركة المحدد",

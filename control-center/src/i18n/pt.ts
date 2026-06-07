@@ -105,6 +105,8 @@ const pt = {
   "profiles.filterAll": "Todos",
   "profiles.sortName": "Nome",
   "profiles.sortPing": "Ping",
+  "profiles.filterGroup": "Grupo",
+  "profiles.filterSort": "Ordenar",
   "profiles.bulkSelected": "Selecionados:",
   "profiles.bulkPing": "Testar ping dos selecionados",
   "profiles.bulkShare": "Compartilhar selecionados",

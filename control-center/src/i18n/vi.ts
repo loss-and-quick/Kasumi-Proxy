@@ -102,6 +102,8 @@ const vi = {
   "profiles.filterAll": "Tất cả",
   "profiles.sortName": "Tên",
   "profiles.sortPing": "Ping",
+  "profiles.filterGroup": "Nhóm",
+  "profiles.filterSort": "Sắp xếp",
   "profiles.bulkSelected": "Đã chọn:",
   "profiles.bulkPing": "Ping mục đã chọn",
   "profiles.bulkShare": "Chia sẻ mục đã chọn",
