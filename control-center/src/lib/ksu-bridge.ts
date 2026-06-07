@@ -224,11 +224,18 @@ export const ksuBridge: Bridge = {
   },
   onStatus(cb) {
     // No push channel from shell; poll periodically.
+    // Guard against overlapping: if the previous status call is still in flight
+    // (blocked behind a long-running exec), skip this tick instead of queuing.
+    let polling = false;
     const t = setInterval(async () => {
+      if (polling) return;
+      polling = true;
       try {
         cb(await this.status());
       } catch {
         /* ignore transient errors */
+      } finally {
+        polling = false;
       }
     }, 1000);
     return () => clearInterval(t);
