@@ -2,7 +2,7 @@
 // features/subscriptions/Subscriptions.tsx
 // Manage remote profile sources.
 // ============================================================
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AppBar,
   Btn,
@@ -28,6 +28,7 @@ export default function Subscriptions() {
   const removeSub = useAppStore((s) => s.removeSub);
   const updateSub = useAppStore((s) => s.updateSub);
   const updateAllSubs = useAppStore((s) => s.updateAllSubs);
+  const addGroup = useAppStore((s) => s.addGroup);
   const t = useT();
 
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
@@ -93,7 +94,8 @@ export default function Subscriptions() {
       <SubEditSheet
         open={!!edit}
         sub={edit === "new" ? null : edit}
-        groupOptions={groups.map((g) => ({ value: g.id, label: g.name }))}
+        onNewGroup={addGroup}
+        defaultGroupId={groups[0]?.id ?? "g-main"}
         onClose={() => setEdit(null)}
         onSave={(data) => {
           upsertSub(data);
@@ -271,17 +273,27 @@ function SubEditSheet({
   sub,
   onClose,
   onSave,
-  groupOptions,
+  onNewGroup,
+  defaultGroupId,
 }: {
   open: boolean;
   sub: Subscription | null;
   onClose: () => void;
   onSave: (sub: Subscription) => void;
-  groupOptions: Array<{ value: string; label: string }>;
+  onNewGroup: (name: string) => string;
+  defaultGroupId: string;
 }) {
   const t = useT();
+  const groups = useAppStore((s) => s.groups);
+  const groupOptions = groups.map((g) => ({ value: g.id, label: g.name }));
   const [d, setD] = useState<Subscription | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [newGroupName, setNewGroupName] = useState<string | null>(null);
+  const newGroupInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (newGroupName !== null) newGroupInputRef.current?.focus();
+  }, [newGroupName]);
 
   useEffect(() => {
     if (open) {
@@ -295,7 +307,7 @@ function SubEditSheet({
               userAgent: "",
               filter: "",
               enabled: true,
-              groupId: groupOptions[0]?.value ?? "g-main",
+              groupId: defaultGroupId,
               autoUpdate: false,
               interval: 6,
               allowInsecure: false,
@@ -305,7 +317,7 @@ function SubEditSheet({
             },
       );
     }
-  }, [open, sub, groupOptions]);
+  }, [open, sub, defaultGroupId]);
 
   if (!open || !d) return null;
   const set = <K extends keyof Subscription>(k: K, v: Subscription[K]) =>
@@ -359,17 +371,47 @@ function SubEditSheet({
         error={errors.url}
       />
       <div className="field-label">{t("subs.edit.targetGroup")}</div>
-      <select
-        className="select-box"
-        value={d.groupId ?? groupOptions[0]?.value ?? "g-main"}
-        onChange={(e) => set("groupId", e.target.value)}
-      >
-        {groupOptions.map((g) => (
-          <option key={g.value} value={g.value}>
-            {g.label}
-          </option>
-        ))}
-      </select>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        {newGroupName !== null ? (
+          <input
+            ref={newGroupInputRef}
+            className="input"
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            onBlur={() => {
+              const name = newGroupName.trim();
+              if (name) set("groupId", onNewGroup(name));
+              setNewGroupName(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              }
+              if (e.key === "Escape") setNewGroupName(null);
+            }}
+            style={{ flex: 1 }}
+          />
+        ) : (
+          <select
+            className="select-box"
+            value={d.groupId ?? groupOptions[0]?.value ?? "g-main"}
+            onChange={(e) => set("groupId", e.target.value)}
+            style={{ flex: 1 }}
+          >
+            {groupOptions.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        )}
+        <IconBtn
+          name={newGroupName !== null ? "close" : "add"}
+          title={t("profiles.add.newGroup")}
+          onClick={() => setNewGroupName(newGroupName !== null ? null : "")}
+          onMouseDown={(e) => e.preventDefault()}
+        />
+      </div>
       <div className="input-row" style={{ marginBottom: 14, marginTop: 14 }}>
         <Field
           label={t("subs.edit.userAgent")}

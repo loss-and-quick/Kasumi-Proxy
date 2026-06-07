@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 
 const iconModules = import.meta.glob<string>("../assets/icons/*.svg", {
   query: "?no-inline",
@@ -46,6 +46,7 @@ export const Icon = ({
 export const IconBtn = ({
   name,
   onClick,
+  onMouseDown,
   title,
   sm,
   className = "",
@@ -53,6 +54,7 @@ export const IconBtn = ({
 }: {
   name: string;
   onClick?: () => void;
+  onMouseDown?: (e: MouseEvent<HTMLButtonElement>) => void;
   title?: string;
   sm?: boolean;
   className?: string;
@@ -62,6 +64,7 @@ export const IconBtn = ({
     type="button"
     className={`icon-btn ${sm ? "sm " : ""}${className}`}
     onClick={onClick}
+    onMouseDown={onMouseDown}
     title={title}
     aria-label={title}
     style={style}
