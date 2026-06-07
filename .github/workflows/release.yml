@@ -51,9 +51,19 @@ jobs:
           latest_t2s=$(gh release view --repo xjasonlyu/tun2socks --json tagName -q .tagName)
           latest_sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
 
-          [ "$pinned_xray" != "$latest_xray" ] && skip=false
-          [ "$pinned_t2s" != "$latest_t2s" ] && skip=false
-          [ "$pinned_sb" != "$latest_sb" ] && skip=false
+          bins_changed=false
+          [ "$pinned_xray" != "$latest_xray" ] && { skip=false; bins_changed=true; }
+          [ "$pinned_t2s" != "$latest_t2s" ] && { skip=false; bins_changed=true; }
+          [ "$pinned_sb" != "$latest_sb" ]   && { skip=false; bins_changed=true; }
+
+          # bump type: minor if code changed, patch if only binaries updated
+          has_commits=false
+          { [ -z "$last_tag" ] || [ "${commits:-0}" -gt 0 ]; } && has_commits=true
+          if [ "$has_commits" = "true" ]; then
+            echo "bump=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "bump=patch" >> "$GITHUB_OUTPUT"
+          fi
 
           echo "xray_old=$pinned_xray" >> "$GITHUB_OUTPUT"
           echo "t2s_old=$pinned_t2s" >> "$GITHUB_OUTPUT"
@@ -122,7 +132,7 @@ jobs:
       - name: Bump version
         if: steps.changes.outputs.skip != 'true'
         id: bump
-        run: echo "version=$(scripts/bump-version.sh)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(scripts/bump-version.sh ${{ steps.changes.outputs.bump }})" >> "$GITHUB_OUTPUT"
 
       - name: Build release zip
         if: steps.changes.outputs.skip != 'true'

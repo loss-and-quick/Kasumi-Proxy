@@ -12,16 +12,18 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROP="$ROOT/module/module.prop"
 
-cur_ver="$(grep -m1 '^version=' "$PROP" | cut -d= -f2)"        # e.g. v0.0.1
-cur_code="$(grep -m1 '^versionCode=' "$PROP" | cut -d= -f2)"   # e.g. 001
+cur_ver="$(grep -m1 '^version=' "$PROP" | cut -d= -f2)"      # e.g. v0.2.0
+cur_code="$(grep -m1 '^versionCode=' "$PROP" | cut -d= -f2)" # e.g. 002
 
-# Split semver (strip leading v) and bump the patch component.
+bump_type="${1:-minor}" # patch | minor
+
 semver="${cur_ver#v}"
 IFS='.' read -r major minor patch <<<"$semver"
-new_ver="v${major}.${minor}.$((patch + 1))"
+case "$bump_type" in
+patch) new_ver="v${major}.${minor}.$((patch + 1))" ;;
+minor) new_ver="v${major}.$((minor + 1)).0" ;;
+esac
 
-# versionCode: integer increment, keep the 3-digit zero padding.
-# 10# forces base-10 so a leading zero (001) is not read as octal.
 new_code="$(printf '%03d' "$((10#$cur_code + 1))")"
 
 sed -i.bak \
