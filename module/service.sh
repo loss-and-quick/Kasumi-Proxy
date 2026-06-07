@@ -809,9 +809,11 @@ do_job() {
 			fi
 			$ip6tables -t mangle -A OUTPUT -j "$MARK_CHAIN"
 			$ip6tables -I FORWARD -j REJECT --reject-with icmp6-no-route 2>/dev/null
-			read_app_filter
-			protect_local_ports add
 		fi # end xray-only block
+
+		# Protect local proxy ports from bypass-mode apps
+		read_app_filter
+		protect_local_ports add
 
 		# Publish the terminal lifecycle state. A bad config makes the core exit
 		# within ~1s, so confirm it actually stayed up before reporting running.
