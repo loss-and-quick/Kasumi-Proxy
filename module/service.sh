@@ -628,10 +628,9 @@ do_job() {
 			# Verify every local rule_set the config references actually has its
 			# .srs on disk. A generic "any .srs present" check would still let
 			# sing-box fail on a specific missing geoip-xx/geosite-xx set.
-			missing=""
-			for srs in $(sed -n 's/.*"path":[[:space:]]*"\([^"]*\.srs\)".*/\1/p' "$CORE_CFG"); do
-				[ -f "$srs" ] || missing="$missing $srs"
-			done
+			missing=$(sed -n 's/.*"path":[[:space:]]*"\([^"]*.srs\)".*/\1/p' "$CORE_CFG" | while IFS= read -r srs; do
+				[ -f "$srs" ] || printf '%s\n' "$srs"
+			done | tr '\n' ' ')
 			if [ -n "$missing" ]; then
 				log_error "sing-box config references missing rule_set files:$missing — download/refresh geoip/geosite assets"
 				set_service_state "failed:missing rule_set assets"
