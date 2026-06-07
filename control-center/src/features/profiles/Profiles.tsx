@@ -35,6 +35,9 @@ const QrCodeSheet = lazy(() =>
 const QrScannerSheet = lazy(() =>
   import("../../components/QrScannerSheet").then((module) => ({ default: module.QrScannerSheet })),
 );
+const ManageGroupsSheet = lazy(() =>
+  import("./ManageGroupsSheet").then((module) => ({ default: module.ManageGroupsSheet })),
+);
 
 export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string | "new") => void }) {
   const profiles = useAppStore((s) => s.profiles);
@@ -58,7 +61,6 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const removeDuplicates = useAppStore((s) => s.removeDuplicates);
   const selectBest = useAppStore((s) => s.selectBest);
   const addProfiles = useAppStore((s) => s.addProfiles);
-  const addGroup = useAppStore((s) => s.addGroup);
   const t = useT();
 
   const [pingSheetOpen, setPingSheetOpen] = useState(false);
@@ -78,6 +80,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const [moveGroup, setMoveGroup] = useState<string>(groups[0]?.id ?? "g-main");
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [qrPayload, setQrPayload] = useState<{ title: string; text: string } | null>(null);
+  const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
 
   const toggleSelected = (id: string) =>
     setSelected((current) => ({ ...current, [id]: !current[id] }));
@@ -100,11 +103,6 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         return (
           (left.ping ?? Number.MAX_SAFE_INTEGER) - (right.ping ?? Number.MAX_SAFE_INTEGER) ||
           left.remarks.localeCompare(right.remarks)
-        );
-      }
-      if (sort === "group") {
-        return (
-          left.groupId.localeCompare(right.groupId) || left.remarks.localeCompare(right.remarks)
         );
       }
       return left.remarks.localeCompare(right.remarks);
@@ -224,6 +222,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         bulkMode={bulkMode}
         onToggleBulk={toggleBulkMode}
         onOpenAdd={() => setAddOpen(true)}
+        onManageGroups={() => setManageGroupsOpen(true)}
         groupFilter={groupFilter}
         setGroupFilter={setGroupFilter}
         groups={groups}
@@ -240,7 +239,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
       />
 
       <ProfilesList
-        orderedGroups={orderedGroups}
+        groups={orderedGroups}
         byGroup={byGroup}
         activeId={activeId}
         bulkMode={bulkMode}
@@ -351,8 +350,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
             }}
             onNewGroup={() => {
               setAddOpen(false);
-              addGroup(t("profiles.groupDefault", { n: groups.length + 1 }));
-              notify(t("profiles.groupCreated"));
+              setManageGroupsOpen(true);
             }}
           />
         </Suspense>
@@ -382,6 +380,12 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
             onClose={() => setQrScannerOpen(false)}
             onResult={(text) => importProfilesFromText(text)}
           />
+        </Suspense>
+      )}
+
+      {manageGroupsOpen && (
+        <Suspense fallback={null}>
+          <ManageGroupsSheet open onClose={() => setManageGroupsOpen(false)} />
         </Suspense>
       )}
 

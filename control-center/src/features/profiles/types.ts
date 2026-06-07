@@ -1,1 +1,1 @@
-export type SortMode = "name" | "ping" | "group";
+export type SortMode = "name" | "ping";

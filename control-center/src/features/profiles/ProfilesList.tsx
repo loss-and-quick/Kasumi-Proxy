@@ -3,7 +3,7 @@ import type { Group, Profile } from "../../lib/schema";
 import { ProfileRow } from "./ProfileRow";
 
 export function ProfilesList({
-  orderedGroups,
+  groups,
   byGroup,
   activeId,
   bulkMode,
@@ -14,7 +14,7 @@ export function ProfilesList({
   onEdit,
   onMore,
 }: {
-  orderedGroups: Group[];
+  groups: Group[];
   byGroup: Record<string, Profile[]>;
   activeId: string | null;
   bulkMode: boolean;
@@ -27,23 +27,10 @@ export function ProfilesList({
 }) {
   return (
     <div className="scroll" style={{ paddingTop: 0 }}>
-      {orderedGroups.length === 0 && <EmptyHint icon="search_off" text={emptyText} />}
-      {orderedGroups.map((group) => (
+      {groups.length === 0 && <EmptyHint icon="search_off" text={emptyText} />}
+      {groups.map((group) => (
         <div key={group.id}>
-          <SectionLabel
-            action={
-              <span
-                style={{
-                  marginLeft: "auto",
-                  fontSize: 11,
-                  color: "var(--on-surface-faint)",
-                  fontWeight: 600,
-                }}
-              >
-                {byGroup[group.id].length}
-              </span>
-            }
-          >
+          <SectionLabel action={<span className="group-count">{byGroup[group.id].length}</span>}>
             {group.name}
           </SectionLabel>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
