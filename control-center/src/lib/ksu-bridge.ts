@@ -206,6 +206,26 @@ async function callJson(method: string, args: string[] = [], stdin?: string): Pr
   }
 }
 
+/**
+ * Ask the backend for a list of currently-free local ports. The backend only
+ * knows which ports are *already* listening (it reads /proc/net/tcp), so this is
+ * a single snapshot: one call returns `count` distinct, non-overlapping port
+ * blocks, each `span` consecutive ports wide. Batch diagnostics allocate all
+ * their worker ports here in one shot instead of repeated per-worker calls —
+ * a test core binds its port asynchronously (after *Start returns), so repeated
+ * calls would all see the same snapshot and hand back the same "free"
+ * port, making the concurrent cores collide. `span` covers the widest test situation.
+ */
+const TEST_PORT_SPAN = 3;
+async function freePorts(start: number, count: number, span = TEST_PORT_SPAN): Promise<number[]> {
+  const resp = (await callJson("freePorts", [String(start), String(count), String(span)])) as {
+    ports?: unknown;
+  };
+  return Array.isArray(resp?.ports)
+    ? resp.ports.filter((n): n is number => typeof n === "number")
+    : [];
+}
+
 /** Detect whether a real backend transport is reachable. */
 export function hasNativeTransport(): boolean {
   return getRuntimeBridgeMode() !== "mock";
@@ -324,14 +344,15 @@ export const ksuBridge: Bridge = {
     return out;
   },
 
-  async realPing(profileId) {
+  async realPing(profileId, port) {
     const state = lastState ?? (await this.readState());
     const p = state.profiles.find((x) => x.id === profileId);
     if (!p) return -1;
     const { resolveCore } = await import("./schema/core");
     const engine = resolveCore(p, state.settings);
-    const portResp = (await callJson("freePort", ["19000"])) as { port?: number };
-    const realPingPort = portResp?.port || 19000;
+    // Single test: grab one free block now. Batch runs pass `port` so every
+    // worker gets a distinct block from one snapshot (see realPingAll).
+    const realPingPort = port ?? (await freePorts(19000, 1))[0] ?? 19000;
     const patchedSettings = {
       ...state.settings,
       localSocksPort: realPingPort,
@@ -373,28 +394,34 @@ export const ksuBridge: Bridge = {
     const CONCURRENCY = state.settings.pingConcurrency ?? 3;
     let i = 0;
     const profiles = state.profiles;
-    const worker = async () => {
+    // One snapshot of currently-free ports → one distinct block per worker, so
+    // the concurrent test cores never share a SOCKS port / job file (which used
+    // to make a parallel realPingAll return -1 for every profile). Each worker
+    // reuses its own block across the profiles it pulls from the queue.
+    const ports = await freePorts(19000, CONCURRENCY);
+    const worker = async (slot: number) => {
       while (i < profiles.length) {
         const p = profiles[i++];
         try {
-          out[p.id] = await this.realPing(p.id);
+          out[p.id] = await this.realPing(p.id, ports[slot]);
         } catch {
           out[p.id] = -1;
         }
       }
     };
-    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    await Promise.all(Array.from({ length: CONCURRENCY }, (_, slot) => worker(slot)));
     return out;
   },
 
-  async speedTest(profileId) {
+  async speedTest(profileId, port) {
     const state = lastState ?? (await this.readState());
     const p = state.profiles.find((x) => x.id === profileId);
     if (!p) return -1;
     const { resolveCore } = await import("./schema/core");
     const engine = resolveCore(p, state.settings);
-    const portResp = (await callJson("freePort", ["19100"])) as { port?: number };
-    const stPort = portResp?.port || 19100;
+    // Single test: grab one free block now. Batch runs pass `port` (see
+    // speedTestAll). 19100 keeps speed tests clear of realping's 19000 band.
+    const stPort = port ?? (await freePorts(19100, 1))[0] ?? 19100;
     const patchedSettings = {
       ...state.settings,
       localSocksPort: stPort,
@@ -437,17 +464,19 @@ export const ksuBridge: Bridge = {
     let i = 0;
     const profiles = state.profiles;
     const CONCURRENCY = state.settings.speedConcurrency ?? 1;
-    const worker = async () => {
+    // One snapshot → one distinct port block per worker (see realPingAll).
+    const ports = await freePorts(19100, CONCURRENCY);
+    const worker = async (slot: number) => {
       while (i < profiles.length) {
         const p = profiles[i++];
         try {
-          out[p.id] = await this.speedTest(p.id);
+          out[p.id] = await this.speedTest(p.id, ports[slot]);
         } catch {
           out[p.id] = -1;
         }
       }
     };
-    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    await Promise.all(Array.from({ length: CONCURRENCY }, (_, slot) => worker(slot)));
     return out;
   },
 
