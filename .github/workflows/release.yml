@@ -41,15 +41,24 @@ jobs:
         run: |
           skip=true
 
-          # 1. New commits (excluding version-bump-only commits)
+          # 1. New code commits (docs/ci/chore-only changes do not trigger release)
           last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          has_code_commits=false
           if [ -z "$last_tag" ]; then
-            skip=false
+            has_code_commits=true
           else
-            commits=$(git log "$last_tag"..HEAD --oneline -- . \
-              ':(exclude)module/module.prop' ':(exclude)update.json' | wc -l)
-            [ "$commits" -gt 0 ] && skip=false
+            code_commits=$(git log "$last_tag"..HEAD --oneline \
+              -- \
+              'module/*.sh' \
+              'module/bin/kasumi-proxyctl' \
+              'module/webroot/cgi-bin/' \
+              'control-center/src/' \
+              'scripts/fetch-bin.sh' \
+              'scripts/package-release.sh' \
+              2>/dev/null | wc -l)
+            [ "$code_commits" -gt 0 ] && has_code_commits=true
           fi
+          [ "$has_code_commits" = "true" ] && skip=false
 
           # 2. Upstream binary updates
           pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
@@ -66,9 +75,7 @@ jobs:
           [ "$pinned_sb" != "$latest_sb" ]   && { skip=false; bins_changed=true; }
 
           # bump type: minor if code changed, patch if only binaries updated
-          has_commits=false
-          { [ -z "$last_tag" ] || [ "${commits:-0}" -gt 0 ]; } && has_commits=true
-          if [ "$has_commits" = "true" ]; then
+          if [ "$has_code_commits" = "true" ]; then
             echo "bump=minor" >> "$GITHUB_OUTPUT"
           else
             echo "bump=patch" >> "$GITHUB_OUTPUT"
