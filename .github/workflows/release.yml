@@ -2,13 +2,14 @@ name: Release
 
 on:
   schedule:
-    - cron: "0 3 */3 * *"
+    - cron: "0 3 * * 1"  # every Monday — check for new core binaries
   workflow_dispatch:
     inputs:
-      force:
-        description: 'Force release even without changes'
-        type: boolean
-        default: false
+      bump:
+        description: 'Version bump type'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       skip_bump:
         description: 'Skip version bump (use current version)'
         type: boolean
@@ -74,17 +75,15 @@ jobs:
           [ "$pinned_t2s" != "$latest_t2s" ] && { skip=false; bins_changed=true; }
           [ "$pinned_sb" != "$latest_sb" ]   && { skip=false; bins_changed=true; }
 
-          # bump type: minor if code changed, patch if only binaries updated
-          if [ "$has_code_commits" = "true" ]; then
+          if [ "$bins_changed" = "true" ]; then
             echo "bump=minor" >> "$GITHUB_OUTPUT"
           else
-            echo "bump=patch" >> "$GITHUB_OUTPUT"
+            echo "bump=${{ inputs.bump || 'patch' }}" >> "$GITHUB_OUTPUT"
           fi
 
           echo "xray_old=$pinned_xray" >> "$GITHUB_OUTPUT"
           echo "t2s_old=$pinned_t2s" >> "$GITHUB_OUTPUT"
           echo "sb_old=$pinned_sb" >> "$GITHUB_OUTPUT"
-          [ "${{ inputs.force }}" = "true" ] && skip=false
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
           echo "xray_version=$latest_xray" >> "$GITHUB_OUTPUT"
           echo "t2s_version=$latest_t2s" >> "$GITHUB_OUTPUT"
@@ -153,7 +152,7 @@ jobs:
           if [ "${{ inputs.skip_bump }}" = "true" ]; then
             version=$(grep -m1 '^version=' module/module.prop | cut -d= -f2)
           else
-            version=$(scripts/bump-version.sh ${{ steps.changes.outputs.bump }})
+            version=$(scripts/bump-version.sh ${{ inputs.bump || 'patch' }})
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
