@@ -946,7 +946,7 @@ apply_mark_rule() {
 
 	cur=$(get_active_interface)
 	last="$cur"
-	if [ ! -z "$cur" ]; then
+	if [ -n "$cur" ]; then
 		log_info "initial active interface: $cur"
 		# apply iptables rules for the first time
 		start_on_boot
@@ -956,7 +956,7 @@ apply_mark_rule() {
 	fi
 
 	inotifyd - /data/misc/net::w | while read -r _; do
-		until [ ! -z "$(get_active_interface)" ]; do
+		until [ -n "$(get_active_interface)" ]; do
 			sleep 1
 		done
 		cur=$(get_active_interface)
