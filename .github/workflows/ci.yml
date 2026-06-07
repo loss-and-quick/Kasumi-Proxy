@@ -34,11 +34,13 @@ jobs:
 
       - name: ShellCheck
         run: |
+          # Module payload runs under Android mksh — lint as POSIX sh.
           shellcheck -s sh \
             module/service.sh \
             module/customize.sh \
             module/action.sh \
             module/uninstall.sh \
             module/bin/kasumi-proxyctl \
-            module/webroot/cgi-bin/exec \
-            scripts/*.sh
+            module/webroot/cgi-bin/exec
+          # Build/release helpers are #!/usr/bin/env bash — lint as bash, not sh.
+          shellcheck -s bash scripts/*.sh
