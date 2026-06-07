@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  schedule:
+    - cron: "0 3 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Never run two releases at once (they both bump module.prop).
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Third-party actions are pinned to commit SHAs (with the human-readable tag in a
+# trailing comment) so a moved tag cannot silently change what runs with the
+# `contents: write` token. Bump the SHA + comment together when upgrading.
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('control-center/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          # Mirror flake.nix (nixpkgs pins Go ~1.26). geodat2srs is cloned at
+          # runtime, so disable setup-go's auto-cache (no go.sum at checkout)
+          # and use the explicit Go cache step below instead.
+          go-version: '1.26'
+          cache: false
+
+      - name: Cache Go build & modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-geodat2srs
+          restore-keys: go-${{ runner.os }}-
+
+      - name: Setup NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
+        with:
+          # Mirror flake.nix NDK 28.0.13004108 (== r28).
+          ndk-version: r28
+
+      - name: Clone geodat2srs
+        run: git clone https://github.com/loss-and-quick/geodat2srs.git $HOME/geodat2srs
+
+      - name: Install UI dependencies
+        working-directory: control-center
+        run: bun install --frozen-lockfile
+
+      - name: Lint & test
+        working-directory: control-center
+        run: |
+          bun run check
+          bun run check:i18n
+          bun run test
+
+      - name: Bump version
+        id: bump
+        run: echo "version=$(scripts/bump-version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Build release zip
+        env:
+          NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: scripts/package-release.sh
+
+      - name: Generate update.json
+        run: scripts/gen-update-json.sh
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add module/module.prop update.json
+          git commit -m "chore(release): ${{ steps.bump.outputs.version }}"
+          git push
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ steps.bump.outputs.version }}
+          target_commitish: ${{ github.ref_name }}
+          name: Kasumi Proxy ${{ steps.bump.outputs.version }}
+          files: build/kasumi-proxy-${{ steps.bump.outputs.version }}.zip
+          generate_release_notes: true

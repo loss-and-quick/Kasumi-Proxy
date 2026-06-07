@@ -1,0 +1,47 @@
+# ── Release-time build artifacts (produced by scripts/) ──────────
+# Core binaries fetched by fetch-bin.sh — track only the source files.
+module/bin/*
+!module/bin/kasumi-proxyctl
+!module/bin/README.md
+!module/bin/LICENSE
+
+# Production webroot built by build-webroot.sh — track only the source CGI.
+module/webroot/*
+!module/webroot/cgi-bin/
+
+# ── Node / Vite ──────────────────────────────────────────────────
+node_modules/
+control-center/dist/
+control-center/tsconfig.tsbuildinfo
+coverage/
+.npm/
+package-lock.json
+
+# ── Release artifacts ────────────────────────────────────────────
+build/
+dist/
+*.zip
+
+# ── Nix / direnv ─────────────────────────────────────────────────
+.direnv/
+result
+
+# ── Tooling / editors / OS ───────────────────────────────────────
+.ralph/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Local logs / scratch ─────────────────────────────────────────
+*.log
+*.tmp
+*.swp
+*.swo
+*.orig
+*.rej
+*.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

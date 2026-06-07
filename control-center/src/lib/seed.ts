@@ -1,0 +1,260 @@
+// ============================================================
+// src/lib/seed.ts
+// Seed data for development with the mock bridge.
+// Based on Kasumi Proxy/data.jsx
+// ============================================================
+
+import type { AppState, Subscription } from "./bridge";
+import {
+  type AssetFile,
+  emptyProfile,
+  type Profile,
+  type ProfileOf,
+  type Protocol,
+  type RoutingRule,
+} from "./schema";
+
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+/** Build a seed profile of a given protocol with field overrides. */
+function mk<P extends Protocol>(protocol: P, o: Partial<ProfileOf<P>> = {}): ProfileOf<P> {
+  const base = emptyProfile(protocol) as ProfileOf<P>;
+  return { ...base, ...o, id: o.id ?? uid(), protocol };
+}
+
+export const GROUPS_SEED = [
+  { id: "g-main", name: "Main" },
+  { id: "g-de", name: "🇩🇪 Frankfurt" },
+  { id: "g-nl", name: "🇳🇱 Amsterdam" },
+  { id: "g-priv", name: "Private" },
+];
+
+export const SUBS_SEED: Subscription[] = [
+  {
+    id: "s-aurora",
+    remarks: "Aurora Net",
+    url: "https://aurora.example.net/api/v1/client/subscribe?token=9f2c1ab7d4e8&flow=xtls-rprx-vision",
+    groupId: "g-de",
+    enabled: true,
+    autoUpdate: true,
+    interval: 6,
+    lastUpdated: "2026-06-05 09:14",
+    count: 14,
+    userAgent: "v2rayNG/1.10.7",
+    filter: "",
+    allowInsecure: false,
+  },
+  {
+    id: "s-nodes",
+    remarks: "NodeHub Pro",
+    url: "https://nodehub.example.io/sub/3a91f0e7c2b5d6489a/auto",
+    groupId: "g-main",
+    enabled: true,
+    autoUpdate: false,
+    interval: 24,
+    lastUpdated: "2026-06-03 22:40",
+    count: 9,
+    userAgent: "",
+    filter: "(?i)premium",
+    allowInsecure: false,
+  },
+  {
+    id: "s-relay",
+    remarks: "Relay Backup",
+    url: "https://relay.example.org/u/backup.txt",
+    groupId: "g-priv",
+    enabled: false,
+    autoUpdate: false,
+    interval: 12,
+    lastUpdated: "2026-05-28 11:02",
+    count: 6,
+    userAgent: "",
+    filter: "",
+    allowInsecure: true,
+  },
+];
+
+export const PROFILES_SEED: Profile[] = [
+  mk("vless", {
+    remarks: "DE · Vision Reality",
+    address: "de1.aurora.example.net",
+    port: 443,
+    uuid: "b8f1e2a4-9c3d-4e5f-a6b7-c8d9e0f1a2b3",
+    flow: "xtls-rprx-vision",
+    network: "tcp",
+    security: "reality",
+    sni: "www.microsoft.com",
+    fingerprint: "chrome",
+    publicKey: "qg7v3...n9Xc",
+    shortId: "a1b2c3d4",
+    groupId: "g-de",
+    subId: "s-aurora",
+    ping: 86,
+  }),
+  mk("vless", {
+    remarks: "DE · WS TLS CDN",
+    address: "cdn.aurora.example.net",
+    port: 443,
+    uuid: "c9f2e3a5-0d4e-5f6a-b7c8-d9e0f1a2b3c4",
+    flow: "",
+    network: "ws",
+    host: "cdn.aurora.example.net",
+    path: "/ray",
+    security: "tls",
+    sni: "cdn.aurora.example.net",
+    fingerprint: "chrome",
+    groupId: "g-de",
+    subId: "s-aurora",
+    ping: 142,
+  }),
+  mk("vless", {
+    remarks: "NL · gRPC Reality",
+    address: "nl1.aurora.example.net",
+    port: 8443,
+    uuid: "d0f3e4a6-1e5f-6a7b-c8d9-e0f1a2b3c4d5",
+    flow: "",
+    network: "grpc",
+    path: "",
+    grpcMode: "multi",
+    serviceName: "grpc-svc",
+    authority: "nl1.aurora.example.net",
+    security: "reality",
+    sni: "www.cloudflare.com",
+    fingerprint: "firefox",
+    publicKey: "tk4m9...p2Lq",
+    shortId: "ff00ab",
+    groupId: "g-nl",
+    subId: "s-aurora",
+    ping: 121,
+  }),
+  mk("vmess", {
+    remarks: "NL · VMess Legacy",
+    address: "nl2.aurora.example.net",
+    port: 443,
+    uuid: "e1f4e5a7-2f6a-7b8c-d9e0-f1a2b3c4d5e6",
+    encryption: "auto",
+    network: "ws",
+    host: "nl2.aurora.example.net",
+    path: "/vm",
+    security: "tls",
+    sni: "nl2.aurora.example.net",
+    groupId: "g-nl",
+    subId: "s-aurora",
+    ping: 168,
+  }),
+  mk("trojan", {
+    remarks: "US · Trojan Direct",
+    address: "us1.nodehub.example.io",
+    port: 443,
+    password: "Tr0jan$ecret_Pwd_2026",
+    network: "tcp",
+    security: "tls",
+    sni: "us1.nodehub.example.io",
+    fingerprint: "chrome",
+    groupId: "g-main",
+    subId: "s-nodes",
+    ping: 233,
+  }),
+  mk("shadowsocks", {
+    remarks: "SG · Shadowsocks 2022",
+    address: "sg.nodehub.example.io",
+    port: 8388,
+    password: "rdJ8x2k9PqL=",
+    method: "2022-blake3-aes-128-gcm",
+    groupId: "g-main",
+    subId: "s-nodes",
+    ping: 64,
+  }),
+  mk("vless", {
+    remarks: "Home Lab",
+    address: "192.0.2.44",
+    port: 51820,
+    uuid: "f2f5e6a8-3a7b-8c9d-e0f1-a2b3c4d5e6f7",
+    flow: "xtls-rprx-vision",
+    network: "tcp",
+    security: "reality",
+    sni: "www.apple.com",
+    fingerprint: "safari",
+    publicKey: "ux5n0...q3Mr",
+    shortId: "deadbeef",
+    groupId: "g-priv",
+    ping: 12,
+  }),
+  mk("wireguard", {
+    remarks: "WG · Mullvad",
+    address: "193.32.127.66",
+    port: 51820,
+    secretKey: "wFakeSecretKey0000000000000000000000000000=",
+    peerPublicKey: "wFakePeerPublicKey00000000000000000000000=",
+    localAddress: "10.64.0.2/32",
+    groupId: "g-priv",
+    ping: 38,
+  }),
+  mk("hysteria2", {
+    remarks: "FI · Hysteria2",
+    address: "hy2.nodehub.example.io",
+    port: 443,
+    password: "hy2Pass_2026!",
+    obfsType: "salamander",
+    obfsPassword: "obfsSecret",
+    sni: "hy2.nodehub.example.io",
+    upMbps: 100,
+    downMbps: 200,
+    groupId: "g-main",
+    subId: "s-nodes",
+    ping: 54,
+  }),
+  mk("tuic", {
+    remarks: "JP · TUIC v5",
+    address: "tuic.nodehub.example.io",
+    port: 8443,
+    uuid: "a3b6c7d8-4b8c-9d0e-f1a2-b3c4d5e6f7a8",
+    password: "tuicPass_2026",
+    congestionControl: "bbr",
+    sni: "tuic.nodehub.example.io",
+    groupId: "g-main",
+    subId: "s-nodes",
+    ping: 97,
+  }),
+];
+
+export const ROUTING_RULES_SEED: RoutingRule[] = [];
+
+export const ASSET_FILES_SEED: AssetFile[] = [];
+
+export const SETTINGS_SEED = {
+  routingMode: "global" as const,
+  domainSniffing: true,
+  routeOnly: false,
+  domainStrategy: "IPIfNonMatch",
+  domainStrategy4Singbox: "prefer_ipv4",
+  dnsViaProxy: true,
+  fakeDns: false,
+  preferIpv6: false,
+  mux: false,
+  muxConcurrency: 8,
+  muxXudpConcurrency: 8,
+  muxXudp443: "reject" as "reject" | "proxy" | undefined,
+  fragment: true,
+  fragmentPackets: "tlshello",
+  mtu: 1500,
+  pingConcurrency: 3,
+  speedConcurrency: 1,
+  autoStart: true,
+  coreByProtocol: {},
+  appCaptureMode: "all" as "all" | "none",
+  appFilter: {} as Record<string, "force-proxy" | "bypass">,
+  logRotateMaxKb: 512,
+} as const;
+
+export function seedAppState(): AppState {
+  return {
+    profiles: PROFILES_SEED,
+    groups: GROUPS_SEED,
+    subscriptions: SUBS_SEED,
+    routingRules: ROUTING_RULES_SEED,
+    assetFiles: [],
+    settings: SETTINGS_SEED,
+    activeId: PROFILES_SEED[0].id,
+  };
+}

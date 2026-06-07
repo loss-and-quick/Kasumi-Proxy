@@ -1,0 +1,129 @@
+// ============================================================
+// src/lib/bridge.ts
+// The bridge contract the UI talks to: domain types, the `Bridge`
+// interface, and the response parsers shared by implementations.
+// Concrete impls live in ksu-bridge.ts (device) / mock-bridge.ts
+// (dev); bridge-provider.ts picks one. Swapping the impl never
+// touches a screen.
+// ============================================================
+import type { Profile } from "./schema";
+
+// Domain types are inferred from the Zod schemas (single source of truth).
+export type {
+  AdvancedSettings,
+  AppState,
+  AssetFile,
+  Group,
+  RoutingRule,
+  Subscription,
+} from "./schema";
+
+import type { AppState } from "./schema";
+
+export type ServiceState = "stopped" | "connecting" | "running";
+
+export interface AppEntry {
+  pkg: string;
+  uid: number;
+  system: boolean;
+  label?: string;
+  iconUrl?: string;
+}
+
+export interface ServiceStatus {
+  state: ServiceState;
+  activeId: string | null;
+  uploadBytes: number;
+  downloadBytes: number;
+  uptimeSec: number;
+  core: string; // e.g. "Xray 25.5.16"
+}
+
+export interface Capabilities {
+  bridge: string; // "ksu" | "cgi" | "mock"
+  core: string; // Xray version
+  singboxVersion: string; // sing-box version
+  curl: boolean;
+  tun: boolean;
+}
+
+export type ResourceUpdateMode = "auto" | "proxy" | "direct";
+
+export interface Bridge {
+  // service control
+  start(profileId: string): Promise<ServiceStatus>;
+  stop(): Promise<ServiceStatus>;
+  restart(): Promise<ServiceStatus>;
+  status(): Promise<ServiceStatus>;
+  onStatus(cb: (s: ServiceStatus) => void): () => void; // live stream → unsubscribe
+  capabilities(): Promise<Capabilities>;
+
+  // diagnostics
+  ping(profileId: string): Promise<number>;
+  pingAll(): Promise<Record<string, number>>;
+  realPing(profileId: string): Promise<number>;
+  realPingAll(): Promise<Record<string, number>>;
+  speedTest(profileId: string): Promise<number>; // bytes/sec, -1 = failed
+  speedTestAll(): Promise<Record<string, number>>;
+  log(input?: {
+    target?: "xray" | "singbox" | "tun2socks" | "service" | "proxy_control";
+    lines?: number;
+  }): Promise<string>;
+  clearLogs(): Promise<{ ok: boolean; error?: string }>;
+
+  // persistence (source of truth lives in module files, not localStorage)
+  readState(): Promise<AppState>;
+  writeState(state: AppState): Promise<void>;
+
+  // subscriptions
+  fetchSubscription(
+    url: string,
+    opts?: { userAgent?: string; allowInsecure?: boolean },
+  ): Promise<Profile[]>;
+
+  // asset files
+  downloadAsset(
+    filename: string,
+    url: string,
+    mode?: ResourceUpdateMode,
+  ): Promise<{ ok: boolean; error?: string }>;
+  listAssets(): Promise<string[]>;
+  listApps(): Promise<AppEntry[]>;
+  reloadAppFilter(): Promise<{ ok: boolean; error?: string }>;
+
+  // import / export / backup
+  parseShareLinks(text: string): Promise<Profile[]>; // vless:// vmess:// trojan://
+  buildShareLink(p: Profile): Promise<string>;
+  exportBackup(): Promise<Blob>;
+  importBackup(file: Blob, mode: "merge" | "replace"): Promise<void>;
+}
+
+/** Parse a raw service-status payload into a typed `ServiceStatus`. */
+export function parseServiceStatus(value: unknown): ServiceStatus {
+  if (!value || typeof value !== "object") throw new Error("Invalid service status payload");
+  const s = value as Record<string, unknown>;
+  const state = s.state;
+  if (state !== "stopped" && state !== "connecting" && state !== "running") {
+    throw new Error("Invalid service state");
+  }
+  return {
+    state,
+    activeId: typeof s.activeId === "string" ? s.activeId : null,
+    uploadBytes: typeof s.uploadBytes === "number" ? s.uploadBytes : 0,
+    downloadBytes: typeof s.downloadBytes === "number" ? s.downloadBytes : 0,
+    uptimeSec: typeof s.uptimeSec === "number" ? s.uptimeSec : 0,
+    core: typeof s.core === "string" ? s.core : "",
+  };
+}
+
+/** Parse a raw capabilities payload into a typed `Capabilities`. */
+export function parseCapabilities(value: unknown): Capabilities {
+  const s = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    bridge: typeof s.bridge === "string" ? s.bridge : "",
+    core: typeof s.core === "string" ? s.core : "",
+    singboxVersion: typeof s.singboxVersion === "string" ? s.singboxVersion : "",
+    curl: s.curl === true || s.curl === 1 || s.curl === "1",
+    tun: s.tun === true || s.tun === 1 || s.tun === "1",
+  };
+}
