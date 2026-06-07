@@ -165,15 +165,17 @@ jobs:
 
       - name: Generate changelog
         if: steps.changes.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          XRAY_OLD: ${{ steps.changes.outputs.xray_old }}
+          XRAY_NEW: ${{ steps.changes.outputs.xray_version }}
+          T2S_OLD: ${{ steps.changes.outputs.t2s_old }}
+          T2S_NEW: ${{ steps.changes.outputs.t2s_version }}
+          SB_OLD: ${{ steps.changes.outputs.sb_old }}
+          SB_NEW: ${{ steps.changes.outputs.sb_version }}
         run: |
           scripts/gen-changelog.sh \
-            "${{ steps.bump.outputs.version }}" \
-            "${{ steps.changes.outputs.xray_old }}" \
-            "${{ steps.changes.outputs.xray_version }}" \
-            "${{ steps.changes.outputs.t2s_old }}" \
-            "${{ steps.changes.outputs.t2s_version }}" \
-            "${{ steps.changes.outputs.sb_old }}" \
-            "${{ steps.changes.outputs.sb_version }}"
+            "$VERSION" "$XRAY_OLD" "$XRAY_NEW" "$T2S_OLD" "$T2S_NEW" "$SB_OLD" "$SB_NEW"
 
       - name: Commit version bump
         if: steps.changes.outputs.skip != 'true'
