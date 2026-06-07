@@ -1,18 +1,14 @@
 ## v0.3.1 — 2026-06-07
 
-### Core updates
+### Fixes
 
-- xray-core: `v26.3.27"` → `v26.3.27`
-- tun2socks: `v2.6.0"` → `v2.6.0`
-- sing-box: `v1.13.13"` → `v1.13.13`
-
-### Changes
-
-- 6330a52 ci(release): manual dispatch with bump type, auto minor on new core binaries
-- 1ff5bca fix(realping): replace per-worker freePort with batch freePorts to prevent port collision (#1)
-- 5be22af ci: lint build scripts as bash, not POSIX sh
-- 5d51437 fix(service): use -n instead of `! -z` (SC2236)
-- 3c59d04 ci: make changelog generation and release commit idempotent
+- **Real ping no longer returns -1 for all profiles when run in batch.**
+  Concurrent `realPingAll` workers all received the same SOCKS port from
+  `freePort` (TOCTOU — the test core binds asynchronously after `*Start`
+  returns). Replaced per-worker `freePort` with a single `freePorts` call
+  that allocates a distinct port block per worker from one snapshot.
+  `freePort` removed from `kasumi-proxyctl`; `freePorts <start> <count>
+  [<span>]` is the new API.
 
 ## v0.3.0 — 2026-06-07
 
@@ -35,10 +31,4 @@
 - Config-affecting settings sections are disabled while the proxy is running.
 
 ## v0.2.0 — 2026-06-07
-
-### Core updates
-
-- xray-core: `v26.3.27"` → `v26.3.27`
-- tun2socks: `v2.6.0"` → `v2.6.0`
-- sing-box: `v1.13.13"` → `v1.13.13`
 

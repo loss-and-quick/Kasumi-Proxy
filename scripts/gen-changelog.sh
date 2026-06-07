@@ -32,9 +32,9 @@ last_tag=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo "")
 
 	# Binary updates
 	bin_section=""
-	[ -n "$XRAY_NEW" ] && [ "$XRAY_OLD" != "$XRAY_NEW" ] && bin_section+="- xray-core: \`$XRAY_OLD\` → \`$XRAY_NEW\`"$'\n'
-	[ -n "$T2S_NEW" ] && [ "$T2S_OLD" != "$T2S_NEW" ] && bin_section+="- tun2socks: \`$T2S_OLD\` → \`$T2S_NEW\`"$'\n'
-	[ -n "$SB_NEW" ] && [ "$SB_OLD" != "$SB_NEW" ] && bin_section+="- sing-box: \`$SB_OLD\` → \`$SB_NEW\`"$'\n'
+	[ -n "$XRAY_NEW" ] && [ -n "$XRAY_OLD" ] && [ "$XRAY_OLD" != "$XRAY_NEW" ] && bin_section+="- xray-core: \`$XRAY_OLD\` → \`$XRAY_NEW\`"$'\n'
+	[ -n "$T2S_NEW" ] && [ -n "$T2S_OLD" ] && [ "$T2S_OLD" != "$T2S_NEW" ] && bin_section+="- tun2socks: \`$T2S_OLD\` → \`$T2S_NEW\`"$'\n'
+	[ -n "$SB_NEW" ] && [ -n "$SB_OLD" ] && [ "$SB_OLD" != "$SB_NEW" ] && bin_section+="- sing-box: \`$SB_OLD\` → \`$SB_NEW\`"$'\n'
 
 	if [ -n "$bin_section" ]; then
 		echo "### Core updates"
@@ -48,7 +48,7 @@ last_tag=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo "")
 		commits=$(git -C "$ROOT" log "$last_tag"..HEAD --oneline \
 			--no-merges \
 			-- . ':(exclude)module/module.prop' ':(exclude)update.json' ':(exclude)CHANGELOG.md' \
-			2>/dev/null || true)
+			2>/dev/null | grep -vE '^[0-9a-f]+ (ci|chore)[:(]' || true)
 		if [ -n "$commits" ]; then
 			echo "### Changes"
 			echo ""
