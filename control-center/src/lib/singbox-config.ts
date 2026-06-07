@@ -753,6 +753,7 @@ export function buildSingboxConfig(
   s: AdvancedSettings,
   routingRules: RoutingRule[] = [],
   profiles: Profile[] = [],
+  opts: { noTun?: boolean } = {},
 ): JsonObject {
   if (p.protocol === "custom") throw new Error("custom profiles run on Xray, not sing-box");
   const socksPort = s.localSocksPort ?? 10808;
@@ -765,7 +766,7 @@ export function buildSingboxConfig(
     dns: buildSingboxDns(s, routingRules, sharedRuleSetTags),
     inbounds: [
       { type: "mixed", tag: "socks-in", listen: "127.0.0.1", listen_port: socksPort },
-      ...buildSingboxTunInbounds(s),
+      ...(opts.noTun ? [] : buildSingboxTunInbounds(s)),
     ],
     outbounds: isEndpoint
       ? [...targets.outbounds, { type: "direct", tag: "direct" }]
@@ -783,6 +784,7 @@ export function buildSingboxConfigJSON(
   s: AdvancedSettings,
   routingRules: RoutingRule[] = [],
   profiles: Profile[] = [],
+  opts: { noTun?: boolean } = {},
 ): string {
-  return JSON.stringify(buildSingboxConfig(p, s, routingRules, profiles), null, 2);
+  return JSON.stringify(buildSingboxConfig(p, s, routingRules, profiles, opts), null, 2);
 }

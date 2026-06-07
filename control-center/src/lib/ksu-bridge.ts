@@ -292,6 +292,7 @@ export const ksuBridge: Bridge = {
             patchedSettings,
             state.routingRules ?? [],
             state.profiles,
+            { noTun: true },
           )
         : (await import("./xray-config")).buildXrayConfigJSON(
             p,
@@ -353,6 +354,7 @@ export const ksuBridge: Bridge = {
             patchedSettings,
             state.routingRules ?? [],
             state.profiles,
+            { noTun: true },
           )
         : (await import("./xray-config")).buildXrayConfigJSON(
             p,
