@@ -1,3 +1,19 @@
+## v0.3.1 — 2026-06-07
+
+### Core updates
+
+- xray-core: `v26.3.27"` → `v26.3.27`
+- tun2socks: `v2.6.0"` → `v2.6.0`
+- sing-box: `v1.13.13"` → `v1.13.13`
+
+### Changes
+
+- 6330a52 ci(release): manual dispatch with bump type, auto minor on new core binaries
+- 1ff5bca fix(realping): replace per-worker freePort with batch freePorts to prevent port collision (#1)
+- 5be22af ci: lint build scripts as bash, not POSIX sh
+- 5d51437 fix(service): use -n instead of `! -z` (SC2236)
+- 3c59d04 ci: make changelog generation and release commit idempotent
+
 ## v0.3.0 — 2026-06-07
 
 ### Fixes
