@@ -548,17 +548,20 @@ case "$method" in
         sleep 2
 
         # download through socks5, measure bytes/sec via curl's speed-meter
+        # -w writes to stdout AFTER the body; redirect body to /dev/null via -o,
+        # capture only the -w output (speed) through a separate fd to avoid mixing.
         st_tmpfile=$(mktemp)
+        exec 3>"$st_tmpfile"
         curl -fsS --max-time "$st_timeout" --socks5 "127.0.0.1:$st_port" \
-            -o "$st_tmpfile" -w "%{speed_download}" "$st_url" 2>/dev/null > "${st_tmpfile}.speed" && {
-            raw=$(cat "${st_tmpfile}.speed" 2>/dev/null)
-            # curl reports speed as float (bytes/sec); convert to int
-            case "$raw" in
-                ''|0|0.000) st_bps=-1 ;;
-                *) st_bps=$(printf '%.0f' "$raw" 2>/dev/null) || st_bps=-1 ;;
-            esac
-        }
-        rm -f "$st_tmpfile" "${st_tmpfile}.speed"
+            -o /dev/null -w "%{speed_download}" "$st_url" 2>/dev/null >&3
+        exec 3>&-
+        raw=$(cat "$st_tmpfile" 2>/dev/null)
+        # curl reports speed as float (bytes/sec); convert to int
+        case "$raw" in
+            ''|0|0.000) st_bps=-1 ;;
+            *) st_bps=$(printf '%.0f' "$raw" 2>/dev/null) || st_bps=-1 ;;
+        esac
+        rm -f "$st_tmpfile"
 
         st_pid_val=$(cat "$st_pid" 2>/dev/null)
         kill "$st_pid_val" 2>/dev/null
