@@ -465,6 +465,7 @@ const pt = {
   "profiles.groupCreated": "Grupo criado",
   "profiles.groupRenamed": "Grupo renomeado",
   "profiles.renameGroup": "Renomear grupo",
+  "profiles.removeGroup": "Excluir grupo",
   "profiles.deleted": "Perfil excluído",
   "profiles.groupDefault": "Novo grupo {n}",
   "profiles.row.select": "Selecionar",

@@ -488,6 +488,7 @@ const ru = {
   "profiles.groupCreated": "Группа создана",
   "profiles.groupRenamed": "Группа переименована",
   "profiles.renameGroup": "Переименовать группу",
+  "profiles.removeGroup": "Удалить группу",
   "profiles.deleted": "Профиль удалён",
   "profiles.groupDefault": "Новая группа {n}",
   "profiles.row.select": "Выбрать",

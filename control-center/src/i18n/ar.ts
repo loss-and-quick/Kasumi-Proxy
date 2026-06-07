@@ -600,6 +600,7 @@ const ar = {
   "profiles.groupCreated": "تم إنشاء المجموعة",
   "profiles.groupRenamed": "تمت إعادة تسمية المجموعة",
   "profiles.renameGroup": "إعادة تسمية المجموعة",
+  "profiles.removeGroup": "حذف المجموعة",
   "profiles.deleted": "تم حذف الملف التعريفي",
   "profiles.groupDefault": "مجموعة جديدة {n}",
   "profiles.row.select": "تحديد",
