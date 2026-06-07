@@ -133,7 +133,9 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
                   title={app.label ?? app.pkg}
                   sub={app.label ? app.pkg : app.system ? t("appFilter.systemApp") : undefined}
                   right={
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <div
+                      style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}
+                    >
                       <Chip
                         active={mode === "bypass"}
                         onClick={() =>
