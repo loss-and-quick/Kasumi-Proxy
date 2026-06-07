@@ -12,6 +12,18 @@ XRAY_OLD="${2:-}" XRAY_NEW="${3:-}"
 T2S_OLD="${4:-}" T2S_NEW="${5:-}"
 SB_OLD="${6:-}" SB_NEW="${7:-}"
 
+# Idempotent: if this version already has an entry (hand-written ahead of a
+# skip_bump release, or a re-run of this job), leave it untouched instead of
+# prepending a duplicate. Match the `## <version> …` heading at line start,
+# escaping regex metacharacters in the version string.
+if [ -f "$OUT" ]; then
+	ver_re=$(printf '%s' "$VERSION" | sed 's/[][\\.*^$/]/\\&/g')
+	if grep -qE "^## ${ver_re}([[:space:]]|\$)" "$OUT"; then
+		echo "→ $OUT already has a $VERSION entry — leaving it untouched"
+		exit 0
+	fi
+fi
+
 last_tag=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo "")
 
 {

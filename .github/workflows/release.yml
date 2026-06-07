@@ -190,8 +190,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add module/module.prop update.json CHANGELOG.md
-          git commit -m "chore(release): ${{ steps.bump.outputs.version }}"
-          git push
+          # The version/changelog may already be committed (a hand-prepared
+          # skip_bump release, or a re-run) — don't fail when there is nothing new.
+          if git diff --cached --quiet; then
+            echo "nothing to commit — version, update.json and changelog already current"
+          else
+            git commit -m "chore(release): ${{ steps.bump.outputs.version }}"
+            git push
+          fi
 
       - name: Create GitHub Release
         if: steps.changes.outputs.skip != 'true'
