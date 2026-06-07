@@ -593,5 +593,16 @@ describe("useAppStore", () => {
       expect(feed[0].icon).toBe("file_download_done");
       expect(feed[0].text).toContain("geoip.dat");
     });
+
+    it("upsertProfile pushes profileSaved activity", async () => {
+      await useAppStore.getState().hydrate();
+      const profile = makeVless({ id: "p1", remarks: "MyNode" });
+
+      useAppStore.getState().upsertProfile(profile);
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("edit_note");
+      expect(feed[0].text).toContain("MyNode");
+    });
   });
 });

@@ -357,6 +357,7 @@ export const useAppStore = create<Store>((set, get) => {
 
     upsertProfile(p) {
       patch((s) => ({ profiles: upsertById(s.profiles, p, "front") }));
+      pushActivity("edit_note", translateCurrent("activity.profileSaved", { remarks: p.remarks }));
     },
     async removeProfile(id) {
       const wasActive = get().activeId === id;
