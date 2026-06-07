@@ -27,19 +27,38 @@ jobs:
 
       - name: Check for changes since last release
         id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          skip=true
+
+          # 1. New commits (excluding version-bump-only commits)
           last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$last_tag" ]; then
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            skip=false
           else
             commits=$(git log "$last_tag"..HEAD --oneline -- . \
               ':(exclude)module/module.prop' ':(exclude)update.json' | wc -l)
-            if [ "$commits" -eq 0 ]; then
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "skip=false" >> "$GITHUB_OUTPUT"
-            fi
+            [ "$commits" -gt 0 ] && skip=false
           fi
+
+          # 2. Upstream binary updates
+          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
+          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
+          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
+
+          latest_xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
+          latest_t2s=$(gh release view --repo xjasonlyu/tun2socks --json tagName -q .tagName)
+          latest_sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
+
+          [ "$pinned_xray" != "$latest_xray" ] && skip=false
+          [ "$pinned_t2s" != "$latest_t2s" ] && skip=false
+          [ "$pinned_sb" != "$latest_sb" ] && skip=false
+
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "xray_version=$latest_xray" >> "$GITHUB_OUTPUT"
+          echo "t2s_version=$latest_t2s" >> "$GITHUB_OUTPUT"
+          echo "sb_version=$latest_sb" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         if: steps.changes.outputs.skip != 'true'
@@ -106,6 +125,9 @@ jobs:
         if: steps.changes.outputs.skip != 'true'
         env:
           NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+          XRAY_VERSION: ${{ steps.changes.outputs.xray_version }}
+          TUN2SOCKS_VERSION: ${{ steps.changes.outputs.t2s_version }}
+          SINGBOX_VERSION: ${{ steps.changes.outputs.sb_version }}
         run: scripts/package-release.sh
 
       - name: Generate update.json
