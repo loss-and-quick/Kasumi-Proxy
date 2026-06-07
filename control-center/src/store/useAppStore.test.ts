@@ -456,4 +456,153 @@ describe("useAppStore", () => {
     expect(state.subscriptions[0].lastError).toBeNull();
     expect(bridge.start).not.toHaveBeenCalled();
   });
+
+  describe("recentActivity", () => {
+    it("starts empty", async () => {
+      await useAppStore.getState().hydrate();
+      expect(useAppStore.getState().recentActivity).toHaveLength(0);
+    });
+
+    it("toggleService start pushes serviceStarted activity", async () => {
+      const profile = makeVless({ id: "p1", remarks: "MyNode" });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [profile], activeId: profile.id }));
+      await useAppStore.getState().hydrate();
+
+      await useAppStore.getState().toggleService();
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed).toHaveLength(1);
+      expect(feed[0].icon).toBe("play_circle");
+      expect(feed[0].text).toContain("MyNode");
+      expect(feed[0].color).toBe("var(--running)");
+      expect(feed[0].at).toBeGreaterThan(0);
+    });
+
+    it("toggleService stop pushes serviceStopped activity", async () => {
+      const profile = makeVless({ id: "p1", remarks: "MyNode" });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [profile], activeId: profile.id }));
+      bridge.status.mockResolvedValue({
+        ...DEFAULT_STATUS,
+        state: "running",
+        activeId: profile.id,
+      });
+      await useAppStore.getState().hydrate();
+
+      await useAppStore.getState().toggleService();
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("stop_circle");
+      expect(feed[0].color).toBe("var(--error)");
+    });
+
+    it("addProfiles pushes profileImported activity", async () => {
+      await useAppStore.getState().hydrate();
+      const profiles = [makeVless({ id: "p1" }), makeVless({ id: "p2" })];
+      useAppStore.getState().addProfiles(profiles);
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed).toHaveLength(1);
+      expect(feed[0].icon).toBe("download");
+      expect(feed[0].text).toMatch(/2/);
+    });
+
+    it("updateSub pushes subUpdated activity on success", async () => {
+      const sub = makeSub({ id: "s1", remarks: "MySub" });
+      bridge.readState.mockResolvedValue(makeState({ subscriptions: [sub] }));
+      bridge.fetchSubscription.mockResolvedValue([makeVless({ id: "p1", subId: "s1" })]);
+      await useAppStore.getState().hydrate();
+
+      await useAppStore.getState().updateSub("s1");
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("cloud_sync");
+      expect(feed[0].text).toContain("MySub");
+    });
+
+    it("selectBest pushes bestSelected activity", async () => {
+      const best = makeVless({ id: "p1", remarks: "FastNode", ping: 10 });
+      const slow = makeVless({ id: "p2", remarks: "SlowNode", ping: 200 });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [best, slow], activeId: best.id }));
+      await useAppStore.getState().hydrate();
+
+      useAppStore.getState().selectBest();
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("stars");
+      expect(feed[0].text).toContain("FastNode");
+    });
+
+    it("newer events appear before older ones", async () => {
+      await useAppStore.getState().hydrate();
+      useAppStore.getState().addProfiles([makeVless({ id: "p1" })]);
+      useAppStore.getState().addProfiles([makeVless({ id: "p2" })]);
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].at).toBeGreaterThanOrEqual(feed[1].at);
+    });
+
+    it("speedTestAll pushes speedTestComplete activity", async () => {
+      const profile = makeVless({ id: "p1" });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [profile] }));
+      bridge.speedTestAll = vi.fn(async () => ({ [profile.id]: 5_000_000 }));
+      await useAppStore.getState().hydrate();
+
+      await useAppStore.getState().speedTestAll();
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("speed");
+      expect(feed[0].text).toMatch(/1/);
+    });
+
+    it("removeUnreachable pushes unreachableRemoved activity", async () => {
+      const dead = makeVless({ id: "p1", ping: -1 });
+      const alive = makeVless({ id: "p2", ping: 20 });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [dead, alive] }));
+      await useAppStore.getState().hydrate();
+
+      await useAppStore.getState().removeUnreachable();
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("delete_sweep");
+      expect(feed[0].color).toBe("var(--error)");
+      expect(feed[0].text).toMatch(/1/);
+    });
+
+    it("removeDuplicates pushes duplicatesRemoved activity", async () => {
+      const a = makeVless({ id: "p1", remarks: "Node", address: "1.2.3.4", port: 443 });
+      const b = makeVless({ id: "p2", remarks: "Node", address: "1.2.3.4", port: 443 });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [a, b] }));
+      await useAppStore.getState().hydrate();
+
+      useAppStore.getState().removeDuplicates();
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("content_cut");
+      expect(feed[0].text).toMatch(/1/);
+    });
+
+    it("downloadAsset pushes assetDownloaded activity on success", async () => {
+      const asset = makeAsset({ id: "a1", remarks: "geoip.dat" });
+      bridge.readState.mockResolvedValue(makeState({ assetFiles: [asset] }));
+      bridge.downloadAsset.mockResolvedValue({ ok: true });
+      await useAppStore.getState().hydrate();
+
+      await useAppStore.getState().downloadAsset("a1");
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("file_download_done");
+      expect(feed[0].text).toContain("geoip.dat");
+    });
+
+    it("upsertProfile pushes profileSaved activity", async () => {
+      await useAppStore.getState().hydrate();
+      const profile = makeVless({ id: "p1", remarks: "MyNode" });
+
+      useAppStore.getState().upsertProfile(profile);
+
+      const feed = useAppStore.getState().recentActivity;
+      expect(feed[0].icon).toBe("edit_note");
+      expect(feed[0].text).toContain("MyNode");
+    });
+  });
 });

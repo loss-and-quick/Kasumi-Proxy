@@ -18,6 +18,8 @@ import { bridge } from "../lib/bridge-provider";
 import { showNativeToast } from "../lib/ksu-webui";
 import type { AssetFile, Profile, RoutingRule } from "../lib/schema";
 import { uid } from "../lib/utils";
+import type { ActivityEvent } from "./activity";
+import { ActivityService } from "./activity";
 import { EMPTY_SETTINGS, mergeSettings } from "./defaults";
 import { errorMessage } from "./errors";
 import { profileFilterRegex } from "./profile-filter";
@@ -52,6 +54,7 @@ interface Store extends AppState {
   pinging: Set<string>; // profile ids currently being pinged
   speedTesting: Set<string>; // profile ids currently being speed-tested
   toast: string | null;
+  recentActivity: ActivityEvent[];
 
   hydrate: () => Promise<void>;
   flush: () => Promise<void>;
@@ -112,6 +115,10 @@ interface Store extends AppState {
 }
 
 export const useAppStore = create<Store>((set, get) => {
+  const activity = new ActivityService();
+  const pushActivity = (icon: string, text: string, color?: string) => {
+    set({ recentActivity: activity.add(icon, text, color) });
+  };
   let t: ReturnType<typeof setTimeout> | null = null;
   const persist = () => {
     if (t) clearTimeout(t);
@@ -196,6 +203,7 @@ export const useAppStore = create<Store>((set, get) => {
     pinging: new Set<string>(),
     speedTesting: new Set<string>(),
     toast: null,
+    recentActivity: [],
     caps: null,
     uploadRate: 0,
     downloadRate: 0,
@@ -276,6 +284,12 @@ export const useAppStore = create<Store>((set, get) => {
         try {
           await showStartingState(id);
           syncService(await bridge.start(id));
+          const remarks = get().profiles.find((p) => p.id === id)?.remarks ?? id;
+          pushActivity(
+            "swap_horiz",
+            translateCurrent("activity.profileSwitched", { remarks }),
+            "var(--primary)",
+          );
           get().notify(translateCurrent("store.service.switched"));
         } catch (e: unknown) {
           get().notify(translateCurrent("store.service.restartFailed", { error: errorMessage(e) }));
@@ -291,11 +305,18 @@ export const useAppStore = create<Store>((set, get) => {
         if (service.state === "running") {
           set({ busy: true });
           syncService(await bridge.stop());
+          pushActivity("stop_circle", translateCurrent("activity.serviceStopped"), "var(--error)");
           get().notify(translateCurrent("store.service.stopped"));
         } else if (activeId) {
           await get().flush();
           await showStartingState(activeId);
           syncService(await bridge.start(activeId));
+          const remarks = get().profiles.find((p) => p.id === activeId)?.remarks ?? activeId;
+          pushActivity(
+            "play_circle",
+            translateCurrent("activity.serviceStarted", { remarks }),
+            "var(--running)",
+          );
           get().notify(translateCurrent("store.service.started"));
         } else {
           get().notify(translateCurrent("store.service.selectActiveFirst"));
@@ -318,6 +339,13 @@ export const useAppStore = create<Store>((set, get) => {
           await showStartingState(get().service.activeId);
           syncService(await bridge.restart());
         }
+        const remarks =
+          get().profiles.find((p) => p.id === (activeId ?? get().service.activeId))?.remarks ?? "";
+        pushActivity(
+          "restart_alt",
+          translateCurrent("activity.serviceRestarted", { remarks }),
+          "var(--warn)",
+        );
         get().notify(translateCurrent("store.service.restarted"));
       } catch (e: unknown) {
         get().notify(translateCurrent("store.service.restartFailed", { error: errorMessage(e) }));
@@ -329,6 +357,7 @@ export const useAppStore = create<Store>((set, get) => {
 
     upsertProfile(p) {
       patch((s) => ({ profiles: upsertById(s.profiles, p, "front") }));
+      pushActivity("edit_note", translateCurrent("activity.profileSaved", { remarks: p.remarks }));
     },
     async removeProfile(id) {
       const wasActive = get().activeId === id;
@@ -366,6 +395,10 @@ export const useAppStore = create<Store>((set, get) => {
     addProfiles(profiles) {
       if (!profiles.length) return;
       patch((s) => ({ profiles: [...profiles, ...s.profiles] }));
+      pushActivity(
+        "download",
+        translateCurrent("activity.profileImported", { count: profiles.length }),
+      );
       get().notify(translateCurrent("store.profile.imported", { count: profiles.length }));
     },
 
@@ -423,6 +456,10 @@ export const useAppStore = create<Store>((set, get) => {
         set({ pinging: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
+      pushActivity(
+        "speed",
+        translateCurrent("activity.pingComplete", { count: get().profiles.length }),
+      );
     },
 
     async realPingAll() {
@@ -440,6 +477,10 @@ export const useAppStore = create<Store>((set, get) => {
         set({ pinging: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
+      pushActivity(
+        "speed",
+        translateCurrent("activity.pingComplete", { count: get().profiles.length }),
+      );
     },
 
     async speedTestAll() {
@@ -457,6 +498,10 @@ export const useAppStore = create<Store>((set, get) => {
         set({ speedTesting: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
+      pushActivity(
+        "speed",
+        translateCurrent("activity.speedTestComplete", { count: get().profiles.length }),
+      );
     },
 
     async removeUnreachable() {
@@ -474,6 +519,11 @@ export const useAppStore = create<Store>((set, get) => {
         activeId: activeIdAfterProfileRemoval(s.activeId, unreachable),
       }));
       await get().flush();
+      pushActivity(
+        "delete_sweep",
+        translateCurrent("activity.unreachableRemoved", { count: unreachable.size }),
+        "var(--error)",
+      );
       get().notify(translateCurrent("store.ping.removeUnreachable", { count: unreachable.size }));
     },
 
@@ -487,6 +537,11 @@ export const useAppStore = create<Store>((set, get) => {
         return;
       }
       void get().setActive(best.id);
+      pushActivity(
+        "stars",
+        translateCurrent("activity.bestSelected", { remarks: best.remarks }),
+        "var(--primary)",
+      );
       get().notify(translateCurrent("store.ping.selectBest"));
     },
 
@@ -498,6 +553,10 @@ export const useAppStore = create<Store>((set, get) => {
         return;
       }
       patch(() => ({ profiles: kept }));
+      pushActivity(
+        "content_cut",
+        translateCurrent("activity.duplicatesRemoved", { count: removedCount }),
+      );
       get().notify(translateCurrent("store.dedup.done", { count: removedCount }));
     },
 
@@ -609,6 +668,7 @@ export const useAppStore = create<Store>((set, get) => {
             }),
           );
         }
+        pushActivity("cloud_sync", translateCurrent("activity.subUpdated", { name: sub.remarks }));
       } catch (e: unknown) {
         patch((s) => ({
           subscriptions: s.subscriptions.map((x) =>
@@ -684,6 +744,10 @@ export const useAppStore = create<Store>((set, get) => {
           item.id === id ? { ...item, lastUpdated: Date.now() } : item,
         ),
       }));
+      pushActivity(
+        "file_download_done",
+        translateCurrent("activity.assetDownloaded", { name: asset.remarks }),
+      );
       get().notify(translateCurrent("store.asset.updated", { mode, name: asset.remarks }));
     },
 
@@ -726,6 +790,7 @@ export const useAppStore = create<Store>((set, get) => {
       }
       patch((s) => mergeBackupState(s, incoming, mode));
       await get().flush();
+      pushActivity("backup", translateCurrent("activity.backupRestored"));
       get().notify(
         translateCurrent(mode === "replace" ? "store.backup.restored" : "store.backup.merged"),
       );

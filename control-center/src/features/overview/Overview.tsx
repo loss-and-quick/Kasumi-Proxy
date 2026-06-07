@@ -2,7 +2,7 @@
 // features/overview/Overview.tsx
 // Operational dashboard — first screen users see.
 // ============================================================
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AppBar,
   Btn,
@@ -52,6 +52,18 @@ export default function Overview({
   const updateAllSubs = useAppStore((s) => s.updateAllSubs);
   const t = useT();
 
+  const recentActivity = useAppStore((s) => s.recentActivity);
+  const [, setTick] = useState(0);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Re-render every 30 s so relative timestamps stay fresh
+  useEffect(() => {
+    tickRef.current = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, []);
+
   const needsAssets =
     settings.routingMode !== "global" && !assetFiles.some((a) => a.lastUpdated != null);
 
@@ -78,25 +90,15 @@ export default function Overview({
   const coreSummary =
     running && service.core ? service.core : (resolvedCore ?? service.core ?? t("common.xrayCore"));
 
-  const recent = [
-    running && active
-      ? {
-          icon: "play_circle",
-          color: "var(--running)",
-          text: t("overview.activity.running", { remarks: active.remarks }),
-          time: formatUptime(service.uptimeSec),
-        }
-      : null,
-    {
-      icon: "dns",
-      color: "var(--primary)",
-      text: t("overview.activity.profiles", { profiles: profiles.length, groups: groups.length }),
-      time: "now",
-    },
-    enabledSubs
-      ? { icon: "cloud_sync", text: t("overview.activity.subs", { n: enabledSubs }), time: "now" }
-      : null,
-  ].filter(Boolean) as Array<{ icon: string; color?: string; text: string; time: string }>;
+  const now = Date.now();
+  const relTime = (at: number): string => {
+    const sec = Math.floor((now - at) / 1000);
+    if (sec < 60) return t("time.now");
+    const min = Math.floor(sec / 60);
+    if (min < 60) return t("time.ago", { n: min, unit: t("time.unit.m") });
+    const hr = Math.floor(min / 60);
+    return t("time.ago", { n: hr, unit: t("time.unit.h") });
+  };
 
   return (
     <div className="app-region screen-enter">
@@ -325,24 +327,36 @@ export default function Overview({
 
         <SectionLabel>{t("overview.recentActivity")}</SectionLabel>
         <Card style={{ padding: "4px 14px" }}>
-          {recent.map((l) => (
-            <div key={`${l.time}-${l.text}`} className="list-row" style={{ cursor: "default" }}>
-              <div className="lr-icon" style={{ background: "transparent", width: 30 }}>
-                <Icon
-                  name={l.icon}
-                  style={{ fontSize: 19, color: l.color || "var(--on-surface-variant)" }}
-                />
-              </div>
-              <div className="lr-main">
-                <div className="lr-title" style={{ fontSize: 13.5, fontWeight: 400 }}>
-                  {l.text}
-                </div>
-              </div>
-              <span className="mono" style={{ fontSize: 11, color: "var(--on-surface-faint)" }}>
-                {l.time}
-              </span>
+          {recentActivity.length === 0 ? (
+            <div
+              className="list-row"
+              style={{ cursor: "default", color: "var(--on-surface-faint)", fontSize: 13 }}
+            >
+              {t("overview.activity.profiles", {
+                profiles: profiles.length,
+                groups: groups.length,
+              })}
             </div>
-          ))}
+          ) : (
+            recentActivity.map((l) => (
+              <div key={`${l.at}-${l.text}`} className="list-row" style={{ cursor: "default" }}>
+                <div className="lr-icon" style={{ background: "transparent", width: 30 }}>
+                  <Icon
+                    name={l.icon}
+                    style={{ fontSize: 19, color: l.color || "var(--on-surface-variant)" }}
+                  />
+                </div>
+                <div className="lr-main">
+                  <div className="lr-title" style={{ fontSize: 13.5, fontWeight: 400 }}>
+                    {l.text}
+                  </div>
+                </div>
+                <span className="mono" style={{ fontSize: 11, color: "var(--on-surface-faint)" }}>
+                  {relTime(l.at)}
+                </span>
+              </div>
+            ))
+          )}
         </Card>
         <div style={{ height: 8 }} />
       </div>
