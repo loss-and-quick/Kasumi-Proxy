@@ -326,19 +326,9 @@ export default function Overview({
         />
 
         <SectionLabel>{t("overview.recentActivity")}</SectionLabel>
-        <Card style={{ padding: "4px 14px" }}>
-          {recentActivity.length === 0 ? (
-            <div
-              className="list-row"
-              style={{ cursor: "default", color: "var(--on-surface-faint)", fontSize: 13 }}
-            >
-              {t("overview.activity.profiles", {
-                profiles: profiles.length,
-                groups: groups.length,
-              })}
-            </div>
-          ) : (
-            recentActivity.map((l) => (
+        {recentActivity.length > 0 && (
+          <Card style={{ padding: "4px 14px" }}>
+            {recentActivity.map((l) => (
               <div key={`${l.at}-${l.text}`} className="list-row" style={{ cursor: "default" }}>
                 <div className="lr-icon" style={{ background: "transparent", width: 30 }}>
                   <Icon
@@ -355,9 +345,9 @@ export default function Overview({
                   {relTime(l.at)}
                 </span>
               </div>
-            ))
-          )}
-        </Card>
+            ))}
+          </Card>
+        )}
         <div style={{ height: 8 }} />
       </div>
     </div>
