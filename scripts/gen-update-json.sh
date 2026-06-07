@@ -26,11 +26,14 @@ code="$(grep -m1 '^versionCode=' "$PROP" | cut -d= -f2)"
 # JSON forbids leading zeros — emit versionCode as a bare base-10 integer.
 code="$((10#$code))"
 
+raw="https://raw.githubusercontent.com/${repo}/main"
+
 cat >"$OUT" <<EOF
 {
   "version": "${ver}",
   "versionCode": ${code},
-  "zipUrl": "${server}/${repo}/releases/download/${ver}/kasumi-proxy-${ver}.zip"
+  "zipUrl": "${server}/${repo}/releases/download/${ver}/kasumi-proxy-${ver}.zip",
+  "changelog": "${raw}/CHANGELOG.md"
 }
 EOF
 
