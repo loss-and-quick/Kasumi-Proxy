@@ -62,9 +62,9 @@ jobs:
           [ "$has_code_commits" = "true" ] && skip=false
 
           # 2. Upstream binary updates
-          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
-          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
-          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\(.*\)}/\1/')
+          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
 
           latest_xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
           latest_t2s=$(gh release view --repo xjasonlyu/tun2socks --json tagName -q .tagName)
