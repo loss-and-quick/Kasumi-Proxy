@@ -84,8 +84,9 @@ interface Store extends AppState {
   selectBest: () => void;
 
   // groups
-  addGroup: (name: string) => void;
-  removeGroup: (id: string) => void;
+  addGroup: (name: string) => string;
+  renameGroup: (id: string, name: string) => void;
+  removeGroup: (id: string) => Promise<void>;
 
   // subscriptions
   upsertSub: (s: Subscription) => void;
@@ -561,13 +562,25 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     addGroup(name) {
-      patch((s) => ({ groups: [...s.groups, { id: uid(), name }] }));
+      const id = uid();
+      patch((s) => ({ groups: [...s.groups, { id, name }] }));
+      return id;
     },
-    removeGroup(id) {
-      patch((s) => ({
+    renameGroup(id, name) {
+      patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
+    },
+    async removeGroup(id) {
+      if (id === "g-main") return;
+      const { profiles, activeId } = get();
+      const activeProfile = profiles.find((p) => p.id === activeId);
+      // The group holding the active profile is protected from deletion.
+      if (activeProfile?.groupId === id) return;
+      const removed = new Set(profiles.filter((p) => p.groupId === id).map((p) => p.id));
+      set((s) => ({
         groups: s.groups.filter((g) => g.id !== id),
-        profiles: s.profiles.map((p) => (p.groupId === id ? { ...p, groupId: "g-main" } : p)),
+        profiles: removeProfilesByIds(s.profiles, removed),
       }));
+      await get().flush();
     },
 
     upsertSub(sub) {
