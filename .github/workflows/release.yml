@@ -9,6 +9,10 @@ on:
         description: 'Force release even without changes'
         type: boolean
         default: false
+      skip_bump:
+        description: 'Skip version bump (use current version)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -138,7 +142,13 @@ jobs:
       - name: Bump version
         if: steps.changes.outputs.skip != 'true'
         id: bump
-        run: echo "version=$(scripts/bump-version.sh ${{ steps.changes.outputs.bump }})" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${{ inputs.skip_bump }}" = "true" ]; then
+            version=$(grep -m1 '^version=' module/module.prop | cut -d= -f2)
+          else
+            version=$(scripts/bump-version.sh ${{ steps.changes.outputs.bump }})
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Build release zip
         if: steps.changes.outputs.skip != 'true'
