@@ -497,6 +497,10 @@ export const useAppStore = create<Store>((set, get) => {
         set({ speedTesting: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
+      pushActivity(
+        "speed",
+        translateCurrent("activity.speedTestComplete", { count: get().profiles.length }),
+      );
     },
 
     async removeUnreachable() {
@@ -514,6 +518,11 @@ export const useAppStore = create<Store>((set, get) => {
         activeId: activeIdAfterProfileRemoval(s.activeId, unreachable),
       }));
       await get().flush();
+      pushActivity(
+        "delete_sweep",
+        translateCurrent("activity.unreachableRemoved", { count: unreachable.size }),
+        "var(--error)",
+      );
       get().notify(translateCurrent("store.ping.removeUnreachable", { count: unreachable.size }));
     },
 
@@ -543,6 +552,10 @@ export const useAppStore = create<Store>((set, get) => {
         return;
       }
       patch(() => ({ profiles: kept }));
+      pushActivity(
+        "content_cut",
+        translateCurrent("activity.duplicatesRemoved", { count: removedCount }),
+      );
       get().notify(translateCurrent("store.dedup.done", { count: removedCount }));
     },
 
@@ -730,6 +743,10 @@ export const useAppStore = create<Store>((set, get) => {
           item.id === id ? { ...item, lastUpdated: Date.now() } : item,
         ),
       }));
+      pushActivity(
+        "file_download_done",
+        translateCurrent("activity.assetDownloaded", { name: asset.remarks }),
+      );
       get().notify(translateCurrent("store.asset.updated", { mode, name: asset.remarks }));
     },
 
