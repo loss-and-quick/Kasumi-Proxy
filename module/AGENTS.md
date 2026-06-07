@@ -23,6 +23,12 @@ POSIX, and don't blanket-disable real warnings (`SC2046`, `SC2086`, `SC3020`) �
 - **`bin/kasumi-proxyctl`** is the typed facade the UI calls: `kasumi-proxyctl <method> [args]`, JSON on
   stdout, payloads on stdin. To avoid a `jq` dependency it never parses nested JSON. Add new
   capabilities as new methods in its `case "$method"` dispatch.
+  - **A method must not block for more than a moment.** The UI calls these through `ksu.exec`,
+    which freezes the WebView for the command's whole duration. So any long-running op is split
+    into a fast `<op>Start` that backgrounds the work (`( … ) >/dev/null 2>&1 &`, writing a
+    status/result file via `write_test_job` / `write_asset_job_status`) plus a fast `<op>Status`
+    the UI polls — see `downloadAssetStart`/`downloadAssetStatus` and
+    `pingStart`/`realpingStart`/`speedtestStart`.
 - **`service.sh`** is the daemon (core + tun2socks + iptables/`ip rule` marking via the
   `KASUMI_PROXY_MARK` chain); `proxy_control.sh` is the start/stop/restart facade over the control
   pipe. State lives in `/data/adb/kasumi-proxy/`.

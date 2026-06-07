@@ -59,6 +59,12 @@ errors. Use `bunx @biomejs/biome check --write src/` to auto-fix import order / 
 
 ## Watch-outs
 
+- **`ksu.exec` freezes the WebView renderer for the entire duration of the shell command.**
+  Verified empirically: a `sleep 8` exec drops a 100ms `setInterval` to **0 ticks** — the whole
+  WebUI hangs, not just our page. So a `Bridge` method must **never** issue one long-running
+  exec. Anything that can take more than a moment runs as a background job: a fast `*Start` that
+  spawns the work and returns immediately, polled by a fast `*Status` every 250ms until done.
+  See `runTestJob` (tcping / realping / speedtest) and `downloadAsset` for the pattern.
 - `vite.config.ts` uses `base: "./"` (relative asset paths) so the bundle works under BusyBox
   httpd and WebView — don't switch to absolute `/`.
 - Large components (`features/{profiles,settings,editor}`) are slated for decomposition — see
