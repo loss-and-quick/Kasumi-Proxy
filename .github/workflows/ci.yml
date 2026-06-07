@@ -2,8 +2,20 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - 'control-center/src/**'
+      - 'module/**'
+      - 'scripts/**'
+      - 'control-center/package.json'
+      - 'control-center/bun.lock'
   push:
     branches: [main]
+    paths:
+      - 'control-center/src/**'
+      - 'module/**'
+      - 'scripts/**'
+      - 'control-center/package.json'
+      - 'control-center/bun.lock'
 
 jobs:
   lint:
