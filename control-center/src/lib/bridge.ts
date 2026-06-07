@@ -61,9 +61,12 @@ export interface Bridge {
   // diagnostics
   ping(profileId: string): Promise<number>;
   pingAll(): Promise<Record<string, number>>;
-  realPing(profileId: string): Promise<number>;
+  // `port` lets batch runs hand each concurrent worker its own pre-allocated
+  // free port so the on-demand test cores never share a SOCKS port / job file
+  // (see realPingAll). When omitted, the impl allocates one itself.
+  realPing(profileId: string, port?: number): Promise<number>;
   realPingAll(): Promise<Record<string, number>>;
-  speedTest(profileId: string): Promise<number>; // bytes/sec, -1 = failed
+  speedTest(profileId: string, port?: number): Promise<number>; // bytes/sec, -1 = failed
   speedTestAll(): Promise<Record<string, number>>;
   log(input?: {
     target?: "xray" | "singbox" | "tun2socks" | "service" | "proxy_control";

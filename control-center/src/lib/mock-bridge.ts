@@ -157,7 +157,7 @@ export const mockBridge: Bridge = {
     return results;
   },
 
-  async realPing(profileId: string): Promise<number> {
+  async realPing(profileId: string, _port?: number): Promise<number> {
     await new Promise((r) => setTimeout(r, 800 + Math.random() * 1200));
     const ms = Math.random() < 0.15 ? -1 : simPing();
     state.profiles = state.profiles.map((p) => (p.id === profileId ? { ...p, ping: ms } : p));
@@ -181,7 +181,7 @@ export const mockBridge: Bridge = {
     return results;
   },
 
-  async speedTest(_profileId: string): Promise<number> {
+  async speedTest(_profileId: string, _port?: number): Promise<number> {
     await new Promise((r) => setTimeout(r, 3000 + Math.random() * 5000));
     const bps = Math.random() < 0.15 ? -1 : Math.floor(500_000 + Math.random() * 9_500_000);
     return bps;

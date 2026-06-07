@@ -701,9 +701,44 @@ case "$method" in
         printf ']\n'
         ;;
 
-    freePort)
-        # args: [<start>]  -> {"port":N} or {"port":0} if none found
-        fp=$(find_free_port "${1:-19000}") && printf '{"port":%d}\n' "$fp" || printf '{"port":0}\n'
+    freePorts)
+        # args: <start> <count> [<span>]  -> {"ports":[N,...]}
+        # ONE snapshot of /proc/net/tcp{,6}: return <count> distinct, non-
+        # overlapping port blocks (each <span> consecutive ports currently free).
+        # The kernel only tells us which ports are *listening now*, so a caller
+        # that needs several ports at once (parallel realping/speedtest workers)
+        # must take them from a single snapshot here — asking port-by-port would
+        # keep returning the same "free" port until a core actually binds it.
+        fps_start="${1:-19000}"; fps_count="${2:-1}"; fps_span="${3:-1}"
+        case "$fps_start" in (''|*[!0-9]*) fps_start=19000 ;; esac
+        case "$fps_count" in (''|*[!0-9]*) fps_count=1 ;; esac
+        case "$fps_span"  in (''|*[!0-9]*) fps_span=1 ;; esac
+        [ "$fps_count" -lt 1 ] && fps_count=1
+        [ "$fps_span"  -lt 1 ] && fps_span=1
+        # Set of in-use ports as 4-hex-digit uppercase tokens (the field is
+        # HEXIP:HEXPORT; split on ':' and take the port half).
+        fps_used=" $(cat /proc/net/tcp /proc/net/tcp6 2>/dev/null \
+            | awk '{ if (split($2, a, ":") == 2 && a[2] ~ /^[0-9A-Fa-f]+$/) print a[2] }' \
+            | tr 'a-f' 'A-F' | tr '\n' ' ') "
+        printf '{"ports":['
+        fps_p="$fps_start"; fps_got=0; fps_first=1
+        while [ "$fps_got" -lt "$fps_count" ] && [ "$fps_p" -le $(( 65000 - fps_span )) ]; do
+            fps_ok=1; fps_i=0
+            while [ "$fps_i" -lt "$fps_span" ]; do
+                fps_hex=$(printf '%04X' $(( fps_p + fps_i )))
+                case "$fps_used" in (*" $fps_hex "*) fps_ok=0; break ;; esac
+                fps_i=$(( fps_i + 1 ))
+            done
+            if [ "$fps_ok" = 1 ]; then
+                [ "$fps_first" = 1 ] && fps_first=0 || printf ','
+                printf '%d' "$fps_p"
+                fps_got=$(( fps_got + 1 ))
+                fps_p=$(( fps_p + fps_span ))
+            else
+                fps_p=$(( fps_p + 1 ))
+            fi
+        done
+        printf ']}\n'
         ;;
 
     capabilities)
