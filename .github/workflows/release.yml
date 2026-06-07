@@ -76,19 +76,38 @@ jobs:
           bun run check:i18n
           bun run test
 
+      - name: Check for changes since last release
+        id: changes
+        run: |
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$last_tag" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            commits=$(git log "$last_tag"..HEAD --oneline -- . ':(exclude)module/module.prop' ':(exclude)update.json' | wc -l)
+            if [ "$commits" -eq 0 ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
       - name: Bump version
         id: bump
+        if: steps.changes.outputs.skip != 'true'
         run: echo "version=$(scripts/bump-version.sh)" >> "$GITHUB_OUTPUT"
 
       - name: Build release zip
+        if: steps.changes.outputs.skip != 'true'
         env:
           NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: scripts/package-release.sh
 
       - name: Generate update.json
+        if: steps.changes.outputs.skip != 'true'
         run: scripts/gen-update-json.sh
 
       - name: Commit version bump
+        if: steps.changes.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -97,6 +116,7 @@ jobs:
           git push
 
       - name: Create GitHub Release
+        if: steps.changes.outputs.skip != 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.bump.outputs.version }}
