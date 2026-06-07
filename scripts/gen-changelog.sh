@@ -45,6 +45,7 @@ last_tag=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo "")
 
 	# Git commits since last tag
 	if [ -n "$last_tag" ]; then
+		repo_url=$(git -C "$ROOT" remote get-url origin 2>/dev/null | sed 's|git@github.com:|https://github.com/|;s|\.git$||' || echo "")
 		commits=$(git -C "$ROOT" log "$last_tag"..HEAD --oneline \
 			--no-merges \
 			-- . ':(exclude)module/module.prop' ':(exclude)update.json' ':(exclude)CHANGELOG.md' \
@@ -53,7 +54,13 @@ last_tag=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo "")
 			echo "### Changes"
 			echo ""
 			printf '%s\n' "$commits" | while IFS= read -r line; do
-				echo "- ${line}"
+				sha="${line%% *}"
+				msg="${line#* }"
+				if [ -n "$repo_url" ]; then
+					echo "- [\`${sha}\`](${repo_url}/commit/${sha}) ${msg}"
+				else
+					echo "- ${line}"
+				fi
 			done
 			echo ""
 		fi
