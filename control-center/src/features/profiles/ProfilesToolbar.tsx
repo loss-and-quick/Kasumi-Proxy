@@ -183,21 +183,23 @@ export function ProfilesToolbar({
                 {selectedCount}
               </span>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <Btn variant="outline" sm onClick={onBulkPing} disabled={bulkDisabled}>
+            {/* Even two-column grid: Move pairs with its target select; Delete
+                stays on its own row, away from the move selector. */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Btn variant="outline" sm block onClick={onBulkPing} disabled={bulkDisabled}>
                 {t("profiles.bulkPing")}
               </Btn>
-              <Btn variant="outline" sm onClick={onBulkShare} disabled={bulkDisabled}>
+              <Btn variant="outline" sm block onClick={onBulkShare} disabled={bulkDisabled}>
                 {t("profiles.bulkShare")}
               </Btn>
-              <Btn variant="outline" sm onClick={onBulkMove} disabled={bulkDisabled}>
+              <Btn variant="outline" sm block onClick={onBulkMove} disabled={bulkDisabled}>
                 {t("profiles.bulkMove")}
               </Btn>
               <select
                 className="select-box"
                 value={moveGroup}
                 onChange={(e) => setMoveGroup(e.target.value)}
-                style={{ width: 160, height: 34, paddingTop: 6, paddingBottom: 6 }}
+                style={{ width: "100%", height: 34, paddingTop: 6, paddingBottom: 6 }}
               >
                 {groups.map((group) => (
                   <option key={group.id} value={group.id}>
@@ -205,11 +207,11 @@ export function ProfilesToolbar({
                   </option>
                 ))}
               </select>
-              <Btn variant="outline" sm onClick={onBulkDedup}>
-                {t("profiles.bulkDedup")}
-              </Btn>
-              <Btn variant="error" sm onClick={onBulkDelete} disabled={bulkDisabled}>
+              <Btn variant="error" sm block onClick={onBulkDelete} disabled={bulkDisabled}>
                 {t("profiles.bulkDelete")}
+              </Btn>
+              <Btn variant="outline" sm block onClick={onBulkDedup}>
+                {t("profiles.bulkDedup")}
               </Btn>
             </div>
           </Card>
