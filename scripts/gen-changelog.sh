@@ -49,7 +49,7 @@ last_tag=$(git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || echo "")
 		commits=$(git -C "$ROOT" log "$last_tag"..HEAD --oneline \
 			--no-merges \
 			-- . ':(exclude)module/module.prop' ':(exclude)update.json' ':(exclude)CHANGELOG.md' \
-			2>/dev/null | grep -vE '^[0-9a-f]+ (ci|chore)[:(]' || true)
+			2>/dev/null | grep -vE '^[0-9a-f]+ (ci|chore|refactor)[:(]' || true)
 		if [ -n "$commits" ]; then
 			echo "### Changes"
 			echo ""
