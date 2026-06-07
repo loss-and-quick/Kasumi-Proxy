@@ -519,6 +519,7 @@ const zh = {
   "settings.assetUse": "使用",
   "settings.assetNotDownloaded": "尚未下载",
   "settings.assetProxyNotRunning": "使用“仅代理”模式前，请先启动代理。",
+  "settings.proxyRunningWarning": "代理正在运行。请先停止代理再修改这些设置。",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

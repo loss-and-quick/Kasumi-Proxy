@@ -653,6 +653,7 @@ const ar = {
   "settings.assetUse": "استخدام",
   "settings.assetNotDownloaded": "لم يتم تنزيله بعد",
   "settings.assetProxyNotRunning": "شغّل الوكيل أولًا قبل استخدام وضع " + '"عبر الوكيل فقط".',
+  "settings.proxyRunningWarning": "الوكيل يعمل. أوقفه لتغيير هذه الإعدادات.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

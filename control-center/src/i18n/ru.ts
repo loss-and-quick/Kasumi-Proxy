@@ -540,6 +540,7 @@ const ru = {
   "settings.assetUse": "Использовать",
   "settings.assetNotDownloaded": "Ещё не скачано",
   "settings.assetProxyNotRunning": "Перед режимом «Только через прокси» сначала запустите прокси.",
+  "settings.proxyRunningWarning": "Прокси запущен. Остановите его, чтобы изменить эти настройки.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

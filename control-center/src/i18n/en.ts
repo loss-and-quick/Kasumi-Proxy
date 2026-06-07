@@ -526,6 +526,7 @@ const en = {
   "settings.assetUse": "Use",
   "settings.assetNotDownloaded": "Not downloaded yet",
   "settings.assetProxyNotRunning": "Start the proxy before using Proxy only mode.",
+  "settings.proxyRunningWarning": "Proxy is running. Stop it to change these settings.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

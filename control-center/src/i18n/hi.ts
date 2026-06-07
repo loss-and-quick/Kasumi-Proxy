@@ -518,6 +518,7 @@ const hi = {
   "settings.assetUse": "उपयोग करें",
   "settings.assetNotDownloaded": "अभी डाउनलोड नहीं किया गया",
   "settings.assetProxyNotRunning": "Proxy only mode उपयोग करने से पहले प्रॉक्सी शुरू करें।",
+  "settings.proxyRunningWarning": "प्रॉक्सी चल रहा है। इन सेटिंग्स को बदलने के लिए इसे बंद करें।",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

@@ -172,6 +172,8 @@ export default function Settings({
 
   const setRoutingMode = (mode: typeof settings.routingMode) => set("routingMode", mode);
 
+  const running = service.state === "running";
+
   return (
     <div className="app-region screen-enter">
       <AppBar title={t("settings.title")} subtitle={t("settings.subtitle")} />
@@ -183,37 +185,55 @@ export default function Settings({
           subscriptionsCount={subscriptions.length}
           activeId={activeId}
         />
-        <RoutingSection
-          settings={settings}
-          set={set}
-          routingRules={routingRules}
-          profiles={profiles}
-          setRoutingMode={setRoutingMode}
-          openNewRule={openNewRule}
-          onEditRule={openRuleEditor}
-          addRoutingRule={addRoutingRule}
-          updateRoutingRule={updateRoutingRule}
-          reorderRoutingRules={reorderRoutingRules}
-          removeRoutingRule={removeRoutingRule}
-          onOpenRulesIO={() => setRulesIOOpen(true)}
-        />
-        <AppFilterSection settings={settings} set={set} onOpenAppFilter={onOpenAppFilter} />
-        <AssetFilesSection
-          assetFiles={assetFiles}
-          busyAssetSet={busyAssetSet}
-          runAssetDownload={runAssetDownload}
-          updateAllAssets={updateAllAssets}
-          openNewAsset={openNewAsset}
-          onEditAsset={openAssetEditor}
-          resourceUpdateMode={resourceUpdateMode}
-          setResourceUpdateMode={setResourceUpdateMode}
-          addResourceLink={addResourceLink}
-          removeAssetFile={removeAssetFile}
-        />
-        <CoresSection coreFor={coreFor} setCoreFor={setCoreFor} />
-        <DnsSection settings={settings} set={set} />
-        <ConnectionSection settings={settings} set={set} />
-        <LocalPortsSection settings={settings} set={set} />
+        {running && (
+          <div
+            style={{
+              margin: "12px 0 2px",
+              padding: "12px 16px",
+              borderRadius: 12,
+              borderLeft: "3px solid var(--running)",
+              background: "var(--sc-low)",
+              color: "var(--on-surface-variant)",
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {t("settings.proxyRunningWarning")}
+          </div>
+        )}
+        <div style={running ? { pointerEvents: "none", opacity: 0.5 } : undefined}>
+          <RoutingSection
+            settings={settings}
+            set={set}
+            routingRules={routingRules}
+            profiles={profiles}
+            setRoutingMode={setRoutingMode}
+            openNewRule={openNewRule}
+            onEditRule={openRuleEditor}
+            addRoutingRule={addRoutingRule}
+            updateRoutingRule={updateRoutingRule}
+            reorderRoutingRules={reorderRoutingRules}
+            removeRoutingRule={removeRoutingRule}
+            onOpenRulesIO={() => setRulesIOOpen(true)}
+          />
+          <AppFilterSection settings={settings} set={set} onOpenAppFilter={onOpenAppFilter} />
+          <AssetFilesSection
+            assetFiles={assetFiles}
+            busyAssetSet={busyAssetSet}
+            runAssetDownload={runAssetDownload}
+            updateAllAssets={updateAllAssets}
+            openNewAsset={openNewAsset}
+            onEditAsset={openAssetEditor}
+            resourceUpdateMode={resourceUpdateMode}
+            setResourceUpdateMode={setResourceUpdateMode}
+            addResourceLink={addResourceLink}
+            removeAssetFile={removeAssetFile}
+          />
+          <CoresSection coreFor={coreFor} setCoreFor={setCoreFor} />
+          <DnsSection settings={settings} set={set} />
+          <ConnectionSection settings={settings} set={set} />
+          <LocalPortsSection settings={settings} set={set} />
+        </div>
         <AdvancedSection settings={settings} set={set} />
         <LanguageSection lang={lang} setLang={setLang} />
         <SystemSection

@@ -520,6 +520,7 @@ const vi = {
   "settings.assetUse": "Sử dụng",
   "settings.assetNotDownloaded": "Chưa tải về",
   "settings.assetProxyNotRunning": "Hãy khởi động proxy trước khi dùng chế độ Chỉ qua proxy.",
+  "settings.proxyRunningWarning": "Proxy đang chạy. Dừng lại để thay đổi các cài đặt này.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

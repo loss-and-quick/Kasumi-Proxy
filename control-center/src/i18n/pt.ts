@@ -519,6 +519,7 @@ const pt = {
   "settings.assetUse": "Usar",
   "settings.assetNotDownloaded": "Ainda não baixado",
   "settings.assetProxyNotRunning": "Inicie o proxy antes de usar o modo Somente proxy.",
+  "settings.proxyRunningWarning": "O proxy está ativo. Pare-o para alterar estas configurações.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",
