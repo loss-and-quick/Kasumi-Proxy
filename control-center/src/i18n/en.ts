@@ -470,6 +470,8 @@ const en = {
   "profiles.sheet.qr": "Show QR code",
   "profiles.qr.unsupported": "This profile type has no share QR link",
   "profiles.groupCreated": "Group created",
+  "profiles.groupRenamed": "Group renamed",
+  "profiles.renameGroup": "Rename group",
   "profiles.deleted": "Profile deleted",
   "profiles.groupDefault": "New group {n}",
   "profiles.row.select": "Select",

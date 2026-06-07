@@ -464,6 +464,8 @@ const es = {
   "profiles.sheet.qr": "Mostrar código QR",
   "profiles.qr.unsupported": "Este tipo de perfil no tiene enlace QR para compartir",
   "profiles.groupCreated": "Grupo creado",
+  "profiles.groupRenamed": "Grupo renombrado",
+  "profiles.renameGroup": "Renombrar grupo",
   "profiles.deleted": "Perfil eliminado",
   "profiles.groupDefault": "Nuevo grupo {n}",
   "profiles.row.select": "Seleccionar",

@@ -486,6 +486,8 @@ const ru = {
   "profiles.sheet.qr": "Показать QR-код",
   "profiles.qr.unsupported": "У этого типа профиля нет QR-ссылки для шаринга",
   "profiles.groupCreated": "Группа создана",
+  "profiles.groupRenamed": "Группа переименована",
+  "profiles.renameGroup": "Переименовать группу",
   "profiles.deleted": "Профиль удалён",
   "profiles.groupDefault": "Новая группа {n}",
   "profiles.row.select": "Выбрать",
