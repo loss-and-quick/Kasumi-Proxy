@@ -459,6 +459,8 @@ const hi = {
   "profiles.sheet.qr": "QR कोड दिखाएँ",
   "profiles.qr.unsupported": "इस प्रोफ़ाइल प्रकार के लिए साझा QR लिंक उपलब्ध नहीं है",
   "profiles.groupCreated": "समूह बना दिया गया",
+  "profiles.groupRenamed": "समूह का नाम बदल दिया गया",
+  "profiles.renameGroup": "समूह का नाम बदलें",
   "profiles.deleted": "प्रोफ़ाइल हटा दी गई",
   "profiles.groupDefault": "नया समूह {n}",
   "profiles.row.select": "चयन करें",

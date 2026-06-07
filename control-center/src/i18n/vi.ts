@@ -461,6 +461,8 @@ const vi = {
   "profiles.sheet.qr": "Hiện mã QR",
   "profiles.qr.unsupported": "Loại hồ sơ này không có liên kết QR để chia sẻ",
   "profiles.groupCreated": "Đã tạo nhóm",
+  "profiles.groupRenamed": "Đã đổi tên nhóm",
+  "profiles.renameGroup": "Đổi tên nhóm",
   "profiles.deleted": "Đã xóa hồ sơ",
   "profiles.groupDefault": "Nhóm mới {n}",
   "profiles.row.select": "Chọn",

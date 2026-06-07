@@ -85,6 +85,7 @@ interface Store extends AppState {
 
   // groups
   addGroup: (name: string) => void;
+  renameGroup: (id: string, name: string) => void;
   removeGroup: (id: string) => void;
 
   // subscriptions
@@ -562,6 +563,9 @@ export const useAppStore = create<Store>((set, get) => {
 
     addGroup(name) {
       patch((s) => ({ groups: [...s.groups, { id: uid(), name }] }));
+    },
+    renameGroup(id, name) {
+      patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
     },
     removeGroup(id) {
       patch((s) => ({

@@ -59,6 +59,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const selectBest = useAppStore((s) => s.selectBest);
   const addProfiles = useAppStore((s) => s.addProfiles);
   const addGroup = useAppStore((s) => s.addGroup);
+  const renameGroup = useAppStore((s) => s.renameGroup);
   const t = useT();
 
   const [pingSheetOpen, setPingSheetOpen] = useState(false);
@@ -250,6 +251,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         onUse={(id) => void setActive(id)}
         onEdit={onOpenEditor}
         onMore={setSheetProfile}
+        onRenameGroup={renameGroup}
       />
 
       <button type="button" className="fab" onClick={() => setAddOpen(true)}>
