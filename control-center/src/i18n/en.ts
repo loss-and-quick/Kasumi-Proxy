@@ -52,6 +52,23 @@ const en = {
     one: "# active subscription",
     other: "# active subscriptions",
   }),
+  "activity.serviceStarted": "Service started · {remarks}",
+  "activity.serviceStopped": "Service stopped",
+  "activity.serviceRestarted": "Service restarted · {remarks}",
+  "activity.profileSwitched": "Switched to {remarks}",
+  "activity.profileImported": plural("count", {
+    one: "Imported # profile",
+    other: "Imported # profiles",
+  }),
+  "activity.subUpdated": "Subscription updated · {name}",
+  "activity.pingComplete": "Ping complete · {count} profiles",
+  "activity.bestSelected": "Best profile selected · {remarks}",
+  "activity.backupRestored": "Backup restored",
+  "time.now": "now",
+  "time.ago": "{n}{unit} ago",
+  "time.unit.s": "s",
+  "time.unit.m": "m",
+  "time.unit.h": "h",
   // profiles
   "profiles.title": "Profiles",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

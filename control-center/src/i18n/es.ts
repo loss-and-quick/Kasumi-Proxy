@@ -51,6 +51,23 @@ const es = {
     one: "# suscripción activa",
     other: "# suscripciones activas",
   }),
+  "activity.serviceStarted": "Servicio iniciado · {remarks}",
+  "activity.serviceStopped": "Servicio detenido",
+  "activity.serviceRestarted": "Servicio reiniciado · {remarks}",
+  "activity.profileSwitched": "Cambiado a {remarks}",
+  "activity.profileImported": plural("count", {
+    one: "Importado # perfil",
+    other: "Importados # perfiles",
+  }),
+  "activity.subUpdated": "Suscripción actualizada · {name}",
+  "activity.pingComplete": "Ping completado · {count} perfiles",
+  "activity.bestSelected": "Mejor perfil seleccionado · {remarks}",
+  "activity.backupRestored": "Copia de seguridad restaurada",
+  "time.now": "ahora",
+  "time.ago": "hace {n}{unit}",
+  "time.unit.s": "s",
+  "time.unit.m": "min",
+  "time.unit.h": "h",
   // profiles
   "profiles.title": "Perfiles",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

@@ -51,6 +51,23 @@ const pt = {
     one: "# assinatura ativa",
     other: "# assinaturas ativas",
   }),
+  "activity.serviceStarted": "Serviço iniciado · {remarks}",
+  "activity.serviceStopped": "Serviço parado",
+  "activity.serviceRestarted": "Serviço reiniciado · {remarks}",
+  "activity.profileSwitched": "Alterado para {remarks}",
+  "activity.profileImported": plural("count", {
+    one: "Importado # perfil",
+    other: "Importados # perfis",
+  }),
+  "activity.subUpdated": "Assinatura atualizada · {name}",
+  "activity.pingComplete": "Ping concluído · {count} perfis",
+  "activity.bestSelected": "Melhor perfil selecionado · {remarks}",
+  "activity.backupRestored": "Backup restaurado",
+  "time.now": "agora",
+  "time.ago": "há {n}{unit}",
+  "time.unit.s": "s",
+  "time.unit.m": "min",
+  "time.unit.h": "h",
   // profiles
   "profiles.title": "Perfis",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

@@ -50,6 +50,23 @@ const hi = {
     one: "# सक्रिय सदस्यता",
     other: "# सक्रिय सदस्यताएँ",
   }),
+  "activity.serviceStarted": "सेवा शुरू · {remarks}",
+  "activity.serviceStopped": "सेवा बंद",
+  "activity.serviceRestarted": "सेवा पुनः शुरू · {remarks}",
+  "activity.profileSwitched": "{remarks} पर स्विच किया",
+  "activity.profileImported": plural("count", {
+    one: "# प्रोफ़ाइल आयात की",
+    other: "# प्रोफ़ाइलें आयात की",
+  }),
+  "activity.subUpdated": "सदस्यता अपडेट · {name}",
+  "activity.pingComplete": "पिंग पूर्ण · {count} प्रोफ़ाइलें",
+  "activity.bestSelected": "सर्वश्रेष्ठ प्रोफ़ाइल चुनी · {remarks}",
+  "activity.backupRestored": "बैकअप पुनर्स्थापित",
+  "time.now": "अभी",
+  "time.ago": "{n}{unit} पहले",
+  "time.unit.s": "से",
+  "time.unit.m": "मि",
+  "time.unit.h": "घ",
   // profiles
   "profiles.title": "प्रोफ़ाइल",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {
