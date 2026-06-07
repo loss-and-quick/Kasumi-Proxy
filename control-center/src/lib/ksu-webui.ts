@@ -2,7 +2,6 @@ import {
   enableEdgeToEdge,
   exec as ksuExec,
   getPackagesInfo as ksuGetPackagesInfo,
-  listPackages as ksuListPackages,
   moduleInfo as ksuModuleInfo,
   toast as ksuToast,
 } from "kernelsu";
@@ -60,23 +59,53 @@ export function showNativeToast(message: string): boolean {
   }
 }
 
-export function ksuListApps(): {
-  pkg: string;
-  uid: number;
-  system: boolean;
-  label?: string;
-  iconUrl?: string;
-}[] {
+export async function ksuListApps(): Promise<
+  {
+    pkg: string;
+    uid: number;
+    system: boolean;
+    label?: string;
+    iconUrl?: string;
+  }[]
+> {
   try {
-    const pkgs = ksuListPackages("all");
-    const infos = ksuGetPackagesInfo(pkgs);
-    return infos.map((p) => ({
-      pkg: p.packageName,
-      uid: p.uid,
-      system: p.isSystem,
-      label: p.appLabel || undefined,
-      iconUrl: `ksu://icon/${p.packageName}`,
-    }));
+    const userIds = [...(await ksuExec("pm list users")).stdout.matchAll(/UserInfo\{(\d+):/g)].map(
+      (m) => Number(m[1]),
+    );
+
+    const apps: { pkg: string; uid: number; system: boolean; label?: string; iconUrl?: string }[] =
+      [];
+    const seen = new Set<string>();
+
+    for (const userId of userIds) {
+      const { stdout } = await ksuExec(`pm list packages -U --user ${userId}`);
+      for (const line of stdout.split("\n")) {
+        const m = line.match(/^package:(\S+)\s+uid:(\d+)/);
+        if (!m) continue;
+        const key = `${m[1]}:${m[2]}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        apps.push({
+          pkg: m[1],
+          uid: Number(m[2]),
+          system: false,
+          label: undefined,
+          iconUrl: `ksu://icon/${m[1]}`,
+        });
+      }
+    }
+
+    const infos = ksuGetPackagesInfo([...new Set(apps.map((a) => a.pkg))]);
+    const infoMap = new Map(infos.map((i) => [i.packageName, i] as const));
+    for (const app of apps) {
+      const info = infoMap.get(app.pkg);
+      if (info) {
+        app.system = info.isSystem;
+        app.label = info.appLabel || undefined;
+      }
+    }
+
+    return apps;
   } catch {
     return [];
   }

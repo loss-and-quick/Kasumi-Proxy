@@ -9,8 +9,16 @@ import { IconBtn } from "../../components/icons";
 import { useT } from "../../i18n";
 import type { AppEntry } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
-import { NO_MATCH, fuzzyScore } from "../../lib/fuzzy";
+import { fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
 import { useAppStore } from "../../store/useAppStore";
+
+// pkg:uid uniquely identifies one profile instance of an app.
+const filterKey = (app: AppEntry) => `${app.pkg}:${app.uid}`;
+// userId > 0 means work/secondary profile.
+const profileLabel = (app: AppEntry): string | null => {
+  const userId = Math.floor(app.uid / 100000);
+  return userId > 0 ? `Profile ${userId}` : null;
+};
 
 export default function AppFilterPage({ onBack }: { onBack: () => void }) {
   const t = useT();
@@ -28,12 +36,14 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     bridge
       .listApps()
-      // The native bridge lists a package once per Android user/work profile,
-      // so the same pkg can appear multiple times. Dedupe by pkg — the filter
-      // is keyed by package, and duplicate React keys break list rendering.
       .then((list) => {
         const seen = new Set<string>();
-        setApps(list.filter((a) => (seen.has(a.pkg) ? false : seen.add(a.pkg))));
+        setApps(
+          list.filter((a) => {
+            const k = `${a.pkg}:${a.uid}`;
+            return seen.has(k) ? false : seen.add(k);
+          }),
+        );
       })
       .catch(() => setApps([]))
       .finally(() => setLoading(false));
@@ -42,7 +52,6 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
   const filtered = useMemo(() => {
     const q = query.trim();
     if (q) {
-      // While searching, rank by fuzzy relevance (best matches first).
       return apps
         .map((app) => ({
           app,
@@ -53,12 +62,14 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
         .map((entry) => entry.app);
     }
     return [...apps].sort((a, b) => {
-      const ma = appFilter[a.pkg];
-      const mb = appFilter[b.pkg];
+      const ka = filterKey(a),
+        kb = filterKey(b);
+      const ma = appFilter[ka];
+      const mb = appFilter[kb];
       if (ma && !mb) return -1;
       if (!ma && mb) return 1;
       if (a.system !== b.system) return a.system ? 1 : -1;
-      return a.pkg.localeCompare(b.pkg);
+      return a.pkg.localeCompare(b.pkg) || a.uid - b.uid;
     });
   }, [apps, query, appFilter]);
 
@@ -114,10 +125,12 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
         ) : (
           <Card style={{ padding: "4px 14px" }}>
             {filtered.map((app) => {
-              const mode = appFilter[app.pkg] ?? null;
+              const key = filterKey(app);
+              const mode = appFilter[key] ?? null;
+              const pLabel = profileLabel(app);
               return (
                 <ListRow
-                  key={app.pkg}
+                  key={key}
                   icon={app.iconUrl ? undefined : app.system ? "shield_moon" : "smart_toy"}
                   iconSlot={
                     app.iconUrl ? (
@@ -131,23 +144,25 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
                     ) : undefined
                   }
                   title={app.label ?? app.pkg}
-                  sub={app.label ? app.pkg : app.system ? t("appFilter.systemApp") : undefined}
+                  sub={
+                    [app.label ? app.pkg : app.system ? t("appFilter.systemApp") : null, pLabel]
+                      .filter(Boolean)
+                      .join(" · ") || undefined
+                  }
                   right={
                     <div
                       style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}
                     >
                       <Chip
                         active={mode === "bypass"}
-                        onClick={() =>
-                          setAppFilterMode(app.pkg, mode === "bypass" ? null : "bypass")
-                        }
+                        onClick={() => setAppFilterMode(key, mode === "bypass" ? null : "bypass")}
                       >
                         {t("appFilter.bypass")}
                       </Chip>
                       <Chip
                         active={mode === "force-proxy"}
                         onClick={() =>
-                          setAppFilterMode(app.pkg, mode === "force-proxy" ? null : "force-proxy")
+                          setAppFilterMode(key, mode === "force-proxy" ? null : "force-proxy")
                         }
                       >
                         {t("appFilter.forceProxy")}

@@ -102,27 +102,24 @@ read_http_port() {
 # Pass "add" or "del"; must be called after read_app_filter so APP_FILTER_JSON is set.
 protect_local_ports() { # add|del
 	local action="$1"
-	local sp hp port uid pkg mode
+	local sp hp port uid mode
 	sp=$(read_socks_port)
 	hp=$(read_http_port)
 	# First, always remove any per-uid rules to avoid stacking on repeated starts.
 	[ -z "$APP_FILTER_JSON" ] && return
 	printf '%s' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
-		pkg=$(printf '%s' "$pair" | sed -n 's/"\([^"]*\)":"[^"]*".*/\1/p')
+		key=$(printf '%s' "$pair" | sed -n 's/"\([^"]*\)":"[^"]*".*/\1/p')
 		mode=$(printf '%s' "$pair" | sed -n 's/"[^"]*":"\([^"]*\)".*/\1/p')
 		[ "$mode" = "bypass" ] || continue
-		# Hide the loopback proxy ports from every profile's instance of the app
-		# (personal + work), matching how the filter rules cover all uids.
-		for uid in $(pkg_to_uids "$pkg"); do
-			for port in "$sp" "$hp"; do
-				case "$port" in '' | *[!0-9]*) continue ;; esac
-				$iptables -D OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset 2>/dev/null
-				$ip6tables -D OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset 2>/dev/null
-				if [ "$action" = "add" ]; then
-					$iptables -A OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset
-					$ip6tables -A OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset
-				fi
-			done
+		uid=${key##*:}
+		for port in "$sp" "$hp"; do
+			case "$port" in '' | *[!0-9]*) continue ;; esac
+			$iptables -D OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset 2>/dev/null
+			$ip6tables -D OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset 2>/dev/null
+			if [ "$action" = "add" ]; then
+				$iptables -A OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset
+				$ip6tables -A OUTPUT -o lo -p tcp --dport "$port" -m owner --uid-owner "$uid" -j REJECT --reject-with tcp-reset
+			fi
 		done
 	done
 }
@@ -169,28 +166,21 @@ pkg_to_uids() { # <pkg> -> uids
 append_app_uid_rules() { # <ipt> <chain>
 	local ipt="$1" chain="$2"
 	[ -z "$APP_FILTER_JSON" ] && return
-	# Parse "pkg":"mode" pairs from the flat JSON object.
-	# APP_FILTER_JSON looks like: "com.foo":"bypass","com.bar":"force-proxy"
+	# Parse "pkg:uid":"mode" pairs. Key format is "pkg:uid" — uid extracted directly.
 	printf '%s' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
-		pkg=$(printf '%s' "$pair" | sed -n 's/"\([^"]*\)":"[^"]*".*/\1/p')
+		key=$(printf '%s' "$pair" | sed -n 's/"\([^"]*\)":"[^"]*".*/\1/p')
 		mode=$(printf '%s' "$pair" | sed -n 's/"[^"]*":"\([^"]*\)".*/\1/p')
-		[ -z "$pkg" ] || [ -z "$mode" ] && continue
-		# One filter entry is keyed by package, but the app may live in several
-		# profiles, each with its own uid. Apply the rule to every profile's uid
-		# so bypass/force-proxy behaves the same in personal and work profiles.
-		for uid in $(pkg_to_uids "$pkg"); do
-			case "$mode" in
-			bypass)
-				# Return before catch-all mark — goes direct
-				"$ipt" -t mangle -A "$chain" -m owner --uid-owner "$uid" -j RETURN
-				;;
-			force-proxy)
-				# Mark with fwmark 2 → table 101 → tun2 (xray: separate tun2socks; sing-box: tun-force inbound)
-				"$ipt" -t mangle -A "$chain" -m owner --uid-owner "$uid" -j MARK --set-xmark 2
-				"$ipt" -t mangle -A "$chain" -m owner --uid-owner "$uid" -j RETURN
-				;;
-			esac
-		done
+		[ -z "$key" ] || [ -z "$mode" ] && continue
+		uid=${key##*:}
+		case "$mode" in
+		bypass)
+			"$ipt" -t mangle -A "$chain" -m owner --uid-owner "$uid" -j RETURN
+			;;
+		force-proxy)
+			"$ipt" -t mangle -A "$chain" -m owner --uid-owner "$uid" -j MARK --set-xmark 2
+			"$ipt" -t mangle -A "$chain" -m owner --uid-owner "$uid" -j RETURN
+			;;
+		esac
 	done
 }
 

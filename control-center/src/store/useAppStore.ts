@@ -103,7 +103,7 @@ interface Store extends AppState {
 
   // settings
   setSetting: <K extends keyof AdvancedSettings>(k: K, v: AdvancedSettings[K]) => void;
-  setAppFilterMode: (pkg: string, mode: "force-proxy" | "bypass" | null) => void;
+  setAppFilterMode: (key: string, mode: "force-proxy" | "bypass" | null) => void;
 
   // backup
   importBackup: (json: string, mode: "merge" | "replace") => Promise<void>;
@@ -652,13 +652,13 @@ export const useAppStore = create<Store>((set, get) => {
       }));
     },
 
-    setAppFilterMode(pkg, mode) {
+    setAppFilterMode(key, mode) {
       // Functional update reads the latest appFilter inside the setter, so
       // rapid toggles never overwrite each other via a stale closure.
       patch((s) => {
         const next = { ...(s.settings.appFilter ?? {}) };
-        if (mode === null) delete next[pkg];
-        else next[pkg] = mode;
+        if (mode === null) delete next[key];
+        else next[key] = mode;
         return {
           settings: { ...s.settings, appFilter: next },
         };
