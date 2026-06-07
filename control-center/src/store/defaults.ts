@@ -37,5 +37,9 @@ export function mergeSettings(settings?: Partial<AdvancedSettings>): AdvancedSet
   };
   // Legacy: the "bypass-lan" mode was removed; LAN bypass is now unconditional.
   if ((merged.routingMode as string) === "bypass-lan") merged.routingMode = "global";
+  // Migration: drop old pkg-only appFilter keys (new format is pkg:uid).
+  merged.appFilter = Object.fromEntries(
+    Object.entries(merged.appFilter).filter(([k]) => k.includes(":")),
+  ) as AdvancedSettings["appFilter"];
   return merged;
 }
