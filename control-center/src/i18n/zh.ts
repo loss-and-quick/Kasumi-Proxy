@@ -69,6 +69,7 @@ const zh = {
     other: "已删除 # 个重复",
   }),
   "activity.assetDownloaded": "资源已更新 · {name}",
+  "activity.profileSaved": "配置已保存 · {remarks}",
   "time.now": "刚刚",
   "time.ago": "{n}{unit}前",
   "time.unit.s": "秒",

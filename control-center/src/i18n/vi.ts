@@ -70,6 +70,7 @@ const vi = {
     other: "Đã xóa # bản trùng",
   }),
   "activity.assetDownloaded": "Đã cập nhật tài nguyên · {name}",
+  "activity.profileSaved": "Đã lưu hồ sơ · {remarks}",
   "time.now": "vừa xong",
   "time.ago": "{n}{unit} trước",
   "time.unit.s": "s",

@@ -73,6 +73,7 @@ const es = {
     other: "Eliminados # duplicados",
   }),
   "activity.assetDownloaded": "Recurso actualizado · {name}",
+  "activity.profileSaved": "Perfil guardado · {remarks}",
   "time.now": "ahora",
   "time.ago": "hace {n}{unit}",
   "time.unit.s": "s",

@@ -73,6 +73,7 @@ const pt = {
     other: "Removidas # duplicatas",
   }),
   "activity.assetDownloaded": "Recurso atualizado · {name}",
+  "activity.profileSaved": "Perfil salvo · {remarks}",
   "time.now": "agora",
   "time.ago": "há {n}{unit}",
   "time.unit.s": "s",

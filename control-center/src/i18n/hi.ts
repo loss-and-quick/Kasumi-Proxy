@@ -69,6 +69,7 @@ const hi = {
   }),
   "activity.duplicatesRemoved": plural("count", { one: "# डुप्लिकेट हटाया", other: "# डुप्लिकेट हटाए" }),
   "activity.assetDownloaded": "संसाधन अपडेट · {name}",
+  "activity.profileSaved": "प्रोफ़ाइल सहेजी · {remarks}",
   "time.now": "अभी",
   "time.ago": "{n}{unit} पहले",
   "time.unit.s": "से",

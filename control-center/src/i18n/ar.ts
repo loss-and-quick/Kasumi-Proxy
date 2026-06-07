@@ -107,6 +107,7 @@ const ar = {
     other: "تم حذف # تكرار",
   }),
   "activity.assetDownloaded": "تم تحديث المورد · {name}",
+  "activity.profileSaved": "تم حفظ الملف التعريفي · {remarks}",
   "time.now": "الآن",
   "time.ago": "منذ {n}{unit}",
   "time.unit.s": "ث",

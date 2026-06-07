@@ -81,6 +81,7 @@ const ru = {
     other: "Удалено # дубликата",
   }),
   "activity.assetDownloaded": "Ресурс обновлён · {name}",
+  "activity.profileSaved": "Профиль сохранён · {remarks}",
   "time.now": "сейчас",
   "time.ago": "{n}{unit} назад",
   "time.unit.s": "с",

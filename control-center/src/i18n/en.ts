@@ -74,6 +74,7 @@ const en = {
     other: "Removed # duplicates",
   }),
   "activity.assetDownloaded": "Asset updated · {name}",
+  "activity.profileSaved": "Profile saved · {remarks}",
   "time.now": "now",
   "time.ago": "{n}{unit} ago",
   "time.unit.s": "s",
