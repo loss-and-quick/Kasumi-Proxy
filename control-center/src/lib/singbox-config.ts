@@ -607,12 +607,14 @@ function buildSingboxResolveRule(s: AdvancedSettings): JsonObject {
 
 /* ---------- tun inbounds ---------- */
 function buildSingboxTunInbounds(s: AdvancedSettings): JsonObject[] {
-  const forcePackages = Object.entries(s.appFilter ?? {})
+  // Keys are "pkg:uid" — use numeric uid for per-profile accuracy
+  const uidOf = (key: string) => Number(key.split(":")[1]);
+  const forceUids = Object.entries(s.appFilter ?? {})
     .filter(([, mode]) => mode === "force-proxy")
-    .map(([pkg]) => pkg);
-  const bypassPackages = Object.entries(s.appFilter ?? {})
+    .map(([key]) => uidOf(key));
+  const bypassUids = Object.entries(s.appFilter ?? {})
     .filter(([, mode]) => mode === "bypass")
-    .map(([pkg]) => pkg);
+    .map(([key]) => uidOf(key));
 
   const mainTun: JsonObject = {
     type: "tun",
@@ -623,11 +625,11 @@ function buildSingboxTunInbounds(s: AdvancedSettings): JsonObject[] {
     strict_route: true,
     stack: "system",
   };
-  const excludeFromMain = [...bypassPackages, ...forcePackages];
-  if (excludeFromMain.length) mainTun.exclude_package = excludeFromMain;
+  const excludeFromMain = [...bypassUids, ...forceUids];
+  if (excludeFromMain.length) mainTun.exclude_uid = excludeFromMain;
 
   const inbounds: JsonObject[] = [mainTun];
-  if (forcePackages.length) {
+  if (forceUids.length) {
     inbounds.push({
       type: "tun",
       tag: "tun-force",
@@ -636,7 +638,7 @@ function buildSingboxTunInbounds(s: AdvancedSettings): JsonObject[] {
       auto_route: true,
       strict_route: true,
       stack: "system",
-      include_package: forcePackages,
+      include_uid: forceUids,
     });
   }
   return inbounds;
