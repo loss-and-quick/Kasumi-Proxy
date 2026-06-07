@@ -67,12 +67,12 @@ interface Store extends AppState {
   refreshStatus: () => Promise<void>;
 
   // profiles
-  upsertProfile: (p: Profile) => void;
+  upsertProfile: (p: Profile) => Promise<void>;
   removeProfile: (id: string) => Promise<void>;
   removeProfiles: (ids: string[]) => Promise<void>;
-  cloneProfile: (id: string) => void;
-  moveProfiles: (ids: string[], groupId: string) => void;
-  addProfiles: (profiles: Profile[]) => void;
+  cloneProfile: (id: string) => Promise<void>;
+  moveProfiles: (ids: string[], groupId: string) => Promise<void>;
+  addProfiles: (profiles: Profile[]) => Promise<void>;
   pingProfile: (id: string) => Promise<void>;
   realPingProfile: (id: string) => Promise<void>;
   speedTestProfile: (id: string) => Promise<void>;
@@ -80,36 +80,36 @@ interface Store extends AppState {
   realPingAll: () => Promise<void>;
   speedTestAll: () => Promise<void>;
   removeUnreachable: () => Promise<void>;
-  removeDuplicates: () => void;
-  selectBest: () => void;
+  removeDuplicates: () => Promise<void>;
+  selectBest: () => Promise<void>;
 
   // groups
-  addGroup: (name: string) => string;
-  renameGroup: (id: string, name: string) => void;
+  addGroup: (name: string) => Promise<string>;
+  renameGroup: (id: string, name: string) => Promise<void>;
   removeGroup: (id: string) => Promise<void>;
 
   // subscriptions
-  upsertSub: (s: Subscription) => void;
+  upsertSub: (s: Subscription) => Promise<void>;
   removeSub: (id: string) => Promise<void>;
   updateSub: (id: string) => Promise<void>;
   updateAllSubs: () => Promise<void>;
 
   // routing rules
-  addRoutingRule: (rule: RoutingRule) => void;
-  updateRoutingRule: (id: string, patch: Partial<RoutingRule>) => void;
-  removeRoutingRule: (id: string) => void;
-  reorderRoutingRules: (from: number, to: number) => void;
-  importRoutingRules: (rules: RoutingRule[], mode: "merge" | "replace") => void;
+  addRoutingRule: (rule: RoutingRule) => Promise<void>;
+  updateRoutingRule: (id: string, patch: Partial<RoutingRule>) => Promise<void>;
+  removeRoutingRule: (id: string) => Promise<void>;
+  reorderRoutingRules: (from: number, to: number) => Promise<void>;
+  importRoutingRules: (rules: RoutingRule[], mode: "merge" | "replace") => Promise<void>;
 
   // asset files
-  addAssetFile: (asset: AssetFile) => void;
-  updateAssetFile: (id: string, patch: Partial<AssetFile>) => void;
-  removeAssetFile: (id: string) => void;
+  addAssetFile: (asset: AssetFile) => Promise<void>;
+  updateAssetFile: (id: string, patch: Partial<AssetFile>) => Promise<void>;
+  removeAssetFile: (id: string) => Promise<void>;
   downloadAsset: (id: string, mode?: ResourceUpdateMode) => Promise<void>;
 
   // settings
-  setSetting: <K extends keyof AdvancedSettings>(k: K, v: AdvancedSettings[K]) => void;
-  setAppFilterMode: (key: string, mode: "force-proxy" | "bypass" | null) => void;
+  setSetting: <K extends keyof AdvancedSettings>(k: K, v: AdvancedSettings[K]) => Promise<void>;
+  setAppFilterMode: (key: string, mode: "force-proxy" | "bypass" | null) => Promise<void>;
 
   // backup
   importBackup: (json: string, mode: "merge" | "replace") => Promise<void>;
@@ -120,14 +120,11 @@ export const useAppStore = create<Store>((set, get) => {
   const pushActivity = (icon: string, text: string, color?: string) => {
     set({ recentActivity: activity.add(icon, text, color) });
   };
-  let t: ReturnType<typeof setTimeout> | null = null;
-  const persist = () => {
-    if (t) clearTimeout(t);
-    t = setTimeout(() => get().flush(), 400);
-  };
+  // Mutate state and persist it. Returns the flush promise so every mutator
+  // can be awaited uniformly (see the Promise<void> action signatures).
   const patch = (fn: (s: Store) => Partial<Store>) => {
     set(fn);
-    persist();
+    return get().flush();
   };
   let lastTrafficSample: { uploadBytes: number; downloadBytes: number; at: number } | null = null;
   const syncService = (service: ServiceStatus) => {
@@ -357,8 +354,9 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     upsertProfile(p) {
-      patch((s) => ({ profiles: upsertById(s.profiles, p, "front") }));
+      const done = patch((s) => ({ profiles: upsertById(s.profiles, p, "front") }));
       pushActivity("edit_note", translateCurrent("activity.profileSaved", { remarks: p.remarks }));
+      return done;
     },
     async removeProfile(id) {
       const wasActive = get().activeId === id;
@@ -383,7 +381,7 @@ export const useAppStore = create<Store>((set, get) => {
       await get().flush();
     },
     cloneProfile(id) {
-      patch((s) => {
+      return patch((s) => {
         const src = s.profiles.find((p) => p.id === id);
         if (!src) return {};
         const copy: Profile = { ...src, id: uid(), remarks: `${src.remarks} (copy)`, subId: null };
@@ -391,16 +389,17 @@ export const useAppStore = create<Store>((set, get) => {
       });
     },
     moveProfiles(ids, groupId) {
-      patch((s) => ({ profiles: moveProfilesToGroup(s.profiles, ids, groupId) }));
+      return patch((s) => ({ profiles: moveProfilesToGroup(s.profiles, ids, groupId) }));
     },
-    addProfiles(profiles) {
+    async addProfiles(profiles) {
       if (!profiles.length) return;
-      patch((s) => ({ profiles: [...profiles, ...s.profiles] }));
+      const done = patch((s) => ({ profiles: [...profiles, ...s.profiles] }));
       pushActivity(
         "download",
         translateCurrent("activity.profileImported", { count: profiles.length }),
       );
       get().notify(translateCurrent("store.profile.imported", { count: profiles.length }));
+      await done;
     },
 
     async pingProfile(id) {
@@ -528,7 +527,7 @@ export const useAppStore = create<Store>((set, get) => {
       get().notify(translateCurrent("store.ping.removeUnreachable", { count: unreachable.size }));
     },
 
-    selectBest() {
+    async selectBest() {
       const { profiles } = get();
       const best = profiles
         .filter((p) => p.ping != null && p.ping > 0)
@@ -537,37 +536,39 @@ export const useAppStore = create<Store>((set, get) => {
         get().notify(translateCurrent("store.ping.noPingData"));
         return;
       }
-      void get().setActive(best.id);
+      const done = get().setActive(best.id);
       pushActivity(
         "stars",
         translateCurrent("activity.bestSelected", { remarks: best.remarks }),
         "var(--primary)",
       );
       get().notify(translateCurrent("store.ping.selectBest"));
+      await done;
     },
 
-    removeDuplicates() {
+    async removeDuplicates() {
       const { profiles, activeId } = get();
       const { kept, removedCount } = deduplicateProfiles(profiles, activeId);
       if (!removedCount) {
         get().notify(translateCurrent("store.dedup.none"));
         return;
       }
-      patch(() => ({ profiles: kept }));
+      const done = patch(() => ({ profiles: kept }));
       pushActivity(
         "content_cut",
         translateCurrent("activity.duplicatesRemoved", { count: removedCount }),
       );
       get().notify(translateCurrent("store.dedup.done", { count: removedCount }));
+      await done;
     },
 
-    addGroup(name) {
+    async addGroup(name) {
       const id = uid();
-      patch((s) => ({ groups: [...s.groups, { id, name }] }));
+      await patch((s) => ({ groups: [...s.groups, { id, name }] }));
       return id;
     },
     renameGroup(id, name) {
-      patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
+      return patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
     },
     async removeGroup(id) {
       if (id === "g-main") return;
@@ -584,7 +585,7 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     upsertSub(sub) {
-      patch((s) => ({ subscriptions: upsertById(s.subscriptions, sub) }));
+      return patch((s) => ({ subscriptions: upsertById(s.subscriptions, sub) }));
     },
     async removeSub(id) {
       const activeProfile = get().profiles.find((p) => p.id === get().activeId);
@@ -698,41 +699,41 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     addRoutingRule(rule) {
-      patch((s) => ({ routingRules: upsertById(s.routingRules, rule) }));
+      return patch((s) => ({ routingRules: upsertById(s.routingRules, rule) }));
     },
     updateRoutingRule(id, rulePatch) {
-      patch((s) => ({
+      return patch((s) => ({
         routingRules: s.routingRules.map((rule) =>
           rule.id === id ? { ...rule, ...rulePatch } : rule,
         ),
       }));
     },
     removeRoutingRule(id) {
-      patch((s) => ({ routingRules: s.routingRules.filter((rule) => rule.id !== id) }));
+      return patch((s) => ({ routingRules: s.routingRules.filter((rule) => rule.id !== id) }));
     },
     reorderRoutingRules(from, to) {
-      patch((s) => ({ routingRules: moveItemByIndex(s.routingRules, from, to) }));
+      return patch((s) => ({ routingRules: moveItemByIndex(s.routingRules, from, to) }));
     },
     importRoutingRules(rules, mode) {
       // Re-id imported rules so they never collide with existing ones.
       const incoming = rules.map((rule) => ({ ...rule, id: uid() }));
-      patch((s) => ({
+      return patch((s) => ({
         routingRules: mode === "replace" ? incoming : [...s.routingRules, ...incoming],
       }));
     },
 
     addAssetFile(asset) {
-      patch((s) => ({ assetFiles: upsertById(s.assetFiles, asset) }));
+      return patch((s) => ({ assetFiles: upsertById(s.assetFiles, asset) }));
     },
     updateAssetFile(id, assetPatch) {
-      patch((s) => ({
+      return patch((s) => ({
         assetFiles: s.assetFiles.map((asset) =>
           asset.id === id ? { ...asset, ...assetPatch } : asset,
         ),
       }));
     },
     removeAssetFile(id) {
-      patch((s) => ({
+      return patch((s) => ({
         assetFiles: s.assetFiles.filter((asset) => asset.id !== id),
       }));
     },
@@ -765,7 +766,7 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     setSetting(k, v) {
-      patch((s) => ({
+      return patch((s) => ({
         settings: { ...s.settings, [k]: v },
       }));
     },
@@ -773,7 +774,7 @@ export const useAppStore = create<Store>((set, get) => {
     setAppFilterMode(key, mode) {
       // Functional update reads the latest appFilter inside the setter, so
       // rapid toggles never overwrite each other via a stale closure.
-      patch((s) => {
+      return patch((s) => {
         const next = { ...(s.settings.appFilter ?? {}) };
         if (mode === null) delete next[key];
         else next[key] = mode;
@@ -801,8 +802,7 @@ export const useAppStore = create<Store>((set, get) => {
       if (mode === "replace" && get().service.state === "running") {
         await stopServiceIfRunning(translateCurrent("store.service.stoppedBeforeBackupRestore"));
       }
-      patch((s) => mergeBackupState(s, incoming, mode));
-      await get().flush();
+      await patch((s) => mergeBackupState(s, incoming, mode));
       pushActivity("backup", translateCurrent("activity.backupRestored"));
       get().notify(
         translateCurrent(mode === "replace" ? "store.backup.restored" : "store.backup.merged"),

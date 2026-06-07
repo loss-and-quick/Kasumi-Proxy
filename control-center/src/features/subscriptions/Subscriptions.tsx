@@ -280,7 +280,7 @@ function SubEditSheet({
   sub: Subscription | null;
   onClose: () => void;
   onSave: (sub: Subscription) => void;
-  onNewGroup: (name: string) => string;
+  onNewGroup: (name: string) => Promise<string>;
   defaultGroupId: string;
 }) {
   const t = useT();
@@ -378,9 +378,9 @@ function SubEditSheet({
             className="input"
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
-            onBlur={() => {
+            onBlur={async () => {
               const name = newGroupName.trim();
-              if (name) set("groupId", onNewGroup(name));
+              if (name) set("groupId", await onNewGroup(name));
               setNewGroupName(null);
             }}
             onKeyDown={(e) => {
