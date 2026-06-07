@@ -17,6 +17,7 @@ export function ProfilesList({
   onEdit,
   onMore,
   onRenameGroup,
+  onRemoveGroup,
 }: {
   orderedGroups: Group[];
   byGroup: Record<string, Profile[]>;
@@ -29,6 +30,7 @@ export function ProfilesList({
   onEdit: (id: string) => void;
   onMore: (profile: Profile) => void;
   onRenameGroup: (id: string, name: string) => void;
+  onRemoveGroup: (id: string) => void;
 }) {
   const t = useT();
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -74,6 +76,24 @@ export function ProfilesList({
                     }}
                   >
                     <Icon name="edit" style={{ fontSize: 14 }} />
+                  </button>
+                )}
+                {editingGroupId !== group.id && group.id !== "g-main" && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveGroup(group.id)}
+                    title={t("profiles.removeGroup")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: "0 4px",
+                      color: "var(--on-surface-faint)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Icon name="delete" style={{ fontSize: 14 }} />
                   </button>
                 )}
                 <span

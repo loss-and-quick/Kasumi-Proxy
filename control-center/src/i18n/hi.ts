@@ -461,6 +461,7 @@ const hi = {
   "profiles.groupCreated": "समूह बना दिया गया",
   "profiles.groupRenamed": "समूह का नाम बदल दिया गया",
   "profiles.renameGroup": "समूह का नाम बदलें",
+  "profiles.removeGroup": "समूह हटाएं",
   "profiles.deleted": "प्रोफ़ाइल हटा दी गई",
   "profiles.groupDefault": "नया समूह {n}",
   "profiles.row.select": "चयन करें",

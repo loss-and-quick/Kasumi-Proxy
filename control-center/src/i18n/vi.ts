@@ -463,6 +463,7 @@ const vi = {
   "profiles.groupCreated": "Đã tạo nhóm",
   "profiles.groupRenamed": "Đã đổi tên nhóm",
   "profiles.renameGroup": "Đổi tên nhóm",
+  "profiles.removeGroup": "Xóa nhóm",
   "profiles.deleted": "Đã xóa hồ sơ",
   "profiles.groupDefault": "Nhóm mới {n}",
   "profiles.row.select": "Chọn",

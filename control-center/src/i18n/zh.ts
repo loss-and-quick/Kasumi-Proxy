@@ -462,6 +462,7 @@ const zh = {
   "profiles.groupCreated": "分组已创建",
   "profiles.groupRenamed": "分组已重命名",
   "profiles.renameGroup": "重命名分组",
+  "profiles.removeGroup": "删除分组",
   "profiles.deleted": "配置已删除",
   "profiles.groupDefault": "新分组 {n}",
   "profiles.row.select": "选择",

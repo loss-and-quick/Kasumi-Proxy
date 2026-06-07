@@ -472,6 +472,7 @@ const en = {
   "profiles.groupCreated": "Group created",
   "profiles.groupRenamed": "Group renamed",
   "profiles.renameGroup": "Rename group",
+  "profiles.removeGroup": "Delete group",
   "profiles.deleted": "Profile deleted",
   "profiles.groupDefault": "New group {n}",
   "profiles.row.select": "Select",
