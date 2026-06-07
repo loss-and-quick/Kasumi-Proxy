@@ -107,7 +107,7 @@ protect_local_ports() { # add|del
 	hp=$(read_http_port)
 	# First, always remove any per-uid rules to avoid stacking on repeated starts.
 	[ -z "$APP_FILTER_JSON" ] && return
-	printf '%s' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
+	printf '%s\n' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
 		key=$(printf '%s' "$pair" | sed -n 's/"\([^"]*\)":"[^"]*".*/\1/p')
 		mode=$(printf '%s' "$pair" | sed -n 's/"[^"]*":"\([^"]*\)".*/\1/p')
 		[ "$mode" = "bypass" ] || continue
@@ -167,7 +167,7 @@ append_app_uid_rules() { # <ipt> <chain>
 	local ipt="$1" chain="$2"
 	[ -z "$APP_FILTER_JSON" ] && return
 	# Parse "pkg:uid":"mode" pairs. Key format is "pkg:uid" — uid extracted directly.
-	printf '%s' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
+	printf '%s\n' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
 		key=$(printf '%s' "$pair" | sed -n 's/"\([^"]*\)":"[^"]*".*/\1/p')
 		mode=$(printf '%s' "$pair" | sed -n 's/"[^"]*":"\([^"]*\)".*/\1/p')
 		[ -z "$key" ] || [ -z "$mode" ] && continue
