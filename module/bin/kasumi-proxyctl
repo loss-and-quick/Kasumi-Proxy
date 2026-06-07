@@ -480,7 +480,7 @@ case "$method" in
         # start core in background
         case "$rp_engine" in
             sing-box) "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
-            *)        "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
+            *)        XRAY_LOCATION_ASSET="$DATADIR" "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
         esac
         echo $! > "$rp_pid"
         sleep 2
@@ -543,7 +543,10 @@ case "$method" in
             printf '{"bps":-1,"error":"core not found"}\n'; exit 0
         fi
 
-        "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 &
+        case "$st_engine" in
+            sing-box) "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 & ;;
+            *)        XRAY_LOCATION_ASSET="$DATADIR" "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 & ;;
+        esac
         echo $! > "$st_pid"
         sleep 2
 
