@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 3 */3 * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force release even without changes'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -68,6 +73,7 @@ jobs:
           echo "xray_old=$pinned_xray" >> "$GITHUB_OUTPUT"
           echo "t2s_old=$pinned_t2s" >> "$GITHUB_OUTPUT"
           echo "sb_old=$pinned_sb" >> "$GITHUB_OUTPUT"
+          [ "${{ inputs.force }}" = "true" ] && skip=false
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
           echo "xray_version=$latest_xray" >> "$GITHUB_OUTPUT"
           echo "t2s_version=$latest_t2s" >> "$GITHUB_OUTPUT"
