@@ -1,3 +1,18 @@
+## v0.3.2 — 2026-06-07
+
+### Changes
+
+- e4cdcc1 feat(store): add pushActivity to upsertProfile + test coverage for all activity events
+- 9fa8f76 feat(i18n): add activity.profileSaved to all 8 locales
+- e60e3f4 feat(store): add pushActivity to speedTestAll/removeUnreachable/removeDuplicates/downloadAsset
+- aff1b28 feat(i18n): add speedTest/unreachable/duplicates/asset activity keys to all 8 locales
+- 150d3bf feat(overview): replace hardcoded recent array with live activity feed + relative timestamps
+- 5e6aec3 feat(store): wire ActivityService into useAppStore — recentActivity slice + pushActivity on key actions
+- ae06fed feat(i18n): add activity event keys + time.now/ago to all 8 locales
+- 6e383bd feat(activity): add ActivityService — capped in-memory event feed
+- 15bebde fix(changelog): strip quotes from core versions, exclude ci/chore commits, require non-empty OLD for core update entries
+- 5b39c7d fix(ci): strip quotes from pinned version parse in changelog
+
 ## v0.3.1 — 2026-06-07
 
 ### Fixes
