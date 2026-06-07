@@ -107,38 +107,62 @@ export function ProfilesToolbar({
         </div>
       )}
 
+      {/* Sort row */}
       <div
         style={{
           display: "flex",
+          alignItems: "center",
           gap: 8,
-          overflowX: "auto",
-          padding: "2px 16px 12px",
-          flex: "0 0 auto",
-          scrollbarWidth: "none",
+          padding: "2px 16px 8px",
         }}
       >
-        <Chip active={groupFilter === "all"} onClick={() => setGroupFilter("all")}>
-          {t("profiles.filterAll")}
-        </Chip>
-        {groups.map((group) => (
-          <Chip
-            key={group.id}
-            active={groupFilter === group.id}
-            onClick={() => setGroupFilter(group.id)}
-          >
-            {group.name}
-          </Chip>
-        ))}
-        <div style={{ marginLeft: "auto" }} />
+        <span
+          style={{ fontSize: 11, fontWeight: 600, color: "var(--on-surface-faint)", flexShrink: 0 }}
+        >
+          {t("profiles.filterSort")}
+        </span>
         <Chip active={sort === "name"} onClick={() => setSort("name")}>
           {t("profiles.sortName")}
         </Chip>
         <Chip active={sort === "ping"} onClick={() => setSort("ping")}>
           {t("profiles.sortPing")}
         </Chip>
-        <Chip active={sort === "group"} onClick={() => setSort("group")}>
-          {t("profiles.sortGroup")}
-        </Chip>
+      </div>
+
+      {/* Group filter row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 8,
+          padding: "0 16px 12px",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--on-surface-faint)",
+            flexShrink: 0,
+            paddingTop: 6,
+          }}
+        >
+          {t("profiles.filterGroup")}
+        </span>
+        <div style={{ display: "flex", overflowX: "auto", gap: 8, scrollbarWidth: "none" }}>
+          <Chip active={groupFilter === "all"} onClick={() => setGroupFilter("all")}>
+            {t("profiles.filterAll")}
+          </Chip>
+          {groups.map((group) => (
+            <Chip
+              key={group.id}
+              active={groupFilter === group.id}
+              onClick={() => setGroupFilter(group.id)}
+            >
+              {group.name}
+            </Chip>
+          ))}
+        </div>
       </div>
 
       {bulkMode && (
