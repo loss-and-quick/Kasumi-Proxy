@@ -449,21 +449,39 @@ case "$method" in
         echo '{"ok":true}'
         ;;
 
-    ping)
-        # args: <host> <port>  -> {"ms":N} or {"ms":null}
-        host="$1"; port="$2"
-        ms="null"
-        if [ -n "$host" ] && [ -n "$port" ] && command -v nc >/dev/null 2>&1; then
+    pingStart)
+        # args: <token> <host> <port>  — background TCP connect (tcping).
+        # Returns {"ok":true} at once; poll `pingStatus <token>` for the result.
+        # A blocking nc -w 3 inside ksu.exec freezes the WebUI for up to 3s per
+        # unreachable host, so this runs as a job like realping/speedtest.
+        pg_token="$1"; pg_host="$2"; pg_port="$3"
+        case "$pg_token" in (''|*[!A-Za-z0-9_-]*) printf '{"ok":false,"error":"invalid token"}\n'; exit 0 ;; esac
+        pg_job=$(test_job_path "$pg_token")
+        if [ -z "$pg_host" ] || [ -z "$pg_port" ] || ! command -v nc >/dev/null 2>&1; then
+            write_test_job "$pg_job" '"state":"done","ms":null'; printf '{"ok":true}\n'; exit 0
+        fi
+        write_test_job "$pg_job" '"state":"running"'
+        (
+            ms=null
             s=$(date +%s%N 2>/dev/null)
-            if nc -w 3 -z "$host" "$port" >/dev/null 2>&1; then
+            if nc -w 3 -z "$pg_host" "$pg_port" >/dev/null 2>&1; then
                 e=$(date +%s%N 2>/dev/null)
                 case "$s$e" in
-                    *[!0-9]*) ms="null" ;;   # date +%s%N unsupported
+                    *[!0-9]*) ms=null ;;   # date +%s%N unsupported
                     *) ms=$(( (e - s) / 1000000 )); [ "$ms" -lt 0 ] && ms=0 ;;
                 esac
             fi
-        fi
-        printf '{"ms":%s}\n' "$ms"
+            write_test_job "$pg_job" "\"state\":\"done\",\"ms\":$ms"
+        ) >/dev/null 2>&1 &
+        printf '{"ok":true}\n'
+        ;;
+
+    pingStatus)
+        # args: <token>  -> the job JSON ({"state":"running"} | {"state":"done","ms":N|null})
+        pg_token="$1"
+        case "$pg_token" in (''|*[!A-Za-z0-9_-]*) printf '{"state":"idle"}\n'; exit 0 ;; esac
+        pg_job=$(test_job_path "$pg_token")
+        if [ -f "$pg_job" ]; then cat "$pg_job"; else printf '{"state":"idle"}\n'; fi
         ;;
 
     realpingStart)

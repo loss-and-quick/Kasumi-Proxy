@@ -20,7 +20,6 @@ import { profileAddress, profilePort } from "./profile";
 
 const DEFAULT_MODULE_ID = "kasumi-proxy";
 const CGI = "http://127.17.1.3/cgi-bin/exec";
-type PingResponse = { ms: number | null };
 type AssetDownloadResponse = { ok: boolean; error?: string };
 type AssetDownloadStatus = { state: "idle" | "running" | "done"; ok?: boolean; error?: string };
 
@@ -96,12 +95,6 @@ function acceptServiceState(method: string, value: unknown): ServiceStatus {
   return parseServiceStatus(value);
 }
 
-function parsePingResponse(value: unknown): PingResponse {
-  if (!value || typeof value !== "object") return { ms: null };
-  const ms = (value as Record<string, unknown>).ms;
-  return { ms: typeof ms === "number" ? ms : null };
-}
-
 function parseAssetDownloadResponse(value: unknown): AssetDownloadResponse {
   if (!value || typeof value !== "object")
     return { ok: false, error: "Invalid asset download response" };
@@ -142,24 +135,26 @@ function parseTestJobStatus(value: unknown): TestJobStatus {
 }
 
 /**
- * Drive a realping/speedtest as a background job: fire a quick *Start exec, then
- * poll a quick *Status exec until done. Crucial because every ksu.exec blocks
- * the WebView renderer for its whole duration — a single multi-second test exec
- * froze the UI, so the work must be split into sub-250ms execs.
+ * Drive a diagnostic (tcping/realping/speedtest) as a background job: fire a
+ * quick *Start exec, then poll a quick *Status exec until done. Crucial because
+ * every ksu.exec blocks the WebView renderer for its whole duration — a single
+ * multi-second test exec froze the UI, so the work must be split into sub-250ms
+ * execs. `statusKey` is whatever the runner keys its job file on (the inbound
+ * port for realping/speedtest, the profile id for tcping).
  */
 async function runTestJob(
   startMethod: string,
   statusMethod: string,
   startArgs: string[],
-  port: number,
-  config: string,
+  statusKey: string,
   timeoutMs: number,
+  config?: string,
 ): Promise<TestJobStatus> {
   const started = parseAssetDownloadResponse(await callJson(startMethod, startArgs, config));
   if (!started.ok) return { state: "done" };
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const status = parseTestJobStatus(await callJson(statusMethod, [String(port)]));
+    const status = parseTestJobStatus(await callJson(statusMethod, [statusKey]));
     if (status.state === "done") return status;
     await sleep(250);
   }
@@ -286,8 +281,14 @@ export const ksuBridge: Bridge = {
     const addr = profileAddress(p),
       port = profilePort(p);
     if (!addr || port == null) return 0;
-    const r = parsePingResponse(await callJson("ping", [addr, String(port)]));
-    return r.ms ?? 0;
+    const status = await runTestJob(
+      "pingStart",
+      "pingStatus",
+      [profileId, addr, String(port)],
+      profileId,
+      8_000,
+    );
+    return typeof status.ms === "number" ? status.ms : 0;
   },
   async pingAll() {
     const state = lastState ?? (await this.readState());
@@ -306,8 +307,14 @@ export const ksuBridge: Bridge = {
         const port = profilePort(p);
         if (!addr || port == null) continue;
         try {
-          const r = parsePingResponse(await callJson("ping", [addr, String(port)]));
-          if (r.ms != null) out[p.id] = r.ms;
+          const status = await runTestJob(
+            "pingStart",
+            "pingStatus",
+            [p.id, addr, String(port)],
+            p.id,
+            8_000,
+          );
+          if (typeof status.ms === "number") out[p.id] = status.ms;
         } catch {
           /* skip */
         }
@@ -353,9 +360,9 @@ export const ksuBridge: Bridge = {
         state.settings.delayTestUrl || "http://www.gstatic.com/generate_204",
         String(realPingPort),
       ],
-      realPingPort,
-      config,
+      String(realPingPort),
       20_000,
+      config,
     );
     return typeof status.ms === "number" ? status.ms : -1;
   },
@@ -417,9 +424,9 @@ export const ksuBridge: Bridge = {
         String(stPort),
         "15",
       ],
-      stPort,
-      config,
+      String(stPort),
       30_000,
+      config,
     );
     return typeof status.bps === "number" && status.bps > 0 ? status.bps : -1;
   },
