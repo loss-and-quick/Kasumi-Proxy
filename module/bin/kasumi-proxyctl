@@ -34,8 +34,22 @@ PIPE_FILE="$MODDIR/run/control.pipe"
 # Lifecycle channel published by service.sh (connecting|running|stopped|failed:reason).
 SERVICE_STATE_FILE="$DATADIR/service-state"
 ASSET_JOB_DIR="$DATADIR/asset-jobs"
+TEST_JOB_DIR="$DATADIR/test-jobs"
 
-mkdir -p "$DATADIR" "$ASSET_JOB_DIR" 2>/dev/null
+mkdir -p "$DATADIR" "$ASSET_JOB_DIR" "$TEST_JOB_DIR" 2>/dev/null
+
+# Prefix for the on-demand test workloads (realping/speedtest core + curl). They
+# run a full proxy core and pull a payload at line rate, which — at normal
+# priority — starves the foreground WebUI of CPU and makes it stutter/freeze.
+# Renicing them to the lowest priority lets the scheduler keep the UI smooth.
+# Expanded UNQUOTED at the call site so it word-splits into `nice -n 19`; empty
+# (a no-op prefix) when `nice` is unavailable. `nice` execs in place, so the
+# backgrounded core keeps the same PID and `$!` stays valid for later kill.
+if command -v nice >/dev/null 2>&1; then
+    NICE="nice -n 19"
+else
+    NICE=""
+fi
 
 # ---------- small helpers ----------
 
@@ -248,6 +262,20 @@ write_asset_job_status() { # <job-file> <state> <ok?> <error?>
     mv -f "$tmp" "$job_file"
 }
 
+# Job status for the realping/speedtest runners, keyed by inbound port (unique
+# per concurrent test). Mirrors the asset-job pattern so the WebUI fires a quick
+# *Start exec and then polls a quick *Status exec — never one long blocking exec
+# (a multi-second ksu.exec freezes the whole WebView).
+test_job_path() { # <port>
+    printf '%s/%s.json' "$TEST_JOB_DIR" "$1"
+}
+
+write_test_job() { # <job-file> <inner-json>   e.g.  '"state":"done","ms":42'
+    tmp="$1.tmp.$$"
+    printf '{%s}\n' "$2" >"$tmp"
+    mv -f "$tmp" "$1"
+}
+
 convert_dat_to_srs() { # <filename> — convert .dat -> .srs if geodat2srs available
     [ -x "$BINDIR/geodat2srs" ] || return 0
     case "$1" in
@@ -438,139 +466,134 @@ case "$method" in
         printf '{"ms":%s}\n' "$ms"
         ;;
 
-    realping)
-        # stdin: core config JSON; args: <engine> <testUrl> [<port>]
-        # If port=0 or omitted — finds a free port automatically.
+    realpingStart)
+        # stdin: core config JSON; args: <engine> <testUrl> <port>
+        # Spawns the measurement in the background and returns {"ok":true}
+        # immediately; the caller polls `realpingStatus <port>` for the result.
+        # Never blocks on the core/curl — a multi-second ksu.exec freezes the UI.
         rp_engine="${1:-xray}"
         rp_url="${2:-http://www.gstatic.com/generate_204}"
         rp_port="${3:-0}"
-        # The inbound port is baked into the stdin config by the caller, so we
-        # cannot auto-pick one here — a mismatched port would always measure -1.
-        # The caller (freePort -> build config -> realping) must pass it explicitly.
-        case "$rp_port" in (''|0|*[!0-9]*) printf '{"ms":-1,"error":"port required (must match config inbound)"}\n'; exit 0 ;; esac
-        rp_cfg="$DATADIR/realping.json"
-        rp_pid="$DATADIR/realping.pid"
-        rp_ms=-1
+        # The inbound port is baked into the stdin config by the caller and also
+        # keys the job/temp files, so it must be passed explicitly and be unique.
+        case "$rp_port" in (''|0|*[!0-9]*) printf '{"ok":false,"error":"port required (must match config inbound)"}\n'; exit 0 ;; esac
+        rp_job=$(test_job_path "$rp_port")
+        rp_cfg="$DATADIR/test-$rp_port.json"
+        rp_pid="$DATADIR/test-$rp_port.pid"
 
         if ! command -v curl >/dev/null 2>&1; then
-            printf '{"ms":-1,"error":"curl not available"}\n'; exit 0
+            write_test_job "$rp_job" '"state":"done","ms":-1,"error":"curl not available"'; printf '{"ok":true}\n'; exit 0
         fi
-
-        # write temp config
         if ! atomic_write_json "$rp_cfg"; then
-            printf '{"ms":-1,"error":"invalid config"}\n'; exit 0
+            write_test_job "$rp_job" '"state":"done","ms":-1,"error":"invalid config"'; printf '{"ok":true}\n'; exit 0
         fi
-
-        # kill any leftover realping process
-        if [ -f "$rp_pid" ]; then
-            old_pid=$(cat "$rp_pid" 2>/dev/null)
-            kill "$old_pid" 2>/dev/null
-            rm -f "$rp_pid"
-        fi
-
         case "$rp_engine" in
             sing-box) rp_bin="$BINDIR/sing-box" ;;
             *)        rp_bin="$BINDIR/xray" ;;
         esac
-
         if [ ! -x "$rp_bin" ]; then
-            printf '{"ms":-1,"error":"core not found"}\n'; exit 0
+            write_test_job "$rp_job" '"state":"done","ms":-1,"error":"core not found"'; printf '{"ok":true}\n'; exit 0
         fi
 
-        # start core in background
-        case "$rp_engine" in
-            sing-box) "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
-            *)        XRAY_LOCATION_ASSET="$DATADIR" "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
-        esac
-        echo $! > "$rp_pid"
-        sleep 2
-
-        # measure HTTP latency through socks5
-        rp_start=$(date +%s%N 2>/dev/null)
-        if curl -fsS --max-time 5 --socks5 "127.0.0.1:$rp_port" \
-                -o /dev/null "$rp_url" 2>/dev/null; then
-            rp_end=$(date +%s%N 2>/dev/null)
-            case "$rp_start$rp_end" in
-                *[!0-9]*) rp_ms=-1 ;;
-                *) rp_ms=$(( (rp_end - rp_start) / 1000000 ))
-                   [ "$rp_ms" -lt 0 ] && rp_ms=-1 ;;
+        write_test_job "$rp_job" '"state":"running"'
+        (
+            # kill any leftover core bound to this port
+            [ -f "$rp_pid" ] && { kill "$(cat "$rp_pid" 2>/dev/null)" 2>/dev/null; rm -f "$rp_pid"; }
+            # start core in background (lowest priority — see $NICE rationale above)
+            case "$rp_engine" in
+                sing-box) $NICE "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
+                *)        XRAY_LOCATION_ASSET="$DATADIR" $NICE "$rp_bin" run -c "$rp_cfg" >/dev/null 2>&1 & ;;
             esac
-        fi
-
-        # always clean up
-        rp_pid_val=$(cat "$rp_pid" 2>/dev/null)
-        kill "$rp_pid_val" 2>/dev/null
-        rm -f "$rp_pid" "$rp_cfg"
-
-        printf '{"ms":%d}\n' "$rp_ms"
+            echo $! > "$rp_pid"
+            sleep 2
+            rp_ms=-1
+            rp_s=$(date +%s%N 2>/dev/null)
+            if $NICE curl -fsS --max-time 5 --socks5 "127.0.0.1:$rp_port" -o /dev/null "$rp_url" 2>/dev/null; then
+                rp_e=$(date +%s%N 2>/dev/null)
+                case "$rp_s$rp_e" in
+                    *[!0-9]*) rp_ms=-1 ;;
+                    *) rp_ms=$(( (rp_e - rp_s) / 1000000 )); [ "$rp_ms" -lt 0 ] && rp_ms=-1 ;;
+                esac
+            fi
+            kill "$(cat "$rp_pid" 2>/dev/null)" 2>/dev/null
+            rm -f "$rp_pid" "$rp_cfg"
+            write_test_job "$rp_job" "\"state\":\"done\",\"ms\":$rp_ms"
+        ) >/dev/null 2>&1 &
+        printf '{"ok":true}\n'
         ;;
 
-    speedtest)
-        # stdin: core config JSON; args: <engine> <testUrl> [<port>] [<timeout>]
-        # Returns: {"bps":N} in bytes/sec, or {"bps":-1,"error":"..."}
+    realpingStatus)
+        # args: <port>  -> the job JSON ({"state":"running"} | {"state":"done","ms":N})
+        rp_port="$1"
+        case "$rp_port" in (''|*[!0-9]*) printf '{"state":"idle"}\n'; exit 0 ;; esac
+        rp_job=$(test_job_path "$rp_port")
+        if [ -f "$rp_job" ]; then cat "$rp_job"; else printf '{"state":"idle"}\n'; fi
+        ;;
+
+    speedtestStart)
+        # stdin: core config JSON; args: <engine> <testUrl> <port> [<timeout>]
+        # Background job; poll `speedtestStatus <port>` for {"bps":N}.
         st_engine="${1:-xray}"
         st_url="${2:-http://speed.cloudflare.com/__down?bytes=10000000}"
         st_port="${3:-0}"
         st_timeout="${4:-15}"
-        # The inbound port is baked into the stdin config by the caller, so we
-        # cannot auto-pick one here — a mismatched port would always measure -1.
-        # The caller (freePort -> build config -> speedtest) must pass it explicitly.
-        case "$st_port" in (''|0|*[!0-9]*) printf '{"bps":-1,"error":"port required (must match config inbound)"}\n'; exit 0 ;; esac
-        st_cfg="$DATADIR/speedtest.json"
-        st_pid="$DATADIR/speedtest.pid"
-        st_bps=-1
+        case "$st_port" in (''|0|*[!0-9]*) printf '{"ok":false,"error":"port required (must match config inbound)"}\n'; exit 0 ;; esac
+        st_job=$(test_job_path "$st_port")
+        st_cfg="$DATADIR/test-$st_port.json"
+        st_pid="$DATADIR/test-$st_port.pid"
 
         if ! command -v curl >/dev/null 2>&1; then
-            printf '{"bps":-1,"error":"curl not available"}\n'; exit 0
+            write_test_job "$st_job" '"state":"done","bps":-1,"error":"curl not available"'; printf '{"ok":true}\n'; exit 0
         fi
-
         if ! atomic_write_json "$st_cfg"; then
-            printf '{"bps":-1,"error":"invalid config"}\n'; exit 0
+            write_test_job "$st_job" '"state":"done","bps":-1,"error":"invalid config"'; printf '{"ok":true}\n'; exit 0
         fi
-
-        if [ -f "$st_pid" ]; then
-            old_pid=$(cat "$st_pid" 2>/dev/null)
-            kill "$old_pid" 2>/dev/null
-            rm -f "$st_pid"
-        fi
-
         case "$st_engine" in
             sing-box) st_bin="$BINDIR/sing-box" ;;
             *)        st_bin="$BINDIR/xray" ;;
         esac
-
         if [ ! -x "$st_bin" ]; then
-            printf '{"bps":-1,"error":"core not found"}\n'; exit 0
+            write_test_job "$st_job" '"state":"done","bps":-1,"error":"core not found"'; printf '{"ok":true}\n'; exit 0
         fi
 
-        case "$st_engine" in
-            sing-box) "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 & ;;
-            *)        XRAY_LOCATION_ASSET="$DATADIR" "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 & ;;
-        esac
-        echo $! > "$st_pid"
-        sleep 2
+        write_test_job "$st_job" '"state":"running"'
+        (
+            [ -f "$st_pid" ] && { kill "$(cat "$st_pid" 2>/dev/null)" 2>/dev/null; rm -f "$st_pid"; }
+            # lowest priority — see $NICE rationale above
+            case "$st_engine" in
+                sing-box) $NICE "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 & ;;
+                *)        XRAY_LOCATION_ASSET="$DATADIR" $NICE "$st_bin" run -c "$st_cfg" >/dev/null 2>&1 & ;;
+            esac
+            echo $! > "$st_pid"
+            sleep 2
+            st_bps=-1
+            # download through socks5, measure bytes/sec via curl's speed-meter.
+            # -w writes to stdout AFTER the body; redirect body to /dev/null via -o,
+            # capture only the -w output (speed) through a separate fd to avoid mixing.
+            st_tmpfile=$(mktemp)
+            exec 3>"$st_tmpfile"
+            $NICE curl -fsS --max-time "$st_timeout" --socks5 "127.0.0.1:$st_port" \
+                -o /dev/null -w "%{speed_download}" "$st_url" 2>/dev/null >&3
+            exec 3>&-
+            raw=$(cat "$st_tmpfile" 2>/dev/null)
+            case "$raw" in
+                ''|0|0.000) st_bps=-1 ;;
+                *) st_bps=$(printf '%.0f' "$raw" 2>/dev/null) || st_bps=-1 ;;
+            esac
+            rm -f "$st_tmpfile"
+            kill "$(cat "$st_pid" 2>/dev/null)" 2>/dev/null
+            rm -f "$st_pid" "$st_cfg"
+            write_test_job "$st_job" "\"state\":\"done\",\"bps\":$st_bps"
+        ) >/dev/null 2>&1 &
+        printf '{"ok":true}\n'
+        ;;
 
-        # download through socks5, measure bytes/sec via curl's speed-meter
-        # -w writes to stdout AFTER the body; redirect body to /dev/null via -o,
-        # capture only the -w output (speed) through a separate fd to avoid mixing.
-        st_tmpfile=$(mktemp)
-        exec 3>"$st_tmpfile"
-        curl -fsS --max-time "$st_timeout" --socks5 "127.0.0.1:$st_port" \
-            -o /dev/null -w "%{speed_download}" "$st_url" 2>/dev/null >&3
-        exec 3>&-
-        raw=$(cat "$st_tmpfile" 2>/dev/null)
-        # curl reports speed as float (bytes/sec); convert to int
-        case "$raw" in
-            ''|0|0.000) st_bps=-1 ;;
-            *) st_bps=$(printf '%.0f' "$raw" 2>/dev/null) || st_bps=-1 ;;
-        esac
-        rm -f "$st_tmpfile"
-
-        st_pid_val=$(cat "$st_pid" 2>/dev/null)
-        kill "$st_pid_val" 2>/dev/null
-        rm -f "$st_pid" "$st_cfg"
-
-        printf '{"bps":%d}\n' "$st_bps"
+    speedtestStatus)
+        # args: <port>  -> the job JSON ({"state":"running"} | {"state":"done","bps":N})
+        st_port="$1"
+        case "$st_port" in (''|*[!0-9]*) printf '{"state":"idle"}\n'; exit 0 ;; esac
+        st_job=$(test_job_path "$st_port")
+        if [ -f "$st_job" ]; then cat "$st_job"; else printf '{"state":"idle"}\n'; fi
         ;;
 
     fetchSubscription)

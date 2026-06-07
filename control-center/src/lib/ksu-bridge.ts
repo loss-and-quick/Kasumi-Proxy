@@ -128,6 +128,44 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type TestJobStatus = { state: "idle" | "running" | "done"; ms?: number; bps?: number };
+
+function parseTestJobStatus(value: unknown): TestJobStatus {
+  if (!value || typeof value !== "object") return { state: "idle" };
+  const obj = value as Record<string, unknown>;
+  const state = obj.state === "running" || obj.state === "done" ? obj.state : "idle";
+  return {
+    state,
+    ...(typeof obj.ms === "number" ? { ms: obj.ms } : {}),
+    ...(typeof obj.bps === "number" ? { bps: obj.bps } : {}),
+  };
+}
+
+/**
+ * Drive a realping/speedtest as a background job: fire a quick *Start exec, then
+ * poll a quick *Status exec until done. Crucial because every ksu.exec blocks
+ * the WebView renderer for its whole duration — a single multi-second test exec
+ * froze the UI, so the work must be split into sub-250ms execs.
+ */
+async function runTestJob(
+  startMethod: string,
+  statusMethod: string,
+  startArgs: string[],
+  port: number,
+  config: string,
+  timeoutMs: number,
+): Promise<TestJobStatus> {
+  const started = parseAssetDownloadResponse(await callJson(startMethod, startArgs, config));
+  if (!started.ok) return { state: "done" };
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const status = parseTestJobStatus(await callJson(statusMethod, [String(port)]));
+    if (status.state === "done") return status;
+    await sleep(250);
+  }
+  return { state: "done" };
+}
+
 /**
  * Run a kasumi-proxyctl call via the best available transport → stdout text.
  * The KernelSU transport execs a shell, so it gets a composed command string;
@@ -307,18 +345,19 @@ export const ksuBridge: Bridge = {
             state.routingRules ?? [],
             state.profiles,
           );
-    const r = parsePingResponse(
-      await callJson(
-        "realping",
-        [
-          engine,
-          state.settings.delayTestUrl || "http://www.gstatic.com/generate_204",
-          String(realPingPort),
-        ],
-        config,
-      ),
+    const status = await runTestJob(
+      "realpingStart",
+      "realpingStatus",
+      [
+        engine,
+        state.settings.delayTestUrl || "http://www.gstatic.com/generate_204",
+        String(realPingPort),
+      ],
+      realPingPort,
+      config,
+      20_000,
     );
-    return r.ms ?? -1;
+    return typeof status.ms === "number" ? status.ms : -1;
   },
 
   async realPingAll() {
@@ -369,17 +408,20 @@ export const ksuBridge: Bridge = {
             state.routingRules ?? [],
             state.profiles,
           );
-    const raw = (await callJson(
-      "speedtest",
+    const status = await runTestJob(
+      "speedtestStart",
+      "speedtestStatus",
       [
         engine,
         state.settings.speedTestUrl || "http://speed.cloudflare.com/__down?bytes=10000000",
         String(stPort),
         "15",
       ],
+      stPort,
       config,
-    )) as { bps?: number };
-    return typeof raw?.bps === "number" && raw.bps > 0 ? raw.bps : -1;
+      30_000,
+    );
+    return typeof status.bps === "number" && status.bps > 0 ? status.bps : -1;
   },
 
   async speedTestAll() {
