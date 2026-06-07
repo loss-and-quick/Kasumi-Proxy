@@ -3,7 +3,8 @@
 module/bin/*
 !module/bin/kasumi-proxyctl
 !module/bin/README.md
-!module/bin/LICENSE
+!module/bin/licenses/
+!module/bin/licenses/*
 
 # Production webroot built by build-webroot.sh — track only the source CGI.
 module/webroot/*
