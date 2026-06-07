@@ -106,7 +106,6 @@ const en = {
   "profiles.filterAll": "All",
   "profiles.sortName": "Name",
   "profiles.sortPing": "Ping",
-  "profiles.sortGroup": "Group",
   "profiles.bulkSelected": "Selected:",
   "profiles.bulkPing": "Ping selected",
   "profiles.bulkShare": "Share selected",

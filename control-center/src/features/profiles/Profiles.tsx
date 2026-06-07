@@ -104,11 +104,6 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
           left.remarks.localeCompare(right.remarks)
         );
       }
-      if (sort === "group") {
-        return (
-          left.groupId.localeCompare(right.groupId) || left.remarks.localeCompare(right.remarks)
-        );
-      }
       return left.remarks.localeCompare(right.remarks);
     });
   }

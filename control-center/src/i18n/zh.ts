@@ -101,7 +101,6 @@ const zh = {
   "profiles.filterAll": "全部",
   "profiles.sortName": "名称",
   "profiles.sortPing": "延迟",
-  "profiles.sortGroup": "分组",
   "profiles.bulkSelected": "已选择：",
   "profiles.bulkPing": "测试所选延迟",
   "profiles.bulkShare": "分享所选配置",

@@ -101,7 +101,6 @@ const hi = {
   "profiles.filterAll": "सभी",
   "profiles.sortName": "नाम",
   "profiles.sortPing": "पिंग",
-  "profiles.sortGroup": "समूह",
   "profiles.bulkSelected": "चयनित:",
   "profiles.bulkPing": "चयनित को पिंग करें",
   "profiles.bulkShare": "चयनित साझा करें",
