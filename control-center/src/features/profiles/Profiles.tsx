@@ -52,6 +52,8 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const realPingAll = useAppStore((s) => s.realPingAll);
   const speedTestAll = useAppStore((s) => s.speedTestAll);
   const speedTestProfile = useAppStore((s) => s.speedTestProfile);
+  const pinging = useAppStore((s) => s.pinging);
+  const speedTesting = useAppStore((s) => s.speedTesting);
   const removeUnreachable = useAppStore((s) => s.removeUnreachable);
   const removeDuplicates = useAppStore((s) => s.removeDuplicates);
   const selectBest = useAppStore((s) => s.selectBest);
@@ -257,6 +259,8 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
       <PingActionsSheet
         open={pingSheetOpen}
         onClose={() => setPingSheetOpen(false)}
+        pinging={pinging.size > 0}
+        speedTesting={speedTesting.size > 0}
         onTcping={() => {
           void pingAll();
           setPingSheetOpen(false);
@@ -284,6 +288,8 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
           <ProfileActionsSheet
             profile={sheetProfile}
             onClose={closeSheetProfile}
+            pinging={sheetProfile ? pinging.has(sheetProfile.id) : false}
+            speedTesting={sheetProfile ? speedTesting.has(sheetProfile.id) : false}
             onUse={(profile) => {
               void setActive(profile.id);
               closeSheetProfile();

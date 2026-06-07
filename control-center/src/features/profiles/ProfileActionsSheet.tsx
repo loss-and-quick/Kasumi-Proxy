@@ -14,6 +14,8 @@ export function ProfileActionsSheet({
   onRealPing,
   onSpeedTest,
   onDelete,
+  pinging,
+  speedTesting,
 }: {
   profile: Profile | null;
   onClose: () => void;
@@ -26,8 +28,13 @@ export function ProfileActionsSheet({
   onRealPing: (profile: Profile) => void;
   onSpeedTest: (profile: Profile) => void;
   onDelete: (profile: Profile) => void;
+  pinging: boolean;
+  speedTesting: boolean;
 }) {
   const t = useT();
+  // Any test in progress contends for a core / the exec channel, so block every
+  // test action while one runs — not just the matching category.
+  const busy = pinging || speedTesting;
 
   return (
     <Sheet open={!!profile} title={profile?.remarks} onClose={onClose}>
@@ -62,16 +69,19 @@ export function ProfileActionsSheet({
             icon="lan"
             label={t("profiles.sheet.latency")}
             onClick={() => onPing(profile)}
+            disabled={busy}
           />
           <SheetAction
             icon="travel_explore"
             label={t("profiles.sheet.realLatency")}
             onClick={() => onRealPing(profile)}
+            disabled={busy}
           />
           <SheetAction
             icon="speed"
             label={t("profiles.sheet.speedtest")}
             onClick={() => onSpeedTest(profile)}
+            disabled={busy}
           />
           <div className="divider" />
           <SheetAction

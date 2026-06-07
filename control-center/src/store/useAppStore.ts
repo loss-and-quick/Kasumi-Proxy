@@ -49,6 +49,8 @@ interface Store extends AppState {
   caps: Capabilities | null;
   hydrated: boolean;
   busy: boolean; // true while a service lifecycle op is in flight
+  pinging: Set<string>; // profile ids currently being pinged
+  speedTesting: Set<string>; // profile ids currently being speed-tested
   toast: string | null;
 
   hydrate: () => Promise<void>;
@@ -191,6 +193,8 @@ export const useAppStore = create<Store>((set, get) => {
     activeId: null,
     hydrated: false,
     busy: false,
+    pinging: new Set<string>(),
+    speedTesting: new Set<string>(),
     toast: null,
     caps: null,
     uploadRate: 0,
@@ -366,55 +370,92 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     async pingProfile(id) {
+      if (get().pinging.has(id)) return;
+      set((s) => ({ pinging: new Set([...s.pinging, id]) }));
       try {
         const ms = await bridge.ping(id);
         set((s) => ({
           profiles: s.profiles.map((p) => (p.id === id ? { ...p, ping: ms || null } : p)),
+          pinging: new Set([...s.pinging].filter((x) => x !== id)),
         }));
       } catch {
-        /* ignore */
+        set((s) => ({ pinging: new Set([...s.pinging].filter((x) => x !== id)) }));
       }
     },
     async realPingProfile(id) {
+      if (get().pinging.has(id)) return;
+      set((s) => ({ pinging: new Set([...s.pinging, id]) }));
       try {
         const ms = await bridge.realPing(id);
         set((s) => ({
           profiles: s.profiles.map((p) => (p.id === id ? { ...p, ping: ms } : p)),
+          pinging: new Set([...s.pinging].filter((x) => x !== id)),
         }));
       } catch {
-        /* ignore */
+        set((s) => ({ pinging: new Set([...s.pinging].filter((x) => x !== id)) }));
       }
     },
     async speedTestProfile(id) {
+      if (get().speedTesting.has(id)) return;
+      set((s) => ({ speedTesting: new Set([...s.speedTesting, id]) }));
       try {
         const bps = await bridge.speedTest(id);
         set((s) => ({
           profiles: s.profiles.map((p) => (p.id === id ? { ...p, speed: bps } : p)),
+          speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)),
         }));
       } catch {
-        /* ignore */
+        set((s) => ({ speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)) }));
       }
     },
     async pingAll() {
+      if (get().pinging.size) return;
       get().notify(translateCurrent("store.ping.started"));
-      const result = await bridge.pingAll();
-      set((s) => ({ profiles: s.profiles.map((p) => ({ ...p, ping: result[p.id] ?? p.ping })) }));
+      const ids = get().profiles.map((p) => p.id);
+      set({ pinging: new Set(ids) });
+      try {
+        const result = await bridge.pingAll();
+        set((s) => ({
+          profiles: s.profiles.map((p) => ({ ...p, ping: result[p.id] ?? p.ping })),
+          pinging: new Set(),
+        }));
+      } catch {
+        set({ pinging: new Set() });
+      }
       get().notify(translateCurrent("store.ping.complete"));
     },
 
     async realPingAll() {
+      if (get().pinging.size) return;
       get().notify(translateCurrent("store.ping.started"));
-      const result = await bridge.realPingAll();
-      set((s) => ({ profiles: s.profiles.map((p) => ({ ...p, ping: result[p.id] ?? p.ping })) }));
+      const ids = get().profiles.map((p) => p.id);
+      set({ pinging: new Set(ids) });
+      try {
+        const result = await bridge.realPingAll();
+        set((s) => ({
+          profiles: s.profiles.map((p) => ({ ...p, ping: result[p.id] ?? p.ping })),
+          pinging: new Set(),
+        }));
+      } catch {
+        set({ pinging: new Set() });
+      }
       get().notify(translateCurrent("store.ping.complete"));
     },
 
     async speedTestAll() {
+      if (get().speedTesting.size) return;
       get().notify(translateCurrent("store.ping.started"));
-      const result = await bridge.speedTestAll();
-      set((s) => ({
-        profiles: s.profiles.map((p) => ({ ...p, speed: result[p.id] ?? p.speed })),
-      }));
+      const ids = get().profiles.map((p) => p.id);
+      set({ speedTesting: new Set(ids) });
+      try {
+        const result = await bridge.speedTestAll();
+        set((s) => ({
+          profiles: s.profiles.map((p) => ({ ...p, speed: result[p.id] ?? p.speed })),
+          speedTesting: new Set(),
+        }));
+      } catch {
+        set({ speedTesting: new Set() });
+      }
       get().notify(translateCurrent("store.ping.complete"));
     },
 

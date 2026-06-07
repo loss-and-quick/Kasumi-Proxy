@@ -44,6 +44,8 @@ export default function Overview({
   const pingAll = useAppStore((s) => s.pingAll);
   const realPingAll = useAppStore((s) => s.realPingAll);
   const speedTestAll = useAppStore((s) => s.speedTestAll);
+  const pinging = useAppStore((s) => s.pinging);
+  const speedTesting = useAppStore((s) => s.speedTesting);
   const removeUnreachable = useAppStore((s) => s.removeUnreachable);
   const selectBest = useAppStore((s) => s.selectBest);
   const [pingSheetOpen, setPingSheetOpen] = useState(false);
@@ -297,6 +299,8 @@ export default function Overview({
         <PingActionsSheet
           open={pingSheetOpen}
           onClose={() => setPingSheetOpen(false)}
+          pinging={pinging.size > 0}
+          speedTesting={speedTesting.size > 0}
           onTcping={() => {
             void pingAll();
             setPingSheetOpen(false);

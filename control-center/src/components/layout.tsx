@@ -33,6 +33,7 @@ export const ListRow = ({
   onClick,
   right,
   danger,
+  disabled,
 }: {
   icon?: string;
   iconSlot?: ReactNode;
@@ -41,6 +42,7 @@ export const ListRow = ({
   onClick?: () => void;
   right?: ReactNode;
   danger?: boolean;
+  disabled?: boolean;
 }) => {
   const content = (
     <>
@@ -69,6 +71,7 @@ export const ListRow = ({
         <button
           type="button"
           onClick={onClick}
+          disabled={disabled}
           style={{
             display: "flex",
             alignItems: "center",
@@ -135,16 +138,19 @@ export const SheetAction = ({
   sub,
   onClick,
   danger,
+  disabled,
 }: {
   icon: string;
   label: string;
   sub?: string;
   onClick?: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) => (
   <button
     type="button"
     onClick={onClick}
+    disabled={disabled}
     style={{
       display: "flex",
       alignItems: "center",
@@ -152,11 +158,12 @@ export const SheetAction = ({
       padding: "13px 4px",
       background: "none",
       border: "none",
-      cursor: "pointer",
+      cursor: disabled ? "default" : "pointer",
       textAlign: "left",
       width: "100%",
       color: danger ? "var(--error)" : "var(--on-surface)",
       fontFamily: "var(--font-ui)",
+      opacity: disabled ? 0.4 : 1,
     }}
   >
     <Icon
