@@ -472,3 +472,30 @@ describe("http/https proxy share link", () => {
     expect(uris.some((u) => u.startsWith("vless://"))).toBe(true);
   });
 });
+
+describe("URI_RE: fragment with spaces", () => {
+  it("captures full remarks containing spaces after flag emoji", () => {
+    const uri =
+      "trojan://password@ex.com:443?fp=chrome&security=tls&sni=ex.com&type=tcp#🇦🇹 23 - AT - Trojan/TLS/UTLS - 443";
+    const p = parseShareLink(uri);
+    expect(p?.remarks).toBe("🇦🇹 23 - AT - Trojan/TLS/UTLS - 443");
+  });
+
+  it("does not bleed into the next URI on a separate line", () => {
+    const text = "vless://u@a.com:443#🇩🇪 first name\ntrojan://p@b.com:443#🇷🇺 second name";
+    const uris = extractUris(text);
+    expect(uris).toHaveLength(2);
+    expect(uris[0]).toContain("first name");
+    expect(uris[1]).toContain("second name");
+  });
+
+  it("extracts all profiles with full remarks from a real-world subscription", () => {
+    const lines = [
+      "vless://id@1.2.3.4:443?type=tcp#🇷🇺 3 - RU - VLESS/REALITY - 443",
+      "trojan://pw@5.6.7.8:443?security=tls#🇩🇪 8 - DE - Trojan - 443",
+    ];
+    const uris = extractUris(lines.join("\n"));
+    expect(uris[0]).toMatch(/🇷🇺 3 - RU/);
+    expect(uris[1]).toMatch(/🇩🇪 8 - DE/);
+  });
+});

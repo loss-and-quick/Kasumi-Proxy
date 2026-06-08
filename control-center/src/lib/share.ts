@@ -502,10 +502,15 @@ function buildShadowtls(p: ProfileOf<"shadowtls">): string {
   return `shadowtls://${encodeURIComponent(p.password)}@${p.address}:${p.port}?${params.toString()}${hash}`;
 }
 
-const URI_RE =
-  /(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?|https?):\/\/[^\s@]*@[^\s]+|(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?):\/\/[^\s]+/;
-const URI_RE_G =
-  /(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?|https?):\/\/[^\s@]*@[^\s]+|(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?):\/\/[^\s]+/g;
+const _S =
+  "vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\\+https|naive\\+quic|shadowtls|wireguard|socks5?";
+const _SH = `${_S}|https?`;
+const _FRAG = `(?:#[^\\r\\n]*?(?=\\s+(?:${_SH})://|[\\r\\n]|$))?`;
+const URI_RE = new RegExp(`(?:${_SH})://[^\\s@]*@[^\\s#]*${_FRAG}|(?:${_S})://[^\\s#]*${_FRAG}`);
+const URI_RE_G = new RegExp(
+  `(?:${_SH})://[^\\s@]*@[^\\s#]*${_FRAG}|(?:${_S})://[^\\s#]*${_FRAG}`,
+  "g",
+);
 
 /** Extract every share URI from arbitrary text, decoding base64 blobs. */
 export function extractUris(text: string, depth = 0): string[] {
