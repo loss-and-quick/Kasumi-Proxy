@@ -472,3 +472,39 @@ describe("http/https proxy share link", () => {
     expect(uris.some((u) => u.startsWith("vless://"))).toBe(true);
   });
 });
+
+describe("ssr share link", () => {
+  // ssr://base64(host:port:protocol:method:obfs:base64(password)/?params)
+  type Shadowsocks = Extract<Profile, { protocol: "shadowsocks" }>;
+  const rawInner =
+    "ssr2.example.com:443:auth_sha1_v4:chacha20-ietf:tls1.2_ticket_auth:cGFzc3dvcmQ=/?remarks=dGVzdA==&group=dGVzdGc=";
+  const uri = `ssr://${btoa(rawInner)}`;
+
+  it("parses host/port/method/password", () => {
+    const p = mustParse<Shadowsocks>(uri);
+    expect(p.protocol).toBe("shadowsocks");
+    expect(p.address).toBe("ssr2.example.com");
+    expect(p.port).toBe(443);
+    expect(p.password).toBe("password");
+  });
+
+  it("decodes remarks param as profile name", () => {
+    const p = mustParse<Shadowsocks>(uri);
+    expect(p.remarks).toBe("test");
+  });
+
+  it("returns null for malformed ssr link", () => {
+    expect(parseShareLink("ssr://notbase64!!!")).toBeNull();
+    expect(parseShareLink(`ssr://${btoa("only:four:parts:here")}`)).toBeNull();
+  });
+
+  it("extractUris picks up ssr:// links from plain text", () => {
+    const uris = extractUris(`${uri} vless://u@v.ex:443#V`);
+    expect(uris.some((u) => u.startsWith("ssr://"))).toBe(true);
+  });
+
+  it("extractUris decodes ssr:// from a base64-wrapped subscription body", () => {
+    const uris = extractUris(btoa(uri));
+    expect(uris.some((u) => u.startsWith("ssr://"))).toBe(true);
+  });
+});

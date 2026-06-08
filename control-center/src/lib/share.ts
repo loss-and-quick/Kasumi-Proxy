@@ -404,6 +404,32 @@ function parseNaive(uri: string, groupId?: string): Profile | null {
   });
 }
 
+function parseSsr(uri: string, groupId?: string): Profile | null {
+  const dec = b64decode(uri.slice("ssr://".length));
+  if (!dec) return null;
+  const [main, query] = splitFirst(dec, "?");
+  const parts = main.split(":");
+  // parts: host, port, protocol, method, obfs, base64(password)
+  if (parts.length < 6) return null;
+  const [host, portStr, , method, , b64pass] = parts;
+  const port = Number(portStr);
+  if (!host || !port) return null;
+  const password = b64decode(b64pass.split("/")[0]) ?? b64pass.split("/")[0];
+  const params = new URLSearchParams(query ?? "");
+  const remarksRaw = params.get("remarks");
+  const groupRaw = params.get("group");
+  const group = (groupRaw ? b64decode(groupRaw) : null) ?? undefined;
+  const remarks = (remarksRaw ? b64decode(remarksRaw) : null) ?? host;
+  return mk("shadowsocks", {
+    remarks: remarks || host,
+    address: host,
+    port,
+    method: asSsMethod(method),
+    password,
+    groupId: groupId ?? group ?? "g-main",
+  });
+}
+
 /** Parse a single share URI into a Profile (or null). */
 export function parseShareLink(uri: string, groupId?: string): Profile | null {
   const s = uri.trim();
@@ -411,6 +437,7 @@ export function parseShareLink(uri: string, groupId?: string): Profile | null {
   if (s.startsWith("vless://")) return parseUrlBased(s, "vless", groupId);
   if (s.startsWith("trojan://")) return parseUrlBased(s, "trojan", groupId);
   if (s.startsWith("ss://")) return parseSs(s, groupId);
+  if (s.startsWith("ssr://")) return parseSsr(s, groupId);
   if (s.startsWith("hysteria2://") || s.startsWith("hy2://")) return parseHysteria2(s, groupId);
   if (s.startsWith("tuic://")) return parseTuic(s, groupId);
   if (s.startsWith("anytls://")) return parseAnytls(s, groupId);
@@ -503,9 +530,9 @@ function buildShadowtls(p: ProfileOf<"shadowtls">): string {
 }
 
 const URI_RE =
-  /(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?|https?):\/\/[^\s@]*@[^\s]+|(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?):\/\/[^\s]+/;
+  /(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?|https?):\/\/[^\s@]*@[^\s]+|(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?):\/\/[^\s]+/;
 const URI_RE_G =
-  /(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?|https?):\/\/[^\s@]*@[^\s]+|(vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?):\/\/[^\s]+/g;
+  /(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?|https?):\/\/[^\s@]*@[^\s]+|(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?):\/\/[^\s]+/g;
 
 /** Extract every share URI from arbitrary text, decoding base64 blobs. */
 export function extractUris(text: string, depth = 0): string[] {
