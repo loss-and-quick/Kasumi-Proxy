@@ -15,7 +15,7 @@ import {
   Sheet,
   Switch,
 } from "../../components";
-import { useT } from "../../i18n";
+import { useFormatters, useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
 import { uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
@@ -154,6 +154,7 @@ function SubCard({
   onDelete: () => void;
 }) {
   const t = useT();
+  const { formatDateTime } = useFormatters();
   return (
     <Card style={{ padding: 14, opacity: s.enabled ? 1 : 0.6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -175,7 +176,7 @@ function SubCard({
             <span>·</span>
             <span>
               {s.lastUpdated
-                ? t("subs.updatedAt", { date: s.lastUpdated.split("T")[0] })
+                ? t("subs.updatedAt", { date: formatDateTime(new Date(s.lastUpdated)) })
                 : t("subs.neverUpdated")}
             </span>
           </div>
