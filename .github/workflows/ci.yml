@@ -1,13 +1,10 @@
 name: CI
 
 on:
+  # Trigger on every PR so the required `lint` check always reports a status
+  # (a required check that never runs would block merges forever). Path
+  # scoping is applied inside the job instead — see the "Detect changes" step.
   pull_request:
-    paths:
-      - 'control-center/src/**'
-      - 'module/**'
-      - 'scripts/**'
-      - 'control-center/package.json'
-      - 'control-center/bun.lock'
   push:
     branches: [main]
     paths:
@@ -22,29 +19,58 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+          # On a brand-new branch the base may be empty/all-zeros — treat as relevant.
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$base" "$head" | grep -Eq '^(control-center/src/|module/|scripts/|control-center/package\.json|control-center/bun\.lock)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Bun
+        if: steps.changes.outputs.relevant == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       - name: Install dependencies
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: control-center
         run: bun install --frozen-lockfile
 
       - name: Biome check (format + lint)
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: control-center
         run: bun run check
 
-      - name: TypeScript
+      - name: Build (tsc + vite)
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: control-center
-        run: bun run build --noEmit 2>/dev/null || bun x tsc --noEmit
+        run: bun run build
 
       - name: Tests
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: control-center
         run: bun run test
 
       - name: ShellCheck
+        if: steps.changes.outputs.relevant == 'true'
         run: |
           # Module payload runs under Android mksh — lint as POSIX sh.
           shellcheck -s sh \
