@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# shellcheck disable=SC3043  # 'local' is supported by Android's /system/bin/sh (mksh)
+# shellcheck disable=SC3043,SC3045  # 'local' and 'read -t' are supported by Android's /system/bin/sh (mksh)
 MODDIR=${0%/*}
 BINDIR="$MODDIR/bin"
 DATADIR="/data/adb/kasumi-proxy"
@@ -53,6 +53,8 @@ TUN2SOCKS2_PIDFILE="$MODDIR/run/tun2socks2.pid"
 
 # Control pipe for receiving commands from the UI or other components
 PIPE_FILE="$MODDIR/run/control.pipe"
+# Wakeup pipe for the subscription auto-update daemon
+SUB_WAKE_PIPE="$MODDIR/run/sub-wake.pipe"
 STUB_DIR=/dev/sysctl_stubs
 
 rm -rf "$STUB_DIR"
@@ -62,6 +64,7 @@ mount -t tmpfs -o "size=64k,mode=0755,context=u:object_r:proc_net:s0" proc "$STU
 rm -rf "$MODDIR/run"
 mkdir -p "$MODDIR/run"
 mkfifo "$PIPE_FILE"
+mkfifo "$SUB_WAKE_PIPE"
 log_debug "control pipe ready: $PIPE_FILE"
 # Fresh boot: no core runs yet. Seed the lifecycle channel so a stale value from
 # the previous session can't make status lie before the first command lands.
@@ -1025,12 +1028,12 @@ sub_autoupdate_tick() {
 		s_ai=0
 		case "$obj" in *'"allowInsecure":true'*) s_ai=1 ;; esac
 		if [ -z "$s_id" ] || [ -z "$s_url" ]; then continue; fi
-		case "$s_int" in (''|*[!0-9]*) s_int=0 ;; esac
+		case "$s_int" in '' | *[!0-9]*) s_int=0 ;; esac
 		[ "$s_int" -gt 0 ] || continue
-		case "$s_id" in (*/*|*..*) continue ;; esac
+		case "$s_id" in */* | *..*) continue ;; esac
 		fetched=$(cat "$SUBCACHE_DIR/$s_id.fetched" 2>/dev/null)
-		case "$fetched" in (''|*[!0-9]*) fetched=0 ;; esac
-		[ "$(( now - fetched ))" -ge "$(( s_int * 60 ))" ] || continue
+		case "$fetched" in '' | *[!0-9]*) fetched=0 ;; esac
+		[ "$((now - fetched))" -ge "$((s_int * 60))" ] || continue
 		tmp="$SUBCACHE_DIR/$s_id.raw.tmp"
 		if printf '%s' "$s_url" | "$BINDIR/kasumi-proxyctl" fetchSubscription "$s_ai" 0 "$s_ua" >"$tmp" 2>/dev/null && [ -s "$tmp" ]; then
 			mv "$tmp" "$SUBCACHE_DIR/$s_id.raw"
@@ -1043,10 +1046,48 @@ sub_autoupdate_tick() {
 	done
 }
 
-# Poll the subscription schedule once a minute.
+# Calculate seconds until the next subscription update is due.
+# Returns 21600 (6h cap) if no update is imminent.
+sub_next_sleep() {
+	local min=21600 now compact subs obj s_id s_int fetched due remaining
+	now=$(date +%s)
+	[ -f "$STATE_FILE" ] || {
+		printf '%s' "$min"
+		return
+	}
+	compact=$(tr -d '\r\n' <"$STATE_FILE" 2>/dev/null)
+	subs=$(printf '%s' "$compact" | sed -n 's/.*"subscriptions":\[\(.*\)\],"routingRules".*/\1/p')
+	[ -n "$subs" ] || {
+		printf '%s' "$min"
+		return
+	}
+	while IFS= read -r obj; do
+		case "$obj" in *'"autoUpdate":true'*) ;; *) continue ;; esac
+		case "$obj" in *'"enabled":true'*) ;; *) continue ;; esac
+		s_id=$(printf '%s' "$obj" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+		s_int=$(printf '%s' "$obj" | sed -n 's/.*"interval":\([0-9]*\).*/\1/p')
+		case "$s_int" in '' | *[!0-9]*) continue ;; esac
+		[ "$s_int" -gt 0 ] || continue
+		case "$s_id" in */* | *..*) continue ;; esac
+		fetched=$(cat "$SUBCACHE_DIR/$s_id.fetched" 2>/dev/null)
+		case "$fetched" in '' | *[!0-9]*) fetched=0 ;; esac
+		due=$((fetched + s_int * 60))
+		remaining=$((due - now))
+		[ "$remaining" -lt 1 ] && remaining=1
+		[ "$remaining" -lt "$min" ] && min=$remaining
+	done <<EOF
+$(printf '%s' "$subs" | sed 's/},{/}\n{/g')
+EOF
+	printf '%s' "$min"
+}
+
+# Sleep until the next subscription update is due, then run a tick.
+# Wakes early when frontend writes to SUB_WAKE_PIPE.
+# Keep write-end open so read -t doesn't block waiting for a writer.
 {
+	exec 9>"$SUB_WAKE_PIPE"
 	while true; do
-		sleep 60
 		sub_autoupdate_tick
+		read -r -t "$(sub_next_sleep)" _wake <"$SUB_WAKE_PIPE" || true
 	done
 } &
