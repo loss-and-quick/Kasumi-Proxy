@@ -37,7 +37,7 @@ export const SUBS_SEED: Subscription[] = [
     groupId: "g-de",
     enabled: true,
     autoUpdate: true,
-    interval: 6,
+    interval: 360,
     lastUpdated: "2026-06-05 09:14",
     count: 14,
     userAgent: "v2rayNG/1.10.7",
@@ -51,7 +51,7 @@ export const SUBS_SEED: Subscription[] = [
     groupId: "g-main",
     enabled: true,
     autoUpdate: false,
-    interval: 24,
+    interval: 1440,
     lastUpdated: "2026-06-03 22:40",
     count: 9,
     userAgent: "",
@@ -65,7 +65,7 @@ export const SUBS_SEED: Subscription[] = [
     groupId: "g-priv",
     enabled: false,
     autoUpdate: false,
-    interval: 12,
+    interval: 720,
     lastUpdated: "2026-05-28 11:02",
     count: 6,
     userAgent: "",
@@ -256,5 +256,6 @@ export function seedAppState(): AppState {
     assetFiles: [],
     settings: SETTINGS_SEED,
     activeId: PROFILES_SEED[0].id,
+    version: __MODULE_VERSION__,
   };
 }

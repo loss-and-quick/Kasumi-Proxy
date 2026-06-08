@@ -131,6 +131,7 @@ function makeState(overrides: Partial<AppState> = {}): AppState {
     assetFiles: overrides.assetFiles ?? [],
     settings: overrides.settings ?? DEFAULT_SETTINGS,
     activeId: overrides.activeId ?? null,
+    version: overrides.version,
   };
 }
 
@@ -267,6 +268,29 @@ describe("useAppStore", () => {
         settings: expect.objectContaining({ routingMode: "global" }),
       }),
     );
+  });
+
+  it("hydrate migrates legacy subscription interval from hours to minutes", async () => {
+    bridge.readState.mockResolvedValue(
+      makeState({ subscriptions: [makeSub({ id: "s1", interval: 6 })] }), // no version → legacy
+    );
+
+    await useAppStore.getState().hydrate();
+
+    expect(useAppStore.getState().subscriptions[0].interval).toBe(360);
+    const written = bridge.writeState.mock.calls.at(-1)?.[0];
+    expect(written?.subscriptions[0].interval).toBe(360);
+    expect(written?.version).toBeTruthy();
+  });
+
+  it("hydrate leaves versioned state intact (no re-migration)", async () => {
+    bridge.readState.mockResolvedValue(
+      makeState({ subscriptions: [makeSub({ id: "s1", interval: 360 })], version: "v0.3.2" }),
+    );
+
+    await useAppStore.getState().hydrate();
+
+    expect(useAppStore.getState().subscriptions[0].interval).toBe(360);
   });
 
   it("setActive flushes and restarts when service is running", async () => {

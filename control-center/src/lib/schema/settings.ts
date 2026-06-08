@@ -105,6 +105,11 @@ export const AppStateSchema = z.object({
   assetFiles: z.array(AssetFileSchema).default([]),
   settings: AdvancedSettingsSchema,
   activeId: z.string().nullable(),
+  // Module version (module.prop) that last wrote this state. Absent on legacy
+  // pre-versioning state, which is the trigger for one-time migrations in
+  // hydrate() (e.g. subscription `interval` hours→minutes). Newer migrations
+  // can semver-compare this against the current build's __MODULE_VERSION__.
+  version: z.string().optional(),
 });
 
 /* ---------- inferred domain types ---------- */

@@ -216,6 +216,12 @@ export const useAppStore = create<Store>((set, get) => {
 
     async hydrate() {
       const state = await bridge.readState();
+      // Legacy state predates the version marker; its absence triggers one-time
+      // migrations. v0→: subscription `interval` moved from hours to minutes.
+      const needsMigration = !state.version;
+      const subscriptions = needsMigration
+        ? state.subscriptions.map((s) => ({ ...s, interval: s.interval * 60 }))
+        : state.subscriptions;
       let assetFiles = stripLegacyDefaultAssets(state.assetFiles);
       const settings = mergeSettings(state.settings);
       try {
@@ -227,13 +233,27 @@ export const useAppStore = create<Store>((set, get) => {
         /* ignore */
       }
       if (
+        needsMigration ||
         assetFiles.length !== state.assetFiles.length ||
         assetFiles.some((a, i) => a.lastUpdated !== state.assetFiles[i]?.lastUpdated) ||
         settings.routingMode !== state.settings.routingMode
       ) {
-        await bridge.writeState({ ...state, assetFiles, settings });
+        await bridge.writeState({
+          ...state,
+          subscriptions,
+          assetFiles,
+          settings,
+          version: __MODULE_VERSION__,
+        });
       }
-      set({ ...state, assetFiles, settings, hydrated: true });
+      set({
+        ...state,
+        subscriptions,
+        assetFiles,
+        settings,
+        version: __MODULE_VERSION__,
+        hydrated: true,
+      });
       bridge.onStatus((service) => syncService(service));
       try {
         syncService(await bridge.status());
@@ -257,6 +277,8 @@ export const useAppStore = create<Store>((set, get) => {
         assetFiles,
         settings,
         activeId,
+        // Stamp every write with the current build version (see __MODULE_VERSION__).
+        version: __MODULE_VERSION__,
       });
     },
     notify(msg) {
