@@ -93,6 +93,7 @@ interface Store extends AppState {
   removeSub: (id: string) => Promise<void>;
   updateSub: (id: string) => Promise<void>;
   updateAllSubs: () => Promise<void>;
+  consumeSubCache: () => Promise<void>;
 
   // routing rules
   addRoutingRule: (rule: RoutingRule) => Promise<void>;
@@ -265,6 +266,8 @@ export const useAppStore = create<Store>((set, get) => {
       } catch {
         /* ignore */
       }
+      // Apply anything the backend auto-update daemon downloaded while we were away.
+      void get().consumeSubCache();
     },
     async flush() {
       const { profiles, groups, subscriptions, routingRules, assetFiles, settings, activeId } =
@@ -724,6 +727,65 @@ export const useAppStore = create<Store>((set, get) => {
     async updateAllSubs() {
       for (const sub of get().subscriptions.filter((s) => s.enabled)) {
         await get().updateSub(sub.id);
+      }
+    },
+    async consumeSubCache() {
+      let cached: Awaited<ReturnType<typeof bridge.listSubCache>>;
+      try {
+        cached = await bridge.listSubCache();
+      } catch {
+        return;
+      }
+      for (const entry of cached) {
+        const sub = get().subscriptions.find((x) => x.id === entry.id);
+        // Stale entry for a removed/disabled subscription — just drop it.
+        if (!sub?.enabled) {
+          await bridge.clearSubCache(entry.id).catch(() => {});
+          continue;
+        }
+        try {
+          const filter = profileFilterRegex(sub.filter);
+          if (sub.filter.trim() && !filter) continue; // bad filter; leave for manual fix
+          const fresh = await bridge.parseShareLinks(await bridge.readSubCache(entry.id));
+          const mapped = mapFetchedSubscriptionProfiles(fresh, sub, filter);
+          // Apply mirrors updateSub's success path, but the source is the
+          // daemon-downloaded cache rather than a live fetch.
+          const current = get();
+          const nextActiveId = nextActiveIdAfterSubscriptionUpdate(current, sub.id, mapped);
+          const activeAffected =
+            current.profiles.find((p) => p.id === current.activeId)?.subId === sub.id;
+          set((s) => ({
+            profiles: [...removeProfilesBySubId(s.profiles, sub.id), ...mapped],
+            subscriptions: s.subscriptions.map((x) =>
+              x.id === sub.id
+                ? {
+                    ...x,
+                    lastUpdated: new Date().toISOString(),
+                    count: mapped.length,
+                    lastError: null,
+                  }
+                : x,
+            ),
+            activeId: nextActiveId,
+          }));
+          await get().flush();
+          if (activeAffected && current.service.state === "running") {
+            set({ busy: true });
+            try {
+              syncService(nextActiveId ? await bridge.start(nextActiveId) : await bridge.stop());
+            } finally {
+              set({ busy: false });
+              await get().refreshStatus();
+            }
+          }
+          pushActivity(
+            "cloud_sync",
+            translateCurrent("activity.subUpdated", { name: sub.remarks }),
+          );
+        } catch {
+          // Parse/apply failed — skip; the daemon refetches next cycle.
+        }
+        await bridge.clearSubCache(entry.id).catch(() => {});
       }
     },
 

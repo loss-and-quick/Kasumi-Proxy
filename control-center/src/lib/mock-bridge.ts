@@ -241,6 +241,15 @@ export const mockBridge: Bridge = {
     return simFetchSub(url, opts);
   },
 
+  // No backend daemon in dev, so the sub-cache is always empty.
+  async listSubCache() {
+    return [];
+  },
+  async readSubCache(_id: string) {
+    return "";
+  },
+  async clearSubCache(_id: string) {},
+
   async downloadAsset(
     filename: string,
     _url: string,

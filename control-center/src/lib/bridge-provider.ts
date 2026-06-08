@@ -97,6 +97,15 @@ export const bridge: Bridge = {
   async fetchSubscription(url, opts) {
     return (await loadBridge()).fetchSubscription(url, opts);
   },
+  async listSubCache() {
+    return (await loadBridge()).listSubCache();
+  },
+  async readSubCache(id) {
+    return (await loadBridge()).readSubCache(id);
+  },
+  async clearSubCache(id) {
+    return (await loadBridge()).clearSubCache(id);
+  },
   async downloadAsset(filename, url, mode) {
     return (await loadBridge()).downloadAsset(filename, url, mode);
   },

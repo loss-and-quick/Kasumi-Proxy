@@ -504,6 +504,21 @@ export const ksuBridge: Bridge = {
     const raw = await run("fetchSubscription", [allow, "1", ua], url);
     return (await import("./share")).parseShareLinks(raw);
   },
+  async listSubCache() {
+    const out = await callJson("listSubCache");
+    return Array.isArray(out)
+      ? out.filter(
+          (x): x is { id: string; fetchedAt: number } =>
+            x && typeof x.id === "string" && typeof x.fetchedAt === "number",
+        )
+      : [];
+  },
+  async readSubCache(id) {
+    return run("readSubCache", [id]);
+  },
+  async clearSubCache(id) {
+    await run("clearSubCache", [id]);
+  },
   async downloadAsset(filename, url, mode: ResourceUpdateMode = "auto") {
     const started = parseAssetDownloadResponse(
       await callJson("downloadAssetStart", [filename, mode], url),
