@@ -70,23 +70,10 @@ export const ListRow = ({
       {onClick ? (
         <button
           type="button"
+          className="btn-reset"
           onClick={onClick}
           disabled={disabled}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            minWidth: 0,
-            flex: 1,
-            appearance: "none",
-            background: "none",
-            border: "none",
-            color: "inherit",
-            cursor: "pointer",
-            font: "inherit",
-            padding: 0,
-            textAlign: "left",
-          }}
+          style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}
         >
           {content}
         </button>

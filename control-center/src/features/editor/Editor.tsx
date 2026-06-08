@@ -25,7 +25,14 @@ import { RawConfigSection } from "./sections/RawConfigSection";
 import { SecuritySection } from "./sections/SecuritySection";
 import { SharePreview } from "./sections/SharePreview";
 import { TransportSection } from "./sections/TransportSection";
-import type { FieldErrors, ProfilePatch, ProfileView } from "./types";
+import {
+  asView,
+  copyViewField,
+  type FieldErrors,
+  fromView,
+  type ProfilePatch,
+  type ProfileView,
+} from "./types";
 
 export default function Editor({
   profileId,
@@ -45,21 +52,20 @@ export default function Editor({
   );
   const [errors, setErrors] = useState<FieldErrors>({});
 
-  const v = draft as unknown as ProfileView; // read-view
-  const set = (patch: ProfilePatch) => setDraft((current) => ({ ...current, ...patch }) as Profile);
+  const v = asView(draft); // read-view
+  const set = (patch: ProfilePatch) =>
+    setDraft((current) => fromView({ ...asView(current), ...patch }));
 
   const changeProtocol = (proto: Protocol) => {
     setDraft((current) => {
-      const next = emptyProfile(proto, current.groupId) as unknown as ProfileView;
-      const cur = current as unknown as ProfileView;
+      const next = asView(emptyProfile(proto, current.groupId));
+      const cur = asView(current);
       for (const key of Object.keys(next) as (keyof ProfileView)[]) {
-        if (key === "protocol") continue;
-        if (key in cur && cur[key] !== undefined && key !== "id") {
-          next[key] = cur[key] as never;
-        }
+        if (key === "protocol" || key === "id") continue;
+        if (cur[key] !== undefined) copyViewField(next, cur, key);
       }
       next.id = cur.id;
-      return next as unknown as Profile;
+      return fromView(next);
     });
   };
 

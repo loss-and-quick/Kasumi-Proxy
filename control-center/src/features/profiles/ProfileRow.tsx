@@ -61,20 +61,15 @@ export function ProfileRow({
       )}
       <button
         type="button"
+        className="btn-reset"
         onClick={bulkMode ? onToggleSelected : onUse}
         style={{
-          appearance: "none",
-          background: "none",
-          border: "none",
-          color: "inherit",
-          cursor: "pointer",
           display: "flex",
           alignItems: "center",
           flex: 1,
           gap: 12,
           minWidth: 0,
           padding: "12px 4px 12px 14px",
-          textAlign: "left",
         }}
       >
         <div

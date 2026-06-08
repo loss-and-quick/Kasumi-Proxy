@@ -162,6 +162,12 @@ body {
 .btn-block { width: 100%; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Neutralize default <button> chrome for buttons that only carry layout styles. */
+.btn-reset {
+  appearance: none; border: none; background: none; padding: 0;
+  color: inherit; font: inherit; cursor: pointer; text-align: left;
+}
+
 .chip {
   font-family: var(--font-ui); font-size: 13px; font-weight: 500; height: 32px; padding: 0 13px; border-radius: 9px;
   border: 1px solid var(--outline-variant); background: transparent; color: var(--on-surface-variant);

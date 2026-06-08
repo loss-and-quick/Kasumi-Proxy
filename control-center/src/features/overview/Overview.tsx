@@ -159,19 +159,7 @@ export default function Overview({
             </div>
 
             {active ? (
-              <button
-                type="button"
-                onClick={() => onNavigate("profiles")}
-                style={{
-                  appearance: "none",
-                  background: "none",
-                  border: "none",
-                  color: "inherit",
-                  cursor: "pointer",
-                  padding: 0,
-                  textAlign: "left",
-                }}
-              >
+              <button type="button" className="btn-reset" onClick={() => onNavigate("profiles")}>
                 <div style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2 }}>
                   {active.remarks}
                 </div>
