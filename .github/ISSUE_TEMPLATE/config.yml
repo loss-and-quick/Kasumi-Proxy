@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 README & setup guide
+    url: https://github.com/loss-and-quick/Kasumi-Proxy#readme
+    about: Installation, requirements and troubleshooting before opening an issue.
+  - name: 🙋 No root? Use a GUI client instead
+    url: https://github.com/XTLS/Xray-core#gui-clients
+    about: Kasumi Proxy is a root module, not a standalone VPN app.

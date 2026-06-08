@@ -1,0 +1,87 @@
+name: 🐞 Bug report
+description: Something in Kasumi Proxy is broken or misbehaving
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Kasumi Proxy is a **root module** (Magisk / KernelSU / APatch),
+        not a VPN app. Please fill in the environment fields — most issues are
+        root-method or core specific.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I am on the latest release
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Module version
+      description: From the Web UI footer or `module.prop` (e.g. v0.3.2)
+      placeholder: v0.3.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: root
+    attributes:
+      label: Root solution
+      options:
+        - Magisk
+        - KernelSU
+        - APatch
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version & device / ROM
+      placeholder: "Android 14 — Pixel 7 (stock)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: core
+    attributes:
+      label: Affected core
+      description: Which engine runs the failing profile? (Xray for VLESS/VMess/Trojan/SS/SOCKS/HTTP/WireGuard, sing-box for Hysteria2/TUIC)
+      options:
+        - Xray-core
+        - sing-box
+        - Both / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Import profile …
+        2. Start the proxy …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste logs from the Web UI **Logs** page or `/data/adb/kasumi-proxy/`. Redact secrets (UUIDs, passwords, server addresses).
+      render: shell
