@@ -294,6 +294,8 @@ const en = {
   "subs.edit.interval": "Interval (hours)",
   "subs.edit.insecure": "Allow insecure URL",
   "subs.edit.insecureSub": "Skip TLS verification when fetching",
+  "subs.edit.urlInsecureHint":
+    "Unencrypted HTTP — this subscription could be tampered with in transit.",
   "subs.edit.validationRemarks": "Remarks required",
   "subs.edit.validationUrl": "Subscription URL required",
   "subs.edit.validationInterval": "Interval must be greater than 0",

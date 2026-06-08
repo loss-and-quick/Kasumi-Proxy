@@ -286,6 +286,7 @@ const zh = {
   "subs.edit.interval": "间隔（小时）",
   "subs.edit.insecure": "允许不安全 URL",
   "subs.edit.insecureSub": "获取时跳过 TLS 验证",
+  "subs.edit.urlInsecureHint": "未加密的 HTTP —— 此订阅在传输中可能被篡改。",
   "subs.edit.validationRemarks": "备注不能为空",
   "subs.edit.validationUrl": "订阅 URL 不能为空",
   "subs.edit.validationInterval": "间隔必须大于 0",
