@@ -430,13 +430,6 @@ function SubEditSheet({
         />
       </div>
       <RowToggle
-        icon="toggle_on"
-        title={t("subs.edit.enabled")}
-        sub={t("subs.edit.enabledSub")}
-        on={d.enabled}
-        onChange={(v) => set("enabled", v)}
-      />
-      <RowToggle
         icon="autorenew"
         title={t("subs.edit.autoUpdate")}
         sub={t("subs.edit.autoUpdateSub")}
