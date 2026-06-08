@@ -153,14 +153,10 @@ function buildSingboxMux(p: Profile, s: AdvancedSettings): JsonObject | undefine
 }
 
 function buildServerPorts(ports: string): string[] {
-  return ports
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .map((x) => {
-      const port = x.replace(/-/g, ":");
-      return port.includes(":") ? port : `${port}:${port}`;
-    });
+  return (splitCsv(ports) ?? []).map((x) => {
+    const port = x.replace(/-/g, ":");
+    return port.includes(":") ? port : `${port}:${port}`;
+  });
 }
 
 /* ---------- outbound per protocol ---------- */
@@ -453,10 +449,7 @@ function buildBaseSingboxRule(
       : { outbound: resolveOutboundTag(rule.outboundTag || "proxy") };
 
   if (rule.port?.trim()) {
-    for (const item of rule.port
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)) {
+    for (const item of splitCsv(rule.port) ?? []) {
       if (item.includes("-")) addStringList(out, "port_range", item.replace(/-/g, ":"));
       else {
         const port = Number(item);
@@ -464,11 +457,7 @@ function buildBaseSingboxRule(
       }
     }
   }
-  if (rule.network)
-    out.network = rule.network
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+  if (rule.network) out.network = splitCsv(rule.network) ?? [];
   if (rule.protocol?.length) out.protocol = [...rule.protocol];
   return out;
 }
