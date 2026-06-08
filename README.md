@@ -1,5 +1,11 @@
 # Kasumi Proxy
 
+[![CI](https://github.com/loss-and-quick/Kasumi-Proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/loss-and-quick/Kasumi-Proxy/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/loss-and-quick/Kasumi-Proxy?sort=semver)](https://github.com/loss-and-quick/Kasumi-Proxy/releases/latest)
+[![Open issues](https://img.shields.io/github/issues/loss-and-quick/Kasumi-Proxy)](https://github.com/loss-and-quick/Kasumi-Proxy/issues)
+[![License: GPL v3](https://img.shields.io/github/license/loss-and-quick/Kasumi-Proxy)](LICENSE)
+[![Platform: Android (root)](https://img.shields.io/badge/platform-Android%20(root)-3DDC84?logo=android&logoColor=white)](https://github.com/loss-and-quick/Kasumi-Proxy#readme)
+
 > A system-level transparent proxy engine for **rooted Android** — routes all device
 > traffic through Xray-core / sing-box at the kernel level, with a clean Web UI.
 
