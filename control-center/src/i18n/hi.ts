@@ -252,7 +252,7 @@ const hi = {
   "subs.addBtn": "सदस्यता जोड़ें",
   "subs.infoText":
     "प्रत्येक सदस्यता अपने सर्वरों को चुने गए समूह में आयात करती है। अपडेट करने पर, जहाँ संभव हो, आपका सक्रिय चयन बनाए रखते हुए उन प्रोफ़ाइलों को ताज़ा किया जाता है।",
-  "subs.autoLabel": "स्वचालित · {interval}घं",
+  "subs.autoLabel": "स्वचालित · {interval}",
   "subs.manualLabel": "मैनुअल",
   "subs.insecureLabel": "असुरक्षित",
   "subs.errorLabel": "त्रुटि",
@@ -280,7 +280,7 @@ const hi = {
   "subs.edit.enabledSub": "अपडेट और प्रोफ़ाइल सूची में शामिल करें",
   "subs.edit.autoUpdate": "स्वचालित अपडेट",
   "subs.edit.autoUpdateSub": "निर्धारित समय पर ताज़ा करें",
-  "subs.edit.interval": "अंतराल (घंटे)",
+  "subs.edit.interval": "अंतराल (hh:mm)",
   "subs.edit.insecure": "असुरक्षित URL की अनुमति दें",
   "subs.edit.insecureSub": "फ़ेच करते समय TLS सत्यापन छोड़ें",
   "subs.edit.urlInsecureHint": "अनएन्क्रिप्टेड HTTP — यह सदस्यता ट्रांज़िट में बदली जा सकती है।",

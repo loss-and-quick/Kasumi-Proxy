@@ -264,7 +264,7 @@ const ru = {
   "subs.addBtn": "Добавить подписку",
   "subs.infoText":
     "Каждая подписка импортирует свои серверы в выбранную группу. При обновлении эти профили обновляются, по возможности сохраняя ваш активный выбор.",
-  "subs.autoLabel": "Авто · {interval}ч",
+  "subs.autoLabel": "Авто · {interval}",
   "subs.manualLabel": "Вручную",
   "subs.insecureLabel": "Небезопасно",
   "subs.errorLabel": "Ошибка",
@@ -297,7 +297,7 @@ const ru = {
   "subs.edit.enabledSub": "Учитывать при обновлениях и в списке профилей",
   "subs.edit.autoUpdate": "Автообновление",
   "subs.edit.autoUpdateSub": "Обновлять по расписанию",
-  "subs.edit.interval": "Интервал (часы)",
+  "subs.edit.interval": "Интервал (чч:мм)",
   "subs.edit.insecure": "Разрешить небезопасный URL",
   "subs.edit.insecureSub": "Пропускать проверку TLS при загрузке",
   "subs.edit.urlInsecureHint":

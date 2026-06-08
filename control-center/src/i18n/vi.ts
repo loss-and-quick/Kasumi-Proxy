@@ -253,7 +253,7 @@ const vi = {
   "subs.addBtn": "Thêm đăng ký",
   "subs.infoText":
     "Mỗi đăng ký sẽ nhập các máy chủ của nó vào một nhóm đã chọn. Khi cập nhật, các hồ sơ đó sẽ được làm mới và cố gắng giữ nguyên lựa chọn đang hoạt động của bạn.",
-  "subs.autoLabel": "Tự động · {interval}h",
+  "subs.autoLabel": "Tự động · {interval}",
   "subs.manualLabel": "Thủ công",
   "subs.insecureLabel": "Không an toàn",
   "subs.errorLabel": "Lỗi",
@@ -281,7 +281,7 @@ const vi = {
   "subs.edit.enabledSub": "Đưa vào cập nhật và danh sách hồ sơ",
   "subs.edit.autoUpdate": "Tự động cập nhật",
   "subs.edit.autoUpdateSub": "Làm mới theo lịch",
-  "subs.edit.interval": "Khoảng thời gian (giờ)",
+  "subs.edit.interval": "Khoảng thời gian (hh:mm)",
   "subs.edit.insecure": "Cho phép URL không an toàn",
   "subs.edit.insecureSub": "Bỏ qua xác minh TLS khi tải",
   "subs.edit.urlInsecureHint": "HTTP không mã hóa — đăng ký này có thể bị giả mạo khi truyền.",

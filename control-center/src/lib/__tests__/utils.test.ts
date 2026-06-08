@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isInsecureHttpUrl, isLocalOrPrivateHost } from "../utils";
+import { clockToMinutes, isInsecureHttpUrl, isLocalOrPrivateHost, minutesToClock } from "../utils";
 
 describe("isLocalOrPrivateHost", () => {
   it("treats localhost and *.local as private", () => {
@@ -41,5 +41,26 @@ describe("isInsecureHttpUrl", () => {
     expect(isInsecureHttpUrl("http://example.com")).toBe(true);
     expect(isInsecureHttpUrl("https://example.com")).toBe(false);
     expect(isInsecureHttpUrl("garbage")).toBe(false);
+  });
+});
+
+describe("minutesToClock / clockToMinutes", () => {
+  it("formats minutes as HH:MM", () => {
+    expect(minutesToClock(0)).toBe("00:00");
+    expect(minutesToClock(90)).toBe("01:30");
+    expect(minutesToClock(360)).toBe("06:00");
+    expect(minutesToClock(1439)).toBe("23:59");
+  });
+
+  it("parses HH:MM back to minutes", () => {
+    expect(clockToMinutes("00:00")).toBe(0);
+    expect(clockToMinutes("01:30")).toBe(90);
+    expect(clockToMinutes("06:00")).toBe(360);
+  });
+
+  it("round-trips and tolerates malformed input", () => {
+    expect(clockToMinutes(minutesToClock(725))).toBe(725);
+    expect(clockToMinutes("")).toBe(0);
+    expect(clockToMinutes("nope")).toBe(0);
   });
 });

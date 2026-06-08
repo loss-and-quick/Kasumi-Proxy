@@ -334,7 +334,7 @@ const ar = {
   "subs.addBtn": "إضافة اشتراك",
   "subs.infoText":
     "يستورد كل اشتراك خوادمه إلى مجموعة محددة. وعند التحديث تُحدَّث تلك الملفات التعريفية مع الحفاظ على اختيارك النشط قدر الإمكان.",
-  "subs.autoLabel": "تلقائي · {interval}س",
+  "subs.autoLabel": "تلقائي · {interval}",
   "subs.manualLabel": "يدوي",
   "subs.insecureLabel": "غير آمن",
   "subs.errorLabel": "خطأ",
@@ -369,7 +369,7 @@ const ar = {
   "subs.edit.enabledSub": "تضمينه في التحديثات وقائمة الملفات التعريفية",
   "subs.edit.autoUpdate": "تحديث تلقائي",
   "subs.edit.autoUpdateSub": "التحديث وفق جدول زمني",
-  "subs.edit.interval": "الفاصل (بالساعات)",
+  "subs.edit.interval": "الفاصل (hh:mm)",
   "subs.edit.insecure": "السماح برابط غير آمن",
   "subs.edit.insecureSub": "تجاوز التحقق من TLS عند الجلب",
   "subs.edit.urlInsecureHint": "HTTP غير مشفّر — قد يتم العبث بهذا الاشتراك أثناء النقل.",
