@@ -114,7 +114,7 @@ const pt = {
   "profiles.bulkDelete": "Excluir",
   "profiles.bulkDedup": "Dedup",
   "profiles.noResults": "Nenhum perfil correspondente",
-  "profiles.fabNew": "Novo",
+  "profiles.fabNew": "Criar",
   "profiles.sheet.useProfile": "Usar este perfil",
   "profiles.sheet.edit": "Editar",
   "profiles.sheet.clone": "Clonar",

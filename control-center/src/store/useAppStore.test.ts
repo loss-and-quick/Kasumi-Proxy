@@ -345,6 +345,30 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().profiles[0].remarks).toBe("Two updated");
   });
 
+  it("cloneProfile resets ping/speed stats and subscription link", () => {
+    const src = {
+      ...makeVless({ id: "p1", remarks: "Node", ping: 123 }),
+      speed: 9_000,
+      subId: "s1",
+    };
+    useAppStore.setState({
+      profiles: [src],
+      groups: [],
+      subscriptions: [],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+
+    useAppStore.getState().cloneProfile("p1");
+
+    const copy = useAppStore.getState().profiles.find((p) => p.id !== "p1");
+    expect(copy).toBeDefined();
+    expect(copy?.remarks).toBe("Node (copy)");
+    expect(copy?.ping).toBeNull();
+    expect(copy?.speed).toBeNull();
+    expect(copy?.subId).toBeNull();
+  });
+
   it("removeProfile stops service and clears active id when removing active profile", async () => {
     const active = makeVless({ id: "p1", subId: null });
     const other = makeVless({ id: "p2", uuid: "22222222-2222-2222-2222-222222222222" });
