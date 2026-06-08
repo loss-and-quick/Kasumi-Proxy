@@ -1,3 +1,31 @@
+## v0.3.3 — 2026-06-08
+
+### Changes
+
+- [`059fe75`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/059fe75) fix(share): preserve full profile name when fragment contains spaces (#17)
+- [`4b07317`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4b07317) fix(service): point xray asset dir at DATADIR
+- [`62865b5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/62865b5) fix(service): avoid SC2015 in sub auto-update guard
+- [`52a3c45`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/52a3c45) feat(service): subscription auto-update daemon + proxyctl sub-cache commands
+- [`de4f8ac`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/de4f8ac) feat(subscriptions): consume backend auto-update cache on hydrate
+- [`347457b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/347457b) feat(subscriptions): edit interval as HH:MM time picker
+- [`afb5a6b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/afb5a6b) feat(schema): version state by module version, migrate sub interval to minutes (#12)
+- [`6f0bbd9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6f0bbd9) fix(subscriptions): auto-derive allowInsecure, warn on plain HTTP
+- [`7135713`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7135713) fix(subscriptions): drop duplicate enable toggle in edit sheet
+- [`6c06f29`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6c06f29) fix(subscriptions): show date and time of last update
+- [`51132b8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/51132b8) i18n: use action verb for add-profile FAB across locales
+- [`91e2733`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/91e2733) fix(profiles): keep FAB clear of last row, fix ru label
+- [`d31b93c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d31b93c) fix(profiles): reset ping/speed stats on clone
+- [`b4acddc`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b4acddc) docs(readme): add status badges
+- [`8754a91`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8754a91) fix(deps): remove unused styling deps
+- [`8aba4b3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8aba4b3) fix(ui): extract shared btn-reset utility class
+- [`a747a9b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a747a9b) fix(editor): drop unsafe Profile/ProfileView double casts
+- [`ac36cee`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ac36cee) fix(config): reuse splitCsv in sing-box generator
+- [`46b2d2b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/46b2d2b) feat(subscriptions): inline new group in edit sheet
+- [`66df59f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/66df59f) feat(profiles): group management sheet
+- [`fe266d6`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fe266d6) feat(store): delete group removes its profiles
+- [`0eea5c4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0eea5c4) fix(overview): hide activity card when feed is empty
+- [`52d380c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/52d380c) fix(changelog): link commit hashes to GitHub in CHANGELOG.md
+
 ## v0.3.2 — 2026-06-07
 
 ### Changes
