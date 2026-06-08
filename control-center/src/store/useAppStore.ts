@@ -384,7 +384,14 @@ export const useAppStore = create<Store>((set, get) => {
       return patch((s) => {
         const src = s.profiles.find((p) => p.id === id);
         if (!src) return {};
-        const copy: Profile = { ...src, id: uid(), remarks: `${src.remarks} (copy)`, subId: null };
+        const copy: Profile = {
+          ...src,
+          id: uid(),
+          remarks: `${src.remarks} (copy)`,
+          subId: null,
+          ping: null,
+          speed: null,
+        };
         return { profiles: insertAfterId(s.profiles, id, copy) };
       });
     },
