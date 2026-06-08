@@ -1,6 +1,11 @@
 import { defineConfig } from "vitest/config";
+import { readModuleVersion } from "./scripts/module-version";
 
 export default defineConfig({
+  // Mirror the Vite build's __MODULE_VERSION__ inject so code under test resolves it.
+  define: {
+    __MODULE_VERSION__: JSON.stringify(readModuleVersion()),
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
