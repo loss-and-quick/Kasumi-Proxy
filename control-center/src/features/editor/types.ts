@@ -1,4 +1,4 @@
-import type { Protocol } from "../../lib/schema";
+import type { Profile, Protocol } from "../../lib/schema";
 
 /** Flat read-view over the union: every possible field, all optional. */
 export interface ProfileView {
@@ -96,3 +96,22 @@ export interface ProfileView {
 export type ProfilePatch = Partial<ProfileView>;
 export type ProfileSetter = (patch: ProfilePatch) => void;
 export type FieldErrors = Record<string, string>;
+
+// Boundary between the discriminated `Profile` union and the flat `ProfileView`.
+// Every protocol embeds `metaShape`, so a Profile structurally satisfies the
+// required ProfileView fields — reading is assignment, no cast.
+
+/** Read a `Profile` as the flat view used by the editor form. */
+export const asView = (p: Profile): ProfileView => p;
+
+/** Re-narrow an edited flat view to `Profile`; validated by Zod on save. */
+export const fromView = (v: ProfileView): Profile => v as Profile;
+
+/** Copy one field between flat views, keeping the key↔value type link (no cast). */
+export const copyViewField = <K extends keyof ProfileView>(
+  into: ProfileView,
+  from: ProfileView,
+  key: K,
+): void => {
+  into[key] = from[key];
+};
