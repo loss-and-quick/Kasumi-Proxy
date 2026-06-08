@@ -1022,7 +1022,7 @@ sub_autoupdate_tick() {
 		s_ua=$(printf '%s' "$obj" | sed -n 's/.*"userAgent":"\([^"]*\)".*/\1/p')
 		s_ai=0
 		case "$obj" in *'"allowInsecure":true'*) s_ai=1 ;; esac
-		[ -n "$s_id" ] && [ -n "$s_url" ] || continue
+		if [ -z "$s_id" ] || [ -z "$s_url" ]; then continue; fi
 		case "$s_int" in (''|*[!0-9]*) s_int=0 ;; esac
 		[ "$s_int" -gt 0 ] || continue
 		case "$s_id" in (*/*|*..*) continue ;; esac
