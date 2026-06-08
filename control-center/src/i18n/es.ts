@@ -114,7 +114,7 @@ const es = {
   "profiles.bulkDelete": "Eliminar",
   "profiles.bulkDedup": "Dedup",
   "profiles.noResults": "No hay perfiles coincidentes",
-  "profiles.fabNew": "Nuevo",
+  "profiles.fabNew": "Crear",
   "profiles.sheet.useProfile": "Usar este perfil",
   "profiles.sheet.edit": "Editar",
   "profiles.sheet.clone": "Clonar",

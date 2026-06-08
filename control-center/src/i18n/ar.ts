@@ -170,7 +170,7 @@ const ar = {
   "profiles.bulkDelete": "حذف",
   "profiles.bulkDedup": "حذف المكرر",
   "profiles.noResults": "لا توجد ملفات تعريف مطابقة",
-  "profiles.fabNew": "جديد",
+  "profiles.fabNew": "إنشاء",
   "profiles.sheet.useProfile": "استخدام هذا الملف التعريفي",
   "profiles.sheet.edit": "تعديل",
   "profiles.sheet.clone": "استنساخ",

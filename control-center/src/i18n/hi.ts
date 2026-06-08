@@ -110,7 +110,7 @@ const hi = {
   "profiles.bulkDelete": "हटाएँ",
   "profiles.bulkDedup": "डुप हटाएँ",
   "profiles.noResults": "मेल खाती कोई प्रोफ़ाइल नहीं मिली",
-  "profiles.fabNew": "नई",
+  "profiles.fabNew": "बनाएँ",
   "profiles.sheet.useProfile": "इस प्रोफ़ाइल का उपयोग करें",
   "profiles.sheet.edit": "संपादित करें",
   "profiles.sheet.clone": "क्लोन करें",

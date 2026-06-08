@@ -111,7 +111,7 @@ const vi = {
   "profiles.bulkDelete": "Xóa",
   "profiles.bulkDedup": "Xóa trùng",
   "profiles.noResults": "Không có hồ sơ khớp",
-  "profiles.fabNew": "Mới",
+  "profiles.fabNew": "Tạo",
   "profiles.sheet.useProfile": "Dùng hồ sơ này",
   "profiles.sheet.edit": "Chỉnh sửa",
   "profiles.sheet.clone": "Nhân bản",
