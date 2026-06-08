@@ -660,8 +660,10 @@ do_job() {
 		if [ "$CORE_PID" -gt 0 ] && pid_matches_bin "$CORE_PID" "$CORE_BIN"; then
 			log_info "$ENGINE already running pid=$CORE_PID"
 		else
-			# Start the selected core (both accept: <bin> run -c <cfg>)
-			XRAY_LOCATION_ASSET="$BINDIR" "$CORE_BIN" run -c "$CORE_CFG" </dev/null >"$CORE_LOG" 2>&1 &
+			# Start the selected core (both accept: <bin> run -c <cfg>).
+			# xray resolves geoip.dat/geosite.dat via XRAY_LOCATION_ASSET; the
+			# .dat assets live in DATADIR (downloaded there), not BINDIR.
+			XRAY_LOCATION_ASSET="$DATADIR" "$CORE_BIN" run -c "$CORE_CFG" </dev/null >"$CORE_LOG" 2>&1 &
 			CORE_PID=$!
 			echo "$CORE_PID" >"$PIDFILE"
 			log_info "started $ENGINE pid=$CORE_PID log=$CORE_LOG"
