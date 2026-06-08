@@ -287,6 +287,8 @@ const pt = {
   "subs.edit.interval": "Intervalo (horas)",
   "subs.edit.insecure": "Permitir URL insegura",
   "subs.edit.insecureSub": "Ignorar verificação TLS ao buscar",
+  "subs.edit.urlInsecureHint":
+    "HTTP não criptografado — esta assinatura pode ser adulterada em trânsito.",
   "subs.edit.validationRemarks": "Nome obrigatório",
   "subs.edit.validationUrl": "URL da assinatura obrigatória",
   "subs.edit.validationInterval": "O intervalo deve ser maior que 0",

@@ -17,7 +17,7 @@ import {
 } from "../../components";
 import { useFormatters, useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
-import { uid } from "../../lib/utils";
+import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 
 export default function Subscriptions() {
@@ -340,8 +340,13 @@ function SubEditSheet({
     }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
-    onSave(d);
+    // TLS verification is skipped only for localhost / private hosts (self-signed
+    // certs are normal there); public URLs are always verified strictly.
+    onSave({ ...d, allowInsecure: isLocalOrPrivateHost(d.url) });
   };
+
+  const showInsecureHint =
+    d.url.trim() !== "" && isInsecureHttpUrl(d.url) && !isLocalOrPrivateHost(d.url);
 
   return (
     <Sheet
@@ -370,6 +375,7 @@ function SubEditSheet({
         placeholder={t("subs.edit.urlPh")}
         onChange={(v) => set("url", v)}
         error={errors.url}
+        hint={showInsecureHint ? t("subs.edit.urlInsecureHint") : undefined}
       />
       <div className="field-label">{t("subs.edit.targetGroup")}</div>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -447,14 +453,6 @@ function SubEditSheet({
           />
         </div>
       )}
-      <RowToggle
-        icon="gpp_maybe"
-        title={t("subs.edit.insecure")}
-        sub={t("subs.edit.insecureSub")}
-        on={d.allowInsecure}
-        onChange={(v) => set("allowInsecure", v)}
-        danger
-      />
       <div style={{ height: 10 }} />
     </Sheet>
   );

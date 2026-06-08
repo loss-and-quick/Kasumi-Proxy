@@ -287,6 +287,8 @@ const es = {
   "subs.edit.interval": "Intervalo (horas)",
   "subs.edit.insecure": "Permitir URL insegura",
   "subs.edit.insecureSub": "Omitir la verificación TLS al descargar",
+  "subs.edit.urlInsecureHint":
+    "HTTP sin cifrar: esta suscripción podría ser manipulada en tránsito.",
   "subs.edit.validationRemarks": "El nombre es obligatorio",
   "subs.edit.validationUrl": "La URL de la suscripción es obligatoria",
   "subs.edit.validationInterval": "El intervalo debe ser mayor que 0",

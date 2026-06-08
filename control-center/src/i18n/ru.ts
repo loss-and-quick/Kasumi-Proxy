@@ -300,6 +300,8 @@ const ru = {
   "subs.edit.interval": "Интервал (часы)",
   "subs.edit.insecure": "Разрешить небезопасный URL",
   "subs.edit.insecureSub": "Пропускать проверку TLS при загрузке",
+  "subs.edit.urlInsecureHint":
+    "Незашифрованное соединение (HTTP) — подписку могут подменить при передаче.",
   "subs.edit.validationRemarks": "Название обязательно",
   "subs.edit.validationUrl": "URL подписки обязателен",
   "subs.edit.validationInterval": "Интервал должен быть больше 0",

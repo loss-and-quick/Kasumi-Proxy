@@ -284,6 +284,7 @@ const vi = {
   "subs.edit.interval": "Khoảng thời gian (giờ)",
   "subs.edit.insecure": "Cho phép URL không an toàn",
   "subs.edit.insecureSub": "Bỏ qua xác minh TLS khi tải",
+  "subs.edit.urlInsecureHint": "HTTP không mã hóa — đăng ký này có thể bị giả mạo khi truyền.",
   "subs.edit.validationRemarks": "Bắt buộc nhập ghi chú",
   "subs.edit.validationUrl": "Bắt buộc nhập URL đăng ký",
   "subs.edit.validationInterval": "Khoảng thời gian phải lớn hơn 0",

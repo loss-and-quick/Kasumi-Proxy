@@ -283,6 +283,7 @@ const hi = {
   "subs.edit.interval": "अंतराल (घंटे)",
   "subs.edit.insecure": "असुरक्षित URL की अनुमति दें",
   "subs.edit.insecureSub": "फ़ेच करते समय TLS सत्यापन छोड़ें",
+  "subs.edit.urlInsecureHint": "अनएन्क्रिप्टेड HTTP — यह सदस्यता ट्रांज़िट में बदली जा सकती है।",
   "subs.edit.validationRemarks": "टिप्पणी आवश्यक है",
   "subs.edit.validationUrl": "सदस्यता URL आवश्यक है",
   "subs.edit.validationInterval": "अंतराल 0 से बड़ा होना चाहिए",

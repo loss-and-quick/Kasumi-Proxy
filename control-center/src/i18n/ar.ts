@@ -372,6 +372,7 @@ const ar = {
   "subs.edit.interval": "الفاصل (بالساعات)",
   "subs.edit.insecure": "السماح برابط غير آمن",
   "subs.edit.insecureSub": "تجاوز التحقق من TLS عند الجلب",
+  "subs.edit.urlInsecureHint": "HTTP غير مشفّر — قد يتم العبث بهذا الاشتراك أثناء النقل.",
   "subs.edit.validationRemarks": "الاسم مطلوب",
   "subs.edit.validationUrl": "رابط الاشتراك مطلوب",
   "subs.edit.validationInterval": "يجب أن يكون الفاصل أكبر من 0",
