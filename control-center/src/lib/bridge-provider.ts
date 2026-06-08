@@ -106,6 +106,9 @@ export const bridge: Bridge = {
   async clearSubCache(id) {
     return (await loadBridge()).clearSubCache(id);
   },
+  async subWakeup() {
+    return (await loadBridge()).subWakeup();
+  },
   async downloadAsset(filename, url, mode) {
     return (await loadBridge()).downloadAsset(filename, url, mode);
   },

@@ -519,6 +519,9 @@ export const ksuBridge: Bridge = {
   async clearSubCache(id) {
     await run("clearSubCache", [id]);
   },
+  async subWakeup() {
+    await run("subWakeup", []);
+  },
   async downloadAsset(filename, url, mode: ResourceUpdateMode = "auto") {
     const started = parseAssetDownloadResponse(
       await callJson("downloadAssetStart", [filename, mode], url),

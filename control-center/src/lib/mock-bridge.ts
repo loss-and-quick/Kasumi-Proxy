@@ -249,6 +249,7 @@ export const mockBridge: Bridge = {
     return "";
   },
   async clearSubCache(_id: string) {},
+  async subWakeup() {},
 
   async downloadAsset(
     filename: string,

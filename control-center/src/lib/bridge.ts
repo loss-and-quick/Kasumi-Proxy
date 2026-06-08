@@ -95,6 +95,7 @@ export interface Bridge {
   listSubCache(): Promise<SubCacheEntry[]>;
   readSubCache(id: string): Promise<string>;
   clearSubCache(id: string): Promise<void>;
+  subWakeup(): Promise<void>;
 
   // asset files
   downloadAsset(
