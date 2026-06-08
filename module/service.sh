@@ -12,6 +12,9 @@ TUN2_IFACE_FILE="$DATADIR/tun2-iface"
 # it publishes the authoritative state here for kasumi-proxyctl status to read.
 # One of: connecting | running | stopped | failed:<reason>.
 SERVICE_STATE_FILE="$DATADIR/service-state"
+# Subscription auto-update cache: the daemon below downloads bodies on schedule;
+# the UI parses & applies them on launch (kasumi-proxyctl {list,read,clear}SubCache).
+SUBCACHE_DIR="$DATADIR/sub-cache"
 mkdir -p "$DATADIR"
 "$BINDIR/kasumi-proxyctl" rotateLogs
 exec >>"$DATADIR/service.log" 2>&1
@@ -992,5 +995,56 @@ apply_mark_rule() {
 			log_error "watchdog: process died core_dead=$core_dead tun_dead=$tun_dead — flushing rules and stopping"
 			echo "stop" >"$PIPE_FILE"
 		fi
+	done
+} &
+
+# ---- Subscription auto-update daemon --------------------------------------
+# Backend half of the hybrid auto-update: for each enabled subscription with
+# autoUpdate, once its interval (minutes) elapses since the last fetch, download
+# the raw body into SUBCACHE_DIR. The UI parses & applies it on next launch.
+# app-state.json is written compact by the UI; fields are pulled with sed (no jq),
+# mirroring read_app_filter. Reuses kasumi-proxyctl fetchSubscription for the curl.
+sub_autoupdate_tick() {
+	[ -f "$STATE_FILE" ] || return
+	mkdir -p "$SUBCACHE_DIR"
+	now=$(date +%s)
+	compact=$(tr -d '\r\n' <"$STATE_FILE" 2>/dev/null)
+	subs=$(printf '%s' "$compact" | sed -n 's/.*"subscriptions":\[\(.*\)\],"routingRules".*/\1/p')
+	[ -n "$subs" ] || return
+	# One subscription object per line.
+	printf '%s' "$subs" | sed 's/},{/}\
+{/g' | while IFS= read -r obj; do
+		case "$obj" in *'"autoUpdate":true'*) ;; *) continue ;; esac
+		case "$obj" in *'"enabled":true'*) ;; *) continue ;; esac
+		s_id=$(printf '%s' "$obj" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+		s_url=$(printf '%s' "$obj" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+		s_int=$(printf '%s' "$obj" | sed -n 's/.*"interval":\([0-9]*\).*/\1/p')
+		s_ua=$(printf '%s' "$obj" | sed -n 's/.*"userAgent":"\([^"]*\)".*/\1/p')
+		s_ai=0
+		case "$obj" in *'"allowInsecure":true'*) s_ai=1 ;; esac
+		if [ -z "$s_id" ] || [ -z "$s_url" ]; then continue; fi
+		case "$s_int" in (''|*[!0-9]*) s_int=0 ;; esac
+		[ "$s_int" -gt 0 ] || continue
+		case "$s_id" in (*/*|*..*) continue ;; esac
+		fetched=$(cat "$SUBCACHE_DIR/$s_id.fetched" 2>/dev/null)
+		case "$fetched" in (''|*[!0-9]*) fetched=0 ;; esac
+		[ "$(( now - fetched ))" -ge "$(( s_int * 60 ))" ] || continue
+		tmp="$SUBCACHE_DIR/$s_id.raw.tmp"
+		if printf '%s' "$s_url" | "$BINDIR/kasumi-proxyctl" fetchSubscription "$s_ai" 0 "$s_ua" >"$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+			mv "$tmp" "$SUBCACHE_DIR/$s_id.raw"
+			printf '%s' "$now" >"$SUBCACHE_DIR/$s_id.fetched"
+			log_info "sub auto-update: fetched $s_id"
+		else
+			rm -f "$tmp"
+			log_warn "sub auto-update: fetch failed for $s_id"
+		fi
+	done
+}
+
+# Poll the subscription schedule once a minute.
+{
+	while true; do
+		sleep 60
+		sub_autoupdate_tick
 	done
 } &

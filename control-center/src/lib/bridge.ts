@@ -30,6 +30,12 @@ export interface AppEntry {
   iconUrl?: string;
 }
 
+/** A subscription body the backend daemon downloaded on its schedule, awaiting parse. */
+export interface SubCacheEntry {
+  id: string; // subscription id
+  fetchedAt: number; // epoch seconds the daemon wrote it
+}
+
 export interface ServiceStatus {
   state: ServiceState;
   activeId: string | null;
@@ -83,6 +89,12 @@ export interface Bridge {
     url: string,
     opts?: { userAgent?: string; allowInsecure?: boolean },
   ): Promise<Profile[]>;
+
+  // subscription auto-update cache: a backend daemon downloads raw subscription
+  // bodies on a schedule; the UI parses & applies them on launch, then clears.
+  listSubCache(): Promise<SubCacheEntry[]>;
+  readSubCache(id: string): Promise<string>;
+  clearSubCache(id: string): Promise<void>;
 
   // asset files
   downloadAsset(

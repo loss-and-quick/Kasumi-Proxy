@@ -252,7 +252,7 @@ const zh = {
   "subs.addBtn": "添加订阅",
   "subs.infoText":
     "每个订阅会将其节点导入到所选分组。更新时会刷新这些配置，并尽可能保留当前活动配置。",
-  "subs.autoLabel": "自动 · {interval} 小时",
+  "subs.autoLabel": "自动 · {interval}",
   "subs.manualLabel": "手动",
   "subs.insecureLabel": "不安全",
   "subs.errorLabel": "错误",
@@ -283,7 +283,7 @@ const zh = {
   "subs.edit.enabledSub": "参与更新并显示在配置列表中",
   "subs.edit.autoUpdate": "自动更新",
   "subs.edit.autoUpdateSub": "按计划自动刷新",
-  "subs.edit.interval": "间隔（小时）",
+  "subs.edit.interval": "间隔（hh:mm）",
   "subs.edit.insecure": "允许不安全 URL",
   "subs.edit.insecureSub": "获取时跳过 TLS 验证",
   "subs.edit.urlInsecureHint": "未加密的 HTTP —— 此订阅在传输中可能被篡改。",

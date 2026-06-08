@@ -17,7 +17,13 @@ import {
 } from "../../components";
 import { useFormatters, useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
-import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
+import {
+  clockToMinutes,
+  isInsecureHttpUrl,
+  isLocalOrPrivateHost,
+  minutesToClock,
+  uid,
+} from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 
 export default function Subscriptions() {
@@ -220,7 +226,7 @@ function SubCard({
             style={{ height: 28, fontSize: 11.5, pointerEvents: "none" }}
           >
             <Icon name="autorenew" style={{ fontSize: 15 }} />{" "}
-            {t("subs.autoLabel", { interval: s.interval })}
+            {t("subs.autoLabel", { interval: minutesToClock(s.interval) })}
           </span>
         ) : (
           <span className="chip" style={{ height: 28, fontSize: 11.5, pointerEvents: "none" }}>
@@ -310,7 +316,7 @@ function SubEditSheet({
               enabled: true,
               groupId: defaultGroupId,
               autoUpdate: false,
-              interval: 6,
+              interval: 360, // minutes (06:00)
               allowInsecure: false,
               lastUpdated: "",
               count: 0,
@@ -446,9 +452,9 @@ function SubEditSheet({
         <div style={{ paddingLeft: 54 }}>
           <Field
             label={t("subs.edit.interval")}
-            value={d.interval}
-            type="number"
-            onChange={(v) => set("interval", Number(v))}
+            value={minutesToClock(d.interval)}
+            type="time"
+            onChange={(v) => set("interval", clockToMinutes(v))}
             error={errors.interval}
           />
         </div>

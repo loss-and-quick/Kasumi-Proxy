@@ -256,7 +256,7 @@ const pt = {
   "subs.addBtn": "Adicionar assinatura",
   "subs.infoText":
     "Cada assinatura importa seus servidores para um grupo selecionado. Ao atualizar, esses perfis são renovados mantendo sua seleção ativa sempre que possível.",
-  "subs.autoLabel": "Auto · {interval}h",
+  "subs.autoLabel": "Auto · {interval}",
   "subs.manualLabel": "Manual",
   "subs.insecureLabel": "Inseguro",
   "subs.errorLabel": "Erro",
@@ -284,7 +284,7 @@ const pt = {
   "subs.edit.enabledSub": "Incluir nas atualizações e na lista de perfis",
   "subs.edit.autoUpdate": "Atualização automática",
   "subs.edit.autoUpdateSub": "Atualizar em um intervalo programado",
-  "subs.edit.interval": "Intervalo (horas)",
+  "subs.edit.interval": "Intervalo (hh:mm)",
   "subs.edit.insecure": "Permitir URL insegura",
   "subs.edit.insecureSub": "Ignorar verificação TLS ao buscar",
   "subs.edit.urlInsecureHint":

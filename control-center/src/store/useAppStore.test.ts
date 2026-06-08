@@ -160,6 +160,9 @@ function createBridgeMock(): BridgeMock {
     fetchSubscription: vi.fn(
       async (_url: string, _opts?: { userAgent?: string; allowInsecure?: boolean }) => [],
     ),
+    listSubCache: vi.fn(async () => []),
+    readSubCache: vi.fn(async (_id: string) => ""),
+    clearSubCache: vi.fn(async (_id: string) => {}),
     downloadAsset: vi.fn(
       async (_filename: string, _url: string, _mode?: "auto" | "proxy" | "direct") => ({
         ok: true,
@@ -503,6 +506,54 @@ describe("useAppStore", () => {
     expect(state.subscriptions[0].count).toBe(2);
     expect(state.subscriptions[0].lastError).toBeNull();
     expect(bridge.start).not.toHaveBeenCalled();
+  });
+
+  it("consumeSubCache applies cached subscription bodies and clears them", async () => {
+    const old = makeVless({ id: "old", remarks: "Old", subId: "s1" });
+    const sub = makeSub({ id: "s1", remarks: "Cached sub", groupId: "g-main" });
+    const fetched = makeVless({
+      id: "fresh",
+      remarks: "Fresh",
+      address: "f.example.com",
+      subId: null,
+      uuid: "66666666-6666-6666-6666-666666666666",
+    });
+    useAppStore.setState({
+      profiles: [old],
+      groups: [{ id: "g-main", name: "Main" }],
+      subscriptions: [sub],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+      service: DEFAULT_STATUS,
+    });
+    bridge.listSubCache.mockResolvedValue([{ id: "s1", fetchedAt: 1 }]);
+    bridge.readSubCache.mockResolvedValue("raw-body");
+    bridge.parseShareLinks.mockResolvedValue([fetched]);
+
+    await useAppStore.getState().consumeSubCache();
+
+    const state = useAppStore.getState();
+    expect(bridge.readSubCache).toHaveBeenCalledWith("s1");
+    expect(state.profiles.find((p) => p.id === "old")).toBeUndefined();
+    expect(state.profiles.find((p) => p.subId === "s1")?.remarks).toBe("Fresh");
+    expect(state.subscriptions[0].count).toBe(1);
+    expect(bridge.clearSubCache).toHaveBeenCalledWith("s1");
+  });
+
+  it("consumeSubCache drops cache entries for unknown subscriptions", async () => {
+    useAppStore.setState({
+      profiles: [],
+      groups: [{ id: "g-main", name: "Main" }],
+      subscriptions: [],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+    bridge.listSubCache.mockResolvedValue([{ id: "ghost", fetchedAt: 1 }]);
+
+    await useAppStore.getState().consumeSubCache();
+
+    expect(bridge.clearSubCache).toHaveBeenCalledWith("ghost");
+    expect(bridge.readSubCache).not.toHaveBeenCalled();
   });
 
   describe("recentActivity", () => {

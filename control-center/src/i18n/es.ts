@@ -256,7 +256,7 @@ const es = {
   "subs.addBtn": "Añadir suscripción",
   "subs.infoText":
     "Cada suscripción importa sus servidores a un grupo seleccionado. Al actualizarse, esos perfiles se refrescan intentando conservar tu selección activa cuando sea posible.",
-  "subs.autoLabel": "Auto · {interval}h",
+  "subs.autoLabel": "Auto · {interval}",
   "subs.manualLabel": "Manual",
   "subs.insecureLabel": "Inseguro",
   "subs.errorLabel": "Error",
@@ -284,7 +284,7 @@ const es = {
   "subs.edit.enabledSub": "Incluir en las actualizaciones y en la lista de perfiles",
   "subs.edit.autoUpdate": "Actualización automática",
   "subs.edit.autoUpdateSub": "Actualizar según una programación",
-  "subs.edit.interval": "Intervalo (horas)",
+  "subs.edit.interval": "Intervalo (hh:mm)",
   "subs.edit.insecure": "Permitir URL insegura",
   "subs.edit.insecureSub": "Omitir la verificación TLS al descargar",
   "subs.edit.urlInsecureHint":

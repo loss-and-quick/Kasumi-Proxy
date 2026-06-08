@@ -263,7 +263,7 @@ const en = {
   "subs.addBtn": "Add subscription",
   "subs.infoText":
     "Each subscription imports its servers into a selected group. Updating refreshes those profiles while keeping your active selection where possible.",
-  "subs.autoLabel": "Auto · {interval}h",
+  "subs.autoLabel": "Auto · {interval}",
   "subs.manualLabel": "Manual",
   "subs.insecureLabel": "Insecure",
   "subs.errorLabel": "Error",
@@ -291,7 +291,7 @@ const en = {
   "subs.edit.enabledSub": "Include in updates & profile list",
   "subs.edit.autoUpdate": "Auto-update",
   "subs.edit.autoUpdateSub": "Refresh on a schedule",
-  "subs.edit.interval": "Interval (hours)",
+  "subs.edit.interval": "Interval (hh:mm)",
   "subs.edit.insecure": "Allow insecure URL",
   "subs.edit.insecureSub": "Skip TLS verification when fetching",
   "subs.edit.urlInsecureHint":
