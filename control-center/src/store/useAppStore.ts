@@ -616,8 +616,9 @@ export const useAppStore = create<Store>((set, get) => {
       await get().flush();
     },
 
-    upsertSub(sub) {
-      return patch((s) => ({ subscriptions: upsertById(s.subscriptions, sub) }));
+    async upsertSub(sub) {
+      await patch((s) => ({ subscriptions: upsertById(s.subscriptions, sub) }));
+      bridge.subWakeup().catch(() => {});
     },
     async removeSub(id) {
       const activeProfile = get().profiles.find((p) => p.id === get().activeId);
