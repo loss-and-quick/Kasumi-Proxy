@@ -34,6 +34,9 @@ PIPE_FILE="$MODDIR/run/control.pipe"
 # Lifecycle channel published by service.sh (connecting|running|stopped|failed:reason).
 SERVICE_STATE_FILE="$DATADIR/service-state"
 ASSET_JOB_DIR="$DATADIR/asset-jobs"
+# Subscription bodies the auto-update daemon (service.sh) downloads on a schedule,
+# awaiting parse by the UI. <id>.raw = body; <id>.fetched = last fetch epoch.
+SUBCACHE_DIR="$DATADIR/sub-cache"
 TEST_JOB_DIR="$DATADIR/test-jobs"
 
 mkdir -p "$DATADIR" "$ASSET_JOB_DIR" "$TEST_JOB_DIR" 2>/dev/null
@@ -625,6 +628,38 @@ case "$method" in
             set -- "$@" --socks5 "127.0.0.1:$(read_socks_port)"
         fi
         "$@" "$url"
+        ;;
+
+    listSubCache)
+        # List subscription bodies the daemon has downloaded: [{"id","fetchedAt"}]
+        printf '['
+        first=1
+        if [ -d "$SUBCACHE_DIR" ]; then
+            for f in "$SUBCACHE_DIR"/*.raw; do
+                [ -f "$f" ] || continue
+                base=${f##*/}; sc_id=${base%.raw}
+                fetched=$(cat "$SUBCACHE_DIR/$sc_id.fetched" 2>/dev/null)
+                case "$fetched" in (''|*[!0-9]*) fetched=0 ;; esac
+                [ "$first" = 1 ] || printf ','
+                first=0
+                printf '{"id":"%s","fetchedAt":%s}' "$(printf '%s' "$sc_id" | json_escape)" "$fetched"
+            done
+        fi
+        printf ']\n'
+        ;;
+
+    readSubCache)
+        # arg: <subId>; prints the cached raw body (empty if none)
+        sc_id="$1"
+        case "$sc_id" in (''|*/*|*..*) exit 0 ;; esac
+        cat "$SUBCACHE_DIR/$sc_id.raw" 2>/dev/null
+        ;;
+
+    clearSubCache)
+        # arg: <subId>; drop the consumed body (keep .fetched as the schedule mark)
+        sc_id="$1"
+        case "$sc_id" in (''|*/*|*..*) exit 0 ;; esac
+        rm -f "$SUBCACHE_DIR/$sc_id.raw"
         ;;
 
     downloadAsset)
