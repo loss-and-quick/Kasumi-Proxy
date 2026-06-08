@@ -26,7 +26,7 @@ export function ProfilesList({
   onMore: (profile: Profile) => void;
 }) {
   return (
-    <div className="scroll" style={{ paddingTop: 0 }}>
+    <div className="scroll with-fab" style={{ paddingTop: 0 }}>
       {groups.length === 0 && <EmptyHint icon="search_off" text={emptyText} />}
       {groups.map((group) => (
         <div key={group.id}>

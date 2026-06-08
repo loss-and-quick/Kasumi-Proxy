@@ -122,7 +122,7 @@ const ru = {
   "profiles.bulkDelete": "Удалить",
   "profiles.bulkDedup": "Дубли",
   "profiles.noResults": "Подходящие профили не найдены",
-  "profiles.fabNew": "Новый",
+  "profiles.fabNew": "Создать",
   "profiles.sheet.useProfile": "Использовать этот профиль",
   "profiles.sheet.edit": "Изменить",
   "profiles.sheet.clone": "Клонировать",
