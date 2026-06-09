@@ -202,7 +202,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   }
 
   function doBulkDedup() {
-    removeDuplicates();
+    removeDuplicates(groupFilter);
   }
 
   function toggleBulkMode() {
@@ -262,23 +262,23 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         pinging={pinging.size > 0}
         speedTesting={speedTesting.size > 0}
         onTcping={() => {
-          void pingAll();
+          void pingAll(groupFilter);
           setPingSheetOpen(false);
         }}
         onRealping={() => {
-          void realPingAll();
+          void realPingAll(groupFilter);
           setPingSheetOpen(false);
         }}
         onSpeedTest={() => {
-          void speedTestAll();
+          void speedTestAll(groupFilter);
           setPingSheetOpen(false);
         }}
         onDeleteUnreachable={() => {
-          void removeUnreachable();
+          void removeUnreachable(groupFilter);
           setPingSheetOpen(false);
         }}
         onSelectBest={() => {
-          selectBest();
+          selectBest(groupFilter);
           setPingSheetOpen(false);
         }}
       />

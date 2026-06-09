@@ -76,12 +76,12 @@ interface Store extends AppState {
   pingProfile: (id: string) => Promise<void>;
   realPingProfile: (id: string) => Promise<void>;
   speedTestProfile: (id: string) => Promise<void>;
-  pingAll: () => Promise<void>;
-  realPingAll: () => Promise<void>;
-  speedTestAll: () => Promise<void>;
-  removeUnreachable: () => Promise<void>;
-  removeDuplicates: () => Promise<void>;
-  selectBest: () => Promise<void>;
+  pingAll: (groupId?: string) => Promise<void>;
+  realPingAll: (groupId?: string) => Promise<void>;
+  speedTestAll: (groupId?: string) => Promise<void>;
+  removeUnreachable: (groupId?: string) => Promise<void>;
+  removeDuplicates: (groupId?: string) => Promise<void>;
+  selectBest: (groupId?: string) => Promise<void>;
 
   // groups
   addGroup: (name: string) => Promise<string>;
@@ -480,9 +480,11 @@ export const useAppStore = create<Store>((set, get) => {
     // ksu-bridge realPingAll). The bridge streams each profile's result back
     // via the callback the moment it resolves, so we update that one profile
     // and clear its spinner progressively instead of waiting for the whole run.
-    async pingAll() {
+    async pingAll(groupId?: string) {
       if (get().pinging.size) return;
-      const ids = get().profiles.map((p) => p.id);
+      const ids = get()
+        .profiles.filter((p) => !groupId || groupId === "all" || p.groupId === groupId)
+        .map((p) => p.id);
       if (!ids.length) return;
       get().notify(translateCurrent("store.ping.started"));
       set({ pinging: new Set(ids) });
@@ -500,9 +502,11 @@ export const useAppStore = create<Store>((set, get) => {
       pushActivity("speed", translateCurrent("activity.pingComplete", { count: ids.length }));
     },
 
-    async realPingAll() {
+    async realPingAll(groupId?: string) {
       if (get().pinging.size) return;
-      const ids = get().profiles.map((p) => p.id);
+      const ids = get()
+        .profiles.filter((p) => !groupId || groupId === "all" || p.groupId === groupId)
+        .map((p) => p.id);
       if (!ids.length) return;
       get().notify(translateCurrent("store.ping.started"));
       set({ pinging: new Set(ids) });
@@ -520,9 +524,11 @@ export const useAppStore = create<Store>((set, get) => {
       pushActivity("speed", translateCurrent("activity.pingComplete", { count: ids.length }));
     },
 
-    async speedTestAll() {
+    async speedTestAll(groupId?: string) {
       if (get().speedTesting.size) return;
-      const ids = get().profiles.map((p) => p.id);
+      const ids = get()
+        .profiles.filter((p) => !groupId || groupId === "all" || p.groupId === groupId)
+        .map((p) => p.id);
       if (!ids.length) return;
       get().notify(translateCurrent("store.ping.started"));
       set({ speedTesting: new Set(ids) });
@@ -540,9 +546,11 @@ export const useAppStore = create<Store>((set, get) => {
       pushActivity("speed", translateCurrent("activity.speedTestComplete", { count: ids.length }));
     },
 
-    async removeUnreachable() {
+    async removeUnreachable(groupId?: string) {
       const { profiles, activeId } = get();
-      const unreachable = new Set(profiles.filter((p) => p.ping === -1).map((p) => p.id));
+      const affected =
+        !groupId || groupId === "all" ? profiles : profiles.filter((p) => p.groupId === groupId);
+      const unreachable = new Set(affected.filter((p) => p.ping === -1).map((p) => p.id));
       if (!unreachable.size) {
         get().notify(translateCurrent("store.ping.noUnreachable"));
         return;
@@ -563,9 +571,11 @@ export const useAppStore = create<Store>((set, get) => {
       get().notify(translateCurrent("store.ping.removeUnreachable", { count: unreachable.size }));
     },
 
-    async selectBest() {
+    async selectBest(groupId?: string) {
       const { profiles } = get();
-      const best = profiles
+      const candidates =
+        !groupId || groupId === "all" ? profiles : profiles.filter((p) => p.groupId === groupId);
+      const best = candidates
         .filter((p) => p.ping != null && p.ping > 0)
         .sort((a, b) => (a.ping ?? Infinity) - (b.ping ?? Infinity))[0];
       if (!best) {
@@ -582,20 +592,32 @@ export const useAppStore = create<Store>((set, get) => {
       await done;
     },
 
-    async removeDuplicates() {
+    async removeDuplicates(groupId?: string) {
       const { profiles, activeId } = get();
-      const { kept, removedCount } = deduplicateProfiles(profiles, activeId);
+      const affected =
+        !groupId || groupId === "all" ? profiles : profiles.filter((p) => p.groupId === groupId);
+      const { kept, removedCount } = deduplicateProfiles(affected, activeId);
       if (!removedCount) {
         get().notify(translateCurrent("store.dedup.none"));
         return;
       }
-      const done = patch(() => ({ profiles: kept }));
+      // kept is a subset of affected — compute removed IDs and merge back
+      const removedIds = new Set(affected.map((p) => p.id));
+      const keptIds = new Set(kept.map((p) => p.id));
+      const removed = new Set([...removedIds].filter((id) => !keptIds.has(id)));
+      const removingActive = activeId != null && removed.has(activeId);
+      if (removingActive)
+        await stopServiceIfRunning(translateCurrent("store.service.stoppedProfileRemoved"));
+      set((s) => ({
+        profiles: removeProfilesByIds(s.profiles, removed),
+        activeId: activeIdAfterProfileRemoval(s.activeId, removed),
+      }));
       pushActivity(
         "content_cut",
         translateCurrent("activity.duplicatesRemoved", { count: removedCount }),
       );
       get().notify(translateCurrent("store.dedup.done", { count: removedCount }));
-      await done;
+      await get().flush();
     },
 
     async addGroup(name) {
