@@ -406,8 +406,8 @@ const hi = {
   "backup.merge": "मर्ज",
   "backup.replace": "प्रतिस्थापित करें",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }, runtime)} · ${pluralPart(Number(groups), { one: "# समूह", other: "# समूह" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# सदस्यता", other: "# सदस्यताएँ" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# समूह", other: "# समूह" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# सदस्यता", other: "# सदस्यताएँ" }, runtime)}`;
   },
   "backup.mergeHint":
     "मर्ज आयातित प्रोफ़ाइलों/समूहों/सदस्यताओं को जोड़ता है और सेटिंग्स को ओवरले करता है। Replace वर्तमान canonical state को पूरी तरह अधिलेखित कर देता है।",

@@ -426,8 +426,8 @@ const ru = {
   "backup.merge": "Объединить",
   "backup.replace": "Заменить",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# профиль", few: "# профиля", many: "# профилей", other: "# профиля" }, runtime)} · ${pluralPart(Number(groups), { one: "# группа", few: "# группы", many: "# групп", other: "# группы" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# подписка", few: "# подписки", many: "# подписок", other: "# подписки" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# группа", few: "# группы", many: "# групп", other: "# группы" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# подписка", few: "# подписки", many: "# подписок", other: "# подписки" }, runtime)}`;
   },
   "backup.mergeHint":
     "Режим объединения добавляет импортированные профили/группы/подписки и накладывает настройки. Режим замены полностью перезаписывает текущее каноническое состояние.",

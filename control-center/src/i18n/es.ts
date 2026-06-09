@@ -412,8 +412,8 @@ const es = {
   "backup.merge": "Combinar",
   "backup.replace": "Reemplazar",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# perfil", other: "# perfiles" }, runtime)} · ${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# suscripción", other: "# suscripciones" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# suscripción", other: "# suscripciones" }, runtime)}`;
   },
   "backup.mergeHint":
     "Combinar añade los perfiles/grupos/suscripciones importados y superpone los ajustes. Reemplazar sobrescribe por completo el estado canónico actual.",

@@ -418,8 +418,8 @@ const en = {
   "backup.merge": "Merge",
   "backup.replace": "Replace",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# profile", other: "# profiles" }, runtime)} · ${pluralPart(Number(groups), { one: "# group", other: "# groups" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# subscription", other: "# subscriptions" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# group", other: "# groups" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# subscription", other: "# subscriptions" }, runtime)}`;
   },
   "backup.mergeHint":
     "Merge appends imported profiles/groups/subscriptions and overlays settings. Replace overwrites the current canonical state completely.",

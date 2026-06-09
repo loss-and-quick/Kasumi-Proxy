@@ -496,19 +496,8 @@ const ar = {
   "backup.merge": "دمج",
   "backup.replace": "استبدال",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
     return `${pluralPart(
-      Number(profiles),
-      {
-        zero: "لا ملفات تعريف",
-        one: "ملف تعريف واحد",
-        two: "ملفا تعريف",
-        few: "# ملفات تعريف",
-        many: "# ملف تعريف",
-        other: "# ملف تعريف",
-      },
-      runtime,
-    )} · ${pluralPart(
       Number(groups),
       {
         zero: "لا مجموعات",
