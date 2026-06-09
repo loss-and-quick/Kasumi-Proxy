@@ -29,6 +29,7 @@ jobs:
           paths=(
             'module/*.sh'
             'module/bin/kasumi-proxyctl'
+            'module/bin/utils.sh'
             'module/webroot/cgi-bin/'
             'control-center/src/'
             'scripts/fetch-bin.sh'
