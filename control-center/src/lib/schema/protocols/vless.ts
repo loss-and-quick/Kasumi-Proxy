@@ -17,7 +17,7 @@ export const VlessObj = z.object({
   ...transportShape,
   ...tlsShape,
   protocol: z.literal("vless"),
-  uuid: z.string().uuid("Must be a valid UUID"),
+  uuid: z.guid({ error: "Must be a valid UUID" }),
   flow: Flow.default(""),
   encryption: z.string().default("none"),
   packetEncoding: PacketEncoding.default(""),
