@@ -17,7 +17,12 @@ export const VmessObj = z.object({
   ...transportShape,
   ...tlsShape,
   protocol: z.literal("vmess"),
-  uuid: z.guid({ error: "Must be a valid UUID" }),
+  uuid: z
+    .string()
+    .regex(
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+      "UUID required",
+    ),
   alterId: z.coerce.number().int().min(0).default(0),
   encryption: VmessEnc.default("auto"),
   packetEncoding: PacketEncoding.default(""),
