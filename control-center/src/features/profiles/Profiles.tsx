@@ -101,7 +101,8 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
     list = [...list].sort((left, right) => {
       if (sort === "ping") {
         return (
-          (left.ping ?? Number.MAX_SAFE_INTEGER) - (right.ping ?? Number.MAX_SAFE_INTEGER) ||
+          (left.ping != null && left.ping >= 0 ? left.ping : Number.MAX_SAFE_INTEGER) -
+            (right.ping != null && right.ping >= 0 ? right.ping : Number.MAX_SAFE_INTEGER) ||
           left.remarks.localeCompare(right.remarks)
         );
       }
