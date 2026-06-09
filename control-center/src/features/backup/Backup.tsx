@@ -25,7 +25,6 @@ async function copyText(text: string) {
 }
 
 export default function Backup({ onClose }: { onClose: () => void }) {
-  const profiles = useAppStore((s) => s.profiles);
   const groups = useAppStore((s) => s.groups);
   const subscriptions = useAppStore((s) => s.subscriptions);
   const settings = useAppStore((s) => s.settings);
@@ -35,8 +34,8 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const t = useT();
 
   const backupJson = useMemo(
-    () => JSON.stringify({ profiles, groups, subscriptions, settings, activeId }, null, 2),
-    [profiles, groups, subscriptions, settings, activeId],
+    () => JSON.stringify({ groups, subscriptions, settings, activeId }, null, 2),
+    [groups, subscriptions, settings, activeId],
   );
   const [importText, setImportText] = useState("");
   const [qrOpen, setQrOpen] = useState(false);
@@ -72,7 +71,6 @@ export default function Backup({ onClose }: { onClose: () => void }) {
         mono
         hint={t("backup.summary", {
           groups: groups.length,
-          profiles: profiles.length,
           subscriptions: subscriptions.length,
         })}
       />
