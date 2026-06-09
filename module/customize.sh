@@ -23,14 +23,13 @@ x64)
 	;;
 esac
 
-# 3. Extract core scripts, webroot UI files and structural assets
+# 3. Extract the rest of the payload, preserving its layout. The arch bin/ dirs
+#    are skipped — the matching one was flattened into $MODPATH/bin above — as is
+#    the installer's own META-INF/customize.sh. Everything else (scripts,
+#    webroot, bin/kasumi-proxyctl, bin/utils.sh, …) ships as-is, so adding a
+#    payload file needs no change here.
 ui_print "- Extracting management scripts and Webroot components..."
-unzip -o "$ZIPFILE" "webroot/*" -d "$MODPATH/"
-unzip -j -o "$ZIPFILE" "proxy_control.sh" -d "$MODPATH"
-unzip -j -o "$ZIPFILE" "service.sh" -d "$MODPATH"
-unzip -j -o "$ZIPFILE" "action.sh" -d "$MODPATH"
-unzip -j -o "$ZIPFILE" "bin/kasumi-proxyctl" -d "$MODPATH/bin"
-unzip -j -o "$ZIPFILE" "module.prop" -d "$MODPATH"
+unzip -o "$ZIPFILE" -x "bin/arm64-v8a/*" "bin/x86_64/*" "META-INF/*" "customize.sh" -d "$MODPATH/"
 
 # 4. Enforce strict executable permissions natively
 ui_print "- Setting executable permissions..."

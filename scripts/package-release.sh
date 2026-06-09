@@ -59,12 +59,15 @@ rm -f "$OUT"
 
 # Zip from inside module/ so its contents land at the archive root (where
 # Magisk expects module.prop, customize.sh, META-INF/…). The webroot React
-# build and bin/* cores are produced by the steps above; cgi-bin/exec is kept.
+# build and bin/* cores are produced by the steps above.
+#
+# Pack by directory/glob, not a per-file allowlist: whole bin/ (cores +
+# kasumi-proxyctl + utils.sh + licenses), whole webroot/, every top-level
+# *.sh, module.prop and META-INF. Adding a payload file ships it automatically;
+# only AGENTS.md (dev doc) is intentionally left out by not matching the globs.
 (cd "$ROOT/module" && zip -r -q "$OUT" \
-	META-INF \
-	bin/arm64-v8a bin/x86_64 bin/kasumi-proxyctl bin/README.md bin/LICENSE \
-	webroot \
-	module.prop customize.sh service.sh proxy_control.sh action.sh uninstall.sh \
+	META-INF bin webroot \
+	module.prop ./*.sh \
 	-x '*.DS_Store')
 
 echo "✅ Release zip: $OUT"
