@@ -4,7 +4,13 @@
 // Swaps in at import time when VITE_BRIDGE_MODE=mock (default).
 // ============================================================
 import type { AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
-import { emptyProfile, type Profile, type ProfileOf, type Protocol } from "./schema";
+import {
+  AppStateSchema,
+  emptyProfile,
+  type Profile,
+  type ProfileOf,
+  type Protocol,
+} from "./schema";
 import { seedAppState } from "./seed";
 import { buildShareLink as realBuild, parseShareLinks as realParse } from "./share";
 import { uid } from "./utils";
@@ -309,7 +315,7 @@ export const mockBridge: Bridge = {
 
   async importBackup(file: Blob, mode: "merge" | "replace") {
     const text = await file.text();
-    const incoming: AppState = JSON.parse(text);
+    const incoming: AppState = AppStateSchema.parse(JSON.parse(text));
     if (mode === "replace") {
       // Keep current profiles — backups no longer include them
       state = { ...incoming, profiles: state.profiles };
