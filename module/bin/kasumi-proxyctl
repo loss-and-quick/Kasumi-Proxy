@@ -581,16 +581,33 @@ case "$method" in
         ;;
 
     fetchSubscription)
-        # args: <allowInsecure:0|1> <viaProxy:0|1> <userAgent>; stdin: URL
-        allow_insecure="${1:-0}"; via_proxy="${2:-0}"; user_agent="$3"
+        # args: <allowInsecure:0|1> <mode:auto|proxy|direct> <userAgent>; stdin: URL
+        # Streams the raw subscription body to stdout, honouring the fetch mode
+        # (mirrors download_asset_impl): proxy-only, direct-only, or auto (proxy
+        # first when the core is up, then direct). On failure: empty stdout and a
+        # non-zero exit, so the UI surfaces an error instead of "0 profiles".
+        allow_insecure="${1:-0}"; mode="${2:-auto}"; user_agent="$3"
+        case "$mode" in auto|proxy|direct) ;; *) mode="auto" ;; esac
         url=$(cat); url=$(echo "$url" | tr -d '\r\n')
         set -- curl -fsSL --max-time 30
         [ "$allow_insecure" = "1" ] && set -- "$@" -k
         [ -n "$user_agent" ] && set -- "$@" -A "$user_agent"
-        if [ "$via_proxy" = "1" ] && is_running "$PIDFILE" "$BINDIR"; then
-            set -- "$@" --socks5 "127.0.0.1:$(read_socks_port "$SOCKS_PORT_FILE")"
+        socks="127.0.0.1:$(read_socks_port "$SOCKS_PORT_FILE")"
+        sub_tmp="$DATADIR/.subfetch.$$"
+        # proxy attempt: always in proxy mode; in auto mode only when the core is up.
+        if [ "$mode" = "proxy" ] || { [ "$mode" = "auto" ] && is_running "$PIDFILE" "$BINDIR"; }; then
+            if "$@" --socks5 "$socks" "$url" -o "$sub_tmp" 2>/dev/null && [ -s "$sub_tmp" ]; then
+                cat "$sub_tmp"; rm -f "$sub_tmp"; exit 0
+            fi
+            rm -f "$sub_tmp"
+            [ "$mode" = "proxy" ] && exit 1   # proxy-only never falls back to direct
         fi
-        "$@" "$url"
+        # direct attempt: direct mode, or the auto fallback after the proxy path.
+        if "$@" "$url" -o "$sub_tmp" 2>/dev/null && [ -s "$sub_tmp" ]; then
+            cat "$sub_tmp"; rm -f "$sub_tmp"; exit 0
+        fi
+        rm -f "$sub_tmp"
+        exit 1
         ;;
 
     listSubCache)

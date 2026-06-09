@@ -132,7 +132,7 @@ export default function Settings({
 
   const ensureProxyForAssetDownload = () => {
     if (resourceUpdateMode === "proxy" && service.state !== "running") {
-      notify(t("settings.assetProxyNotRunning"));
+      notify(t("common.proxyNotRunning"));
       return false;
     }
     return true;

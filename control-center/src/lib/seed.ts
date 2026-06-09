@@ -43,6 +43,7 @@ export const SUBS_SEED: Subscription[] = [
     userAgent: "v2rayNG/1.10.7",
     filter: "",
     allowInsecure: false,
+    updateMode: "auto",
   },
   {
     id: "s-nodes",
@@ -57,6 +58,7 @@ export const SUBS_SEED: Subscription[] = [
     userAgent: "",
     filter: "(?i)premium",
     allowInsecure: false,
+    updateMode: "proxy",
   },
   {
     id: "s-relay",
@@ -71,6 +73,7 @@ export const SUBS_SEED: Subscription[] = [
     userAgent: "",
     filter: "",
     allowInsecure: true,
+    updateMode: "direct",
   },
 ];
 

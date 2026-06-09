@@ -658,11 +658,24 @@ export const useAppStore = create<Store>((set, get) => {
         return;
       }
 
+      // "proxy" mode can only fetch through a live core — mirror assets'
+      // ensureProxyForAssetDownload guard so the failure is explained up front.
+      if (sub.updateMode === "proxy" && current.service.state !== "running") {
+        patch((s) => ({
+          subscriptions: s.subscriptions.map((x) =>
+            x.id === id ? { ...x, lastError: translateCurrent("common.proxyNotRunning") } : x,
+          ),
+        }));
+        get().notify(translateCurrent("common.proxyNotRunning"));
+        return;
+      }
+
       get().notify(translateCurrent("store.sub.updating", { name: sub.remarks }));
       try {
         const freshRaw = await bridge.fetchSubscription(sub.url, {
           userAgent: sub.userAgent,
           allowInsecure: sub.allowInsecure,
+          mode: sub.updateMode,
         });
         const freshMapped = mapFetchedSubscriptionProfiles(freshRaw, sub, filter);
         const nextActiveId = nextActiveIdAfterSubscriptionUpdate(current, id, freshMapped);

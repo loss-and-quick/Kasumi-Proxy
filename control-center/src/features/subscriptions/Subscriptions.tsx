@@ -318,6 +318,7 @@ function SubEditSheet({
               autoUpdate: false,
               interval: 360, // minutes (06:00)
               allowInsecure: false,
+              updateMode: "auto",
               lastUpdated: "",
               count: 0,
               lastError: null,
@@ -441,6 +442,17 @@ function SubEditSheet({
           error={errors.filter}
         />
       </div>
+      <div className="field-label">{t("common.updateMode")}</div>
+      <select
+        className="select-box"
+        value={d.updateMode}
+        onChange={(e) => set("updateMode", e.target.value as Subscription["updateMode"])}
+        style={{ width: "100%", marginBottom: 14 }}
+      >
+        <option value="auto">{t("common.mode.auto")}</option>
+        <option value="proxy">{t("common.mode.proxy")}</option>
+        <option value="direct">{t("common.mode.direct")}</option>
+      </select>
       <RowToggle
         icon="autorenew"
         title={t("subs.edit.autoUpdate")}

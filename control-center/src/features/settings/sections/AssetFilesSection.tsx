@@ -55,15 +55,15 @@ export function AssetFilesSection({
           </Btn>
         </div>
         <div style={{ marginBottom: 12 }}>
-          <div className="field-label">{t("settings.assetUpdateMode")}</div>
+          <div className="field-label">{t("common.updateMode")}</div>
           <select
             className="select-box"
             value={resourceUpdateMode}
             onChange={(e) => setResourceUpdateMode(e.target.value as ResourceUpdateMode)}
           >
-            <option value="auto">{t("settings.assetMode.auto")}</option>
-            <option value="proxy">{t("settings.assetMode.proxy")}</option>
-            <option value="direct">{t("settings.assetMode.direct")}</option>
+            <option value="auto">{t("common.mode.auto")}</option>
+            <option value="proxy">{t("common.mode.proxy")}</option>
+            <option value="direct">{t("common.mode.direct")}</option>
           </select>
         </div>
         {assetFiles.map((asset) => (
