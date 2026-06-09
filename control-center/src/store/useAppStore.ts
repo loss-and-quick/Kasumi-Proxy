@@ -217,17 +217,37 @@ export const useAppStore = create<Store>((set, get) => {
 
     async hydrate() {
       const state = await bridge.readState();
-      // Legacy state predates the version marker; its absence triggers one-time
-      // migrations. v0→: subscription `interval` moved from hours to minutes.
       const needsMigration = !state.version;
       const subscriptions = needsMigration
         ? state.subscriptions.map((s) => ({ ...s, interval: s.interval * 60 }))
         : state.subscriptions;
-      let assetFiles = stripLegacyDefaultAssets(state.assetFiles);
+      const assetFiles0 = stripLegacyDefaultAssets(state.assetFiles);
       const settings = mergeSettings(state.settings);
+      set({
+        ...state,
+        subscriptions,
+        assetFiles: assetFiles0,
+        settings,
+        version: __MODULE_VERSION__,
+        hydrated: true,
+      });
+      // Status/caps first — fast and needed for UI responsiveness.
+      bridge.onStatus((service) => syncService(service));
+      try {
+        syncService(await bridge.status());
+      } catch {
+        /* ignore */
+      }
+      try {
+        set({ caps: await bridge.capabilities() });
+      } catch {
+        /* ignore */
+      }
+      // Post-hydrate: verify asset files on disk, write if migration needed.
+      let assetFiles = assetFiles0;
       try {
         const onDisk = new Set(await bridge.listAssets());
-        assetFiles = assetFiles.map((a) =>
+        assetFiles = assetFiles0.map((a) =>
           a.lastUpdated != null && !onDisk.has(a.remarks) ? { ...a, lastUpdated: null } : a,
         );
       } catch {
@@ -239,6 +259,7 @@ export const useAppStore = create<Store>((set, get) => {
         assetFiles.some((a, i) => a.lastUpdated !== state.assetFiles[i]?.lastUpdated) ||
         settings.routingMode !== state.settings.routingMode
       ) {
+        set({ assetFiles });
         await bridge.writeState({
           ...state,
           subscriptions,
@@ -246,25 +267,6 @@ export const useAppStore = create<Store>((set, get) => {
           settings,
           version: __MODULE_VERSION__,
         });
-      }
-      set({
-        ...state,
-        subscriptions,
-        assetFiles,
-        settings,
-        version: __MODULE_VERSION__,
-        hydrated: true,
-      });
-      bridge.onStatus((service) => syncService(service));
-      try {
-        syncService(await bridge.status());
-      } catch {
-        /* ignore */
-      }
-      try {
-        set({ caps: await bridge.capabilities() });
-      } catch {
-        /* ignore */
       }
       // Apply anything the backend auto-update daemon downloaded while we were away.
       void get().consumeSubCache();
