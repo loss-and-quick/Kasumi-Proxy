@@ -311,7 +311,8 @@ export const mockBridge: Bridge = {
     const text = await file.text();
     const incoming: AppState = JSON.parse(text);
     if (mode === "replace") {
-      state = incoming;
+      // Keep current profiles — backups no longer include them
+      state = { ...incoming, profiles: state.profiles };
     } else {
       // merge: add profiles/groups/subs, then overwrite settings
       state = {
