@@ -67,20 +67,20 @@ export const bridge: Bridge = {
   async ping(profileId) {
     return (await loadBridge()).ping(profileId);
   },
-  async pingAll() {
-    return (await loadBridge()).pingAll();
+  async pingAll(onResult) {
+    return (await loadBridge()).pingAll(onResult);
   },
   async realPing(profileId, port) {
     return (await loadBridge()).realPing(profileId, port);
   },
-  async realPingAll() {
-    return (await loadBridge()).realPingAll();
+  async realPingAll(onResult) {
+    return (await loadBridge()).realPingAll(onResult);
   },
   async speedTest(profileId, port) {
     return (await loadBridge()).speedTest(profileId, port);
   },
-  async speedTestAll() {
-    return (await loadBridge()).speedTestAll();
+  async speedTestAll(onResult) {
+    return (await loadBridge()).speedTestAll(onResult);
   },
   async log(input) {
     return (await loadBridge()).log(input);

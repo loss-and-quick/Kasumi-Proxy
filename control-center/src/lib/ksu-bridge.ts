@@ -310,7 +310,7 @@ export const ksuBridge: Bridge = {
     );
     return typeof status.ms === "number" ? status.ms : 0;
   },
-  async pingAll() {
+  async pingAll(onResult) {
     const state = lastState ?? (await this.readState());
     const out: Record<string, number> = {};
     const CONCURRENCY = state.settings.pingConcurrency ?? 10;
@@ -326,6 +326,9 @@ export const ksuBridge: Bridge = {
         const addr = profileAddress(p);
         const port = profilePort(p);
         if (!addr || port == null) continue;
+        // A failed/timed-out tcping reports 0 (→ "—" in the UI); always emit a
+        // result so the row's spinner clears as soon as this profile resolves.
+        let ms = 0;
         try {
           const status = await runTestJob(
             "pingStart",
@@ -334,10 +337,12 @@ export const ksuBridge: Bridge = {
             p.id,
             8_000,
           );
-          if (typeof status.ms === "number") out[p.id] = status.ms;
+          if (typeof status.ms === "number") ms = status.ms;
         } catch {
-          /* skip */
+          /* treat as failure (ms stays 0) */
         }
+        out[p.id] = ms;
+        onResult?.(p.id, ms);
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
@@ -388,7 +393,7 @@ export const ksuBridge: Bridge = {
     return typeof status.ms === "number" ? status.ms : -1;
   },
 
-  async realPingAll() {
+  async realPingAll(onResult) {
     const state = lastState ?? (await this.readState());
     const out: Record<string, number> = {};
     const CONCURRENCY = state.settings.pingConcurrency ?? 3;
@@ -402,11 +407,14 @@ export const ksuBridge: Bridge = {
     const worker = async (slot: number) => {
       while (i < profiles.length) {
         const p = profiles[i++];
+        let ms: number;
         try {
-          out[p.id] = await this.realPing(p.id, ports[slot]);
+          ms = await this.realPing(p.id, ports[slot]);
         } catch {
-          out[p.id] = -1;
+          ms = -1;
         }
+        out[p.id] = ms;
+        onResult?.(p.id, ms);
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, (_, slot) => worker(slot)));
@@ -458,7 +466,7 @@ export const ksuBridge: Bridge = {
     return typeof status.bps === "number" && status.bps > 0 ? status.bps : -1;
   },
 
-  async speedTestAll() {
+  async speedTestAll(onResult) {
     const state = lastState ?? (await this.readState());
     const out: Record<string, number> = {};
     let i = 0;
@@ -469,11 +477,14 @@ export const ksuBridge: Bridge = {
     const worker = async (slot: number) => {
       while (i < profiles.length) {
         const p = profiles[i++];
+        let bps: number;
         try {
-          out[p.id] = await this.speedTest(p.id, ports[slot]);
+          bps = await this.speedTest(p.id, ports[slot]);
         } catch {
-          out[p.id] = -1;
+          bps = -1;
         }
+        out[p.id] = bps;
+        onResult?.(p.id, bps);
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, (_, slot) => worker(slot)));

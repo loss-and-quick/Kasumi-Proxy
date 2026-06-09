@@ -55,6 +55,8 @@ export interface Capabilities {
 
 export type ResourceUpdateMode = "auto" | "proxy" | "direct";
 
+export type BatchProgress = (profileId: string, value: number) => void;
+
 export interface Bridge {
   // service control
   start(profileId: string): Promise<ServiceStatus>;
@@ -66,14 +68,18 @@ export interface Bridge {
 
   // diagnostics
   ping(profileId: string): Promise<number>;
-  pingAll(): Promise<Record<string, number>>;
+  // Batch runs own concurrency *and* port allocation here (not in the store) so
+  // the on-demand test cores never share a SOCKS port / job file (see
+  // realPingAll). `onResult` streams each profile's result as it resolves so the
+  // UI updates progressively instead of waiting for the whole batch.
+  pingAll(onResult?: BatchProgress): Promise<Record<string, number>>;
   // `port` lets batch runs hand each concurrent worker its own pre-allocated
   // free port so the on-demand test cores never share a SOCKS port / job file
   // (see realPingAll). When omitted, the impl allocates one itself.
   realPing(profileId: string, port?: number): Promise<number>;
-  realPingAll(): Promise<Record<string, number>>;
+  realPingAll(onResult?: BatchProgress): Promise<Record<string, number>>;
   speedTest(profileId: string, port?: number): Promise<number>; // bytes/sec, -1 = failed
-  speedTestAll(): Promise<Record<string, number>>;
+  speedTestAll(onResult?: BatchProgress): Promise<Record<string, number>>;
   log(input?: {
     target?: "xray" | "singbox" | "tun2socks" | "service" | "proxy_control";
     lines?: number;
