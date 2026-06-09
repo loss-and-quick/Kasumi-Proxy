@@ -99,7 +99,7 @@ export const AdvancedSettingsSchema = z.object({
 });
 
 export const AppStateSchema = z.object({
-  profiles: z.array(ProfileSchema),
+  profiles: z.array(ProfileSchema).default([]),
   groups: z.array(GroupSchema),
   subscriptions: z.array(SubscriptionSchema),
   routingRules: z.array(RoutingRuleSchema).default([]),
