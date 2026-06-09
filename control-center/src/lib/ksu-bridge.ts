@@ -3,8 +3,9 @@
 // Real Bridge implementation talking to bin/kasumi-proxyctl through one
 // of the available transports (KernelSU/APatch JS interface or the
 // token-gated CGI endpoint). The UI never builds shell snippets;
-// every call resolves to:  kasumi-proxyctl <method> [args]  with the
-// payload (if any) piped on stdin as base64 to avoid quoting bugs.
+// every call resolves to:  kasumi-proxyctl <method> [args]. A stdin payload is
+// staged to a tmp file via the native writeFile bridge and fed in with `< tmp`,
+// so large state never hits the shell argv length limit (MAX_ARG_STRLEN).
 // ============================================================
 import type { AppState, Bridge, ResourceUpdateMode, ServiceStatus, Subscription } from "./bridge";
 import { parseCapabilities, parseServiceStatus } from "./bridge";
@@ -13,13 +14,22 @@ import {
   getModuleId,
   getRuntimeBridgeMode,
   hasCgiToken,
+  hasKsuFileApi,
   hasKsuNativeApi,
   ksuListApps,
+  readFileNative,
+  writeFileNative,
 } from "./ksu-webui";
 import { profileAddress, profilePort } from "./profile";
 
 const DEFAULT_MODULE_ID = "kasumi-proxy";
 const CGI = "http://127.17.1.3/cgi-bin/exec";
+// Backend data dir (kasumi-proxyctl DATADIR). State and profiles live here; the
+// native file bridge reads/writes them directly, bypassing the shell argv limit.
+const DATADIR = "/data/adb/kasumi-proxy";
+const STATE_PATH = `${DATADIR}/app-state.json`;
+const PROFILES_PATH = `${DATADIR}/profiles.json`;
+
 type AssetDownloadResponse = { ok: boolean; error?: string };
 type AssetDownloadStatus = { state: "idle" | "running" | "done"; ok?: boolean; error?: string };
 
@@ -42,12 +52,35 @@ function b64(str: string): string {
   return btoa(bin);
 }
 
-/** Compose the shell command: decode stdin from base64, pipe into kasumi-proxyctl. */
-function composeCommand(method: string, args: string[], stdin?: string): string {
+/** Compose the shell command for calls without stdin. */
+function composeCommand(method: string, args: string[]): string {
   const quotedArgs = args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
-  const tail = `${getCtlPath()} ${method} ${quotedArgs}`.trim();
-  if (stdin === undefined) return tail;
-  return `printf '%s' '${b64(stdin)}' | base64 -d | ${tail}`;
+  return `${getCtlPath()} ${method} ${quotedArgs}`.trim();
+}
+
+/**
+ * Run a kasumi-proxyctl call whose payload is passed on stdin. The payload is
+ * staged to a tmp file via the native writeFile bridge (a JNI argument, not a
+ * shell argument), then fed to the backend with `< tmp`. This avoids embedding
+ * the payload in the command string, which the shell rejects past MAX_ARG_STRLEN
+ * (~128 KB) — exactly the failure that broke large profiles.json writes.
+ */
+async function runWithStdin(method: string, args: string[], stdin: string): Promise<string> {
+  if (!hasKsuFileApi())
+    throw new Error(
+      `kasumi-proxyctl ${method}: stdin payloads require the native file bridge (ksu.writeFile), which this manager does not expose`,
+    );
+  const tmp = `/data/local/tmp/.kasumi_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  writeFileNative(tmp, stdin);
+  // Clean up tmp in both branches. Crucially, do NOT use `exit` on success: the
+  // KernelSU exec shell dies before libsu reads the exit-code marker, which made
+  // a successful write report failure. `&&/||` returns the right code without it.
+  const { errno, stdout, stderr } = await execNative(
+    `{ ${composeCommand(method, args)} < '${tmp}'; } && rm -f '${tmp}' || { rm -f '${tmp}'; false; }`,
+  );
+  if (errno !== 0)
+    throw new Error(stderr.trim() || `kasumi-proxyctl ${method} exited with code ${errno}`);
+  return stdout;
 }
 
 function lifecycleError(value: unknown): string | null {
@@ -171,10 +204,10 @@ async function runTestJob(
 async function run(method: string, args: string[], stdin?: string): Promise<string> {
   // 1) KernelSU / APatch injected interface
   if (hasKsuNativeApi()) {
-    const { errno, stdout, stderr } = await execNative(composeCommand(method, args, stdin));
-    if (errno !== 0 && !stdout.trim()) {
+    if (stdin !== undefined) return runWithStdin(method, args, stdin);
+    const { errno, stdout, stderr } = await execNative(composeCommand(method, args));
+    if (errno !== 0)
       throw new Error(stderr.trim() || `kasumi-proxyctl ${method} exited with code ${errno}`);
-    }
     return stdout;
   }
 
@@ -500,13 +533,39 @@ export const ksuBridge: Bridge = {
 
   async readState() {
     const { AppStateSchema } = await import("./schema/settings");
-    const state = AppStateSchema.parse(await callJson("readState"));
+    let stateRaw: unknown;
+    let profilesRaw: unknown;
+    if (hasKsuFileApi()) {
+      // Read straight from disk via the native bridge so a large profiles.json
+      // never has to round-trip through exec's evaluateJavascript callback.
+      const stateText = readFileNative(STATE_PATH).trim();
+      stateRaw = stateText ? JSON.parse(stateText) : await callJson("readState");
+      const profilesText = readFileNative(PROFILES_PATH).trim();
+      profilesRaw = profilesText ? JSON.parse(profilesText) : [];
+    } else {
+      stateRaw = await callJson("readState");
+      profilesRaw = await callJson("readProfiles").catch(() => []);
+    }
+    const stateObj = (stateRaw ?? {}) as { profiles?: unknown };
+    let profiles = Array.isArray(profilesRaw) ? profilesRaw : [];
+    // Legacy migration: before the split, profiles lived inside app-state.json and
+    // there was no profiles.json. If the split file is empty but app-state still
+    // carries the old array, adopt it and persist the split layout once below.
+    const legacy = Array.isArray(stateObj.profiles) ? stateObj.profiles : [];
+    const migrated = profiles.length === 0 && legacy.length > 0;
+    if (migrated) profiles = legacy;
+    const state = AppStateSchema.parse({ ...(stateObj as object), profiles });
     lastState = state;
+    if (migrated) await this.writeState(state);
     return state;
   },
   async writeState(state) {
     lastState = state;
-    await callJson("writeState", [], JSON.stringify(state));
+    const { profiles, ...rest } = state;
+    await Promise.all([
+      callJson("writeState", [], JSON.stringify({ ...rest, profiles: [] })),
+      callJson("writeProfiles", [], JSON.stringify(profiles)),
+    ]);
   },
 
   async fetchSubscription(url, opts) {
