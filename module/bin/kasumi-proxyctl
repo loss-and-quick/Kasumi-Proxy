@@ -215,6 +215,64 @@ convert_dat_to_srs() {
     esac
 }
 
+# download_asset_impl <filename> <mode> <url>
+# Download an asset file into DATADIR honouring the update mode:
+#   proxy  — only through the running core's SOCKS proxy
+#   direct — only over the default route
+#   auto   — try proxy first (if the core is up), fall back to direct
+# Sets DOWNLOAD_ERROR on failure.
+download_asset_impl() {
+    DOWNLOAD_ERROR=""
+    local filename="$1" mode="${2:-auto}" url="$3" dest tmp socks
+    case "$filename" in
+        ''|*/*|*'..'*|*\"*|*\\*) DOWNLOAD_ERROR="invalid filename"; return 1 ;;
+    esac
+    case "$mode" in
+        auto|proxy|direct) ;;
+        *) mode="auto" ;;
+    esac
+    if ! command -v curl >/dev/null 2>&1; then
+        DOWNLOAD_ERROR="curl not available"
+        return 1
+    fi
+    dest="$DATADIR/$filename"
+    tmp="$dest.tmp.$$"
+    socks="127.0.0.1:$(read_socks_port "$SOCKS_PORT_FILE")"
+    if [ "$mode" = "proxy" ]; then
+        if ! is_running "$PIDFILE" "$BINDIR"; then
+            DOWNLOAD_ERROR="proxy not running"
+            return 1
+        fi
+        if curl -fsSL --max-time 60 --socks5 "$socks" "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
+            return 0
+        fi
+        rm -f "$tmp" 2>/dev/null
+        DOWNLOAD_ERROR="proxy download failed"
+        return 1
+    fi
+    if [ "$mode" = "direct" ]; then
+        if curl -fsSL --max-time 60 "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
+            return 0
+        fi
+        rm -f "$tmp" 2>/dev/null
+        DOWNLOAD_ERROR="direct download failed"
+        return 1
+    fi
+    # auto: proxy first (when the core is up), then direct
+    if is_running "$PIDFILE" "$BINDIR"; then
+        if curl -fsSL --max-time 60 --socks5 "$socks" "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
+            return 0
+        fi
+        rm -f "$tmp" 2>/dev/null
+    fi
+    if curl -fsSL --max-time 60 "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
+        return 0
+    fi
+    rm -f "$tmp" 2>/dev/null
+    DOWNLOAD_ERROR="download failed"
+    return 1
+}
+
 emit_status() { # [error] [forced_state]
     local status_error="$1" forced_state="$2" state sstate active up down up_secs core
     sstate=$(cat "$SERVICE_STATE_FILE" 2>/dev/null)
