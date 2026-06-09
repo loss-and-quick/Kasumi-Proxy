@@ -96,6 +96,7 @@ export const AdvancedSettingsSchema = z.object({
   coreByProtocol: z.partialRecord(z.enum(PROTOCOLS), CoreEngine).default({}),
   appCaptureMode: z.enum(["all", "none"]).default("all"),
   appFilter: z.record(z.string(), z.enum(["force-proxy", "bypass"])).default({}),
+  dedupOnUpdate: z.boolean().default(false),
 });
 
 export const AppStateSchema = z.object({

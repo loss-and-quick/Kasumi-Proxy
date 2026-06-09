@@ -339,6 +339,8 @@ const zh = {
   "settings.speedConcurrencySub": "并行测速数量 (1–5)",
   "settings.autoStart": "开机自启",
   "settings.autoStartSub": "设备启动时自动启动代理",
+  "settings.dedupOnUpdate": "订阅更新后去重",
+  "settings.dedupOnUpdateSub": "每次订阅更新后自动删除重复的配置文件",
   "settings.xudpConcurrency": "XUDP 并发数",
   "settings.quicInMux": "MUX 隧道中的 QUIC",
   "settings.quicReject": "拒绝",

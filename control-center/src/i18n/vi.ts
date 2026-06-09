@@ -338,6 +338,8 @@ const vi = {
   "settings.speedConcurrencySub": "Kiểm tra tốc độ song song (1–5)",
   "settings.autoStart": "Tự khởi động khi bật máy",
   "settings.autoStartSub": "Tự động chạy proxy khi thiết bị khởi động",
+  "settings.dedupOnUpdate": "Loại bỏ trùng lặp sau cập nhật sub",
+  "settings.dedupOnUpdateSub": "Tự động xóa các hồ sơ trùng lặp sau mỗi lần cập nhật subscription",
   "settings.xudpConcurrency": "Đồng thời XUDP",
   "settings.quicInMux": "QUIC trong đường hầm mux",
   "settings.quicReject": "Từ chối",

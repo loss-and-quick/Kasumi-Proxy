@@ -248,6 +248,7 @@ export const SETTINGS_SEED = {
   appCaptureMode: "all" as "all" | "none",
   appFilter: {} as Record<string, "force-proxy" | "bypass">,
   logRotateMaxKb: 512,
+  dedupOnUpdate: false,
 } as const;
 
 export function seedAppState(): AppState {

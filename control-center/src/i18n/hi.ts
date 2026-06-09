@@ -336,6 +336,8 @@ const hi = {
   "settings.speedConcurrencySub": "समानांतर स्पीड टेस्ट (1–5)",
   "settings.autoStart": "बूट पर ऑटो-स्टार्ट",
   "settings.autoStartSub": "डिवाइस बूट होने पर प्रॉक्सी स्वतः शुरू करें",
+  "settings.dedupOnUpdate": "सब अपडेट पर डुप्लिकेट हटाएं",
+  "settings.dedupOnUpdateSub": "प्रत्येक सब्सक्रिप्शन अपडेट के बाद स्वचालित रूप से डुप्लिकेट प्रोफाइल हटाएं",
   "settings.xudpConcurrency": "XUDP concurrency",
   "settings.quicInMux": "mux टनल में QUIC",
   "settings.quicReject": "अस्वीकार करें",

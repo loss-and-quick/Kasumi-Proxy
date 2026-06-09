@@ -426,6 +426,8 @@ const ar = {
   "settings.speedConcurrencySub": "اختبارات السرعة المتوازية (1–5)",
   "settings.autoStart": "بدء تلقائي عند الإقلاع",
   "settings.autoStartSub": "تشغيل الوكيل تلقائيًا عند إقلاع الجهاز",
+  "settings.dedupOnUpdate": "إزالة التكرار بعد تحديث الاشتراك",
+  "settings.dedupOnUpdateSub": "إزالة الملفات الشخصية المكررة تلقائيًا بعد كل تحديث للاشتراك",
   "settings.xudpConcurrency": "توازي XUDP",
   "settings.quicInMux": "QUIC داخل نفق mux",
   "settings.quicReject": "رفض",

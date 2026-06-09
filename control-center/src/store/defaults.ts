@@ -26,6 +26,7 @@ export const EMPTY_SETTINGS: AdvancedSettings = {
   appCaptureMode: "all",
   appFilter: {},
   logRotateMaxKb: 512,
+  dedupOnUpdate: false,
 };
 
 export function mergeSettings(settings?: Partial<AdvancedSettings>): AdvancedSettings {
