@@ -24,6 +24,7 @@ BINDIR="${SCRIPT%/*}"
 MODDIR="${BINDIR%/*}"
 DATADIR="/data/adb/kasumi-proxy"
 STATE="$DATADIR/app-state.json"
+PROFILES="$DATADIR/profiles.json"
 CONFIG="$DATADIR/config.json"
 SINGBOX_CONFIG="$DATADIR/singbox.json"
 ENGINE_FILE="$DATADIR/engine"
@@ -316,6 +317,18 @@ case "$method" in
             echo '{"ok":true}'
         else
             echo '{"ok":false,"error":"invalid state payload"}'; exit 1
+        fi
+        ;;
+
+    readProfiles)
+        if [ -f "$PROFILES" ]; then cat "$PROFILES"; else echo '[]'; fi
+        ;;
+
+    writeProfiles)
+        if atomic_write_json "$PROFILES"; then
+            echo '{"ok":true}'
+        else
+            echo '{"ok":false,"error":"invalid profiles payload"}'; exit 1
         fi
         ;;
 

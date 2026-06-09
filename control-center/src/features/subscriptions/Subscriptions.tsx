@@ -103,10 +103,14 @@ export default function Subscriptions() {
         onNewGroup={addGroup}
         defaultGroupId={groups[0]?.id ?? "g-main"}
         onClose={() => setEdit(null)}
-        onSave={(data) => {
-          upsertSub(data);
-          setEdit(null);
-          notify(edit === "new" ? t("subs.added") : t("subs.saved"));
+        onSave={async (data) => {
+          try {
+            await upsertSub(data);
+            setEdit(null);
+            notify(edit === "new" ? t("subs.added") : t("subs.saved"));
+          } catch (e) {
+            notify(t("store.service.error", { error: String(e instanceof Error ? e.message : e) }));
+          }
         }}
       />
 
@@ -286,7 +290,7 @@ function SubEditSheet({
   open: boolean;
   sub: Subscription | null;
   onClose: () => void;
-  onSave: (sub: Subscription) => void;
+  onSave: (sub: Subscription) => Promise<void>;
   onNewGroup: (name: string) => Promise<string>;
   defaultGroupId: string;
 }) {

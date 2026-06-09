@@ -18,12 +18,46 @@ declare global {
       toast?: unknown;
       moduleInfo?: unknown;
       exit?: unknown;
+      // File I/O bridge (KernelSU-Next). Both run a root `cat` under the hood but
+      // pass the payload as a JNI method argument / return value, so they sidestep
+      // the shell argv length limit (MAX_ARG_STRLEN) that breaks large `exec` calls.
+      readFile?: (path: string) => string;
+      writeFile?: (path: string, content: string) => boolean;
     };
   }
 }
 
 export function hasKsuNativeApi(): boolean {
   return typeof window !== "undefined" && typeof window.ksu?.exec === "function";
+}
+
+/** Whether the native file I/O bridge (readFile/writeFile) is available. */
+export function hasKsuFileApi(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.ksu?.readFile === "function" &&
+    typeof window.ksu?.writeFile === "function"
+  );
+}
+
+/** Read a file as root via the native bridge. Returns "" if missing/unreadable. */
+export function readFileNative(path: string): string {
+  if (typeof window.ksu?.readFile !== "function")
+    throw new Error("readFileNative: ksu.readFile unavailable");
+  return window.ksu.readFile(path);
+}
+
+/**
+ * Write a file as root via the native bridge. The content travels as a JNI
+ * argument (not in a shell command), so there is no payload size limit.
+ * Note: KernelSU-Next's writeFile returns false even on success (its `cat`
+ * produces no stdout), so the boolean return is intentionally ignored — callers
+ * verify success via the subsequent exec instead.
+ */
+export function writeFileNative(path: string, content: string): void {
+  if (typeof window.ksu?.writeFile !== "function")
+    throw new Error("writeFileNative: ksu.writeFile unavailable");
+  window.ksu.writeFile(path, content);
 }
 
 export function hasCgiToken(): boolean {

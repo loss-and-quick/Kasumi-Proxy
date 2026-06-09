@@ -107,10 +107,13 @@ function makeBackend() {
   const assignedPorts: number[] = [];
 
   function parseCommand(cmd: string): { method: string; args: string[] } {
-    const pipeIdx = cmd.lastIndexOf("| ");
-    const rest = pipeIdx !== -1 && cmd.includes("base64 -d") ? cmd.slice(pipeIdx + 2) : cmd;
-    const trimmed = rest.replace(/^.*kasumi-proxyctl\s+/, "").trim();
-    const parts = trimmed.split(/\s+/).map((t) => t.replace(/^'(.*)'$/, "$1"));
+    if (!cmd.includes("kasumi-proxyctl")) return { method: "", args: [] };
+    const m = cmd.match(/kasumi-proxyctl\s+(.*?)(?:\s*[<;}\n]|$)/);
+    if (!m) return { method: "", args: [] };
+    const parts = m[1]
+      .trim()
+      .split(/\s+/)
+      .map((t) => t.replace(/^'(.*)'$/, "$1"));
     const [method, ...args] = parts;
     return { method, args };
   }
@@ -143,7 +146,10 @@ function makeBackend() {
     if (method === "speedtestStatus")
       return { errno: 0, stdout: JSON.stringify({ state: "done", bps: 1_000_000 }), stderr: "" };
 
-    if (method === "readState") return { errno: 0, stdout: JSON.stringify(FAKE_STATE), stderr: "" };
+    if (method === "readState")
+      return { errno: 0, stdout: JSON.stringify({ ...FAKE_STATE, profiles: [] }), stderr: "" };
+    if (method === "readProfiles")
+      return { errno: 0, stdout: JSON.stringify(FAKE_STATE.profiles), stderr: "" };
 
     return { errno: 0, stdout: JSON.stringify({ ok: true }), stderr: "" };
   });
@@ -162,10 +168,18 @@ describe("ksuBridge port allocation", () => {
   async function loadBridge(execNative: ReturnType<typeof vi.fn>) {
     vi.doMock("../ksu-webui", () => ({
       hasKsuNativeApi: () => true,
+      hasKsuFileApi: () => true,
       hasCgiToken: () => false,
       getRuntimeBridgeMode: () => "ksu",
       getModuleId: () => "kasumi-proxy",
       execNative,
+      // readState reads the data files directly via the native bridge.
+      readFileNative: (path: string) =>
+        path.includes("profiles.json")
+          ? JSON.stringify(FAKE_STATE.profiles)
+          : JSON.stringify({ ...FAKE_STATE, profiles: [] }),
+      // runWithStdin stages the stdin payload via writeFile (return value unused).
+      writeFileNative: vi.fn(),
       ksuListApps: vi.fn(async () => []),
     }));
     vi.doMock("../singbox-config", () => ({ buildSingboxConfigJSON: () => '{"fake":"sb"}' }));
