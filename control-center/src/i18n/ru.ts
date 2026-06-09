@@ -356,6 +356,9 @@ const ru = {
   "settings.speedConcurrencySub": "Параллельные тесты скорости (1–5)",
   "settings.autoStart": "Автозапуск при загрузке",
   "settings.autoStartSub": "Запускать прокси автоматически при загрузке устройства",
+  "settings.dedupOnUpdate": "Дедупликация при обновлении подписки",
+  "settings.dedupOnUpdateSub":
+    "Автоматически удалять дубликаты профилей после каждого обновления подписки",
   "settings.xudpConcurrency": "XUDP concurrency",
   "settings.quicInMux": "QUIC в mux-туннеле",
   "settings.quicReject": "Отклонять",

@@ -754,6 +754,9 @@ export const useAppStore = create<Store>((set, get) => {
             }),
           );
         }
+        if (get().settings.dedupOnUpdate) {
+          await get().removeDuplicates(sub.groupId);
+        }
         pushActivity("cloud_sync", translateCurrent("activity.subUpdated", { name: sub.remarks }));
       } catch (e: unknown) {
         patch((s) => ({
@@ -817,6 +820,9 @@ export const useAppStore = create<Store>((set, get) => {
               set({ busy: false });
               await get().refreshStatus();
             }
+          }
+          if (get().settings.dedupOnUpdate) {
+            await get().removeDuplicates(sub.groupId);
           }
           pushActivity(
             "cloud_sync",

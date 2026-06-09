@@ -348,6 +348,8 @@ const en = {
   "settings.speedConcurrencySub": "Parallel speed tests (1–5)",
   "settings.autoStart": "Auto-start on boot",
   "settings.autoStartSub": "Start the proxy automatically when the device boots",
+  "settings.dedupOnUpdate": "Dedup on sub update",
+  "settings.dedupOnUpdateSub": "Remove duplicate profiles after each subscription update",
   "settings.xudpConcurrency": "XUDP concurrency",
   "settings.quicInMux": "QUIC in mux tunnel",
   "settings.quicReject": "Reject",

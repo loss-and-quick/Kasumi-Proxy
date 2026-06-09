@@ -341,6 +341,9 @@ const pt = {
   "settings.speedConcurrencySub": "Testes de velocidade paralelos (1–5)",
   "settings.autoStart": "Início automático",
   "settings.autoStartSub": "Iniciar o proxy automaticamente ao ligar o dispositivo",
+  "settings.dedupOnUpdate": "Dedup ao atualizar sub",
+  "settings.dedupOnUpdateSub":
+    "Remover perfis duplicados automaticamente após cada atualização de assinatura",
   "settings.xudpConcurrency": "Concorrência XUDP",
   "settings.quicInMux": "QUIC no túnel mux",
   "settings.quicReject": "Rejeitar",

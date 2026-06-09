@@ -26,6 +26,13 @@ export function SystemSection({
           on={settings.autoStart ?? true}
           onChange={(value) => set("autoStart", value)}
         />
+        <RowToggle
+          icon="content_cut"
+          title={t("settings.dedupOnUpdate")}
+          sub={t("settings.dedupOnUpdateSub")}
+          on={settings.dedupOnUpdate ?? false}
+          onChange={(value) => set("dedupOnUpdate", value)}
+        />
         <ListRow
           icon="backup"
           title={t("settings.backup")}
