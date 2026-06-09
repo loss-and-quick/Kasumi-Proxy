@@ -21,19 +21,41 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for commits in last 24h
+      - name: Check whether a nightly build is warranted
         id: check
         run: |
-          count=$(git log --oneline --since="24 hours ago" -- \
-            'module/*.sh' \
-            'module/bin/kasumi-proxyctl' \
-            'module/webroot/cgi-bin/' \
-            'control-center/src/' \
-            'scripts/fetch-bin.sh' \
-            'scripts/package-release.sh' \
-            2>/dev/null | wc -l)
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          [ "$count" -gt 0 ] && echo "skip=false" >> "$GITHUB_OUTPUT" || echo "skip=true" >> "$GITHUB_OUTPUT"
+          # Paths whose changes actually affect the shipped artifact (docs/ci/chore
+          # commits must not trigger a nightly). Kept in sync with release.yml.
+          paths=(
+            'module/*.sh'
+            'module/bin/kasumi-proxyctl'
+            'module/webroot/cgi-bin/'
+            'control-center/src/'
+            'scripts/fetch-bin.sh'
+            'scripts/package-release.sh'
+          )
+
+          # Code commits in the last 24h — keeps the nightly tied to recent work.
+          recent=$(git log --oneline --since="24 hours ago" -- "${paths[@]}" 2>/dev/null | wc -l)
+
+          # Code commits since the last release tag. Without this a build still
+          # fires when commits landed during the day *and* a release was cut after
+          # them: those commits are within 24h, but the release already shipped
+          # everything, so last_tag..HEAD has nothing new to build.
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$last_tag" ]; then
+            since_release=$recent
+          else
+            since_release=$(git log "$last_tag"..HEAD --oneline -- "${paths[@]}" 2>/dev/null | wc -l)
+          fi
+
+          echo "recent=$recent" >> "$GITHUB_OUTPUT"
+          echo "since_release=$since_release" >> "$GITHUB_OUTPUT"
+          if [ "$recent" -gt 0 ] && [ "$since_release" -gt 0 ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Bun
         if: steps.check.outputs.skip != 'true'
