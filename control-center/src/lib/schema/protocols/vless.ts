@@ -17,7 +17,12 @@ export const VlessObj = z.object({
   ...transportShape,
   ...tlsShape,
   protocol: z.literal("vless"),
-  uuid: z.guid({ error: "Must be a valid UUID" }),
+  uuid: z
+    .string()
+    .regex(
+      /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+      "UUID required",
+    ),
   flow: Flow.default(""),
   encryption: z.string().default("none"),
   packetEncoding: PacketEncoding.default(""),
