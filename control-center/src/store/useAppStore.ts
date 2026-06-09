@@ -473,67 +473,69 @@ export const useAppStore = create<Store>((set, get) => {
         set((s) => ({ speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)) }));
       }
     },
+    // Batch tests run their concurrency + port allocation inside the bridge
+    // (so the on-demand test cores never collide on a SOCKS port — see
+    // ksu-bridge realPingAll). The bridge streams each profile's result back
+    // via the callback the moment it resolves, so we update that one profile
+    // and clear its spinner progressively instead of waiting for the whole run.
     async pingAll() {
       if (get().pinging.size) return;
-      get().notify(translateCurrent("store.ping.started"));
       const ids = get().profiles.map((p) => p.id);
+      if (!ids.length) return;
+      get().notify(translateCurrent("store.ping.started"));
       set({ pinging: new Set(ids) });
       try {
-        const result = await bridge.pingAll();
-        set((s) => ({
-          profiles: s.profiles.map((p) => ({ ...p, ping: result[p.id] ?? p.ping })),
-          pinging: new Set(),
-        }));
-      } catch {
+        await bridge.pingAll((id, ms) => {
+          set((s) => ({
+            profiles: s.profiles.map((p) => (p.id === id ? { ...p, ping: ms || null } : p)),
+            pinging: new Set([...s.pinging].filter((x) => x !== id)),
+          }));
+        });
+      } finally {
         set({ pinging: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
-      pushActivity(
-        "speed",
-        translateCurrent("activity.pingComplete", { count: get().profiles.length }),
-      );
+      pushActivity("speed", translateCurrent("activity.pingComplete", { count: ids.length }));
     },
 
     async realPingAll() {
       if (get().pinging.size) return;
-      get().notify(translateCurrent("store.ping.started"));
       const ids = get().profiles.map((p) => p.id);
+      if (!ids.length) return;
+      get().notify(translateCurrent("store.ping.started"));
       set({ pinging: new Set(ids) });
       try {
-        const result = await bridge.realPingAll();
-        set((s) => ({
-          profiles: s.profiles.map((p) => ({ ...p, ping: result[p.id] ?? p.ping })),
-          pinging: new Set(),
-        }));
-      } catch {
+        await bridge.realPingAll((id, ms) => {
+          set((s) => ({
+            profiles: s.profiles.map((p) => (p.id === id ? { ...p, ping: ms } : p)),
+            pinging: new Set([...s.pinging].filter((x) => x !== id)),
+          }));
+        });
+      } finally {
         set({ pinging: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
-      pushActivity(
-        "speed",
-        translateCurrent("activity.pingComplete", { count: get().profiles.length }),
-      );
+      pushActivity("speed", translateCurrent("activity.pingComplete", { count: ids.length }));
     },
 
     async speedTestAll() {
       if (get().speedTesting.size) return;
-      get().notify(translateCurrent("store.ping.started"));
       const ids = get().profiles.map((p) => p.id);
+      if (!ids.length) return;
+      get().notify(translateCurrent("store.ping.started"));
       set({ speedTesting: new Set(ids) });
       try {
-        const result = await bridge.speedTestAll();
-        set((s) => ({
-          profiles: s.profiles.map((p) => ({ ...p, speed: result[p.id] ?? p.speed })),
-          speedTesting: new Set(),
-        }));
-      } catch {
+        await bridge.speedTestAll((id, bps) => {
+          set((s) => ({
+            profiles: s.profiles.map((p) => (p.id === id ? { ...p, speed: bps } : p)),
+            speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)),
+          }));
+        });
+      } finally {
         set({ speedTesting: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
-      pushActivity(
-        "speed",
-        translateCurrent("activity.speedTestComplete", { count: get().profiles.length }),
-      );
+      pushActivity("speed", translateCurrent("activity.speedTestComplete", { count: ids.length }));
     },
 
     async removeUnreachable() {

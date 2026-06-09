@@ -142,18 +142,22 @@ export const mockBridge: Bridge = {
     return ms;
   },
 
-  async pingAll(): Promise<Record<string, number>> {
+  async pingAll(onResult?: (id: string, value: number) => void): Promise<Record<string, number>> {
     const results: Record<string, number> = {};
-    const promises = state.profiles.map(async (p) => {
-      const ms = simPing();
-      results[p.id] = ms;
-      return { id: p.id, ms };
-    });
-    await Promise.all(promises);
-    state.profiles = state.profiles.map((p) => ({
-      ...p,
-      ping: results[p.id] ?? p.ping,
-    }));
+    const profiles = [...state.profiles];
+    const CONCURRENCY = 10;
+    let i = 0;
+    const worker = async () => {
+      while (i < profiles.length) {
+        const p = profiles[i++];
+        await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
+        const ms = simPing();
+        results[p.id] = ms;
+        state.profiles = state.profiles.map((x) => (x.id === p.id ? { ...x, ping: ms } : x));
+        onResult?.(p.id, ms);
+      }
+    };
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
     return results;
   },
 
@@ -164,7 +168,9 @@ export const mockBridge: Bridge = {
     return ms;
   },
 
-  async realPingAll(): Promise<Record<string, number>> {
+  async realPingAll(
+    onResult?: (id: string, value: number) => void,
+  ): Promise<Record<string, number>> {
     const results: Record<string, number> = {};
     const CONCURRENCY = 3;
     const profiles = [...state.profiles];
@@ -173,11 +179,13 @@ export const mockBridge: Bridge = {
       while (i < profiles.length) {
         const p = profiles[i++];
         await new Promise((r) => setTimeout(r, 400 + Math.random() * 600));
-        results[p.id] = Math.random() < 0.15 ? -1 : simPing();
+        const ms = Math.random() < 0.15 ? -1 : simPing();
+        results[p.id] = ms;
+        state.profiles = state.profiles.map((x) => (x.id === p.id ? { ...x, ping: ms } : x));
+        onResult?.(p.id, ms);
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-    state.profiles = state.profiles.map((p) => ({ ...p, ping: results[p.id] ?? p.ping }));
     return results;
   },
 
@@ -187,10 +195,14 @@ export const mockBridge: Bridge = {
     return bps;
   },
 
-  async speedTestAll(): Promise<Record<string, number>> {
+  async speedTestAll(
+    onResult?: (id: string, value: number) => void,
+  ): Promise<Record<string, number>> {
     const results: Record<string, number> = {};
     for (const p of state.profiles) {
-      results[p.id] = await this.speedTest(p.id);
+      const bps = await this.speedTest(p.id);
+      results[p.id] = bps;
+      onResult?.(p.id, bps);
     }
     return results;
   },
