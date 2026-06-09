@@ -11,6 +11,7 @@ import {
   Icon,
   IconBtn,
   ProtoTag,
+  pingLabel,
   SectionLabel,
 } from "../../components";
 import { useT } from "../../i18n";
@@ -201,7 +202,10 @@ export default function Overview({
               <Stat
                 icon="bolt"
                 label={t("overview.ping")}
-                value={active ? (active.ping == null ? "—" : `${active.ping} ms`) : "—"}
+                value={active ? pingLabel(active.ping) : "—"}
+                color={
+                  active && active.ping != null && active.ping < 0 ? "var(--error)" : undefined
+                }
               />
             </div>
           </div>
@@ -372,7 +376,7 @@ function Stat({
       </div>
       <div
         className="mono"
-        style={{ fontSize: 15, fontWeight: 600, marginTop: 3, whiteSpace: "nowrap" }}
+        style={{ fontSize: 15, fontWeight: 600, marginTop: 3, whiteSpace: "nowrap", color }}
       >
         {value}
       </div>
