@@ -408,8 +408,8 @@ const vi = {
   "backup.merge": "Gộp",
   "backup.replace": "Thay thế",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# hồ sơ", other: "# hồ sơ" }, runtime)} · ${pluralPart(Number(groups), { one: "# nhóm", other: "# nhóm" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# đăng ký", other: "# đăng ký" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# nhóm", other: "# nhóm" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# đăng ký", other: "# đăng ký" }, runtime)}`;
   },
   "backup.mergeHint":
     "Chế độ gộp sẽ nối thêm hồ sơ/nhóm/đăng ký đã nhập và chồng đè cài đặt. Chế độ thay thế sẽ ghi đè hoàn toàn trạng thái hiện tại.",

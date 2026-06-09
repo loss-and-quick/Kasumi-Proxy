@@ -411,8 +411,8 @@ const pt = {
   "backup.merge": "Mesclar",
   "backup.replace": "Substituir",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# perfil", other: "# perfis" }, runtime)} · ${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# assinatura", other: "# assinaturas" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# assinatura", other: "# assinaturas" }, runtime)}`;
   },
   "backup.mergeHint":
     "Mesclar adiciona perfis/grupos/assinaturas importados e sobrepõe as configurações. Substituir sobrescreve completamente o estado canônico atual.",

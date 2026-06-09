@@ -585,7 +585,7 @@ export const ksuBridge: Bridge = {
     const current = await this.readState();
     const merged: AppState =
       mode === "replace"
-        ? incoming
+        ? { ...incoming, profiles: current.profiles }
         : {
             ...current,
             profiles: [...current.profiles, ...incoming.profiles],

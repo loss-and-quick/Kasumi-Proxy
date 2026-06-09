@@ -408,8 +408,8 @@ const zh = {
   "backup.merge": "合并",
   "backup.replace": "替换",
   "backup.summary": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0, subscriptions = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# 个配置", other: "# 个配置" }, runtime)} · ${pluralPart(Number(groups), { one: "# 个分组", other: "# 个分组" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# 个订阅", other: "# 个订阅" }, runtime)}`;
+    const { groups = 0, subscriptions = 0 } = vars ?? {};
+    return `${pluralPart(Number(groups), { one: "# 个分组", other: "# 个分组" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# 个订阅", other: "# 个订阅" }, runtime)}`;
   },
   "backup.mergeHint": "合并会追加导入的配置/分组/订阅，并覆盖设置。替换会完整覆盖当前的规范状态。",
   "backup.invalidJson": "JSON 无效",

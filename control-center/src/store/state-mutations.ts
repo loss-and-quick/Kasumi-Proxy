@@ -114,7 +114,8 @@ export function mergeBackupState(
   mode: "merge" | "replace",
 ): AppState {
   if (mode === "replace") {
-    return { ...incoming, settings: mergeSettings(incoming.settings) };
+    // Keep current profiles — backups no longer include them
+    return { ...incoming, profiles: current.profiles, settings: mergeSettings(incoming.settings) };
   }
 
   return {
