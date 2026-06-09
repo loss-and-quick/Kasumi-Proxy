@@ -51,16 +51,15 @@ type RawProfile =
   | z.infer<typeof CustomObj>;
 
 /* ---------- cross-field rules ---------- */
-const TRANSPORT_NEEDS_PATH = ["ws", "grpc", "httpupgrade", "xhttp"];
+const TRANSPORT_NEEDS_PATH = ["ws", "httpupgrade", "xhttp"];
 
 function refineProfile(p: RawProfile, ctx: z.RefinementCtx) {
   if ("network" in p && TRANSPORT_NEEDS_PATH.includes(p.network)) {
-    const pathish = p.network === "grpc" ? p.serviceName || p.path : p.path;
-    if (!pathish) {
+    if (!p.path) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: [p.network === "grpc" ? "serviceName" : "path"],
-        message: p.network === "grpc" ? "serviceName required" : "Path required",
+        path: ["path"],
+        message: "Path required",
       });
     }
   }
