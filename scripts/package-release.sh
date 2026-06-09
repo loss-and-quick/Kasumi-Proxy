@@ -62,7 +62,7 @@ rm -f "$OUT"
 # build and bin/* cores are produced by the steps above; cgi-bin/exec is kept.
 (cd "$ROOT/module" && zip -r -q "$OUT" \
 	META-INF \
-	bin/arm64-v8a bin/x86_64 bin/kasumi-proxyctl bin/README.md bin/LICENSE \
+	bin/arm64-v8a bin/x86_64 bin/kasumi-proxyctl bin/utils.sh bin/README.md bin/LICENSE \
 	webroot \
 	module.prop customize.sh service.sh proxy_control.sh action.sh uninstall.sh \
 	-x '*.DS_Store')

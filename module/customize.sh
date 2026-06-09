@@ -30,6 +30,7 @@ unzip -j -o "$ZIPFILE" "proxy_control.sh" -d "$MODPATH"
 unzip -j -o "$ZIPFILE" "service.sh" -d "$MODPATH"
 unzip -j -o "$ZIPFILE" "action.sh" -d "$MODPATH"
 unzip -j -o "$ZIPFILE" "bin/kasumi-proxyctl" -d "$MODPATH/bin"
+unzip -j -o "$ZIPFILE" "bin/utils.sh" -d "$MODPATH/bin"
 unzip -j -o "$ZIPFILE" "module.prop" -d "$MODPATH"
 
 # 4. Enforce strict executable permissions natively
