@@ -55,27 +55,27 @@ export const AssetFileSchema = z.object({
 export const AdvancedSettingsSchema = z.object({
   routingMode: z.preprocess(
     (v) => (v === "bypass-lan" ? "global" : v),
-    z.enum(["global", "custom", "rules"]),
+    z.enum(["global", "custom", "rules"]).default("global"),
   ),
-  domainSniffing: z.boolean(),
-  routeOnly: z.boolean(),
+  domainSniffing: z.boolean().default(true),
+  routeOnly: z.boolean().default(false),
   domainStrategy: z.enum(["AsIs", "IPIfNonMatch", "IPOnDemand"]).default("IPIfNonMatch"),
   domainStrategy4Singbox: z
     .enum(["prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only"])
     .default("prefer_ipv4"),
-  dnsViaProxy: z.boolean(),
-  fakeDns: z.boolean(),
-  preferIpv6: z.boolean(),
-  mux: z.boolean(),
-  muxConcurrency: z.coerce.number().int().min(1),
+  dnsViaProxy: z.boolean().default(true),
+  fakeDns: z.boolean().default(false),
+  preferIpv6: z.boolean().default(false),
+  mux: z.boolean().default(false),
+  muxConcurrency: z.coerce.number().int().min(1).default(8),
   pingConcurrency: z.coerce.number().int().min(1).max(20).default(3),
   speedConcurrency: z.coerce.number().int().min(1).max(5).default(1),
   autoStart: z.boolean().default(true),
   muxXudpConcurrency: z.coerce.number().int().optional(),
   muxXudp443: z.enum(["reject", "proxy"]).optional(),
-  fragment: z.boolean(),
-  fragmentPackets: z.string(),
-  mtu: z.coerce.number().int().min(1),
+  fragment: z.boolean().default(false),
+  fragmentPackets: z.string().default("tlshello"),
+  mtu: z.coerce.number().int().min(1).default(1350),
   fragmentLength: z.string().optional(),
   fragmentDelay: z.string().optional(),
   logLevel: z.enum(["debug", "info", "warning", "error", "none"]).optional(),
@@ -99,7 +99,24 @@ export const AdvancedSettingsSchema = z.object({
 });
 
 export const AppStateSchema = z.object({
-  profiles: z.array(ProfileSchema).default([]),
+  // Invalid profiles are dropped (not fatal) so one bad entry from a public
+  // subscription can't brick the whole app. Each drop is logged with its reason
+  // for debugging; the import flow surfaces a skipped-count to the user.
+  profiles: z
+    .array(z.unknown())
+    .default([])
+    .transform((arr) =>
+      arr.flatMap((p) => {
+        const r = ProfileSchema.safeParse(p);
+        if (r.success) return [r.data];
+        const label =
+          (p && typeof p === "object" && "remarks" in p && (p as { remarks?: unknown }).remarks) ||
+          (p && typeof p === "object" && "id" in p && (p as { id?: unknown }).id) ||
+          "?";
+        console.warn(`[KP] skipped invalid profile "${String(label)}":`, r.error.issues);
+        return [];
+      }),
+    ),
   groups: z.array(GroupSchema),
   subscriptions: z.array(SubscriptionSchema),
   routingRules: z.array(RoutingRuleSchema).default([]),

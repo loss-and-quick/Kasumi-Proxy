@@ -671,6 +671,7 @@ const hi = {
   "store.backup.invalidStructure": "अमान्य बैकअप संरचना",
   "store.backup.restored": "बैकअप पुनर्स्थापित किया गया",
   "store.backup.merged": "बैकअप मर्ज किया गया",
+  "store.backup.profilesSkipped": "{count} अमान्य प्रोफ़ाइल छोड़ी गईं",
 
   // app filter
   "appFilter.title": "ऐप फ़िल्टर",

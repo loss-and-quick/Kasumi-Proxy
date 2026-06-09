@@ -673,6 +673,7 @@ const vi = {
   "store.backup.invalidStructure": "Cấu trúc sao lưu không hợp lệ",
   "store.backup.restored": "Đã khôi phục bản sao lưu",
   "store.backup.merged": "Đã gộp bản sao lưu",
+  "store.backup.profilesSkipped": "Đã bỏ qua {count} hồ sơ không hợp lệ",
 
   // app filter
   "appFilter.title": "Lọc ứng dụng",

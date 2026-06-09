@@ -678,6 +678,7 @@ const es = {
   "store.backup.invalidStructure": "Estructura de copia no válida",
   "store.backup.restored": "Copia restaurada",
   "store.backup.merged": "Copia combinada",
+  "store.backup.profilesSkipped": "Se omitieron {count} perfiles no válidos",
 
   // app filter
   "appFilter.title": "Filtro de apps",

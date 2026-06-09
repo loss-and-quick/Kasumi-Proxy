@@ -671,6 +671,7 @@ const zh = {
   "store.backup.invalidStructure": "备份结构无效",
   "store.backup.restored": "备份已恢复",
   "store.backup.merged": "备份已合并",
+  "store.backup.profilesSkipped": "已跳过 {count} 个无效配置",
 
   // app filter
   "appFilter.title": "应用过滤",

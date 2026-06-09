@@ -863,6 +863,7 @@ const ar = {
   "store.backup.invalidStructure": "بنية النسخة الاحتياطية غير صالحة",
   "store.backup.restored": "تمت استعادة النسخة الاحتياطية",
   "store.backup.merged": "تم دمج النسخة الاحتياطية",
+  "store.backup.profilesSkipped": "تم تخطّي {count} ملفًا غير صالح",
 
   // app filter
   "appFilter.title": "تصفية التطبيقات",
