@@ -1017,10 +1017,12 @@ sub_list_active() {
 		int = field("interval")
 		ua  = field("userAgent")
 		ai  = ($0 ~ /"allowInsecure":true/) ? "1" : "0"
+		mode = field("updateMode")
+		if (mode != "proxy" && mode != "direct") mode = "auto"
 		if (id == "" || url == "" || int+0 <= 0) next
 		# path traversal guard
 		if (id ~ /\/|\.\./) next
-		print id "|" int "|" url "|" ua "|" ai
+		print id "|" int "|" url "|" ua "|" ai "|" mode
 	}
 	'
 }
@@ -1028,12 +1030,12 @@ sub_list_active() {
 sub_autoupdate_tick() {
 	mkdir -p "$SUBCACHE_DIR"
 	now=$(date +%s)
-	sub_list_active | while IFS='|' read -r s_id s_int s_url s_ua s_ai; do
+	sub_list_active | while IFS='|' read -r s_id s_int s_url s_ua s_ai s_mode; do
 		fetched=$(cat "$SUBCACHE_DIR/$s_id.fetched" 2>/dev/null)
 		case "$fetched" in '' | *[!0-9]*) fetched=0 ;; esac
 		[ "$((now - fetched))" -ge "$((s_int * 60))" ] || continue
 		tmp="$SUBCACHE_DIR/$s_id.raw.tmp"
-		if printf '%s' "$s_url" | "$BINDIR/kasumi-proxyctl" fetchSubscription "$s_ai" 0 "$s_ua" >"$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+		if printf '%s' "$s_url" | "$BINDIR/kasumi-proxyctl" fetchSubscription "$s_ai" "$s_mode" "$s_ua" >"$tmp" 2>/dev/null && [ -s "$tmp" ]; then
 			mv "$tmp" "$SUBCACHE_DIR/$s_id.raw"
 			printf '%s' "$now" >"$SUBCACHE_DIR/$s_id.fetched"
 			log_info "$STATE_FILE" "sub auto-update: fetched $s_id"

@@ -501,7 +501,8 @@ export const ksuBridge: Bridge = {
   async fetchSubscription(url, opts) {
     const allow = opts?.allowInsecure ? "1" : "0";
     const ua = opts?.userAgent ?? "";
-    const raw = await run("fetchSubscription", [allow, "1", ua], url);
+    const mode = opts?.mode ?? "auto";
+    const raw = await run("fetchSubscription", [allow, mode, ua], url);
     return (await import("./share")).parseShareLinks(raw);
   },
   async listSubCache() {

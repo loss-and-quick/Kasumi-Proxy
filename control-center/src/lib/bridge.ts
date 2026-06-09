@@ -87,7 +87,7 @@ export interface Bridge {
   // subscriptions
   fetchSubscription(
     url: string,
-    opts?: { userAgent?: string; allowInsecure?: boolean },
+    opts?: { userAgent?: string; allowInsecure?: boolean; mode?: ResourceUpdateMode },
   ): Promise<Profile[]>;
 
   // subscription auto-update cache: a backend daemon downloads raw subscription

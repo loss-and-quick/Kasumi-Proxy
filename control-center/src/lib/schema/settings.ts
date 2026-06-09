@@ -24,6 +24,7 @@ export const SubscriptionSchema = z.object({
   allowInsecure: z.boolean(),
   userAgent: z.string(),
   filter: z.string(),
+  updateMode: z.enum(["auto", "proxy", "direct"]).default("auto"),
   lastUpdated: z.string(),
   count: z.coerce.number().int().min(0),
   lastError: z.string().nullable().optional(),
