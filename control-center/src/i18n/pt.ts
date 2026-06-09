@@ -677,6 +677,7 @@ const pt = {
   "store.backup.invalidStructure": "Estrutura de backup inválida",
   "store.backup.restored": "Backup restaurado",
   "store.backup.merged": "Backup mesclado",
+  "store.backup.profilesSkipped": "{count} perfis inválidos ignorados",
 
   // app filter
   "appFilter.title": "Filtro de apps",

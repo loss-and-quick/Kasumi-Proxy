@@ -715,6 +715,7 @@ const ru = {
   "store.backup.invalidStructure": "Некорректная структура резервной копии",
   "store.backup.restored": "Резервная копия восстановлена",
   "store.backup.merged": "Резервная копия объединена",
+  "store.backup.profilesSkipped": "Пропущено {count} некорректных профилей",
 
   // app filter
   "appFilter.title": "Фильтр приложений",

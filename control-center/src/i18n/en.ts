@@ -701,6 +701,7 @@ const en = {
   "store.backup.invalidStructure": "Invalid backup structure",
   "store.backup.restored": "Backup restored",
   "store.backup.merged": "Backup merged",
+  "store.backup.profilesSkipped": "Skipped {count} invalid profiles",
 } satisfies Record<string, MessageValue>;
 
 export default en;
