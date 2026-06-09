@@ -1,4 +1,4 @@
-import { Card, EngineTag, Icon, Ping, ProtoTag, Speed } from "../../components";
+import { Card, EngineTag, Icon, Ping, ProtoTag, Speed, Spinner } from "../../components";
 import { useT } from "../../i18n";
 import { profileEndpointLabel, profileNetwork, profileSecurity } from "../../lib/profile";
 import type { Profile } from "../../lib/schema";
@@ -25,6 +25,8 @@ export function ProfileRow({
   onMore: () => void;
 }) {
   const settings = useAppStore((s) => s.settings);
+  const isPinging = useAppStore((s) => s.pinging.has(profile.id));
+  const isSpeedTesting = useAppStore((s) => s.speedTesting.has(profile.id));
   const engine = resolveCore(profile, settings);
   const t = useT();
 
@@ -128,10 +130,10 @@ export function ProfileRow({
           </div>
         </div>
         <div style={{ textAlign: "right", flex: "0 0 auto", paddingRight: 4 }}>
-          <Ping value={profile.ping} />
-          {profile.speed != null && (
+          {isPinging ? <Spinner /> : <Ping value={profile.ping} />}
+          {(isSpeedTesting || profile.speed != null) && (
             <div style={{ marginTop: 2 }}>
-              <Speed value={profile.speed} />
+              {isSpeedTesting ? <Spinner /> : <Speed value={profile.speed} />}
             </div>
           )}
         </div>

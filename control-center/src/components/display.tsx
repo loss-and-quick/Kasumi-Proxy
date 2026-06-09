@@ -1,6 +1,14 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Icon } from "./icons";
 
+export const Spinner = ({ size = 14 }: { size?: number }) => (
+  <Icon
+    name="autorenew"
+    className="spin"
+    style={{ fontSize: size, color: "var(--on-surface-variant)" }}
+  />
+);
+
 export const ProtoTag = ({ protocol }: { protocol: string }) => (
   <span className={`tag ${protocol}`}>{protocol}</span>
 );
@@ -10,7 +18,15 @@ export const EngineTag = ({ engine }: { engine: string }) => (
 );
 
 export function pingClass(v: number | null) {
-  return v == null || v < 0 ? "ping-na" : v < 120 ? "ping-good" : v < 220 ? "ping-mid" : "ping-bad";
+  return v == null
+    ? "ping-na"
+    : v < 0
+      ? "ping-bad"
+      : v < 120
+        ? "ping-good"
+        : v < 220
+          ? "ping-mid"
+          : "ping-bad";
 }
 
 export function pingLabel(v: number | null) {
@@ -32,7 +48,7 @@ export function speedLabel(bps: number | null | undefined): string {
 
 export const Speed = ({ value }: { value: number | null | undefined }) => (
   <span
-    className={`mono ${value == null || value < 0 ? "ping-na" : "ping-good"}`}
+    className={`mono ${value == null ? "ping-na" : value < 0 ? "ping-bad" : "ping-good"}`}
     style={{ fontSize: 12, fontWeight: 600 }}
   >
     {speedLabel(value)}
