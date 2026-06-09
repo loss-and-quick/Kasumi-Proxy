@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# shellcheck disable=SC3043,SC3045  # 'local' and 'read -t' are supported by Android's /system/bin/sh (mksh)
+# shellcheck disable=SC3043,SC3045  # 'local' / 'read -t' are mksh extensions, fine on Android's sh
 MODDIR=${0%/*}
 BINDIR="$MODDIR/bin"
 DATADIR="/data/adb/kasumi-proxy"
@@ -19,33 +19,172 @@ mkdir -p "$DATADIR"
 "$BINDIR/kasumi-proxyctl" rotateLogs
 exec >>"$DATADIR/service.log" 2>&1
 echo "service.sh started (pid=$$, moddir=$MODDIR)"
+# utils.sh sits next to this script under bin/; source-path=SCRIPTDIR makes the
+# directive resolve regardless of the dir shellcheck is invoked from.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=bin/utils.sh
+. "$BINDIR/utils.sh"
 
-# Logging helpers — respect logLevel from app-state.json
+# ============================================================
+# Local helpers — service.sh only. Shared primitives are in bin/utils.sh.
+# ============================================================
+
+# ---------- state file ----------
+
+# read_compact_state <state_file>
+read_compact_state() { tr -d '\r\n\t ' <"$1" 2>/dev/null; }
+
+# ---------- process ----------
+
+# pid_matches_any_core <pid> <bindir>
+pid_matches_any_core() {
+	pid_matches_bin "$1" "$2/xray" || pid_matches_bin "$1" "$2/sing-box"
+}
+
+# read_pidfile <pidfile>
+read_pidfile() {
+	local pid
+	[ -f "$1" ] || {
+		echo 0
+		return
+	}
+	pid=$(cat "$1" 2>/dev/null)
+	case "$pid" in '' | *[!0-9]*) echo 0 ;; *) echo "$pid" ;; esac
+}
+
+# kill_if_running <pid> <bin> <pidfile>
+kill_if_running() {
+	local pid="$1"
+	[ "$pid" -gt 0 ] || return 0
+	${2:+pid_matches_bin "$pid" "$2"} && kill -9 "$pid" 2>/dev/null
+	rm -f "$3"
+}
+
+# ---------- assets ----------
+
+# dat_fingerprint <file>
+dat_fingerprint() {
+	[ -f "$1" ] || return 0
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" 2>/dev/null | cut -d' ' -f1
+	elif command -v md5sum >/dev/null 2>&1; then
+		md5sum "$1" 2>/dev/null | cut -d' ' -f1
+	else
+		stat -c '%s-%Y' "$1" 2>/dev/null
+	fi
+}
+
+# ---------- logging ----------
+
+# _log_level_num <level>
 _log_level_num() {
 	case "$1" in debug) echo 0 ;; info) echo 1 ;; warning) echo 2 ;; error) echo 3 ;; none) echo 4 ;; *) echo 2 ;; esac
 }
+
+# read_log_level <state_file>
 read_log_level() {
-	[ -f "$STATE_FILE" ] || {
+	local compact lvl
+	[ -f "$1" ] || {
 		echo "warning"
 		return
 	}
-	compact=$(tr -d '\r\n\t ' <"$STATE_FILE" 2>/dev/null)
-	lvl=$(printf '%s' "$compact" | sed -n 's/.*"logLevel":"\([^"]*\)".*/\1/p' | head -n 1)
+	compact=$(read_compact_state "$1")
+	lvl=$(printf '%s' "$compact" | sed -n 's/.*"logLevel":"\([^"]*\)".*/\1/p' | head -n1)
 	case "$lvl" in debug | info | warning | error | none) echo "$lvl" ;; *) echo "warning" ;; esac
 }
+
+# log_debug/log_info/log_warn/log_error <state_file> <msg...>
 log_debug() {
-	[ "$(_log_level_num "$(read_log_level)")" -le 0 ] && echo "[DEBUG] $*"
+	local f="$1"
+	shift
+	[ "$(_log_level_num "$(read_log_level "$f")")" -le 0 ] && echo "[DEBUG] $*"
 	return 0
 }
 log_info() {
-	[ "$(_log_level_num "$(read_log_level)")" -le 1 ] && echo "[INFO]  $*"
+	local f="$1"
+	shift
+	[ "$(_log_level_num "$(read_log_level "$f")")" -le 1 ] && echo "[INFO]  $*"
 	return 0
 }
 log_warn() {
-	[ "$(_log_level_num "$(read_log_level)")" -le 2 ] && echo "[WARN]  $*"
+	local f="$1"
+	shift
+	[ "$(_log_level_num "$(read_log_level "$f")")" -le 2 ] && echo "[WARN]  $*"
 	return 0
 }
-log_error() { echo "[ERROR] $*"; }
+log_error() {
+	shift
+	echo "[ERROR] $*"
+}
+
+# ---------- state readers ----------
+
+# read_http_port <state_file>
+read_http_port() {
+	local compact p
+	[ -f "$1" ] || {
+		echo 10809
+		return
+	}
+	compact=$(read_compact_state "$1")
+	p=$(printf '%s' "$compact" | sed -n 's/.*"localHttpPort":\([0-9]*\).*/\1/p' | head -n1)
+	case "$p" in '' | *[!0-9]*) echo 10809 ;; *) echo "$p" ;; esac
+}
+
+# read_routing_mode <state_file>
+read_routing_mode() {
+	local compact mode
+	[ -f "$1" ] || {
+		echo "global"
+		return
+	}
+	compact=$(read_compact_state "$1")
+	mode=$(printf '%s' "$compact" | sed -n 's/.*"routingMode":"\([^"]*\)".*/\1/p' | head -n1)
+	case "$mode" in custom | rules) echo "$mode" ;; *) echo "global" ;; esac
+}
+
+# read_auto_start <state_file>
+read_auto_start() {
+	local compact val
+	[ -f "$1" ] || {
+		echo "true"
+		return
+	}
+	compact=$(read_compact_state "$1")
+	val=$(printf '%s' "$compact" | sed -n 's/.*"autoStart":\(true\|false\).*/\1/p' | head -n1)
+	case "$val" in false) echo "false" ;; *) echo "true" ;; esac
+}
+
+# has_force_proxy_app <state_file>
+has_force_proxy_app() {
+	local compact filter
+	[ -f "$1" ] || return 1
+	compact=$(read_compact_state "$1")
+	filter=$(printf '%s' "$compact" | sed -n 's/.*"appFilter":{\([^}]*\)}.*/\1/p' | head -n1)
+	case "$filter" in *'"force-proxy"'*) return 0 ;; *) return 1 ;; esac
+}
+
+# set_service_state <service_state_file> <state>
+set_service_state() { printf '%s' "$2" >"$1"; }
+
+# ---------- tun iface ----------
+
+# random_tun_iface — generate a random tun interface name
+random_tun_iface() {
+	local raw hex first lead tail
+	raw=$(cat /proc/sys/kernel/random/uuid 2>/dev/null)
+	[ -n "$raw" ] || raw="$(date +%s 2>/dev/null)$$"
+	hex=$(printf '%s%s' "$raw" "$(date +%s 2>/dev/null)$$abcdef12" | tr 'A-F' 'a-f' | tr -cd 'a-f0-9' | cut -c1-9)
+	first=$(printf '%s' "$hex" | cut -c1)
+	case "$first" in
+	0) lead=q ;; 1) lead=w ;; 2) lead=e ;; 3) lead=r ;; 4) lead=t ;;
+	5) lead=y ;; 6) lead=u ;; 7) lead=i ;; 8) lead=o ;; 9) lead=p ;;
+	a) lead=s ;; b) lead=d ;; c) lead=f ;; d) lead=g ;; e) lead=h ;;
+	*) lead=j ;;
+	esac
+	tail=$(printf '%s' "$hex" | cut -c2-9)
+	printf '%s%s\n' "$lead" "$tail"
+}
 
 PIDFILE="$MODDIR/run/core.pid"
 TUN2SOCKS_PIDFILE="$MODDIR/run/tun2socks.pid"
@@ -65,7 +204,7 @@ rm -rf "$MODDIR/run"
 mkdir -p "$MODDIR/run"
 mkfifo "$PIPE_FILE"
 mkfifo "$SUB_WAKE_PIPE"
-log_debug "control pipe ready: $PIPE_FILE"
+log_debug "$STATE_FILE" "control pipe ready: $PIPE_FILE"
 # Fresh boot: no core runs yet. Seed the lifecycle channel so a stale value from
 # the previous session can't make status lie before the first command lands.
 printf '%s' "stopped" >"$SERVICE_STATE_FILE"
@@ -82,26 +221,7 @@ FWMARK=255
 MARK_CHAIN="KASUMI_PROXY_MARK"
 LOCKED=0
 
-read_socks_port() {
-	if [ -f "$SOCKS_PORT_FILE" ]; then
-		p=$(cat "$SOCKS_PORT_FILE" 2>/dev/null)
-		case "$p" in '' | *[!0-9]*) echo 10808 ;; *) echo "$p" ;; esac
-	else
-		echo 10808
-	fi
-}
-
 # HTTP inbound port (xray http-in). Read from app-state.json; default 10809.
-read_http_port() {
-	if [ -f "$STATE_FILE" ]; then
-		compact=$(tr -d '\r\n\t ' <"$STATE_FILE" 2>/dev/null)
-		p=$(printf '%s' "$compact" | sed -n 's/.*"localHttpPort":\([0-9]*\).*/\1/p' | head -n 1)
-		case "$p" in '' | *[!0-9]*) echo 10809 ;; *) echo "$p" ;; esac
-	else
-		echo 10809
-	fi
-}
-
 # Hide the local proxy inbounds from bypass-mode apps only.
 # Apps going direct (bypass) must not be able to detect a running proxy by
 # probing loopback ports. All other apps may reach them normally.
@@ -109,8 +229,8 @@ read_http_port() {
 protect_local_ports() { # add|del
 	local action="$1"
 	local sp hp port uid mode
-	sp=$(read_socks_port)
-	hp=$(read_http_port)
+	sp=$(read_socks_port "$SOCKS_PORT_FILE")
+	hp=$(read_http_port "$STATE_FILE")
 	# First, always remove any per-uid rules to avoid stacking on repeated starts.
 	[ -z "$APP_FILTER_JSON" ] && return
 	printf '%s\n' "$APP_FILTER_JSON" | tr ',' '\n' | while IFS= read -r pair; do
@@ -130,43 +250,20 @@ protect_local_ports() { # add|del
 	done
 }
 
-# Which core the active profile selected (xray default). The UI writes this
-# marker via kasumi-proxyctl start; both cores launch as `<bin> run -c <cfg>`.
-read_engine() {
-	if [ -f "$ENGINE_FILE" ]; then
-		e=$(cat "$ENGINE_FILE" 2>/dev/null)
-		case "$e" in sing-box) echo "sing-box" ;; *) echo "xray" ;; esac
-	else
-		echo "xray"
-	fi
-}
-
 # Read app filter config from app-state.json.
 # Sets APP_CAPTURE_MODE (all|none) and APP_FILTER_JSON (raw object string).
 read_app_filter() {
 	APP_CAPTURE_MODE="all"
 	APP_FILTER_JSON=""
 	[ -f "$STATE_FILE" ] || return
-	compact=$(tr -d '\r\n\t ' <"$STATE_FILE" 2>/dev/null)
+	compact=$(read_compact_state "$STATE_FILE")
 	mode=$(printf '%s' "$compact" | sed -n 's/.*"appCaptureMode":"\([^"]*\)".*/\1/p' | head -n 1)
 	case "$mode" in none) APP_CAPTURE_MODE="none" ;; *) APP_CAPTURE_MODE="all" ;; esac
 	APP_FILTER_JSON=$(printf '%s' "$compact" | sed -n 's/.*"appFilter":{\([^}]*\)}.*/\1/p' | head -n 1)
 }
 
 # Resolve a package name -> every UID that owns it, one per Android profile.
-# An app installed in both the personal profile (user 0) and a work profile
-# (user 10, 11, …) has a DISTINCT uid per profile (≈ user*100000 + appId), and
-# each needs its own iptables --uid-owner rule — otherwise the app filter would
-# only ever cover the personal profile. We glob /data/user/<id>/<pkg>: /data/data
-# is just a bind to /data/user/0, so this also picks up the personal profile.
 # (No `pm` needed at runtime.) Output: newline-separated uids, possibly empty.
-pkg_to_uids() { # <pkg> -> uids
-	for d in /data/user/*/"$1"; do
-		[ -d "$d" ] || continue
-		stat -c '%u' "$d" 2>/dev/null
-	done | sort -u
-}
-
 # Append uid-owner mark rules for app filter.
 # Must be called after local exclusions, before the catch-all mark rules.
 append_app_uid_rules() { # <ipt> <chain>
@@ -190,46 +287,6 @@ append_app_uid_rules() { # <ipt> <chain>
 	done
 }
 
-# True when the active profile pins at least one app to force-proxy mode. The
-# second tun (xray: tun2socks2 + fwmark 2/table 101; sing-box: tun-force inbound)
-# only carries traffic then — without it nothing ever marks fwmark 2, so starting
-# it just leaves an idle tun device, process and routes behind.
-has_force_proxy_app() {
-	[ -f "$STATE_FILE" ] || return 1
-	compact=$(tr -d '\r\n\t ' <"$STATE_FILE" 2>/dev/null)
-	filter=$(printf '%s' "$compact" | sed -n 's/.*"appFilter":{\([^}]*\)}.*/\1/p' | head -n 1)
-	case "$filter" in
-	*'"force-proxy"'*) return 0 ;;
-	*) return 1 ;;
-	esac
-}
-
-read_routing_mode() {
-	if [ -f "$STATE_FILE" ]; then
-		compact=$(tr -d '\r\n\t ' <"$STATE_FILE" 2>/dev/null)
-		mode=$(printf '%s' "$compact" | sed -n 's/.*"routingMode":"\([^"]*\)".*/\1/p' | head -n 1)
-		case "$mode" in
-		custom | rules) echo "$mode" ;;
-		*) echo "global" ;;
-		esac
-	else
-		echo "global"
-	fi
-}
-
-# Read the autoStart flag from app-state.json. Defaults to "true" so a device
-# that has never written the setting keeps the prior boot behaviour. Returns
-# "true" or "false".
-read_auto_start() {
-	[ -f "$STATE_FILE" ] || {
-		echo "true"
-		return
-	}
-	compact=$(tr -d '\r\n\t ' <"$STATE_FILE" 2>/dev/null)
-	val=$(printf '%s' "$compact" | sed -n 's/.*"autoStart":\(true\|false\).*/\1/p' | head -n 1)
-	case "$val" in false) echo "false" ;; *) echo "true" ;; esac
-}
-
 append_local_ipv4_exclusions() { # <chain>
 	chain="$1"
 	$iptables -t mangle -A "$chain" -d 127.0.0.0/8 -j RETURN
@@ -247,28 +304,6 @@ append_local_ipv6_exclusions() { # <chain>
 	$ip6tables -t mangle -A "$chain" -d fc00::/7 -j RETURN
 	$ip6tables -t mangle -A "$chain" -d fe80::/10 -j RETURN
 	$ip6tables -t mangle -A "$chain" -d ff00::/8 -j RETURN
-}
-
-# Absolute path of the selected core binary (may not exist — caller checks).
-core_bin() {
-	case "$(read_engine)" in
-	sing-box) echo "$BINDIR/sing-box" ;;
-	*) echo "$BINDIR/xray" ;;
-	esac
-}
-
-# Fingerprint a .dat asset so we can tell whether its .srs outputs are current.
-# Prefer a content hash; fall back to size+mtime where no hash tool exists.
-dat_fingerprint() { # <file> -> string ("" if missing)
-	f="$1"
-	[ -f "$f" ] || return 0
-	if command -v sha256sum >/dev/null 2>&1; then
-		sha256sum "$f" 2>/dev/null | cut -d' ' -f1
-	elif command -v md5sum >/dev/null 2>&1; then
-		md5sum "$f" 2>/dev/null | cut -d' ' -f1
-	else
-		stat -c '%s-%Y' "$f" 2>/dev/null
-	fi
 }
 
 # Keep one geo asset kind (geoip|geosite) consistent between its .dat source and
@@ -298,14 +333,14 @@ sync_geo_asset() { # <kind: geoip|geosite>
 	if [ ! -f "$dat" ]; then
 		# No source: a .srs without its .dat must not survive — purge it.
 		if [ "$srs_present" = 1 ] || [ -f "$stamp" ]; then
-			log_warn "$kind.dat missing — removing orphaned ${prefix}*.srs"
+			log_warn "$STATE_FILE" "$kind.dat missing — removing orphaned ${prefix}*.srs"
 			rm -f "$DATADIR/$prefix"*.srs "$stamp"
 		fi
 		return 0
 	fi
 
 	if [ ! -x "$BINDIR/geodat2srs" ]; then
-		log_debug "geodat2srs not found, cannot convert $kind.dat"
+		log_debug "$STATE_FILE" "geodat2srs not found, cannot convert $kind.dat"
 		return 0
 	fi
 
@@ -314,11 +349,11 @@ sync_geo_asset() { # <kind: geoip|geosite>
 	[ -f "$stamp" ] && have=$(cat "$stamp" 2>/dev/null)
 	# Up to date only when the stamp matches AND the outputs actually exist.
 	if [ -n "$want" ] && [ "$want" = "$have" ] && [ "$srs_present" = 1 ]; then
-		log_debug "$kind .srs already match $kind.dat"
+		log_debug "$STATE_FILE" "$kind .srs already match $kind.dat"
 		return 0
 	fi
 
-	log_info "converting $kind.dat -> .srs (source changed or outputs missing)"
+	log_info "$STATE_FILE" "converting $kind.dat -> .srs (source changed or outputs missing)"
 	# Build into a temp dir so a mid-run failure can't leave a half-written set
 	# mixed with the old one. Only swap in + stamp once we know it made files.
 	tmp="$DATADIR/.$kind.srs.tmp"
@@ -334,54 +369,28 @@ sync_geo_asset() { # <kind: geoip|geosite>
 		rm -rf "$tmp"
 		if [ "$moved" -gt 0 ]; then
 			printf '%s' "$want" >"$stamp"
-			log_info "$kind: generated $moved .srs file(s) from $kind.dat"
+			log_info "$STATE_FILE" "$kind: generated $moved .srs file(s) from $kind.dat"
 		else
 			rm -f "$stamp"
-			log_warn "$kind: conversion produced no .srs files"
+			log_warn "$STATE_FILE" "$kind: conversion produced no .srs files"
 		fi
 	else
 		# Keep the previous .srs (better than none) but drop the stamp so the
 		# next start retries against the new .dat.
 		rm -rf "$tmp"
 		rm -f "$stamp"
-		log_warn "$kind.dat conversion failed — leaving previous .srs untouched"
+		log_warn "$STATE_FILE" "$kind.dat conversion failed — leaving previous .srs untouched"
 	fi
-}
-
-pid_matches_bin() { # <pid> <bin>
-	pid="$1"
-	bin="$2"
-	case "$pid" in '' | *[!0-9]*) return 1 ;; esac
-	[ -x "$bin" ] || return 1
-	kill -0 "$pid" 2>/dev/null || return 1
-	STAT_CORE_EXE=$(stat -L -c "%D:%i" "/proc/$pid/exe" 2>/dev/null)
-	STAT_CORE_BIN=$(stat -L -c "%D:%i" "$bin" 2>/dev/null)
-	[ -n "$STAT_CORE_EXE" ] && [ "$STAT_CORE_EXE" = "$STAT_CORE_BIN" ]
-}
-
-pid_matches_any_core() { # <pid>
-	pid="$1"
-	pid_matches_bin "$pid" "$BINDIR/xray" || pid_matches_bin "$pid" "$BINDIR/sing-box"
 }
 
 get_status() {
 	if [ -f "$PIDFILE" ]; then
 		PID=$(cat "$PIDFILE" 2>/dev/null)
-		if pid_matches_any_core "$PID"; then
+		if pid_matches_any_core "$PID" "$BINDIR"; then
 			return 0
 		fi
 	fi
 	return 1
-}
-
-read_pidfile() { # <pidfile>
-	file="$1"
-	if [ -f "$file" ]; then
-		pid=$(cat "$file" 2>/dev/null)
-		case "$pid" in '' | *[!0-9]*) echo 0 ;; *) echo "$pid" ;; esac
-	else
-		echo 0
-	fi
 }
 
 refresh_runtime_pids() {
@@ -414,7 +423,7 @@ lock_sysctl() {
 	local real
 	real=$(cat "$target_path" 2>/dev/null)
 	if [ "$real" != "$value" ]; then
-		log_warn "lock_sysctl: $target_path kernel=$real wanted=$value"
+		log_warn "$STATE_FILE" "lock_sysctl: $target_path kernel=$real wanted=$value"
 	fi
 
 	# STEP 2: lock it. Bind-mount a stub holding the same value so later
@@ -424,49 +433,6 @@ lock_sysctl() {
 	chcon "$(stat -Z -c '%C' "$target_path")" "$stub_file" 2>/dev/null # Just in case
 
 	mount -o bind "$stub_file" "$target_path"
-}
-
-random_tun_iface() {
-	if [ -r /proc/sys/kernel/random/uuid ]; then
-		raw=$(cat /proc/sys/kernel/random/uuid 2>/dev/null)
-	else
-		raw=""
-	fi
-	[ -n "$raw" ] || raw="$(date +%s 2>/dev/null)$$"
-	hex=$(printf '%s%s' "$raw" "$(date +%s 2>/dev/null)$$abcdef12" | tr 'A-F' 'a-f' | tr -cd 'a-f0-9' | cut -c1-9)
-	first=$(printf '%s' "$hex" | cut -c1)
-	case "$first" in
-	0) lead=q ;;
-	1) lead=w ;;
-	2) lead=e ;;
-	3) lead=r ;;
-	4) lead=t ;;
-	5) lead=y ;;
-	6) lead=u ;;
-	7) lead=i ;;
-	8) lead=o ;;
-	9) lead=p ;;
-	a) lead=s ;;
-	b) lead=d ;;
-	c) lead=f ;;
-	d) lead=g ;;
-	e) lead=h ;;
-	*) lead=j ;;
-	esac
-	tail=$(printf '%s' "$hex" | cut -c2-9)
-	printf '%s%s\n' "$lead" "$tail"
-}
-
-current_tun_iface() {
-	if [ -f "$TUN_IFACE_FILE" ]; then
-		cat "$TUN_IFACE_FILE" 2>/dev/null
-	fi
-}
-
-current_tun2_iface() {
-	if [ -f "$TUN2_IFACE_FILE" ]; then
-		cat "$TUN2_IFACE_FILE" 2>/dev/null
-	fi
 }
 
 lock_tun_iface() { # <iface>
@@ -485,7 +451,7 @@ remove_mark_rule() {
 }
 
 clear_routing_rules() {
-	TUN_IFACE=$(current_tun_iface)
+	TUN_IFACE=$(cat "$TUN_IFACE_FILE" 2>/dev/null)
 
 	remove_mark_rule
 	read_app_filter
@@ -510,7 +476,7 @@ clear_routing_rules() {
 		$iptables -D FORWARD -i "$TUN_IFACE" -j ACCEPT 2>/dev/null
 		$iptables -t mangle -D FORWARD -o "$TUN_IFACE" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1350 2>/dev/null
 	fi
-	TUN2_IFACE=$(current_tun2_iface)
+	TUN2_IFACE=$(cat "$TUN2_IFACE_FILE" 2>/dev/null)
 	if [ -n "$TUN2_IFACE" ]; then
 		$iptables -D FORWARD -o "$TUN2_IFACE" -j ACCEPT 2>/dev/null
 		$iptables -D FORWARD -i "$TUN2_IFACE" -j ACCEPT 2>/dev/null
@@ -532,42 +498,28 @@ clear_routing_rules() {
 	rm -f "$TUN_IFACE_FILE"
 }
 
-# Publish the authoritative lifecycle state for the status channel.
-set_service_state() { # <connecting|running|stopped|failed:reason>
-	printf '%s' "$1" >"$SERVICE_STATE_FILE"
-}
-
 # Tear down the running cores + routing without touching the lifecycle channel.
 # Shared by the user-facing stop (which then marks "stopped") and the internal
 # restart (which keeps "connecting" so the UI never blips to disconnected while a
 # new config is applied).
 teardown_runtime() {
 	clear_routing_rules
-	if [ "$CORE_PID" -gt 0 ]; then
-		pid_matches_any_core "$CORE_PID" && kill -9 "$CORE_PID" 2>/dev/null
-		rm -f "$PIDFILE"
-		CORE_PID=0
-	fi
-	if [ "$TUN2SOCKS_PID" -gt 0 ]; then
-		pid_matches_bin "$TUN2SOCKS_PID" "$BINDIR/tun2socks" && kill -9 "$TUN2SOCKS_PID" 2>/dev/null
-		rm -f "$TUN2SOCKS_PIDFILE"
-		TUN2SOCKS_PID=0
-	fi
-	if [ "$TUN2SOCKS2_PID" -gt 0 ]; then
-		pid_matches_bin "$TUN2SOCKS2_PID" "$BINDIR/tun2socks" && kill -9 "$TUN2SOCKS2_PID" 2>/dev/null
-		rm -f "$TUN2SOCKS2_PIDFILE"
-		TUN2SOCKS2_PID=0
-	fi
+	kill_if_running "$CORE_PID" "" "$PIDFILE"
+	CORE_PID=0
+	kill_if_running "$TUN2SOCKS_PID" "$BINDIR/tun2socks" "$TUN2SOCKS_PIDFILE"
+	TUN2SOCKS_PID=0
+	kill_if_running "$TUN2SOCKS2_PID" "$BINDIR/tun2socks" "$TUN2SOCKS2_PIDFILE"
+	TUN2SOCKS2_PID=0
 }
 
 do_job() {
 	local content="$1"
-	log_info "command: $content"
+	log_info "$STATE_FILE" "command: $content"
 	refresh_runtime_pids
 	# A restart is an atomic teardown+start that stays "connecting" throughout, so
 	# the status channel never flashes "stopped" between applying a new config.
 	if [ "$content" = "restart" ]; then
-		set_service_state connecting
+		set_service_state "$SERVICE_STATE_FILE" connecting
 		teardown_runtime
 		content="start"
 	fi
@@ -581,16 +533,16 @@ do_job() {
 		pkill -f "httpd -p 127.17.1.3:80"
 	fi
 	if [ "$content" = "start" ]; then
-		log_info "preparing proxy start"
-		set_service_state connecting
+		log_info "$STATE_FILE" "preparing proxy start"
+		set_service_state "$SERVICE_STATE_FILE" connecting
 		if [ ! -e /dev/net/tun ]; then
 			mkdir -p /dev/net
 			mknod /dev/net/tun c 10 200
 			chmod 666 /dev/net/tun
 		fi
 		# Select core by engine marker. xray -> config.json, sing-box -> singbox.json.
-		ENGINE=$(read_engine)
-		ROUTING_MODE=$(read_routing_mode)
+		ENGINE=$(read_engine "$ENGINE_FILE")
+		ROUTING_MODE=$(read_routing_mode "$STATE_FILE")
 		case "$ENGINE" in
 		sing-box)
 			CORE_BIN="$BINDIR/sing-box"
@@ -608,16 +560,16 @@ do_job() {
 			CORE_LOG="$DATADIR/xray.log"
 			;;
 		esac
-		log_info "engine=$ENGINE config=$CORE_CFG"
-		log_info "routing_mode=$ROUTING_MODE"
+		log_info "$STATE_FILE" "engine=$ENGINE config=$CORE_CFG"
+		log_info "$STATE_FILE" "routing_mode=$ROUTING_MODE"
 		if [ ! -x "$CORE_BIN" ]; then
-			log_error "core binary missing: $CORE_BIN"
-			set_service_state "failed:core binary missing"
+			log_error "$STATE_FILE" "core binary missing: $CORE_BIN"
+			set_service_state "$SERVICE_STATE_FILE" "failed:core binary missing"
 			return 0
 		fi
 		if [ ! -f "$CORE_CFG" ]; then
-			log_error "config missing: $CORE_CFG"
-			set_service_state "failed:config missing"
+			log_error "$STATE_FILE" "config missing: $CORE_CFG"
+			set_service_state "$SERVICE_STATE_FILE" "failed:config missing"
 			return 0
 		fi
 		if [ "$ENGINE" = "sing-box" ] && grep -q '"rule_set"' "$CORE_CFG"; then
@@ -628,13 +580,13 @@ do_job() {
 				[ -f "$srs" ] || printf '%s\n' "$srs"
 			done | tr '\n' ' ')
 			if [ -n "$missing" ]; then
-				log_error "sing-box config references missing rule_set files:$missing — download/refresh geoip/geosite assets"
-				set_service_state "failed:missing rule_set assets"
+				log_error "$STATE_FILE" "sing-box config references missing rule_set files:$missing — download/refresh geoip/geosite assets"
+				set_service_state "$SERVICE_STATE_FILE" "failed:missing rule_set assets"
 				return 0
 			fi
 		fi
 		if [ "$ENGINE" = "sing-box" ]; then
-			TUN_IFACE=$(current_tun_iface)
+			TUN_IFACE=$(cat "$TUN_IFACE_FILE" 2>/dev/null)
 			[ -n "$TUN_IFACE" ] || TUN_IFACE=$(random_tun_iface)
 			printf '%s' "$TUN_IFACE" >"$TUN_IFACE_FILE"
 			# Inject interface_name into the tun inbounds. Strip any names a prior
@@ -650,18 +602,18 @@ do_job() {
 			# inject the second iface when the config actually contains it, so the
 			# tun2-iface file never points at a device that was never created.
 			if grep -q '"tag": "tun-force"' "$CORE_CFG"; then
-				TUN2_IFACE=$(current_tun2_iface)
+				TUN2_IFACE=$(cat "$TUN2_IFACE_FILE" 2>/dev/null)
 				[ -n "$TUN2_IFACE" ] || TUN2_IFACE=$(random_tun_iface)
 				printf '%s' "$TUN2_IFACE" >"$TUN2_IFACE_FILE"
 				sed -i "s/\"tag\": \"tun-force\"/\"tag\": \"tun-force\", \"interface_name\": \"$TUN2_IFACE\"/" "$CORE_CFG"
-				log_info "sing-box tun ifaces: main=$TUN_IFACE force=$TUN2_IFACE"
+				log_info "$STATE_FILE" "sing-box tun ifaces: main=$TUN_IFACE force=$TUN2_IFACE"
 			else
 				rm -f "$TUN2_IFACE_FILE"
-				log_info "sing-box tun iface: main=$TUN_IFACE (no force-proxy inbound)"
+				log_info "$STATE_FILE" "sing-box tun iface: main=$TUN_IFACE (no force-proxy inbound)"
 			fi
 		fi
 		if [ "$CORE_PID" -gt 0 ] && pid_matches_bin "$CORE_PID" "$CORE_BIN"; then
-			log_info "$ENGINE already running pid=$CORE_PID"
+			log_info "$STATE_FILE" "$ENGINE already running pid=$CORE_PID"
 		else
 			# Start the selected core (both accept: <bin> run -c <cfg>).
 			# xray resolves geoip.dat/geosite.dat via XRAY_LOCATION_ASSET; the
@@ -669,22 +621,22 @@ do_job() {
 			XRAY_LOCATION_ASSET="$DATADIR" "$CORE_BIN" run -c "$CORE_CFG" </dev/null >"$CORE_LOG" 2>&1 &
 			CORE_PID=$!
 			echo "$CORE_PID" >"$PIDFILE"
-			log_info "started $ENGINE pid=$CORE_PID log=$CORE_LOG"
+			log_info "$STATE_FILE" "started $ENGINE pid=$CORE_PID log=$CORE_LOG"
 		fi
 
-		SOCKS_PORT=$(read_socks_port)
+		SOCKS_PORT=$(read_socks_port "$SOCKS_PORT_FILE")
 		# sing-box manages its own tun interfaces natively via auto_route
 		if [ "$ENGINE" = "xray" ]; then
-			TUN_IFACE=$(current_tun_iface)
+			TUN_IFACE=$(cat "$TUN_IFACE_FILE" 2>/dev/null)
 			[ -n "$TUN_IFACE" ] || TUN_IFACE=$(random_tun_iface)
 			if [ "$TUN2SOCKS_PID" -gt 0 ] && pid_matches_bin "$TUN2SOCKS_PID" "$BINDIR/tun2socks"; then
-				log_info "tun2socks already running pid=$TUN2SOCKS_PID"
+				log_info "$STATE_FILE" "tun2socks already running pid=$TUN2SOCKS_PID"
 			else
 				printf '%s' "$TUN_IFACE" >"$TUN_IFACE_FILE"
 				"$BINDIR/tun2socks" -device "tun://$TUN_IFACE" -proxy "socks5://127.0.0.1:$SOCKS_PORT" -fwmark 255 </dev/null >"$DATADIR/tun2socks.log" 2>&1 &
 				TUN2SOCKS_PID=$!
 				echo "$TUN2SOCKS_PID" >"$TUN2SOCKS_PIDFILE"
-				log_info "started tun2socks pid=$TUN2SOCKS_PID iface=$TUN_IFACE socks=127.0.0.1:$SOCKS_PORT"
+				log_info "$STATE_FILE" "started tun2socks pid=$TUN2SOCKS_PID iface=$TUN_IFACE socks=127.0.0.1:$SOCKS_PORT"
 				local retry=0
 				while [ $retry -lt 10 ]; do
 					$ip link show "$TUN_IFACE" >/dev/null 2>&1 && break
@@ -692,27 +644,27 @@ do_job() {
 					retry=$((retry + 1))
 				done
 				if $ip link show "$TUN_IFACE" >/dev/null 2>&1; then
-					log_debug "tun iface $TUN_IFACE up after ${retry} retries"
+					log_debug "$STATE_FILE" "tun iface $TUN_IFACE up after ${retry} retries"
 				else
-					log_error "tun iface $TUN_IFACE did not appear — tun2socks may have failed (check $DATADIR/tun2socks.log)"
+					log_error "$STATE_FILE" "tun iface $TUN_IFACE did not appear — tun2socks may have failed (check $DATADIR/tun2socks.log)"
 				fi
 			fi
 			# The force-proxy lane (second tun) is only worth standing up when the
 			# profile actually pins apps to force-proxy. Otherwise skip it: no
 			# packet ever carries fwmark 2, so the device/process/table 101 would
 			# sit idle. Mirrors sing-box only emitting tun-force in that case.
-			if has_force_proxy_app; then
+			if has_force_proxy_app "$STATE_FILE"; then
 				FORCE_PORT=$((SOCKS_PORT + 2))
-				TUN2_IFACE=$(current_tun2_iface)
+				TUN2_IFACE=$(cat "$TUN2_IFACE_FILE" 2>/dev/null)
 				[ -n "$TUN2_IFACE" ] || TUN2_IFACE=$(random_tun_iface)
 				if [ "$TUN2SOCKS2_PID" -gt 0 ] && pid_matches_bin "$TUN2SOCKS2_PID" "$BINDIR/tun2socks"; then
-					log_info "tun2socks2 already running pid=$TUN2SOCKS2_PID"
+					log_info "$STATE_FILE" "tun2socks2 already running pid=$TUN2SOCKS2_PID"
 				else
 					printf '%s' "$TUN2_IFACE" >"$TUN2_IFACE_FILE"
 					"$BINDIR/tun2socks" -device "tun://$TUN2_IFACE" -proxy "socks5://127.0.0.1:$FORCE_PORT" -fwmark 255 </dev/null >"$DATADIR/tun2socks2.log" 2>&1 &
 					TUN2SOCKS2_PID=$!
 					echo "$TUN2SOCKS2_PID" >"$TUN2SOCKS2_PIDFILE"
-					log_info "started tun2socks2 (force-proxy) pid=$TUN2SOCKS2_PID iface=$TUN2_IFACE port=$FORCE_PORT"
+					log_info "$STATE_FILE" "started tun2socks2 (force-proxy) pid=$TUN2SOCKS2_PID iface=$TUN2_IFACE port=$FORCE_PORT"
 					local retry2=0
 					while [ $retry2 -lt 10 ]; do
 						$ip link show "$TUN2_IFACE" >/dev/null 2>&1 && break
@@ -720,21 +672,18 @@ do_job() {
 						retry2=$((retry2 + 1))
 					done
 					if $ip link show "$TUN2_IFACE" >/dev/null 2>&1; then
-						log_debug "tun2 iface $TUN2_IFACE up after ${retry2} retries"
+						log_debug "$STATE_FILE" "tun2 iface $TUN2_IFACE up after ${retry2} retries"
 					else
-						log_error "tun2 iface $TUN2_IFACE did not appear — tun2socks2 may have failed (check $DATADIR/tun2socks2.log)"
+						log_error "$STATE_FILE" "tun2 iface $TUN2_IFACE did not appear — tun2socks2 may have failed (check $DATADIR/tun2socks2.log)"
 					fi
 				fi
 			else
 				# No force-proxy apps: ensure no stale second lane lingers.
-				if [ "$TUN2SOCKS2_PID" -gt 0 ]; then
-					pid_matches_bin "$TUN2SOCKS2_PID" "$BINDIR/tun2socks" && kill -9 "$TUN2SOCKS2_PID" 2>/dev/null
-					rm -f "$TUN2SOCKS2_PIDFILE"
-					TUN2SOCKS2_PID=0
-				fi
+				kill_if_running "$TUN2SOCKS2_PID" "$BINDIR/tun2socks" "$TUN2SOCKS2_PIDFILE"
+				TUN2SOCKS2_PID=0
 				TUN2_IFACE=""
 				rm -f "$TUN2_IFACE_FILE"
-				log_info "xray: no force-proxy apps, skipping second tun"
+				log_info "$STATE_FILE" "xray: no force-proxy apps, skipping second tun"
 			fi
 			lock_tun_iface "$TUN_IFACE"
 			$ip addr add 198.18.0.1/15 dev "$TUN_IFACE" 2>/dev/null
@@ -759,10 +708,10 @@ do_job() {
 			$iptables -t mangle -N "$MARK_CHAIN"
 			$iptables -t mangle -A "$MARK_CHAIN" -m mark --mark 255 -j RETURN
 			$iptables -t mangle -A "$MARK_CHAIN" -m conntrack --ctdir REPLY -j RETURN
-			log_debug "applying IPv4 local exclusions"
+			log_debug "$STATE_FILE" "applying IPv4 local exclusions"
 			append_local_ipv4_exclusions "$MARK_CHAIN"
 			read_app_filter
-			log_info "app filter: mode=$APP_CAPTURE_MODE"
+			log_info "$STATE_FILE" "app filter: mode=$APP_CAPTURE_MODE"
 			append_app_uid_rules "$iptables" "$MARK_CHAIN"
 			if [ "$APP_CAPTURE_MODE" = "all" ]; then
 				$iptables -t mangle -A "$MARK_CHAIN" -m owner --uid-owner 1000 -j MARK --set-xmark 1
@@ -779,9 +728,9 @@ do_job() {
 				$ip rule add from 172.16.0.0/12 iif lo lookup "$UPLINK" pref 5021
 				$ip rule del from 192.168.0.0/16 iif lo lookup "$UPLINK" pref 5022 2>/dev/null
 				$ip rule add from 192.168.0.0/16 iif lo lookup "$UPLINK" pref 5022
-				log_info "pinned local-origin traffic to uplink=$UPLINK"
+				log_info "$STATE_FILE" "pinned local-origin traffic to uplink=$UPLINK"
 			else
-				log_warn "no uplink default route found; skipping local-origin pin"
+				log_warn "$STATE_FILE" "no uplink default route found; skipping local-origin pin"
 			fi
 			$ip rule del from 10.0.0.0/8 lookup 100 pref 5030 2>/dev/null
 			$ip rule add from 10.0.0.0/8 lookup 100 pref 5030
@@ -808,7 +757,7 @@ do_job() {
 			$ip6tables -t mangle -N "$MARK_CHAIN"
 			$ip6tables -t mangle -A "$MARK_CHAIN" -m mark --mark 255 -j RETURN
 			$ip6tables -t mangle -A "$MARK_CHAIN" -m conntrack --ctdir REPLY -j RETURN
-			log_debug "applying IPv6 local exclusions"
+			log_debug "$STATE_FILE" "applying IPv6 local exclusions"
 			append_local_ipv6_exclusions "$MARK_CHAIN"
 			append_app_uid_rules "$ip6tables" "$MARK_CHAIN"
 			if [ "$APP_CAPTURE_MODE" = "all" ]; then
@@ -838,28 +787,28 @@ do_job() {
 			verify=$((verify + 1))
 		done
 		if [ "$core_ok" = 1 ]; then
-			set_service_state running
-			log_info "$ENGINE running pid=$CORE_PID"
+			set_service_state "$SERVICE_STATE_FILE" running
+			log_info "$STATE_FILE" "$ENGINE running pid=$CORE_PID"
 		else
-			set_service_state "failed:core exited on startup — see $CORE_LOG"
-			log_error "$ENGINE exited on startup — see $CORE_LOG"
+			set_service_state "$SERVICE_STATE_FILE" "failed:core exited on startup — see $CORE_LOG"
+			log_error "$STATE_FILE" "$ENGINE exited on startup — see $CORE_LOG"
 		fi
 	fi
 	if [ "$content" = "stop" ]; then
-		log_info "stopping proxy service"
+		log_info "$STATE_FILE" "stopping proxy service"
 		teardown_runtime
-		set_service_state stopped
-		log_info "proxy service stopped"
+		set_service_state "$SERVICE_STATE_FILE" stopped
+		log_info "$STATE_FILE" "proxy service stopped"
 	fi
 	if [ "$content" = "reload-app-filter" ]; then
 		if get_status; then
-			ENGINE=$(read_engine)
+			ENGINE=$(read_engine "$ENGINE_FILE")
 			if [ "$ENGINE" = "xray" ]; then
-				log_info "reloading app filter rules (no core restart)"
+				log_info "$STATE_FILE" "reloading app filter rules (no core restart)"
 				$iptables -t mangle -F "$MARK_CHAIN" 2>/dev/null
 				$ip6tables -t mangle -F "$MARK_CHAIN" 2>/dev/null
 				read_app_filter
-				log_info "app filter reload: mode=$APP_CAPTURE_MODE"
+				log_info "$STATE_FILE" "app filter reload: mode=$APP_CAPTURE_MODE"
 				append_app_uid_rules "$iptables" "$MARK_CHAIN"
 				append_app_uid_rules "$ip6tables" "$MARK_CHAIN"
 				if [ "$APP_CAPTURE_MODE" = "all" ]; then
@@ -868,14 +817,14 @@ do_job() {
 					$ip6tables -t mangle -A "$MARK_CHAIN" -m owner --uid-owner 1000 -j MARK --set-xmark 1
 					$ip6tables -t mangle -A "$MARK_CHAIN" -m owner --uid-owner 9999-2147483647 -j MARK --set-xmark 1
 				fi
-				log_info "app filter rules reloaded"
+				log_info "$STATE_FILE" "app filter rules reloaded"
 			else
 				# sing-box: app filter is baked into config, requires full restart
-				log_info "reload-app-filter: sing-box requires restart"
-				echo "restart" >"$PIPE_FILE"
+				log_info "$STATE_FILE" "reload-app-filter: sing-box requires restart"
+				pipe_send "$PIPE_FILE" restart
 			fi
 		else
-			log_warn "reload-app-filter: service not running, skipping"
+			log_warn "$STATE_FILE" "reload-app-filter: service not running, skipping"
 		fi
 	fi
 }
@@ -920,7 +869,7 @@ apply_mark_rule() {
 
 	$ip rule add fwmark $FWMARK table "$iface" priority $RULE_PRIORITY
 	$ip -6 rule add fwmark 255 table "$iface" priority $RULE_PRIORITY
-	log_info "applied: fwmark $FWMARK -> table $iface"
+	log_info "$STATE_FILE" "applied: fwmark $FWMARK -> table $iface"
 }
 
 {
@@ -931,14 +880,14 @@ apply_mark_rule() {
 		[ $on_boot_triggered = 1 ] && return
 		on_boot_triggered=1
 		# Respect the user's auto-start setting (default on).
-		if [ "$(read_auto_start)" = "false" ]; then
+		if [ "$(read_auto_start "$STATE_FILE")" = "false" ]; then
 			return
 		fi
 		# Either core's config present means a profile is active.
 		if [ -e "$DATADIR/config.json" ] || [ -e "$DATADIR/singbox.json" ]; then
-			log_info "auto-start: launching proxy on boot"
-			echo "start" >"$PIPE_FILE"
-			echo "wait" >"$PIPE_FILE"
+			log_info "$STATE_FILE" "auto-start: launching proxy on boot"
+			pipe_send "$PIPE_FILE" start
+			pipe_send "$PIPE_FILE" wait
 		fi
 	}
 
@@ -955,12 +904,12 @@ apply_mark_rule() {
 	cur=$(get_active_interface)
 	last="$cur"
 	if [ -n "$cur" ]; then
-		log_info "initial active interface: $cur"
+		log_info "$STATE_FILE" "initial active interface: $cur"
 		# apply iptables rules for the first time
 		start_on_boot
 		apply_mark_rule "$cur"
 	else
-		log_warn "no active interface detected at startup"
+		log_warn "$STATE_FILE" "no active interface detected at startup"
 	fi
 
 	inotifyd - /data/misc/net::w | while read -r _; do
@@ -970,12 +919,12 @@ apply_mark_rule() {
 		cur=$(get_active_interface)
 
 		if [ "$cur" != "$last" ]; then
-			log_info "network changed: $last -> $cur"
+			log_info "$STATE_FILE" "network changed: $last -> $cur"
 			last="$cur"
 			if get_status; then
-				log_info "network change: restarting proxy"
-				echo "restart" >"$PIPE_FILE"
-				echo "wait" >"$PIPE_FILE"
+				log_info "$STATE_FILE" "network change: restarting proxy"
+				pipe_send "$PIPE_FILE" restart
+				pipe_send "$PIPE_FILE" wait
 			fi
 			start_on_boot
 
@@ -994,11 +943,11 @@ apply_mark_rule() {
 		[ "$CORE_PID" -le 0 ] && [ "$TUN2SOCKS_PID" -le 0 ] && continue
 		core_dead=0
 		tun_dead=0
-		[ "$CORE_PID" -gt 0 ] && ! pid_matches_any_core "$CORE_PID" && core_dead=1
+		[ "$CORE_PID" -gt 0 ] && ! pid_matches_any_core "$CORE_PID" "$BINDIR" && core_dead=1
 		[ "$TUN2SOCKS_PID" -gt 0 ] && ! pid_matches_bin "$TUN2SOCKS_PID" "$BINDIR/tun2socks" && tun_dead=1
 		if [ "$core_dead" -eq 1 ] || [ "$tun_dead" -eq 1 ]; then
-			log_error "watchdog: process died core_dead=$core_dead tun_dead=$tun_dead — flushing rules and stopping"
-			echo "stop" >"$PIPE_FILE"
+			log_error "$STATE_FILE" "watchdog: process died core_dead=$core_dead tun_dead=$tun_dead — flushing rules and stopping"
+			pipe_send "$PIPE_FILE" stop
 		fi
 	done
 } &
@@ -1007,30 +956,79 @@ apply_mark_rule() {
 # Backend half of the hybrid auto-update: for each enabled subscription with
 # autoUpdate, once its interval (minutes) elapses since the last fetch, download
 # the raw body into SUBCACHE_DIR. The UI parses & applies it on next launch.
-# app-state.json is written compact by the UI; fields are pulled with sed (no jq),
+# app-state.json is written compact by the UI; fields are pulled with awk,
 # mirroring read_app_filter. Reuses kasumi-proxyctl fetchSubscription for the curl.
-sub_autoupdate_tick() {
+
+# sub_list_active — print one line per autoUpdate+enabled subscription:
+#   id|interval|url|userAgent|allowInsecure
+# Uses awk for bracket-balanced extraction of the subscriptions array.
+sub_list_active() {
 	[ -f "$STATE_FILE" ] || return
+	awk '
+	{
+		# Find subscriptions array with bracket balancing
+		idx = index($0, "\"subscriptions\":[")
+		if (!idx) next
+		str = substr($0, idx + 17)
+		depth = 1; in_q = 0; esc = 0
+		for (i = 1; i <= length(str); i++) {
+			c = substr(str, i, 1)
+			if (esc) { esc = 0; continue }
+			if (c == "\\") { esc = 1; continue }
+			if (c == "\"" ) { in_q = !in_q; continue }
+			if (in_q) continue
+			if (c == "[" || c == "{") depth++
+			if (c == "]" || c == "}") depth--
+			if (depth == 0) { print substr(str, 1, i-1); exit }
+		}
+	}
+	' "$STATE_FILE" | tr -d '\r\n' | awk '
+	{
+		# Split objects by },{ boundary (safe: we process char-by-char)
+		depth = 0; in_q = 0; esc = 0; start = 1
+		for (i = 1; i <= length($0); i++) {
+			c = substr($0, i, 1)
+			if (esc) { esc = 0; continue }
+			if (c == "\\") { esc = 1; continue }
+			if (c == "\"" ) { in_q = !in_q; continue }
+			if (in_q) continue
+			if (c == "{") { if (depth == 0) start = i; depth++ }
+			if (c == "}") {
+				depth--
+				if (depth == 0) print substr($0, start, i - start + 1)
+			}
+		}
+	}
+	' | awk -F'"' '
+	function field(key,    pat, v) {
+		pat = "\"" key "\":"
+		if (split($0, a, pat) < 2) return ""
+		v = a[2]
+		# strip leading quote if string value
+		if (substr(v,1,1) == "\"") { sub(/^"/, "", v); sub(/".*/, "", v) }
+		else { sub(/[^0-9].*/, "", v) }
+		return v
+	}
+	{
+		if ($0 !~ /"autoUpdate":true/) next
+		if ($0 !~ /"enabled":true/) next
+		id  = field("id")
+		url = field("url")
+		int = field("interval")
+		ua  = field("userAgent")
+		ai  = ($0 ~ /"allowInsecure":true/) ? "1" : "0"
+		if (id == "" || url == "" || int+0 <= 0) next
+		# path traversal guard
+		if (id ~ /\/|\.\./) next
+		print id "|" int "|" url "|" ua "|" ai
+	}
+	'
+}
+
+sub_autoupdate_tick() {
 	mkdir -p "$SUBCACHE_DIR"
 	now=$(date +%s)
-	compact=$(tr -d '\r\n' <"$STATE_FILE" 2>/dev/null)
-	subs=$(printf '%s' "$compact" | sed -n 's/.*"subscriptions":\[\(.*\)\],"routingRules".*/\1/p')
-	[ -n "$subs" ] || return
-	# One subscription object per line.
-	printf '%s' "$subs" | sed 's/},{/}\
-{/g' | while IFS= read -r obj; do
-		case "$obj" in *'"autoUpdate":true'*) ;; *) continue ;; esac
-		case "$obj" in *'"enabled":true'*) ;; *) continue ;; esac
-		s_id=$(printf '%s' "$obj" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-		s_url=$(printf '%s' "$obj" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
-		s_int=$(printf '%s' "$obj" | sed -n 's/.*"interval":\([0-9]*\).*/\1/p')
-		s_ua=$(printf '%s' "$obj" | sed -n 's/.*"userAgent":"\([^"]*\)".*/\1/p')
-		s_ai=0
-		case "$obj" in *'"allowInsecure":true'*) s_ai=1 ;; esac
-		if [ -z "$s_id" ] || [ -z "$s_url" ]; then continue; fi
-		case "$s_int" in '' | *[!0-9]*) s_int=0 ;; esac
-		[ "$s_int" -gt 0 ] || continue
-		case "$s_id" in */* | *..*) continue ;; esac
+	sub_list_active | while IFS='|' read -r s_id s_int s_url s_ua s_ai; do
 		fetched=$(cat "$SUBCACHE_DIR/$s_id.fetched" 2>/dev/null)
 		case "$fetched" in '' | *[!0-9]*) fetched=0 ;; esac
 		[ "$((now - fetched))" -ge "$((s_int * 60))" ] || continue
@@ -1038,10 +1036,10 @@ sub_autoupdate_tick() {
 		if printf '%s' "$s_url" | "$BINDIR/kasumi-proxyctl" fetchSubscription "$s_ai" 0 "$s_ua" >"$tmp" 2>/dev/null && [ -s "$tmp" ]; then
 			mv "$tmp" "$SUBCACHE_DIR/$s_id.raw"
 			printf '%s' "$now" >"$SUBCACHE_DIR/$s_id.fetched"
-			log_info "sub auto-update: fetched $s_id"
+			log_info "$STATE_FILE" "sub auto-update: fetched $s_id"
 		else
 			rm -f "$tmp"
-			log_warn "sub auto-update: fetch failed for $s_id"
+			log_warn "$STATE_FILE" "sub auto-update: fetch failed for $s_id"
 		fi
 	done
 }
@@ -1049,34 +1047,16 @@ sub_autoupdate_tick() {
 # Calculate seconds until the next subscription update is due.
 # Returns 21600 (6h cap) if no update is imminent.
 sub_next_sleep() {
-	local min=21600 now compact subs obj s_id s_int fetched due remaining
+	local min=21600 now
 	now=$(date +%s)
-	[ -f "$STATE_FILE" ] || {
-		printf '%s' "$min"
-		return
-	}
-	compact=$(tr -d '\r\n' <"$STATE_FILE" 2>/dev/null)
-	subs=$(printf '%s' "$compact" | sed -n 's/.*"subscriptions":\[\(.*\)\],"routingRules".*/\1/p')
-	[ -n "$subs" ] || {
-		printf '%s' "$min"
-		return
-	}
-	while IFS= read -r obj; do
-		case "$obj" in *'"autoUpdate":true'*) ;; *) continue ;; esac
-		case "$obj" in *'"enabled":true'*) ;; *) continue ;; esac
-		s_id=$(printf '%s' "$obj" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-		s_int=$(printf '%s' "$obj" | sed -n 's/.*"interval":\([0-9]*\).*/\1/p')
-		case "$s_int" in '' | *[!0-9]*) continue ;; esac
-		[ "$s_int" -gt 0 ] || continue
-		case "$s_id" in */* | *..*) continue ;; esac
+	while IFS='|' read -r s_id s_int _rest; do
 		fetched=$(cat "$SUBCACHE_DIR/$s_id.fetched" 2>/dev/null)
 		case "$fetched" in '' | *[!0-9]*) fetched=0 ;; esac
-		due=$((fetched + s_int * 60))
-		remaining=$((due - now))
+		remaining=$((fetched + s_int * 60 - now))
 		[ "$remaining" -lt 1 ] && remaining=1
 		[ "$remaining" -lt "$min" ] && min=$remaining
 	done <<EOF
-$(printf '%s' "$subs" | sed 's/},{/}\n{/g')
+$(sub_list_active)
 EOF
 	printf '%s' "$min"
 }

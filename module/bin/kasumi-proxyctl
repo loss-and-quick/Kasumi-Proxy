@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# shellcheck disable=SC3043  # 'local' is supported by Android's /system/bin/sh (mksh)
 # ============================================================
 # bin/kasumi-proxyctl — typed backend facade for the Kasumi Proxy UI.
 #
@@ -31,6 +32,7 @@ TUN_IFACE_FILE="$DATADIR/tun-iface"
 PROXY_CTL="$MODDIR/proxy_control.sh"
 PIDFILE="$MODDIR/run/core.pid"
 PIPE_FILE="$MODDIR/run/control.pipe"
+SUB_WAKE_PIPE="$MODDIR/run/sub-wake.pipe"
 # Lifecycle channel published by service.sh (connecting|running|stopped|failed:reason).
 SERVICE_STATE_FILE="$DATADIR/service-state"
 ASSET_JOB_DIR="$DATADIR/asset-jobs"
@@ -55,176 +57,119 @@ else
 fi
 
 # ---------- small helpers ----------
+# utils.sh sits next to this script; source-path=SCRIPTDIR makes the directive
+# resolve regardless of the dir shellcheck is invoked from.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=utils.sh
+. "$BINDIR/utils.sh"
 
-# json-escape a string read from stdin (for embedding in JSON output)
-json_escape() {
-    sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
-        -e 's/\t/\\t/g' -e 's/\r//g' | awk 'BEGIN{ORS=""}{print (NR>1?"\\n":"") $0}'
+# ============================================================
+# Local helpers — kasumi-proxyctl only. Shared primitives are in bin/utils.sh.
+# ============================================================
+
+# ---------- process ----------
+
+# pid_is_running_for_bin <pidfile> <bin>
+pid_is_running_for_bin() {
+    local pid
+    [ -f "$1" ] || return 1
+    pid=$(cat "$1" 2>/dev/null)
+    pid_matches_bin "$pid" "$2"
 }
 
-# extract a top-level "field":number from a JSON file; empty if null/absent
-json_num_field() { # <file> <field>
-    [ -f "$1" ] || return 0
-    sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p" "$1" | head -n1
+# pid_is_running_for_any_core <pidfile> <bindir>
+pid_is_running_for_any_core() {
+    pid_is_running_for_bin "$1" "$2/xray" || pid_is_running_for_bin "$1" "$2/sing-box"
 }
 
-# extract settings.field number from app-state.json
-json_settings_num() { # <field>
-    sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p" "$STATE" 2>/dev/null | head -n1
-}
+# is_running <pidfile> <bindir>
+is_running() { pid_is_running_for_any_core "$1" "$2"; }
 
-# extract a top-level "field":"value" string from a JSON file; empty if null/absent
-json_str_field() { # <file> <field>
-    [ -f "$1" ] || return 0
-    sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$1" | head -n1
-}
+# ---------- core / status ----------
 
-pid_is_running_for_bin() { # <pidfile> <bin>
-    pidfile="$1"
-    bin="$2"
-    [ -f "$pidfile" ] || return 1
-    [ -x "$bin" ] || return 1
-    pid=$(cat "$pidfile" 2>/dev/null)
-    case "$pid" in (''|*[!0-9]*) return 1 ;; esac
-    kill -0 "$pid" 2>/dev/null || return 1
-    stat_exe=$(stat -L -c "%D:%i" "/proc/$pid/exe" 2>/dev/null)
-    stat_bin=$(stat -L -c "%D:%i" "$bin" 2>/dev/null)
-    [ -n "$stat_exe" ] && [ "$stat_exe" = "$stat_bin" ]
-}
-
-pid_is_running_for_any_core() { # <pidfile>
-    pidfile="$1"
-    pid_is_running_for_bin "$pidfile" "$BINDIR/xray" || \
-    pid_is_running_for_bin "$pidfile" "$BINDIR/sing-box"
-}
-
-is_running() {
-    pid_is_running_for_any_core "$PIDFILE"
-}
-
-# engine currently selected for the active profile (xray default)
-read_engine() {
-    if [ -f "$ENGINE_FILE" ]; then
-        e=$(cat "$ENGINE_FILE" 2>/dev/null)
-        case "$e" in sing-box) echo "sing-box" ;; *) echo "xray" ;; esac
-    else
-        echo "xray"
-    fi
-}
-
-core_bin_path() {
-    case "$(read_engine)" in
-        sing-box) echo "$BINDIR/sing-box" ;;
-        *) echo "$BINDIR/xray" ;;
-    esac
-}
-
-# version line of the running core (or the selected engine)
+# core_version <bindir> [engine]
 core_version() {
-    eng="${1:-$(read_engine)}"
+    local bindir="$1" eng="${2:-}"
+    [ -z "$eng" ] && eng=$(read_engine "${ENGINE_FILE:-/dev/null}")
     if [ "$eng" = "sing-box" ]; then
-        if [ -x "$BINDIR/sing-box" ]; then
-            "$BINDIR/sing-box" version 2>/dev/null | head -n1 | tr -d '\r'
-        else
+        [ -x "$bindir/sing-box" ] &&
+            "$bindir/sing-box" version 2>/dev/null | head -n1 | tr -d '\r' ||
             echo "sing-box (not installed)"
-        fi
-    elif [ -x "$BINDIR/xray" ]; then
-        "$BINDIR/xray" version 2>/dev/null | head -n1 | tr -d '\r'
+    elif [ -x "$bindir/xray" ]; then
+        "$bindir/xray" version 2>/dev/null | head -n1 | tr -d '\r'
     else
         echo "Xray (not installed)"
     fi
 }
 
-read_tun_iface() {
-    if [ -f "$TUN_IFACE_FILE" ]; then
-        cat "$TUN_IFACE_FILE" 2>/dev/null
-    fi
+# uptime_sec <pidfile>
+uptime_sec() {
+    [ -f "$1" ] || {
+        echo 0
+        return
+    }
+    local mtime now d
+    mtime=$(stat -c %Y "$1" 2>/dev/null)
+    now=$(date +%s 2>/dev/null)
+    case "$mtime$now" in *[!0-9]*)
+        echo 0
+        return
+        ;;
+    esac
+    [ -z "$mtime" ] && {
+        echo 0
+        return
+    }
+    d=$((now - mtime))
+    [ "$d" -lt 0 ] && d=0
+    echo "$d"
 }
 
-read_traffic() { # echoes "<upBytes> <downBytes>" (best-effort, 0 0 if unknown)
-    up=0; down=0
-    iface=$(read_tun_iface)
-    [ -n "$iface" ] || { echo "$up $down"; return; }
+# read_traffic <tun_iface_file>
+read_traffic() {
+    local up=0 down=0 iface line
+    iface=$(cat "$1" 2>/dev/null)
+    [ -n "$iface" ] || {
+        echo "$up $down"
+        return
+    }
     if [ -r /proc/net/dev ]; then
         line=$(sed 's/:/ /' /proc/net/dev 2>/dev/null | awk -v iface="$iface" '$1==iface{print}')
         if [ -n "$line" ]; then
-            # after iface name: $2=rx_bytes ... $10=tx_bytes
             down=$(echo "$line" | awk '{print $2}')
             up=$(echo "$line" | awk '{print $10}')
-            case "$down" in (''|*[!0-9]*) down=0 ;; esac
-            case "$up"   in (''|*[!0-9]*) up=0   ;; esac
+            case "$down" in *[!0-9]*) down=0 ;; esac
+            case "$up" in *[!0-9]*) up=0 ;; esac
         fi
     fi
     echo "$up $down"
 }
 
-uptime_sec() {
-    [ -f "$PIDFILE" ] || { echo 0; return; }
-    mtime=$(stat -c %Y "$PIDFILE" 2>/dev/null)
-    now=$(date +%s 2>/dev/null)
-    case "$mtime$now" in (*[!0-9]*) echo 0; return ;; esac
-    [ -z "$mtime" ] && { echo 0; return; }
-    d=$((now - mtime)); [ "$d" -lt 0 ] && d=0
-    echo "$d"
+# ---------- JSON ----------
+
+# json_escape — escape stdin for embedding in a JSON string value
+json_escape() {
+    sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+        -e 's/\t/\\t/g' -e 's/\r//g' | awk 'BEGIN{ORS=""}{print (NR>1?"\\n":"") $0}'
 }
 
-emit_status() { # [error] [forced_state]
-    status_error="$1"
-    forced_state="$2"
-    # State resolution. The service.sh lifecycle channel is authoritative while a
-    # start is in flight (connecting) or after a failed start (failed:<reason>) —
-    # in both cases there is no live core yet, so a plain PID check would wrongly
-    # say "stopped". For running/stopped/empty we trust the live process, so a
-    # crashed core reads as stopped even if the channel still says running.
-    sstate=$(cat "$SERVICE_STATE_FILE" 2>/dev/null)
-    if [ -n "$forced_state" ]; then
-        state="$forced_state"
-    else
-        case "$sstate" in
-            connecting)
-                state="connecting"
-                ;;
-            failed:*)
-                state="stopped"
-                [ -z "$status_error" ] && status_error="${sstate#failed:}"
-                ;;
-            *)
-                if is_running; then state="running"; else state="stopped"; fi
-                ;;
-        esac
-    fi
-    active=$(json_str_field "$STATE" activeId)
-    if [ -n "$active" ]; then active="\"$active\""; else active="null"; fi
-    # shellcheck disable=SC2046  # read_traffic prints "up down" — the split is intentional
-    set -- $(read_traffic); up="$1"; down="$2"
-    up_secs=$(uptime_sec)
-    core=$(core_version)
-    printf '{"state":"%s","activeId":%s,"uploadBytes":%s,"downloadBytes":%s,"uptimeSec":%s,"core":"%s"' \
-        "$state" "$active" "$up" "$down" "$up_secs" "$core"
-    [ -n "$status_error" ] && printf ',"error":"%s"' "$(printf '%s' "$status_error" | json_escape)"
-    printf '}\n'
+# json_settings_num <file> <field>
+json_settings_num() {
+    sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p" "$1" 2>/dev/null | head -n1
 }
 
-# atomic write: stdin -> file, only if payload looks like JSON ("{" first)
-# find_free_port <start> — scan from <start> upward, return first port with no listener
-find_free_port() {
-    _p="${1:-19000}"
-    while [ "$_p" -lt 65000 ]; do
-        if ! cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | \
-                awk '{print $2}' | grep -qi "$(printf '%04X' "$_p")$"; then
-            echo "$_p"; return 0
-        fi
-        _p=$(( _p + 1 ))
-    done
-    return 1
+# json_str_field <file> <field>
+json_str_field() {
+    [ -f "$1" ] || return 0
+    sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$1" | head -n1
 }
 
-atomic_write_json() { # <dest>
-    dest="$1"
+# atomic_write_json <dest>
+atomic_write_json() {
+    local dest="$1" tmp first
     tmp="$dest.tmp.$$"
-    cat > "$tmp"
-    # validate: non-empty and first non-space char is { or [
-    first=$(tr -d '[:space:]' < "$tmp" | cut -c1)
+    cat >"$tmp"
+    first=$(tr -d '[:space:]' <"$tmp" | cut -c1)
     if [ -z "$first" ] || { [ "$first" != "{" ] && [ "$first" != "[" ]; }; then
         rm -f "$tmp"
         echo "ERR: payload is not JSON" >&2
@@ -233,30 +178,14 @@ atomic_write_json() { # <dest>
     mv -f "$tmp" "$dest"
 }
 
-default_state() {
-    cat <<'EOF'
-{"profiles":[],"groups":[{"id":"g-main","name":"Default"}],"subscriptions":[],"routingRules":[],"assetFiles":[],"settings":{"routingMode":"global","domainSniffing":true,"routeOnly":false,"domainStrategy":"IPIfNonMatch","domainStrategy4Singbox":"prefer_ipv4","dnsViaProxy":true,"fakeDns":false,"preferIpv6":false,"mux":false,"muxConcurrency":8,"fragment":false,"fragmentPackets":"tlshello","mtu":1350,"pinnedCert":"","logRotateMaxKb":512,"pingConcurrency":3,"speedConcurrency":1,"delayTestUrl":"https://www.gstatic.com/generate_204","speedTestUrl":"http://speed.cloudflare.com/__down?bytes=10000000"},"activeId":null}
-EOF
-}
+# ---------- jobs ----------
 
-read_socks_port() {
-    if [ -f "$SOCKS_PORT_FILE" ]; then
-        p=$(cat "$SOCKS_PORT_FILE" 2>/dev/null)
-        case "$p" in (''|*[!0-9]*) echo 10808 ;; (*) echo "$p" ;; esac
-    else
-        echo 10808
-    fi
-}
+# asset_job_path <asset_job_dir> <filename>
+asset_job_path() { printf '%s/%s.json' "$1" "$2"; }
 
-asset_job_path() { # <filename>
-    printf '%s/%s.json' "$ASSET_JOB_DIR" "$1"
-}
-
-write_asset_job_status() { # <job-file> <state> <ok?> <error?>
-    job_file="$1"
-    job_state="$2"
-    job_ok="$3"
-    job_error="$4"
+# write_asset_job_status <job_file> <state> <ok> <error>
+write_asset_job_status() {
+    local job_file="$1" job_state="$2" job_ok="$3" job_error="$4" tmp
     tmp="$job_file.tmp.$$"
     printf '{"state":"%s"' "$job_state" >"$tmp"
     [ -n "$job_ok" ] && printf ',"ok":%s' "$job_ok" >>"$tmp"
@@ -265,78 +194,54 @@ write_asset_job_status() { # <job-file> <state> <ok?> <error?>
     mv -f "$tmp" "$job_file"
 }
 
-# Job status for the realping/speedtest runners, keyed by inbound port (unique
-# per concurrent test). Mirrors the asset-job pattern so the WebUI fires a quick
-# *Start exec and then polls a quick *Status exec — never one long blocking exec
-# (a multi-second ksu.exec freezes the whole WebView).
-test_job_path() { # <port>
-    printf '%s/%s.json' "$TEST_JOB_DIR" "$1"
-}
+# test_job_path <test_job_dir> <port>
+test_job_path() { printf '%s/%s.json' "$1" "$2"; }
 
-write_test_job() { # <job-file> <inner-json>   e.g.  '"state":"done","ms":42'
-    tmp="$1.tmp.$$"
+# write_test_job <job_file> <inner_json>
+write_test_job() {
+    local tmp="$1.tmp.$$"
     printf '{%s}\n' "$2" >"$tmp"
     mv -f "$tmp" "$1"
 }
 
-convert_dat_to_srs() { # <filename> — convert .dat -> .srs if geodat2srs available
-    [ -x "$BINDIR/geodat2srs" ] || return 0
-    case "$1" in
-        geoip.dat)   "$BINDIR/geodat2srs" geoip    -i "$DATADIR/$1" -o "$DATADIR" --prefix "geoip-"    2>/dev/null ;;
-        geosite.dat) "$BINDIR/geodat2srs" geosite  -i "$DATADIR/$1" -o "$DATADIR" --prefix "geosite-" 2>/dev/null ;;
+# ---------- assets ----------
+
+# convert_dat_to_srs <bindir> <datadir> <filename>
+convert_dat_to_srs() {
+    [ -x "$1/geodat2srs" ] || return 0
+    case "$3" in
+    geoip.dat) "$1/geodat2srs" geoip -i "$2/$3" -o "$2" --prefix "geoip-" 2>/dev/null ;;
+    geosite.dat) "$1/geodat2srs" geosite -i "$2/$3" -o "$2" --prefix "geosite-" 2>/dev/null ;;
     esac
 }
 
-download_asset_impl() { # <filename> <mode> <url>
-    DOWNLOAD_ERROR=""
-    filename="$1"
-    mode="${2:-auto}"
-    url="$3"
-    case "$filename" in
-        ''|*/*|*'..'*|*\"*|*\\*) DOWNLOAD_ERROR="invalid filename"; return 1 ;;
-    esac
-    case "$mode" in
-        auto|proxy|direct) ;;
-        *) mode="auto" ;;
-    esac
-    if ! command -v curl >/dev/null 2>&1; then
-        DOWNLOAD_ERROR="curl not available"
-        return 1
+emit_status() { # [error] [forced_state]
+    local status_error="$1" forced_state="$2" state sstate active up down up_secs core
+    sstate=$(cat "$SERVICE_STATE_FILE" 2>/dev/null)
+    if [ -n "$forced_state" ]; then
+        state="$forced_state"
+    else
+        case "$sstate" in
+            connecting) state="connecting" ;;
+            failed:*)
+                state="stopped"
+                [ -z "$status_error" ] && status_error="${sstate#failed:}"
+                ;;
+            *)
+                if is_running "$PIDFILE" "$BINDIR"; then state="running"; else state="stopped"; fi
+                ;;
+        esac
     fi
-    dest="$DATADIR/$filename"
-    tmp="$dest.tmp.$$"
-    if [ "$mode" = "proxy" ]; then
-        if ! is_running; then
-            DOWNLOAD_ERROR="proxy not running"
-            return 1
-        fi
-        if curl -fsSL --max-time 60 --socks5 "127.0.0.1:$(read_socks_port)" "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
-            return 0
-        fi
-        rm -f "$tmp" 2>/dev/null
-        DOWNLOAD_ERROR="proxy download failed"
-        return 1
-    fi
-    if [ "$mode" = "direct" ]; then
-        if curl -fsSL --max-time 60 "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
-            return 0
-        fi
-        rm -f "$tmp" 2>/dev/null
-        DOWNLOAD_ERROR="direct download failed"
-        return 1
-    fi
-    if is_running; then
-        if curl -fsSL --max-time 60 --socks5 "127.0.0.1:$(read_socks_port)" "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
-            return 0
-        fi
-        rm -f "$tmp" 2>/dev/null
-    fi
-    if curl -fsSL --max-time 60 "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ] && mv -f "$tmp" "$dest"; then
-        return 0
-    fi
-    rm -f "$tmp" 2>/dev/null
-    DOWNLOAD_ERROR="download failed"
-    return 1
+    active=$(json_str_field "$STATE" activeId)
+    if [ -n "$active" ]; then active="\"$active\""; else active="null"; fi
+    # shellcheck disable=SC2046  # read_traffic prints "up down" — intentional split
+    set -- $(read_traffic "$TUN_IFACE_FILE"); up="$1"; down="$2"
+    up_secs=$(uptime_sec "$PIDFILE")
+    core=$(core_version "$BINDIR")
+    printf '{"state":"%s","activeId":%s,"uploadBytes":%s,"downloadBytes":%s,"uptimeSec":%s,"core":"%s"' \
+        "$state" "$active" "$up" "$down" "$up_secs" "$core"
+    [ -n "$status_error" ] && printf ',"error":"%s"' "$(printf '%s' "$status_error" | json_escape)"
+    printf '}\n'
 }
 
 # ---------- methods ----------
@@ -384,7 +289,7 @@ case "$method" in
             echo '{"state":"stopped","error":"service not running"}'; exit 0
         fi
         printf '%s' "connecting" > "$SERVICE_STATE_FILE"
-        ( printf '%s\n' 'restart' > "$PIPE_FILE" ) &
+        pipe_send "$PIPE_FILE" restart
         emit_status "" "connecting"
         ;;
 
@@ -402,7 +307,7 @@ case "$method" in
             echo '{"state":"stopped","error":"service not running"}'; exit 0
         fi
         printf '%s' "connecting" > "$SERVICE_STATE_FILE"
-        ( printf '%s\n' 'restart' > "$PIPE_FILE" ) &
+        pipe_send "$PIPE_FILE" restart
         emit_status "" "connecting"
         ;;
 
@@ -432,7 +337,7 @@ case "$method" in
 
     rotateLogs)
         # reads logRotateMaxKb from app-state.json; falls back to 512
-        _cfg=$(json_settings_num logRotateMaxKb)
+        _cfg=$(json_settings_num "$STATE" logRotateMaxKb)
         max_kb="${1:-${_cfg:-512}}"
         for f in "$DATADIR/service.log" "$DATADIR/xray.log" "$DATADIR/singbox.log" \
                  "$DATADIR/tun2socks.log" "$DATADIR/proxy_control.log"; do
@@ -459,7 +364,7 @@ case "$method" in
         # unreachable host, so this runs as a job like realping/speedtest.
         pg_token="$1"; pg_host="$2"; pg_port="$3"
         case "$pg_token" in (''|*[!A-Za-z0-9_-]*) printf '{"ok":false,"error":"invalid token"}\n'; exit 0 ;; esac
-        pg_job=$(test_job_path "$pg_token")
+        pg_job=$(test_job_path "$TEST_JOB_DIR" "$pg_token")
         if [ -z "$pg_host" ] || [ -z "$pg_port" ] || ! command -v nc >/dev/null 2>&1; then
             write_test_job "$pg_job" '"state":"done","ms":null'; printf '{"ok":true}\n'; exit 0
         fi
@@ -483,7 +388,7 @@ case "$method" in
         # args: <token>  -> the job JSON ({"state":"running"} | {"state":"done","ms":N|null})
         pg_token="$1"
         case "$pg_token" in (''|*[!A-Za-z0-9_-]*) printf '{"state":"idle"}\n'; exit 0 ;; esac
-        pg_job=$(test_job_path "$pg_token")
+        pg_job=$(test_job_path "$TEST_JOB_DIR" "$pg_token")
         if [ -f "$pg_job" ]; then cat "$pg_job"; else printf '{"state":"idle"}\n'; fi
         ;;
 
@@ -498,7 +403,7 @@ case "$method" in
         # The inbound port is baked into the stdin config by the caller and also
         # keys the job/temp files, so it must be passed explicitly and be unique.
         case "$rp_port" in (''|0|*[!0-9]*) printf '{"ok":false,"error":"port required (must match config inbound)"}\n'; exit 0 ;; esac
-        rp_job=$(test_job_path "$rp_port")
+        rp_job=$(test_job_path "$TEST_JOB_DIR" "$rp_port")
         rp_cfg="$DATADIR/test-$rp_port.json"
         rp_pid="$DATADIR/test-$rp_port.pid"
 
@@ -547,7 +452,7 @@ case "$method" in
         # args: <port>  -> the job JSON ({"state":"running"} | {"state":"done","ms":N})
         rp_port="$1"
         case "$rp_port" in (''|*[!0-9]*) printf '{"state":"idle"}\n'; exit 0 ;; esac
-        rp_job=$(test_job_path "$rp_port")
+        rp_job=$(test_job_path "$TEST_JOB_DIR" "$rp_port")
         if [ -f "$rp_job" ]; then cat "$rp_job"; else printf '{"state":"idle"}\n'; fi
         ;;
 
@@ -559,7 +464,7 @@ case "$method" in
         st_port="${3:-0}"
         st_timeout="${4:-15}"
         case "$st_port" in (''|0|*[!0-9]*) printf '{"ok":false,"error":"port required (must match config inbound)"}\n'; exit 0 ;; esac
-        st_job=$(test_job_path "$st_port")
+        st_job=$(test_job_path "$TEST_JOB_DIR" "$st_port")
         st_cfg="$DATADIR/test-$st_port.json"
         st_pid="$DATADIR/test-$st_port.pid"
 
@@ -613,7 +518,7 @@ case "$method" in
         # args: <port>  -> the job JSON ({"state":"running"} | {"state":"done","bps":N})
         st_port="$1"
         case "$st_port" in (''|*[!0-9]*) printf '{"state":"idle"}\n'; exit 0 ;; esac
-        st_job=$(test_job_path "$st_port")
+        st_job=$(test_job_path "$TEST_JOB_DIR" "$st_port")
         if [ -f "$st_job" ]; then cat "$st_job"; else printf '{"state":"idle"}\n'; fi
         ;;
 
@@ -624,8 +529,8 @@ case "$method" in
         set -- curl -fsSL --max-time 30
         [ "$allow_insecure" = "1" ] && set -- "$@" -k
         [ -n "$user_agent" ] && set -- "$@" -A "$user_agent"
-        if [ "$via_proxy" = "1" ] && is_running; then
-            set -- "$@" --socks5 "127.0.0.1:$(read_socks_port)"
+        if [ "$via_proxy" = "1" ] && is_running "$PIDFILE" "$BINDIR"; then
+            set -- "$@" --socks5 "127.0.0.1:$(read_socks_port "$SOCKS_PORT_FILE")"
         fi
         "$@" "$url"
         ;;
@@ -668,7 +573,7 @@ case "$method" in
         mode="${2:-auto}"
         url=$(cat); url=$(echo "$url" | tr -d '\r\n')
         if download_asset_impl "$filename" "$mode" "$url"; then
-            convert_dat_to_srs "$filename"
+            convert_dat_to_srs "$BINDIR" "$DATADIR" "$filename"
             echo '{"ok":true}'
         else
             printf '{"ok":false,"error":"%s"}\n' "$(printf '%s' "$DOWNLOAD_ERROR" | json_escape)"
@@ -691,15 +596,15 @@ case "$method" in
             auto|proxy|direct) ;;
             *) mode="auto" ;;
         esac
-        if [ "$mode" = "proxy" ] && ! is_running; then
+        if [ "$mode" = "proxy" ] && ! is_running "$PIDFILE" "$BINDIR"; then
             echo '{"ok":false,"error":"proxy not running"}'
             exit 1
         fi
-        job_file=$(asset_job_path "$filename")
+        job_file=$(asset_job_path "$ASSET_JOB_DIR" "$filename")
         write_asset_job_status "$job_file" "running" "" ""
         (
             if download_asset_impl "$filename" "$mode" "$url"; then
-                convert_dat_to_srs "$filename"
+                convert_dat_to_srs "$BINDIR" "$DATADIR" "$filename"
                 write_asset_job_status "$job_file" "done" "true" ""
             else
                 write_asset_job_status "$job_file" "done" "false" "$DOWNLOAD_ERROR"
@@ -716,7 +621,7 @@ case "$method" in
                 exit 1
                 ;;
         esac
-        job_file=$(asset_job_path "$filename")
+        job_file=$(asset_job_path "$ASSET_JOB_DIR" "$filename")
         if [ -f "$job_file" ]; then
             cat "$job_file"
         else
@@ -779,9 +684,9 @@ case "$method" in
     capabilities)
         has_curl=false; command -v curl >/dev/null 2>&1 && has_curl=true
         has_tun=false; [ -e /dev/net/tun ] && has_tun=true
-        core=$(core_version xray)
+        core=$(core_version "$BINDIR" xray)
         singbox_version=""
-        [ -x "$BINDIR/sing-box" ] && singbox_version=$(core_version sing-box)
+        [ -x "$BINDIR/sing-box" ] && singbox_version=$(core_version "$BINDIR" sing-box)
         printf '{"bridge":"ksu","core":"%s","singboxVersion":"%s","curl":%s,"tun":%s}\n' \
             "$core" "$singbox_version" "$has_curl" "$has_tun"
         ;;
@@ -806,19 +711,17 @@ EOF
 
     reloadAppFilter)
         # Re-applies iptables uid rules without restarting the core.
-        PIPE_FILE="$MODDIR/run/control.pipe"
         if [ ! -p "$PIPE_FILE" ]; then
             echo '{"ok":false,"error":"service not running"}'
             exit 1
         fi
-        printf '%s\n' 'reload-app-filter' >"$PIPE_FILE"
+        pipe_send "$PIPE_FILE" reload-app-filter
         echo '{"ok":true}'
         ;;
 
     subWakeup)
         # Signal the subscription daemon to wake up and re-evaluate its schedule.
-        SUB_WAKE_PIPE="$MODDIR/run/sub-wake.pipe"
-        [ -p "$SUB_WAKE_PIPE" ] && ( printf '\n' >"$SUB_WAKE_PIPE" ) &
+        pipe_send "$SUB_WAKE_PIPE" ''
         echo '{"ok":true}'
         ;;
 

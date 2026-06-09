@@ -2,6 +2,7 @@
 # Core binaries fetched by fetch-bin.sh — track only the source files.
 module/bin/*
 !module/bin/kasumi-proxyctl
+!module/bin/utils.sh
 !module/bin/README.md
 !module/bin/licenses/
 !module/bin/licenses/*
