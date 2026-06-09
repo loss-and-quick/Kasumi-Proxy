@@ -72,8 +72,11 @@ jobs:
       - name: ShellCheck
         if: steps.changes.outputs.relevant == 'true'
         run: |
-          # Module payload runs under Android mksh — lint as POSIX sh.
-          shellcheck -s sh \
+          # Module payload runs under Android mksh — lint as POSIX sh. -x follows the
+          # sourced bin/utils.sh (its path is pinned per-file via `# shellcheck
+          # source-path=SCRIPTDIR`), so one pass covers cross-file issues too.
+          shellcheck -s sh -x \
+            module/bin/utils.sh \
             module/service.sh \
             module/customize.sh \
             module/action.sh \
