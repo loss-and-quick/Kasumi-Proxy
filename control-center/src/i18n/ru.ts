@@ -204,9 +204,7 @@ const ru = {
   "editor.engine": "Ядро",
   "editor.engineGlobal": "Глобальные настройки",
   "editor.engineResolved": "Будет запущено на: {core}",
-  "editor.engineLockedHy2": "Hysteria2 работает только на sing-box",
-  "editor.engineLockedTuic": "TUIC работает только на sing-box",
-  "editor.engineLockedCustom": "Кастомные конфиги используют Xray",
+  "editor.engineForced": "Этот профиль может работать только на {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Обфускация",
   "editor.obfsPassword": "Пароль obfs",
@@ -224,7 +222,6 @@ const ru = {
   "editor.grpcInitialWindow": "Начальный размер окна",
   "editor.userAgent": "User-Agent",
   "editor.grpcPermitWithoutStream": "Разрешить без потока",
-  "editor.engineLockedSingbox": "Протокол работает только на sing-box",
   "editor.tuicUdpRelayMode": "Режим UDP-ретрансляции",
   "editor.tuicZeroRtt": "Zero RTT",
   "editor.naiveTransport": "Транспорт",

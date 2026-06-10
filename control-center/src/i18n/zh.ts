@@ -192,9 +192,7 @@ const zh = {
   "editor.engine": "核心引擎",
   "editor.engineGlobal": "全局默认",
   "editor.engineResolved": "将使用：{core}",
-  "editor.engineLockedHy2": "Hysteria2 仅支持 sing-box",
-  "editor.engineLockedTuic": "TUIC 仅支持 sing-box",
-  "editor.engineLockedCustom": "自定义配置使用 Xray",
+  "editor.engineForced": "此配置只能在 {core} 上运行",
   // editor — hysteria2 / tuic
   "editor.obfsType": "混淆",
   "editor.obfsPassword": "混淆密码",
@@ -212,7 +210,6 @@ const zh = {
   "editor.grpcInitialWindow": "初始窗口大小",
   "editor.userAgent": "User-Agent",
   "editor.grpcPermitWithoutStream": "无流时允许",
-  "editor.engineLockedSingbox": "协议仅支持 sing-box",
   "editor.tuicUdpRelayMode": "UDP 中继模式",
   "editor.tuicZeroRtt": "零 RTT",
   "editor.naiveTransport": "传输",

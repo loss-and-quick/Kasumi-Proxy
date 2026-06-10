@@ -197,9 +197,7 @@ const en = {
   "editor.engine": "Core engine",
   "editor.engineGlobal": "Global default",
   "editor.engineResolved": "Will run on: {core}",
-  "editor.engineLockedHy2": "Hysteria2 runs on sing-box only",
-  "editor.engineLockedTuic": "TUIC runs on sing-box only",
-  "editor.engineLockedCustom": "Custom configs are Xray",
+  "editor.engineForced": "This profile can only run on {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Obfs password",
@@ -217,7 +215,6 @@ const en = {
   "editor.grpcInitialWindow": "Initial window",
   "editor.userAgent": "User-Agent",
   "editor.grpcPermitWithoutStream": "Permit without stream",
-  "editor.engineLockedSingbox": "Protocol runs on sing-box only",
   "editor.tuicUdpRelayMode": "UDP relay mode",
   "editor.tuicZeroRtt": "Zero RTT",
   "editor.naiveTransport": "Transport",

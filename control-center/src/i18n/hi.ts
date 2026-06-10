@@ -192,9 +192,7 @@ const hi = {
   "editor.engine": "कोर इंजन",
   "editor.engineGlobal": "वैश्विक डिफ़ॉल्ट",
   "editor.engineResolved": "इस पर चलेगा: {core}",
-  "editor.engineLockedHy2": "Hysteria2 केवल sing-box पर चलता है",
-  "editor.engineLockedTuic": "TUIC केवल sing-box पर चलता है",
-  "editor.engineLockedCustom": "कस्टम कॉन्फ़िग Xray हैं",
+  "editor.engineForced": "यह प्रोफ़ाइल केवल {core} पर चल सकती है",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Obfs पासवर्ड",
@@ -212,7 +210,6 @@ const hi = {
   "editor.grpcInitialWindow": "प्रारंभिक विंडो",
   "editor.userAgent": "User-Agent",
   "editor.grpcPermitWithoutStream": "स्ट्रीम के बिना अनुमति",
-  "editor.engineLockedSingbox": "प्रोटोकॉल केवल sing-box पर चलता है",
   "editor.tuicUdpRelayMode": "UDP रिले मोड",
   "editor.tuicZeroRtt": "Zero RTT",
   "editor.naiveTransport": "ट्रांसपोर्ट",

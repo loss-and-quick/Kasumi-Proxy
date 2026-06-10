@@ -11,17 +11,15 @@ import type { AdvancedSettings } from "./settings";
 
 const SINGBOX_ONLY_PROTOCOLS = new Set<Protocol>(["tuic", "anytls", "naive", "shadowtls"]);
 
-/** Protocols whose engine is fixed and not user-selectable. */
-export function coreLocked(protocol: Protocol): boolean {
-  return SINGBOX_ONLY_PROTOCOLS.has(protocol) || protocol === "custom";
-}
-
 /** Engine a protocol uses when nothing overrides it. */
 export function defaultCoreFor(protocol: Protocol): CoreEngineT {
   return protocol === "hysteria2" || SINGBOX_ONLY_PROTOCOLS.has(protocol) ? "sing-box" : "xray";
 }
 
-function transportForcedCore(p: Profile): CoreEngineT | null {
+/** Engine the profile MUST run on (protocol or transport capability), null if selectable. */
+export function forcedCore(p: Profile): CoreEngineT | null {
+  if (p.protocol === "custom") return "xray";
+  if (SINGBOX_ONLY_PROTOCOLS.has(p.protocol)) return "sing-box";
   if (p.protocol === "shadowsocks" && "network" in p) {
     if (p.security === "tls" || p.network !== "tcp" || p.headerType === "http") return "sing-box";
   }
@@ -42,11 +40,8 @@ function transportForcedCore(p: Profile): CoreEngineT | null {
 
 /** Resolve the actual core for a profile (capabilities > override > table > fallback). */
 export function resolveCore(p: Profile, s: AdvancedSettings): CoreEngineT {
-  if (p.protocol === "custom") return "xray";
-  if (SINGBOX_ONLY_PROTOCOLS.has(p.protocol)) return "sing-box";
-
-  const forcedTransport = transportForcedCore(p);
-  if (forcedTransport) return forcedTransport;
+  const forced = forcedCore(p);
+  if (forced) return forced;
 
   if (p.coreType && p.coreType !== "global") return p.coreType;
   return s.coreByProtocol?.[p.protocol] ?? defaultCoreFor(p.protocol);
