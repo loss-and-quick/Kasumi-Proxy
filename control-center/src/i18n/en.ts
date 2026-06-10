@@ -366,6 +366,9 @@ const en = {
   "settings.localPorts": "Local ports",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.allowNonLocalhost": "Allow non-localhost access",
+  "settings.allowNonLocalhostSub":
+    "Bind proxy ports to 0.0.0.0 so other devices on the network can connect",
   "settings.dnsRemote": "Remote DNS (via proxy)",
   "settings.dnsRemotePh": "1.1.1.1, 8.8.8.8",
   "settings.dnsDomestic": "Domestic DNS (direct)",

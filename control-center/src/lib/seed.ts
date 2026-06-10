@@ -249,6 +249,7 @@ export const SETTINGS_SEED = {
   appFilter: {} as Record<string, "force-proxy" | "bypass">,
   logRotateMaxKb: 512,
   dedupOnUpdate: false,
+  allowNonLocalhost: false,
 } as const;
 
 export function seedAppState(): AppState {

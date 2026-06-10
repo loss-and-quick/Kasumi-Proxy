@@ -97,6 +97,7 @@ export const AdvancedSettingsSchema = z.object({
   appCaptureMode: z.enum(["all", "none"]).default("all"),
   appFilter: z.record(z.string(), z.enum(["force-proxy", "bypass"])).default({}),
   dedupOnUpdate: z.boolean().default(false),
+  allowNonLocalhost: z.boolean().default(false),
 });
 
 export const AppStateSchema = z.object({

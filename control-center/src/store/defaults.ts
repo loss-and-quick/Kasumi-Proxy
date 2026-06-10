@@ -27,6 +27,7 @@ export const EMPTY_SETTINGS: AdvancedSettings = {
   appFilter: {},
   logRotateMaxKb: 512,
   dedupOnUpdate: false,
+  allowNonLocalhost: false,
 };
 
 export function mergeSettings(settings?: Partial<AdvancedSettings>): AdvancedSettings {

@@ -535,7 +535,7 @@ export function buildXrayConfig(
       {
         tag: "socks-in",
         port: socksPort,
-        listen: "127.0.0.1",
+        listen: s.allowNonLocalhost ? "0.0.0.0" : "127.0.0.1",
         protocol: "socks",
         settings: { auth: "noauth", udp: true },
         sniffing: {
@@ -547,7 +547,7 @@ export function buildXrayConfig(
       {
         tag: "http-in",
         port: httpPort,
-        listen: "127.0.0.1",
+        listen: s.allowNonLocalhost ? "0.0.0.0" : "127.0.0.1",
         protocol: "http",
         settings: { allowTransparent: false },
       },
@@ -556,7 +556,7 @@ export function buildXrayConfig(
             {
               tag: "force-in",
               port: forcePort,
-              listen: "127.0.0.1",
+              listen: s.allowNonLocalhost ? "0.0.0.0" : "127.0.0.1",
               protocol: "socks",
               settings: { auth: "noauth", udp: true },
             },
