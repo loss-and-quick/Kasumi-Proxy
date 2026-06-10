@@ -1014,15 +1014,16 @@ sub_list_active() {
 		if ($0 !~ /"enabled":true/) next
 		id  = field("id")
 		url = field("url")
-		int = field("interval")
+		# NB: "int" is an awk builtin and cannot be used as a variable name
+		ivl = field("interval")
 		ua  = field("userAgent")
 		ai  = ($0 ~ /"allowInsecure":true/) ? "1" : "0"
 		mode = field("updateMode")
 		if (mode != "proxy" && mode != "direct") mode = "auto"
-		if (id == "" || url == "" || int+0 <= 0) next
+		if (id == "" || url == "" || ivl+0 <= 0) next
 		# path traversal guard
 		if (id ~ /\/|\.\./) next
-		print id "|" int "|" url "|" ua "|" ai "|" mode
+		print id "|" ivl "|" url "|" ua "|" ai "|" mode
 	}
 	'
 }
