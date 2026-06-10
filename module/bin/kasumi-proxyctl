@@ -86,6 +86,17 @@ pid_is_running_for_any_core() {
 # is_running <pidfile> <bindir>
 is_running() { pid_is_running_for_any_core "$1" "$2"; }
 
+# running_engine <pidfile> <bindir> — engine owning the live core PID, empty if none.
+# The engine marker is only the *intent* for the next start; after a failed
+# switch the previous core keeps running, so status must report the PID's truth.
+running_engine() {
+    if pid_is_running_for_bin "$1" "$2/xray"; then
+        echo "xray"
+    elif pid_is_running_for_bin "$1" "$2/sing-box"; then
+        echo "sing-box"
+    fi
+}
+
 # ---------- core / status ----------
 
 # core_version <bindir> [engine]
@@ -275,7 +286,7 @@ download_asset_impl() {
 }
 
 emit_status() { # [error] [forced_state]
-    local status_error="$1" forced_state="$2" state sstate active up down up_secs core
+    local status_error="$1" forced_state="$2" state sstate active up down up_secs core eng
     sstate=$(cat "$SERVICE_STATE_FILE" 2>/dev/null)
     if [ -n "$forced_state" ]; then
         state="$forced_state"
@@ -296,9 +307,13 @@ emit_status() { # [error] [forced_state]
     # shellcheck disable=SC2046  # read_traffic prints "up down" — intentional split
     set -- $(read_traffic "$TUN_IFACE_FILE"); up="$1"; down="$2"
     up_secs=$(uptime_sec "$PIDFILE")
-    core=$(core_version "$BINDIR")
-    printf '{"state":"%s","activeId":%s,"uploadBytes":%s,"downloadBytes":%s,"uptimeSec":%s,"core":"%s"' \
-        "$state" "$active" "$up" "$down" "$up_secs" "$core"
+    # Version/engine of the core that is actually running; the marker file is
+    # only consulted when nothing is up (core_version falls back to it).
+    eng=$(running_engine "$PIDFILE" "$BINDIR")
+    core=$(core_version "$BINDIR" "$eng")
+    [ -z "$eng" ] && eng=$(read_engine "$ENGINE_FILE")
+    printf '{"state":"%s","activeId":%s,"uploadBytes":%s,"downloadBytes":%s,"uptimeSec":%s,"core":"%s","engine":"%s"' \
+        "$state" "$active" "$up" "$down" "$up_secs" "$core" "$eng"
     [ -n "$status_error" ] && printf ',"error":"%s"' "$(printf '%s' "$status_error" | json_escape)"
     printf '}\n'
 }

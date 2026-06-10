@@ -278,6 +278,7 @@ export const useAppStore = create<Store>((set, get) => {
       downloadBytes: 0,
       uptimeSec: 0,
       core: "",
+      engine: null,
     },
 
     async hydrate() {

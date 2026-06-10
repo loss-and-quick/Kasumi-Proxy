@@ -166,7 +166,9 @@ export default function Overview({
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                   <ProtoTag protocol={active.protocol} />
-                  <EngineTag engine={resolvedCore ?? "xray"} />
+                  {/* While running show the engine that actually runs (PID truth
+                      from status); resolveCore is only the intent for next start. */}
+                  <EngineTag engine={(running && service.engine) || resolvedCore || "xray"} />
                   <span
                     className="mono truncate"
                     style={{ fontSize: 12.5, color: "var(--on-surface-variant)" }}

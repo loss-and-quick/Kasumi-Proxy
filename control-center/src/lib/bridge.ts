@@ -43,6 +43,8 @@ export interface ServiceStatus {
   downloadBytes: number;
   uptimeSec: number;
   core: string; // e.g. "Xray 25.5.16"
+  /** Engine actually running (PID truth), not the marker/intent. */
+  engine: "xray" | "sing-box" | null;
 }
 
 export interface Capabilities {
@@ -135,6 +137,7 @@ export function parseServiceStatus(value: unknown): ServiceStatus {
     downloadBytes: typeof s.downloadBytes === "number" ? s.downloadBytes : 0,
     uptimeSec: typeof s.uptimeSec === "number" ? s.uptimeSec : 0,
     core: typeof s.core === "string" ? s.core : "",
+    engine: s.engine === "xray" || s.engine === "sing-box" ? s.engine : null,
   };
 }
 

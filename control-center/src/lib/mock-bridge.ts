@@ -30,6 +30,7 @@ let serviceState: ServiceStatus = {
   downloadBytes: 0,
   uptimeSec: 0,
   core: "Xray 25.5.16",
+  engine: "xray",
 };
 
 function cloneServiceStatus(): ServiceStatus {
