@@ -528,7 +528,8 @@ describe("useAppStore", () => {
       activeId: null,
       service: DEFAULT_STATUS,
     });
-    bridge.listSubCache.mockResolvedValue([{ id: "s1", fetchedAt: 1 }]);
+    const fakeEpoch = 1_700_000_000;
+    bridge.listSubCache.mockResolvedValue([{ id: "s1", fetchedAt: fakeEpoch }]);
     bridge.readSubCache.mockResolvedValue("raw-body");
     bridge.parseShareLinks.mockResolvedValue([fetched]);
 
@@ -538,6 +539,7 @@ describe("useAppStore", () => {
     expect(bridge.readSubCache).toHaveBeenCalledWith("s1");
     expect(state.profiles.find((p) => p.id === "old")).toBeUndefined();
     expect(state.profiles.find((p) => p.subId === "s1")?.remarks).toBe("Fresh");
+    expect(state.subscriptions[0].lastUpdated).toBe(new Date(fakeEpoch * 1000).toISOString());
     expect(state.subscriptions[0].count).toBe(1);
     expect(bridge.clearSubCache).toHaveBeenCalledWith("s1");
   });
