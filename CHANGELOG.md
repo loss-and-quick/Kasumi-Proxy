@@ -1,3 +1,42 @@
+## v0.3.4 — 2026-06-10
+
+### Changes
+
+- [`042437c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/042437c) fix(store): restart active profile only when its config changes
+- [`948f58f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/948f58f) feat(settings): add toggle to allow non-localhost proxy access (#43)
+- [`7eaf0fe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7eaf0fe) fix(store): use daemon fetch timestamp for subscription lastUpdated (#42)
+- [`65c19fe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/65c19fe) fix: preserve profiles manually moved from subscription group on update (#41)
+- [`277b192`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/277b192) fix(overview): show the engine that is actually running
+- [`20b5bf2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/20b5bf2) fix(module): report the running core's engine in status
+- [`33dcac1`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/33dcac1) fix(editor): pin the engine selector to the forced core
+- [`8facd2f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8facd2f) fix(singbox): emit sniff + hijack-dns route rules
+- [`99d2964`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/99d2964) fix(core): run xray-style custom gRPC paths on xray only
+- [`a366c25`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a366c25) feat(subscriptions): consume auto-update cache while the UI stays open
+- [`6f7edc3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6f7edc3) fix(service): open sub-wake pipe read-write to unblock auto-update daemon
+- [`cc51296`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/cc51296) fix(service): rename reserved awk variable breaking subscription listing
+- [`6d208cc`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6d208cc) feat(settings): add dedup on sub update toggle (#36)
+- [`9b3be55`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9b3be55) fix(profiles): scope ping, selectBest, removeUnreachable, and removeDuplicates to current group (#35)
+- [`ef3f65e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ef3f65e) fix(profiles): sort offline profiles (ping=-1) to bottom when sorting by ping (#34)
+- [`4e4cd86`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4e4cd86) fix(storage): persist large state via native file I/O, split profiles.json (#33)
+- [`0ad455d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0ad455d) fix(schema): tolerate invalid profiles/settings and report skipped on import (#32)
+- [`e24283d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e24283d) fix(hydrate): show UI before slow asset/status I/O (#31)
+- [`8f124ae`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8f124ae) fix(schema): drop grpc from TRANSPORT_NEEDS_PATH (#30)
+- [`c58e18e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c58e18e) fix(schema): accept non-RFC-variant UUIDs via explicit hex regex (#29)
+- [`fb855ef`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fb855ef) fix(i18n): drop profiles count from backup summary
+- [`f306939`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f306939) fix(backup): validate imported backup against schema in mock bridge
+- [`5e10e32`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5e10e32) fix(backup): preserve current profiles when importing backup in replace mode
+- [`d733789`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d733789) feat(backup): remove profile export from backup JSON
+- [`c4b56bd`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c4b56bd) fix(schema): make profiles optional in AppStateSchema for backup compatibility
+- [`72341dc`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/72341dc) feat(subscriptions): per-subscription download mode (auto/proxy/direct)
+- [`4f34c5b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4f34c5b) fix(assets): restore download_asset_impl lost in helper refactor (#26)
+- [`0a5b4a0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0a5b4a0) fix(assets): restore download_asset_impl lost in helper refactor
+- [`4d5e143`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4d5e143) fix(profiles): stream batch ping/speed results progressively (#25)
+- [`f75e862`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f75e862) feat(ui): add spinner for in-progress tests and red '—' for failures in profile rows (#24)
+- [`75f31a3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/75f31a3) fix(install): ship bin/utils.sh in the module package (#22)
+- [`a114c60`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a114c60) fix(schema): accept non-RFC-variant UUIDs for vless/vmess (#20)
+- [`6546e9e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6546e9e) feat(subscriptions): wake sub-update daemon on upsertSub
+- [`9af73fe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9af73fe) feat(service): replace 1-min polling with event-driven sub-update scheduling
+
 ## v0.3.3 — 2026-06-08
 
 ### Changes
