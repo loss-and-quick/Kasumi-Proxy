@@ -191,7 +191,7 @@ export const useAppStore = create<Store>((set, get) => {
             x.id === sub.id
               ? {
                   ...x,
-                  lastUpdated: new Date().toISOString(),
+                  lastUpdated: new Date(entry.fetchedAt * 1000).toISOString(),
                   count: mapped.length,
                   lastError: null,
                 }
