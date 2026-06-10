@@ -444,6 +444,9 @@ const ar = {
   "settings.localPorts": "المنافذ المحلية",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.allowNonLocalhost": "السماح بالوصول من غير المضيف المحلي",
+  "settings.allowNonLocalhostSub":
+    "ربط منافذ الوكيل بـ 0.0.0.0 للسماح للأجهزة الأخرى على الشبكة بالاتصال",
   "settings.dnsRemote": "DNS البعيد (عبر الوكيل)",
   "settings.dnsRemotePh": "1.1.1.1, 8.8.8.8",
   "settings.dnsDomestic": "DNS المحلي (مباشر)",

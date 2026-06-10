@@ -375,6 +375,9 @@ const ru = {
   "settings.localPorts": "Локальные порты",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.allowNonLocalhost": "Разрешить доступ не с localhost",
+  "settings.allowNonLocalhostSub":
+    "Привязать прокси-порты к 0.0.0.0, чтобы другие устройства в сети могли подключаться",
   "settings.dnsRemote": "Удалённый DNS (через прокси)",
   "settings.dnsRemotePh": "1.1.1.1, 8.8.8.8",
   "settings.dnsDomestic": "Локальный DNS (напрямую)",

@@ -762,7 +762,12 @@ export function buildSingboxConfig(
     log: { level: s.logLevel || "warning", timestamp: true },
     dns: buildSingboxDns(s, routingRules, sharedRuleSetTags),
     inbounds: [
-      { type: "mixed", tag: "socks-in", listen: "127.0.0.1", listen_port: socksPort },
+      {
+        type: "mixed",
+        tag: "socks-in",
+        listen: s.allowNonLocalhost ? "0.0.0.0" : "127.0.0.1",
+        listen_port: socksPort,
+      },
       ...(opts.noTun ? [] : buildSingboxTunInbounds(s)),
     ],
     outbounds: isEndpoint

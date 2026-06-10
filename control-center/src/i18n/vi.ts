@@ -356,6 +356,9 @@ const vi = {
   "settings.localPorts": "Cổng cục bộ",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.allowNonLocalhost": "Cho phép truy cập không phải localhost",
+  "settings.allowNonLocalhostSub":
+    "Gắn cổng proxy vào 0.0.0.0 để các thiết bị khác trên mạng có thể kết nối",
   "settings.dnsRemote": "DNS từ xa (qua proxy)",
   "settings.dnsRemotePh": "1.1.1.1, 8.8.8.8",
   "settings.dnsDomestic": "DNS nội địa (trực tiếp)",

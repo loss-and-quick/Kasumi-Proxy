@@ -1,4 +1,4 @@
-import { Card, Field, SectionLabel } from "../../../components";
+import { Card, Field, RowToggle, SectionLabel } from "../../../components";
 import { useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
@@ -29,6 +29,13 @@ export function LocalPortsSection({
             onChange={(value) => set("localHttpPort", Number(value))}
           />
         </div>
+        <RowToggle
+          icon="language"
+          title={t("settings.allowNonLocalhost")}
+          sub={t("settings.allowNonLocalhostSub")}
+          on={settings.allowNonLocalhost ?? false}
+          onChange={(value) => set("allowNonLocalhost", value)}
+        />
       </Card>
     </>
   );
