@@ -160,6 +160,29 @@ export const useAppStore = create<Store>((set, get) => {
 
     set({ service, uploadRate, downloadRate });
   };
+  // A subscription update re-creates the active profile under a new id. Rebuild
+  // the core config for the old vs the new active profile and report whether
+  // they actually differ — callers restart the core only when this is true, so
+  // an unchanged re-fetch (or a no-op wake from the daemon) doesn't churn the
+  // connection. `prev` is the pre-update snapshot; the new state is read live.
+  const activeProfileConfigChanged = async (
+    prev: Store,
+    nextActiveId: string,
+  ): Promise<boolean> => {
+    const oldActive = prev.profiles.find((p) => p.id === prev.activeId);
+    const next = get();
+    const newActive = next.profiles.find((p) => p.id === nextActiveId);
+    if (!oldActive || !newActive) return true; // can't compare → restart to be safe
+    try {
+      const { buildCoreConfig, activeConfigChanged } = await import("../lib/core-config");
+      return activeConfigChanged(
+        buildCoreConfig(oldActive, prev.settings, prev.routingRules, prev.profiles),
+        buildCoreConfig(newActive, next.settings, next.routingRules, next.profiles),
+      );
+    } catch {
+      return true; // config build failed → don't risk leaving a stale config
+    }
+  };
   const consumeSubCacheImpl = async () => {
     let cached: Awaited<ReturnType<typeof bridge.listSubCache>>;
     try {
@@ -201,12 +224,16 @@ export const useAppStore = create<Store>((set, get) => {
         }));
         await get().flush();
         if (activeAffected && current.service.state === "running") {
-          set({ busy: true });
-          try {
-            syncService(nextActiveId ? await bridge.start(nextActiveId) : await bridge.stop());
-          } finally {
-            set({ busy: false });
-            await get().refreshStatus();
+          const needsRestart =
+            !nextActiveId || (await activeProfileConfigChanged(current, nextActiveId));
+          if (needsRestart) {
+            set({ busy: true });
+            try {
+              syncService(nextActiveId ? await bridge.start(nextActiveId) : await bridge.stop());
+            } finally {
+              set({ busy: false });
+              await get().refreshStatus();
+            }
           }
         }
         if (get().settings.dedupOnUpdate) {
@@ -800,7 +827,11 @@ export const useAppStore = create<Store>((set, get) => {
         }));
         await get().flush();
 
-        if (activeAffected && current.service.state === "running") {
+        if (
+          activeAffected &&
+          current.service.state === "running" &&
+          (!nextActiveId || (await activeProfileConfigChanged(current, nextActiveId)))
+        ) {
           set({ busy: true });
           try {
             if (nextActiveId) {
