@@ -621,6 +621,23 @@ describe("resolveCore — v2rayN-style engine resolution", () => {
     );
   });
 
+  it("forces xray for xray-style custom gRPC paths (leading slash)", () => {
+    // sing-box hardcodes the "/<service_name>/Tun" wire path, so xray's
+    // custom-path serviceName convention is unrepresentable there.
+    expect(
+      resolveCore(
+        mk("trojan", { network: "grpc", serviceName: "/26863/abc", coreType: "sing-box" }),
+        settings,
+      ),
+    ).toBe("xray");
+    expect(
+      resolveCore(
+        mk("trojan", { network: "grpc", serviceName: "svc", coreType: "sing-box" }),
+        settings,
+      ),
+    ).toBe("sing-box");
+  });
+
   it("custom always resolves to xray", () => {
     expect(resolveCore(mk("custom", { raw: "{}", coreType: "sing-box" }), settings)).toBe("xray");
   });
