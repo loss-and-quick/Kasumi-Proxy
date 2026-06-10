@@ -114,7 +114,17 @@ export function nextActiveIdAfterSubscriptionUpdate(
   const activeProfile = current.profiles.find((profile) => profile.id === current.activeId);
   const activeAffected = activeProfile?.subId === subId;
   if (!activeAffected) return current.activeId;
-  return freshMapped.find((profile) => sameProfileIdentity(profile, activeProfile))?.id ?? null;
+  // Prefer an exact identity match; otherwise fall back to the profile with the
+  // same name (remarks). The fallback lets the active selection "follow" an
+  // endpoint change (e.g. the server port changed) instead of being treated as
+  // removed — the caller then diffs the rebuilt config to decide on a restart.
+  const exact = freshMapped.find((profile) => sameProfileIdentity(profile, activeProfile));
+  if (exact) return exact.id;
+  const byName = freshMapped.find(
+    (profile) =>
+      profile.protocol === activeProfile.protocol && profile.remarks === activeProfile.remarks,
+  );
+  return byName?.id ?? null;
 }
 
 export function mergeBackupState(
