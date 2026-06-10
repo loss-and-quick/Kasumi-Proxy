@@ -545,9 +545,32 @@ describe("buildSingboxConfig — full config", () => {
       }),
     );
     const rules = arr(obj(cfg.route).rules).map((x) => obj(x));
-    expect(rules[0]).toMatchObject({ ip_is_private: true, outbound: "direct" });
-    expect(rules[1]).toMatchObject({ action: "resolve", strategy: "prefer_ipv6" });
+    expect(rules[0]).toMatchObject({ action: "sniff" });
+    expect(rules[1]).toMatchObject({ protocol: ["dns"], action: "hijack-dns" });
     expect(rules[2]).toMatchObject({ ip_is_private: true, outbound: "direct" });
+    expect(rules[3]).toMatchObject({ action: "resolve", strategy: "prefer_ipv6" });
+    expect(rules[4]).toMatchObject({ ip_is_private: true, outbound: "direct" });
+  });
+
+  it("emits sniff + hijack-dns rules so domain rules see tun traffic", () => {
+    const cfg = obj(
+      buildSingboxConfig(
+        mk("hysteria2", { address: "hy.ex", port: 443, password: "pw" }),
+        settings,
+      ),
+    );
+    const rules = arr(obj(cfg.route).rules).map((x) => obj(x));
+    expect(rules[0]).toMatchObject({ action: "sniff" });
+    expect(rules[1]).toMatchObject({ protocol: ["dns"], action: "hijack-dns" });
+
+    const noSniff = obj(
+      buildSingboxConfig(mk("hysteria2", { address: "hy.ex", port: 443, password: "pw" }), {
+        ...settings,
+        domainSniffing: false,
+      }),
+    );
+    const noSniffRules = arr(obj(noSniff.route).rules).map((x) => obj(x));
+    expect(noSniffRules.some((r) => r.action === "sniff" || r.action === "hijack-dns")).toBe(false);
   });
 
   it("places wireguard in endpoints (1.12+) with peer endpoint, not outbounds", () => {

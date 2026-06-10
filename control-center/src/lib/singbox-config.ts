@@ -671,6 +671,14 @@ function buildSingboxRoute(
     rules.unshift({ inbound: ["tun-force"], outbound: "proxy" });
   }
 
+  // Sniffing is a route action in sing-box (xray does it per-inbound). Without
+  // it tun traffic is IP-only and every domain/geosite rule above is dead code.
+  // hijack-dns answers client DNS queries through the dns section so its rules
+  // (and fakeip) apply; it needs sniff to detect the dns protocol first.
+  if (s.domainSniffing) {
+    rules.unshift({ action: "sniff" }, { protocol: ["dns"], action: "hijack-dns" });
+  }
+
   for (const tag of extraRuleSetTags) ruleSetTags.add(tag);
 
   const route: JsonObject = {
