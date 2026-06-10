@@ -1,6 +1,6 @@
 import { Field, SectionLabel, Select } from "../../../components";
 import { useT } from "../../../i18n";
-import { CoreSel, PROTOCOLS, type Protocol } from "../../../lib/schema";
+import { type CoreEngineT, CoreSel, PROTOCOLS, type Protocol } from "../../../lib/schema";
 import type { FieldErrors, ProfileSetter, ProfileView } from "../types";
 
 const PROTOCOL_LABELS: Record<Protocol, string> = {
@@ -26,7 +26,7 @@ export function BasicsSection({
   errors,
   groupOpts,
   changeProtocol,
-  engineLocked,
+  engineForced,
   engineHint,
 }: {
   proto: Protocol;
@@ -35,7 +35,7 @@ export function BasicsSection({
   errors: FieldErrors;
   groupOpts: Array<{ value: string; label: string }>;
   changeProtocol: (proto: Protocol) => void;
-  engineLocked: boolean;
+  engineForced: CoreEngineT | null;
   engineHint: string;
 }) {
   const t = useT();
@@ -87,10 +87,12 @@ export function BasicsSection({
         onChange={(value) => set({ groupId: value })}
       />
 
+      {/* When the profile is forced onto one engine, pin the selector to that
+          engine (not "global" or a stale stored choice) and disable it. */}
       <Select
         label={t("editor.engine")}
-        value={v.coreType ?? "global"}
-        disabled={engineLocked}
+        value={engineForced ?? v.coreType ?? "global"}
+        disabled={engineForced != null}
         options={CoreSel.options.map((option) => ({
           value: option,
           label: option === "global" ? t("editor.engineGlobal") : option,

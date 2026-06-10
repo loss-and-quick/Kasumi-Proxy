@@ -193,9 +193,7 @@ const vi = {
   "editor.engine": "Nhân lõi",
   "editor.engineGlobal": "Mặc định toàn cục",
   "editor.engineResolved": "Sẽ chạy trên: {core}",
-  "editor.engineLockedHy2": "Hysteria2 chỉ chạy với sing-box",
-  "editor.engineLockedTuic": "TUIC chỉ chạy với sing-box",
-  "editor.engineLockedCustom": "Cấu hình tùy chỉnh dùng Xray",
+  "editor.engineForced": "Hồ sơ này chỉ có thể chạy trên {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Mật khẩu obfs",
@@ -213,7 +211,6 @@ const vi = {
   "editor.grpcInitialWindow": "Kích thước cửa sổ ban đầu",
   "editor.userAgent": "User-Agent",
   "editor.grpcPermitWithoutStream": "Cho phép không có luồng",
-  "editor.engineLockedSingbox": "Giao thức chỉ chạy trên sing-box",
   "editor.tuicUdpRelayMode": "Chế độ chuyển tiếp UDP",
   "editor.tuicZeroRtt": "Zero RTT",
   "editor.naiveTransport": "Truyền tải",

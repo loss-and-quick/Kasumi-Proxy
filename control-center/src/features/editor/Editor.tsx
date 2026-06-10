@@ -10,8 +10,8 @@ import { Btn, Sheet } from "../../components";
 import { useT } from "../../i18n";
 import { hasTls, hasTransport } from "../../lib/profile";
 import {
-  coreLocked,
   emptyProfile,
+  forcedCore,
   type Profile,
   type Protocol,
   resolveCore,
@@ -97,16 +97,13 @@ export default function Editor({
   const isTls = v.security === "tls";
   const isQuic = proto === "hysteria2" || proto === "tuic";
   const needsHostPath = ["ws", "grpc", "httpupgrade", "xhttp", "h2"].includes(v.network || "");
-  const engineLocked = coreLocked(proto);
+  // Forced covers both protocol locks (tuic/custom/…) and capability locks
+  // (transport the other core cannot build, e.g. xray-style custom gRPC paths).
+  // When forced, the selector pins to that engine and the hint says why.
+  const engineForced = forcedCore(draft);
   const engineResolved = resolveCore(draft, settings);
-  const engineHint = engineLocked
-    ? proto === "hysteria2"
-      ? t("editor.engineLockedHy2")
-      : proto === "tuic"
-        ? t("editor.engineLockedTuic")
-        : proto === "custom"
-          ? t("editor.engineLockedCustom")
-          : t("editor.engineLockedSingbox")
+  const engineHint = engineForced
+    ? t("editor.engineForced", { core: engineForced })
     : t("editor.engineResolved", { core: engineResolved });
 
   return (
@@ -127,7 +124,7 @@ export default function Editor({
         errors={errors}
         groupOpts={groupOpts}
         changeProtocol={changeProtocol}
-        engineLocked={engineLocked}
+        engineForced={engineForced}
         engineHint={engineHint}
       />
 

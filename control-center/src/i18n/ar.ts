@@ -252,9 +252,7 @@ const ar = {
   "editor.engine": "المحرك",
   "editor.engineGlobal": "الإعداد العام الافتراضي",
   "editor.engineResolved": "سيعمل على: {core}",
-  "editor.engineLockedHy2": "يعمل Hysteria2 على sing-box فقط",
-  "editor.engineLockedTuic": "يعمل TUIC على sing-box فقط",
-  "editor.engineLockedCustom": "الإعدادات المخصصة تستخدم Xray",
+  "editor.engineForced": "هذا الملف الشخصي يعمل فقط على {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "التعمية",
   "editor.obfsPassword": "كلمة مرور obfs",
@@ -272,7 +270,6 @@ const ar = {
   "editor.grpcInitialWindow": "حجم النافذة الأولية",
   "editor.userAgent": "User-Agent",
   "editor.grpcPermitWithoutStream": "السماح بدون تدفق",
-  "editor.engineLockedSingbox": "البروتوكول يعمل على sing-box فقط",
   "editor.tuicUdpRelayMode": "وضع ترحيل UDP",
   "editor.tuicZeroRtt": "Zero RTT",
   "editor.naiveTransport": "النقل",
