@@ -67,8 +67,17 @@ export function removeProfilesByIds(profiles: Profile[], ids: Set<string>): Prof
   return profiles.filter((profile) => !ids.has(profile.id));
 }
 
-export function removeProfilesBySubId(profiles: Profile[], subId: string): Profile[] {
-  return profiles.filter((profile) => profile.subId !== subId);
+export function removeProfilesBySubId(
+  profiles: Profile[],
+  subId: string,
+  subGroupId?: string,
+): Profile[] {
+  return profiles.filter((profile) => {
+    if (profile.subId !== subId) return true;
+    // Preserve profiles manually moved to a different group
+    if (subGroupId && profile.groupId !== subGroupId) return true;
+    return false;
+  });
 }
 
 export function activeIdAfterProfileRemoval(

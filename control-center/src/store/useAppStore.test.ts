@@ -499,7 +499,9 @@ describe("useAppStore", () => {
 
     const state = useAppStore.getState();
     expect(state.activeId).toBe("new-active");
-    expect(state.profiles.find((p) => p.id === "old-active")).toBeUndefined();
+    // Profile manually moved from the subscription's group ("g-alt") to another group ("g-main")
+    // should survive a subscription update.
+    expect(state.profiles.find((p) => p.id === "old-active")?.groupId).toBe("g-main");
     expect(state.profiles.find((p) => p.id === "new-active")?.subId).toBe("s1");
     expect(state.profiles.find((p) => p.id === "new-active")?.groupId).toBe("g-alt");
     expect(state.profiles.find((p) => p.id === "new-b")?.subId).toBe("s1");

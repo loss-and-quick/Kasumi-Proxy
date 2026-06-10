@@ -186,7 +186,7 @@ export const useAppStore = create<Store>((set, get) => {
         const activeAffected =
           current.profiles.find((p) => p.id === current.activeId)?.subId === sub.id;
         set((s) => ({
-          profiles: [...removeProfilesBySubId(s.profiles, sub.id), ...mapped],
+          profiles: [...removeProfilesBySubId(s.profiles, sub.id, sub.groupId), ...mapped],
           subscriptions: s.subscriptions.map((x) =>
             x.id === sub.id
               ? {
@@ -785,7 +785,7 @@ export const useAppStore = create<Store>((set, get) => {
           current.profiles.find((p) => p.id === current.activeId)?.subId === id;
 
         set((s) => ({
-          profiles: [...removeProfilesBySubId(s.profiles, id), ...freshMapped],
+          profiles: [...removeProfilesBySubId(s.profiles, id, sub.groupId), ...freshMapped],
           subscriptions: s.subscriptions.map((x) =>
             x.id === id
               ? {
