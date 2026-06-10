@@ -1014,15 +1014,16 @@ sub_list_active() {
 		if ($0 !~ /"enabled":true/) next
 		id  = field("id")
 		url = field("url")
-		int = field("interval")
+		# NB: "int" is an awk builtin and cannot be used as a variable name
+		ivl = field("interval")
 		ua  = field("userAgent")
 		ai  = ($0 ~ /"allowInsecure":true/) ? "1" : "0"
 		mode = field("updateMode")
 		if (mode != "proxy" && mode != "direct") mode = "auto"
-		if (id == "" || url == "" || int+0 <= 0) next
+		if (id == "" || url == "" || ivl+0 <= 0) next
 		# path traversal guard
 		if (id ~ /\/|\.\./) next
-		print id "|" int "|" url "|" ua "|" ai "|" mode
+		print id "|" ivl "|" url "|" ua "|" ai "|" mode
 	}
 	'
 }
@@ -1065,9 +1066,13 @@ EOF
 
 # Sleep until the next subscription update is due, then run a tick.
 # Wakes early when frontend writes to SUB_WAKE_PIPE.
-# Keep write-end open so read -t doesn't block waiting for a writer.
+# Open the FIFO read-write: a write-only open (9>) would block until a reader
+# appears — but the only reader is the read below in this same subshell, so
+# the daemon would deadlock before its first tick. <> opens immediately and
+# keeps a writer alive so read -t never sees EOF and the read-open of the
+# pipe below never blocks waiting for an external writer.
 {
-	exec 9>"$SUB_WAKE_PIPE"
+	exec 9<>"$SUB_WAKE_PIPE"
 	while true; do
 		sub_autoupdate_tick
 		read -r -t "$(sub_next_sleep)" _wake <"$SUB_WAKE_PIPE" || true
