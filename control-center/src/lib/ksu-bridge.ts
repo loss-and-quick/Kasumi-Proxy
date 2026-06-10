@@ -271,22 +271,13 @@ export const ksuBridge: Bridge = {
     const state = lastState ?? (await this.readState());
     const profile = state.profiles.find((p) => p.id === profileId);
     if (!profile) throw new Error(`Profile not found: ${profileId}`);
-    const { resolveCore } = await import("./schema/core");
-    const engine = resolveCore(profile, state.settings);
-    const config =
-      engine === "sing-box"
-        ? (await import("./singbox-config")).buildSingboxConfigJSON(
-            profile,
-            state.settings,
-            state.routingRules ?? [],
-            state.profiles,
-          )
-        : (await import("./xray-config")).buildXrayConfigJSON(
-            profile,
-            state.settings,
-            state.routingRules ?? [],
-            state.profiles,
-          );
+    const { buildCoreConfig } = await import("./core-config");
+    const { engine, config } = buildCoreConfig(
+      profile,
+      state.settings,
+      state.routingRules ?? [],
+      state.profiles,
+    );
     const socksPort = String(state.settings.localSocksPort ?? 10808);
     return acceptServiceState(
       "start",
