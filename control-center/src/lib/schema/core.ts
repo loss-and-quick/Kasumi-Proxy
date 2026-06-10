@@ -28,6 +28,14 @@ function transportForcedCore(p: Profile): CoreEngineT | null {
   if ("network" in p) {
     if (p.network === "h2" || p.network === "quic") return "sing-box";
     if (p.network === "kcp" || p.network === "xhttp") return "xray";
+    if (p.network === "grpc") {
+      // A leading "/" is Xray's custom-path convention: serviceName is the
+      // full wire path and its last segment replaces the "Tun" method name.
+      // sing-box always sends "/<service_name>/Tun", so such servers answer
+      // 404 — these profiles can only run on xray.
+      const serviceName = ("serviceName" in p ? p.serviceName : "") || ("path" in p ? p.path : "");
+      if (serviceName.startsWith("/")) return "xray";
+    }
   }
   return null;
 }
