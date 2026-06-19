@@ -1,0 +1,112 @@
+# The desktop pipeline: the React UI (bun2nix), the crane-tauri app, and the
+# GTK-wrapped `kasumi-desktop` binary with the cores + tray lib wired in.
+{
+  pkgs,
+  root,
+  crane-tauri,
+  toolchain,
+  version,
+  cores,
+}:
+let
+  inherit (toolchain) lib craneLib tauriLibs;
+
+  # The React UI built into static assets. bun2nix reconstructs node_modules from
+  # the generated bun.nix (one fixed-output fetch per package, no opaque tree
+  # hash); its hook also patches the dep CLI shebangs. The vite build is then
+  # offline and deterministic. Regenerate bun.nix with `bunx bun2nix` after
+  # changing bun.lock.
+  frontend = pkgs.stdenv.mkDerivation {
+    pname = "kasumi-frontend";
+    version = version.appVersion;
+    src = lib.fileset.toSource {
+      inherit root;
+      fileset = lib.fileset.unions [
+        (root + "/package.json")
+        (root + "/bun.lock")
+        (root + "/bun.nix")
+        (root + "/frontend")
+      ];
+    };
+    nativeBuildInputs = [
+      pkgs.bun2nix.hook
+      pkgs.nodejs_22
+    ];
+    bunDeps = pkgs.bun2nix.fetchBunDeps {
+      bunNix = root + "/bun.nix";
+    };
+    buildPhase = ''
+      ( cd frontend && bun run build )
+    '';
+    installPhase = ''
+      cp -R frontend/dist $out
+    '';
+    dontFixup = true;
+  };
+
+  # crane-tauri assembles the Tauri 2 app: builds the Rust workspace with the
+  # built `frontend` embedded, reusing a crane dependency cache. cargoRoot is the
+  # workspace root because src-tauri depends on ../crates/* by path; the installed
+  # binary is cargo's package name (kasumi-desktop).
+  tauri = crane-tauri.lib.buildTauriApp { inherit pkgs craneLib; } {
+    pname = "kasumi-proxy";
+    version = version.appVersion;
+    src = root;
+    cargoRoot = root;
+    binaryName = "kasumi-desktop";
+    inherit frontend;
+  };
+
+  # crane-tauri leaves GTK/WebKit wrapping to the consumer (wrapping in the shared
+  # inputs would perturb PKG_CONFIG_PATH and bust -sys fingerprints). webkit2gtk-4.1
+  # is GTK3-based, so wrap with wrapGAppsHook3.
+  kasumi-desktop = pkgs.stdenv.mkDerivation {
+    pname = "kasumi-desktop";
+    version = version.appVersion;
+    dontUnpack = true;
+    nativeBuildInputs = [
+      pkgs.wrapGAppsHook3
+      pkgs.gobject-introspection
+      pkgs.patchelf
+    ];
+    buildInputs = tauriLibs;
+    # Point the app at the bundled cores by default (the desktop Platform reads
+    # KASUMI_BIN_DIR); --set-default lets a dev still override it.
+    preFixup = ''
+      gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${cores.desktopCores}/bin")
+    '';
+    installPhase = ''
+      mkdir -p $out/bin
+      cp ${tauri.app}/bin/kasumi-desktop $out/bin/kasumi-desktop
+    '';
+    # The tray icon dlopen's libayatana-appindicator at runtime (not linked). Bake
+    # it into the binary's RUNPATH so dlopen finds it even after the app re-execs
+    # as root via pkexec, which scrubs the environment (LD_LIBRARY_PATH would be
+    # lost; RUNPATH survives). This MUST run in postFixup: the generic fixupPhase
+    # runs `patchelf --shrink-rpath`, which would otherwise strip the path back out
+    # (appindicator is dlopen'd, not a DT_NEEDED). wrapGAppsHook has by now renamed
+    # the real ELF to .kasumi-desktop-wrapped.
+    postFixup = ''
+      patchelf --add-rpath ${lib.makeLibraryPath [ pkgs.libayatana-appindicator ]} \
+        $out/bin/.kasumi-desktop-wrapped
+    '';
+  };
+
+  # `nix flake check` — clippy over the same source, reusing crane's dep cache.
+  clippy = craneLib.cargoClippy (
+    tauri.commonArgs
+    // {
+      cargoArtifacts = tauri.cargoArtifacts;
+      cargoClippyExtraArgs = "--all-targets -- -D warnings";
+      TAURI_CONFIG = tauri.tauriConfig;
+    }
+  );
+in
+{
+  inherit
+    frontend
+    tauri
+    kasumi-desktop
+    clippy
+    ;
+}
