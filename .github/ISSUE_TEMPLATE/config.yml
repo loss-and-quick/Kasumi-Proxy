@@ -3,6 +3,6 @@ contact_links:
   - name: 📖 README & setup guide
     url: https://github.com/loss-and-quick/Kasumi-Proxy#readme
     about: Installation, requirements and troubleshooting before opening an issue.
-  - name: 🙋 No root? Use a GUI client instead
+  - name: 🙋 No root and not on Linux desktop? Use a GUI client
     url: https://github.com/XTLS/Xray-core#gui-clients
-    about: Kasumi Proxy is a root module, not a standalone VPN app.
+    about: On Android, Kasumi Proxy is a root module (not a standalone VPN app); on desktop it's a Linux Tauri app.

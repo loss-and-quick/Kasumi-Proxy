@@ -1,124 +1,152 @@
-# Kasumi Proxy
+<p align="center">
+  <img src=".github/logo.png" width="160" alt="Kasumi Proxy" />
+</p>
 
-[![CI](https://github.com/loss-and-quick/Kasumi-Proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/loss-and-quick/Kasumi-Proxy/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/loss-and-quick/Kasumi-Proxy?sort=semver)](https://github.com/loss-and-quick/Kasumi-Proxy/releases/latest)
-[![Open issues](https://img.shields.io/github/issues/loss-and-quick/Kasumi-Proxy)](https://github.com/loss-and-quick/Kasumi-Proxy/issues)
-[![License: GPL v3](https://img.shields.io/github/license/loss-and-quick/Kasumi-Proxy)](LICENSE)
-[![Platform: Android (root)](https://img.shields.io/badge/platform-Android%20(root)-3DDC84?logo=android&logoColor=white)](https://github.com/loss-and-quick/Kasumi-Proxy#readme)
+<h1 align="center">Kasumi Proxy</h1>
 
-> A system-level transparent proxy engine for **rooted Android** — routes all device
-> traffic through Xray-core / sing-box at the kernel level, with a clean Web UI.
+<p align="center">
+  <a href="https://github.com/loss-and-quick/Kasumi-Proxy/actions/workflows/ci.yml"><img src="https://github.com/loss-and-quick/Kasumi-Proxy/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/loss-and-quick/Kasumi-Proxy/releases/latest"><img src="https://img.shields.io/github/v/release/loss-and-quick/Kasumi-Proxy?sort=semver" alt="Latest release" /></a>
+  <a href="https://github.com/loss-and-quick/Kasumi-Proxy/issues"><img src="https://img.shields.io/github/issues/loss-and-quick/Kasumi-Proxy" alt="Open issues" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/loss-and-quick/Kasumi-Proxy" alt="License: GPL v3" /></a>
+  <img src="https://img.shields.io/badge/platform-Android%20(root)%20%C2%B7%20Linux-blue" alt="Platform: Android (root) / Linux" />
+</p>
 
-Kasumi Proxy is a **Magisk / KernelSU / APatch module** (not a standalone app). It runs the
-proxy core as a system daemon and steers traffic with native Linux routing
-(`iptables` / `ip rule`), instead of Android's user-space `VpnService`.
+> A system-level transparent proxy for **rooted Android** and **Linux desktop** — routes all
+> traffic through Xray-core / sing-box at the kernel level, with a clean React UI.
 
-> 🍴 **Fork.** Kasumi Proxy is a fork of
-> [vincentng295/Magic_V2Ray](https://github.com/vincentng295/Magic_V2Ray)
+On Android, Kasumi Proxy is a **Magisk / KernelSU / APatch module** (not a standalone app): it
+runs the proxy core as a system daemon and steers traffic with native Linux routing
+(`iptables` / `ip rule`) instead of Android's user-space `VpnService`. On desktop it is a
+**Tauri 2 app** that owns the same data path with a real TUN. Both shells drive one shared Rust
+backend, so the domain logic — profiles, share links, config builders, subscriptions — lives in
+exactly one place.
 
-> 🤖 **AI SLOP WARNING.** Most of this codebase was written by AI.
+> 🍴 **Fork** of [vincentng295/Magic_V2Ray](https://github.com/vincentng295/Magic_V2Ray).
+>
+> 🤖 **AI SLOP WARNING.** Most of this codebase was written by AI — review before trusting.
 
 ---
 
 ## Why a root module instead of a VPN app?
 
-If you come from v2rayNG, NekoBox, or Matsuri, here is what changes:
+If you come from v2rayNG, NekoBox, or Matsuri, here is what changes on Android:
 
-- **Survives Low-Memory-Killer.** Standard apps run in user space and get killed under
-  memory pressure, dropping the tunnel and leaking your real IP. Kasumi Proxy runs as a root
-  daemon the OS won't reap.
-- **Kernel-level routing.** No virtual `tun0` software bottleneck for app traffic —
-  packets are intercepted at the Netfilter/Mangle layer and handed straight to the core,
-  cutting latency and CPU overhead from Java↔kernel context switching.
-- **Seamless network switches.** Wi-Fi ↔ 4G/5G transitions hot-reload the firewall rules
-  in-kernel, without the usual multi-second freeze.
-- **Universal root support.** Works on Magisk, KernelSU, and APatch out of the box.
+- **Survives Low-Memory-Killer.** User-space apps get killed under memory pressure, dropping the
+  tunnel and leaking your real IP. Kasumi Proxy runs as a root daemon the OS won't reap.
+- **Kernel-level routing.** No virtual `tun0` software bottleneck for app traffic — packets are
+  intercepted at the Netfilter layer and handed straight to the core, cutting latency and the
+  CPU overhead of Java↔kernel context switching.
+- **Seamless network switches.** Wi-Fi ↔ 4G/5G transitions hot-reload the routing rules in-kernel.
+- **Universal root support.** Magisk, KernelSU, and APatch out of the box.
 
-> ⚠️ **No root?** This is a system module, not an app. For a regular GUI client, see the
-> [Xray-core GUI clients](https://github.com/XTLS/Xray-core#gui-clients).
+> ⚠️ **No root?** The Android side is a system module, not an app. For a regular GUI client, see
+> the [Xray-core GUI clients](https://github.com/XTLS/Xray-core#gui-clients).
 
 ---
 
 ## Features
 
-- **Dual core** — Xray-core for VLESS/VMess/Trojan/Shadowsocks/SOCKS/HTTP/WireGuard,
-  sing-box for Hysteria2/TUIC. The core is selected per profile.
+- **Dual core** — Xray-core for VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP / WireGuard,
+  sing-box for Hysteria2 / TUIC. The engine is resolved per profile.
 - **Smart import** — paste subscription URLs, raw config strings, or mixed text; scan QR.
 - **Category organizing** — group servers into folders, one-tap update a whole category.
-- **Web UI** — manage profiles, subscriptions, routing rules, and logs from the browser.
-- **Native background processing** — lighter on battery than a user-space VPN app.
+- **Truthful status** — the main screen distinguishes *connecting / connected / no-internet /
+  failed* via an end-to-end probe, not just "the process started".
+- **Per-profile diagnostics** — tcp-ping, real-ping and a speed test, streamed as they finish.
+- **Headless subscription auto-update** — applies in the background with no UI open.
 
 ---
 
 ## Install
 
+**Android (root):**
+
 1. Download the latest `kasumi-proxy-vX.Y.Z.zip` release.
 2. Flash it in Magisk / KernelSU / APatch and reboot.
-3. Open the module's **Action** (Magisk) or WebUI entry — it launches the local control
-   center in your browser, authenticated with a per-install secret token.
+3. Open the module's **Action** (Magisk) or its WebUI entry — it launches the control center in
+   your browser, authenticated with a per-install token.
 
 State and logs live under `/data/adb/kasumi-proxy/`.
+
+**Linux desktop:** build with `nix build .#kasumi-desktop` (see below); a packaged installer is a
+work in progress.
 
 ---
 
 ## Build from source
 
-The repo is split into the **source you edit** and the **module payload that ships**:
+The repo is one Rust workspace + the React UI, with two thin shells over a shared backend:
 
 ```
 .
-├── module/            # contents that become the installable zip root
-│   ├── module.prop    # id=kasumi-proxy
-│   ├── customize.sh service.sh proxy_control.sh action.sh uninstall.sh
-│   ├── META-INF/      # Magisk installer
-│   ├── bin/           # kasumi-proxyctl (tracked) + xray/sing-box/tun2socks (fetched)
-│   └── webroot/       # cgi-bin/exec (tracked) + built UI (generated)
-├── control-center/    # React + TypeScript Web UI (Vite, Zustand, Zod, Biome)
-├── scripts/           # fetch-bin, build-webroot, package-release
-└── flake.nix          # Nix dev shell (bun, curl, zip, jq, shellcheck)
+├── crates/
+│   ├── kasumi-core/     # neutral domain: profiles, share links, xray/sing-box config
+│   │                    #   builders, sub-apply, on-disk migrations (serde + specta::Type)
+│   ├── kasumi-backend/  # neutral orchestration: Platform trait, typed Command/Response +
+│   │                    #   dispatch, lifecycle/jobs/sub-update, the Service
+│   └── kasumi-daemon/   # Android-only bin: axum HTTP webroot + token-gated WS → the Service
+├── src-tauri/           # Tauri 2 desktop app: the same Service in managed state + Linux Platform
+├── frontend/            # React + TypeScript UI (Vite, Zustand, Biome); runs on generated bindings
+├── module/              # contents that become the installable Android zip root
+│   ├── module.prop customize.sh service.sh action.sh uninstall.sh META-INF/
+│   ├── bin/             # kasumi-proxy daemon + xray/sing-box/tun2socks (built/fetched, gitignored)
+│   └── webroot/         # built UI (generated, gitignored)
+├── scripts/             # fetch-bin, build-daemon-android, build-webroot, package-release
+├── Cargo.toml           # Rust workspace manifest
+└── flake.nix            # Nix dev shell + crane-tauri desktop build + android daemon toolchain
 ```
 
+The frontend's TypeScript bindings, Zod schemas and runtime defaults are **generated from the
+Rust types** (`tauri-specta`), so the two sides can't drift. Everything OS-specific lives behind
+the `Platform` trait — Android in `kasumi-daemon`, Linux desktop in `src-tauri`.
+
+The Nix flake is the supported build path (no system Rust needed):
 
 ```sh
-# fetch core binaries (xray, sing-box, tun2socks) into module/bin/<abi>/
-scripts/fetch-bin.sh        # or: nix run .#fetch-bin
+# Rust gate
+nix develop --command cargo test --workspace
+nix develop --command cargo clippy --workspace --all-targets -- -D warnings
 
-# build the Web UI into module/webroot/
-scripts/build-webroot.sh    # or: nix run .#build-webroot
+# Frontend
+cd frontend && bun install && bun run build && bunx vitest run
 
-# produce an installable module zip (fetches + builds + zips)
-scripts/package-release.sh  # → build/kasumi-proxy-v0.0.1.zip
+# Desktop app (reproducible)
+nix build .#kasumi-desktop
+
+# Android module zip (cross-builds the daemon + cores + webroot, then zips)
+nix run .#package-release -- build/kasumi-proxy.zip
 ```
 
-Core binaries and the built `webroot/` are intentionally **not** committed — they are
-produced at release time (see `.gitignore`).
+Core/daemon binaries and the built `module/webroot/` are intentionally **not** committed — they
+are produced at release time (see `.gitignore`).
 
 ### Web UI development
 
 ```sh
-cd control-center
+cd frontend
 bun install
 bun run dev      # mock bridge — no device needed
-bun test         # Vitest unit tests
-bun run lint     # Biome
+bunx vitest run  # unit tests
+bunx biome check # lint/format
 ```
 
-The UI talks to the module through a `Bridge` abstraction (`src/lib/bridge.ts`): the real
-implementation (`ksu-bridge.ts`) invokes `kasumi-proxyctl <method>` via the KernelSU JS API or
-a token-guarded CGI endpoint; `mock-bridge.ts` simulates it for local development.
+The UI talks to the backend through a `Bridge` abstraction (`src/lib/bridge.ts`): the Tauri
+build invokes the backend in-process, the Android build speaks a token-guarded WebSocket RPC to
+the daemon, and `mock-bridge.ts` simulates it for local development — all carrying the same typed
+`Command` / `Response`.
 
 ---
 
 ## How it works
 
-- **`module/bin/kasumi-proxyctl`** — a typed shell facade. The UI never builds raw shell; it
-  calls fixed methods (`start`, `stop`, `status`, `log`, `ping`, `fetchSubscription`, …)
-  which read/write `/data/adb/kasumi-proxy/` and drive `proxy_control.sh`.
-- **`module/service.sh`** — the daemon: launches the selected core + `tun2socks`, sets up
-  the TUN interface, and applies `iptables` / `ip rule` marking so device traffic is
-  routed through the proxy.
-- **`control-center/`** — generates the core config (`xray-config.ts` / `singbox-config.ts`
-  from Zod-validated profiles) and renders the management UI.
+- **One backend, two shells.** `kasumi-backend` owns the data-path lifecycle (core + `tun2socks`,
+  routing, watchdogs, headless subscription updates) as a `Service`. On Android the
+  `kasumi-proxy` daemon hosts it behind an axum WS server; on desktop the Tauri process *is* the
+  backend. The UI never builds raw shell — it speaks one typed command set over the bridge.
+- **Domain logic lives in `kasumi-core`.** Profiles in, engine config (`xray_config` /
+  `singbox_config`) out, built server-side so subscription updates apply with no UI open.
+- **`frontend/`** is the management UI, running on the generated bindings.
 
 ---
 
@@ -128,8 +156,7 @@ Kasumi Proxy bundles pre-built binaries from these open-source projects:
 
 - **[Xray-core](https://github.com/XTLS/Xray-core)** — primary proxy engine.
 - **[sing-box](https://github.com/SagerNet/sing-box)** — second core.
-- **[tun2socks](https://github.com/xjasonlyu/tun2socks)** — wraps the proxy into a TUN
-  interface.
+- **[tun2socks](https://github.com/xjasonlyu/tun2socks)** — wraps the proxy into a TUN interface.
 
 ## License
 
