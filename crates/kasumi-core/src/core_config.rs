@@ -1,0 +1,87 @@
+//! Resolve the core engine for a profile and build its exact launch config.
+//! Shared by the backend (to launch the core) and config-diffing
+//! (restart-on-change).
+
+use serde_json::Value;
+
+use crate::core::resolve_core;
+use crate::enums::CoreEngine;
+use crate::profile::Profile;
+use crate::singbox_config::{build_singbox_config, SingboxBuildOpts};
+use crate::state::{AdvancedSettings, RoutingRule};
+use crate::xray_config::build_xray_config;
+
+/// Engine + config JSON for a profile, mirroring what the core is launched with.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreConfig {
+    pub engine: CoreEngine,
+    /// The built config as a JSON value (serialize to a string when writing it
+    /// to disk; comparing values is order-independent for restart diffing).
+    pub config: Value,
+}
+
+/// Build the launch config for a profile. `srs_dir` is the platform's rule-set
+/// directory (sing-box only); pass `""` when only diffing configs.
+pub fn build_core_config(
+    profile: &Profile,
+    settings: &AdvancedSettings,
+    routing_rules: &[RoutingRule],
+    profiles: &[Profile],
+    srs_dir: &str,
+) -> Result<CoreConfig, String> {
+    let engine = resolve_core(profile, settings);
+    let config = match engine {
+        CoreEngine::SingBox => build_singbox_config(
+            profile,
+            settings,
+            routing_rules,
+            profiles,
+            SingboxBuildOpts {
+                no_tun: false,
+                srs_dir,
+            },
+        )?,
+        CoreEngine::Xray => build_xray_config(profile, settings, routing_rules, profiles)?,
+    };
+    Ok(CoreConfig { engine, config })
+}
+
+/// True when two resolved core configs differ — i.e. the core must be restarted.
+pub fn active_config_changed(prev: &CoreConfig, next: &CoreConfig) -> bool {
+    prev.engine != next.engine || prev.config != next.config
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::share::parse_share_link;
+
+    #[test]
+    fn dispatches_by_resolved_engine() {
+        let s = AdvancedSettings::default();
+        let xray = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+
+        let cx = build_core_config(&xray, &s, &[], std::slice::from_ref(&xray), "").unwrap();
+        assert_eq!(cx.engine, CoreEngine::Xray);
+        assert!(cx.config["outbounds"].is_array());
+
+        let cs = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+        assert_eq!(cs.engine, CoreEngine::SingBox);
+        assert!(cs.config["route"].is_object());
+    }
+
+    #[test]
+    fn change_detection() {
+        let s = AdvancedSettings::default();
+        let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let a = build_core_config(&p, &s, &[], std::slice::from_ref(&p), "").unwrap();
+        let b = a.clone();
+        assert!(!active_config_changed(&a, &b));
+
+        let mut s2 = s.clone();
+        s2.fragment = true; // changes the built config
+        let c = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
+        assert!(active_config_changed(&a, &c));
+    }
+}
