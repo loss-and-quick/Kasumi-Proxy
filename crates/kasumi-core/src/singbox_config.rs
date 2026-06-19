@@ -1,0 +1,1139 @@
+//! Build a complete sing-box config from a Profile + AdvancedSettings. Builds a
+//! `serde_json::Value` directly; pinned against committed reference fixtures
+//! (Value-compared, so key order is irrelevant).
+
+use serde_json::{json, Map, Value};
+
+use crate::config_shared::{parse_pem_chain, split_csv, split_list};
+use crate::enums::{Fingerprint, HeaderType, Security};
+use crate::mixins::Transport;
+use crate::profile::Profile;
+use crate::state::{
+    AdvancedSettings, AppFilterMode, DomainStrategy, RoutingMode, RoutingRule,
+    DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+};
+
+fn wire<T: serde::Serialize>(v: &T) -> String {
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|x| x.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// Insertion-ordered tag set — sing-box `rule_set` order is significant, so
+/// tags must keep first-seen order (a plain sorted/hashed set would reorder them).
+type Tags = Vec<String>;
+fn tag_insert(v: &mut Tags, s: String) {
+    if !v.contains(&s) {
+        v.push(s);
+    }
+}
+fn tag_extend(v: &mut Tags, other: &Tags) {
+    for t in other {
+        tag_insert(v, t.clone());
+    }
+}
+
+/// Format a JS `Number → String` the way `${n}s`/interval strings expect
+/// (integers without a trailing `.0`).
+fn num_str(v: f64) -> String {
+    if v.fract() == 0.0 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
+}
+
+fn push_str(target: &mut Value, key: &str, value: String) {
+    let arr = target
+        .as_object_mut()
+        .unwrap()
+        .entry(key)
+        .or_insert_with(|| Value::Array(Vec::new()));
+    arr.as_array_mut().unwrap().push(Value::String(value));
+}
+
+fn push_num(target: &mut Value, key: &str, value: i64) {
+    let arr = target
+        .as_object_mut()
+        .unwrap()
+        .entry(key)
+        .or_insert_with(|| Value::Array(Vec::new()));
+    arr.as_array_mut().unwrap().push(Value::from(value));
+}
+
+fn has_match_fields(rule: &Value, keys: &[&str]) -> bool {
+    let Some(o) = rule.as_object() else {
+        return false;
+    };
+    keys.iter().any(|k| o.contains_key(*k))
+}
+
+// ---------- TLS ----------
+
+fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<Value> {
+    let tls = p.tls()?;
+    let active = force || tls.security == Security::Tls || tls.security == Security::Reality;
+    if !active {
+        return None;
+    }
+    let host = p
+        .transport()
+        .map(|t| t.host().to_string())
+        .unwrap_or_default();
+    let authority = p
+        .transport()
+        .map(|t| t.authority().to_string())
+        .unwrap_or_default();
+    let pin_sha256 = match p {
+        Profile::Hysteria2(h) => h.pin_sha256.clone(),
+        _ => String::new(),
+    };
+    let pin = if !pin_sha256.is_empty() {
+        pin_sha256
+    } else {
+        tls.pcs.clone()
+    };
+    let certs = parse_pem_chain(&tls.cert);
+    let address = p.endpoint().map(|e| e.address.clone()).unwrap_or_default();
+    let server_name = if !tls.sni.is_empty() {
+        tls.sni.clone()
+    } else if !authority.is_empty() {
+        authority
+    } else if !host.is_empty() {
+        host
+    } else {
+        address
+    };
+
+    let mut t = json!({
+        "enabled": true,
+        "server_name": server_name,
+        "insecure": tls.allow_insecure,
+    });
+    if tls.disable_sni {
+        t["disable_sni"] = true.into();
+    }
+    if !tls.tls_min_version.is_empty() {
+        t["min_version"] = tls.tls_min_version.clone().into();
+    }
+    if !tls.tls_max_version.is_empty() {
+        t["max_version"] = tls.tls_max_version.clone().into();
+    }
+    if !tls.tls_cipher_suites.is_empty() {
+        t["cipher_suites"] = tls.tls_cipher_suites.clone().into();
+    }
+    if !tls.tls_curve_preferences.is_empty() {
+        t["curve_preferences"] = tls.tls_curve_preferences.clone().into();
+    }
+    if let Some(certs) = &certs {
+        if !certs.is_empty() {
+            t["certificate"] = json!(certs);
+        }
+    }
+    if s.fragment {
+        t["record_fragment"] = true.into();
+    }
+    if !tls.alpn.is_empty() {
+        t["alpn"] = tls.alpn.clone().into();
+    }
+    if !pin.is_empty() {
+        t["certificate_public_key_sha256"] = json!([pin]);
+    }
+    if !tls.ech.is_empty() {
+        t["ech"] = json!({ "enabled": true, "config": [tls.ech] });
+    }
+    if tls.fingerprint != Fingerprint::Empty {
+        t["utls"] = json!({ "enabled": true, "fingerprint": wire(&tls.fingerprint) });
+    }
+    if tls.security == Security::Reality {
+        t["reality"] =
+            json!({ "enabled": true, "public_key": tls.public_key, "short_id": tls.short_id });
+        t["insecure"] = false.into();
+    }
+    Some(t)
+}
+
+// ---------- transport ----------
+
+fn build_singbox_transport(p: &Profile) -> Option<Value> {
+    let t = p.transport()?;
+    match t {
+        Transport::Ws(w) => {
+            let mut v = json!({ "type": "ws" });
+            if !w.path.is_empty() {
+                v["path"] = w.path.clone().into();
+            }
+            if !w.host.is_empty() {
+                let mut headers = Map::new();
+                headers.insert("Host".into(), w.host.clone().into());
+                for (k, val) in &w.headers {
+                    headers.insert(k.clone(), val.clone().into());
+                }
+                v["headers"] = Value::Object(headers);
+            } else if !w.headers.is_empty() {
+                let mut headers = Map::new();
+                for (k, val) in &w.headers {
+                    headers.insert(k.clone(), val.clone().into());
+                }
+                v["headers"] = Value::Object(headers);
+            }
+            if w.early_data > 0 {
+                v["max_early_data"] = w.early_data.into();
+                v["early_data_header_name"] = if w.early_data_header.is_empty() {
+                    "Sec-WebSocket-Protocol".into()
+                } else {
+                    w.early_data_header.clone().into()
+                };
+            } else if !w.early_data_header.is_empty() {
+                v["early_data_header_name"] = w.early_data_header.clone().into();
+            }
+            Some(v)
+        }
+        Transport::Grpc(g) => {
+            let mut v = json!({ "type": "grpc", "service_name": g.service_name.clone() });
+            if g.idle_timeout != 0 {
+                v["idle_timeout"] = format!("{}s", g.idle_timeout).into();
+            }
+            if g.ping_timeout != 0 {
+                v["ping_timeout"] = format!("{}s", g.ping_timeout).into();
+            }
+            if g.permit_without_stream {
+                v["permit_without_stream"] = true.into();
+            }
+            Some(v)
+        }
+        Transport::H2(h) => {
+            let mut v = json!({ "type": "http" });
+            if let Some(hosts) = split_csv(&h.host) {
+                v["host"] = hosts.into();
+            }
+            if !h.path.is_empty() {
+                v["path"] = h.path.clone().into();
+            }
+            if h.idle_timeout != 0 {
+                v["idle_timeout"] = format!("{}s", h.idle_timeout).into();
+            }
+            if h.ping_timeout != 0 {
+                v["ping_timeout"] = format!("{}s", h.ping_timeout).into();
+            }
+            Some(v)
+        }
+        Transport::Httpupgrade(h) => {
+            let mut v = json!({ "type": "httpupgrade" });
+            if !h.path.is_empty() {
+                v["path"] = h.path.clone().into();
+            }
+            if !h.host.is_empty() {
+                v["host"] = h.host.clone().into();
+            }
+            Some(v)
+        }
+        Transport::Quic(_) => Some(json!({ "type": "quic" })),
+        Transport::Tcp(tc) => {
+            if tc.header_type != HeaderType::Http {
+                return None;
+            }
+            let mut v = json!({ "type": "http" });
+            if let Some(hosts) = split_csv(&tc.host) {
+                v["host"] = hosts.into();
+            }
+            if !tc.path.is_empty() {
+                v["path"] = tc.path.clone().into();
+            }
+            Some(v)
+        }
+        // xhttp/kcp aren't sing-box transports.
+        Transport::Xhttp(_) | Transport::Kcp(_) => None,
+    }
+}
+
+fn build_singbox_mux(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
+    if !p.mux_enabled() {
+        return None;
+    }
+    Some(json!({ "enabled": true, "protocol": "h2mux", "max_connections": s.mux_concurrency }))
+}
+
+fn build_server_ports(ports: &str) -> Vec<String> {
+    split_csv(ports)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|x| {
+            let port = x.replace('-', ":");
+            if port.contains(':') {
+                port
+            } else {
+                format!("{port}:{port}")
+            }
+        })
+        .collect()
+}
+
+// ---------- outbound per protocol ----------
+
+/// Build the sing-box outbound (or wireguard endpoint) object for a profile.
+pub fn build_singbox_outbound(p: &Profile, s: &AdvancedSettings) -> Value {
+    let mut base = json!({ "tag": "proxy", "type": wire_protocol(p) });
+    if let Some(ep) = p.endpoint() {
+        base["server"] = ep.address.clone().into();
+        base["server_port"] = ep.port.into();
+    }
+
+    let apply_tls = |base: &mut Value, force: bool| {
+        if let Some(tls) = build_singbox_tls(p, force, s) {
+            base["tls"] = tls;
+        }
+    };
+    let apply_transport = |base: &mut Value| {
+        if let Some(tr) = build_singbox_transport(p) {
+            base["transport"] = tr;
+        }
+    };
+    let apply_mux = |base: &mut Value| {
+        if let Some(mux) = build_singbox_mux(p, s) {
+            base["multiplex"] = mux;
+        }
+    };
+
+    match p {
+        Profile::Vmess(v) => {
+            base["uuid"] = v.uuid.clone().into();
+            base["alter_id"] = v.alter_id.into();
+            base["security"] = wire(&v.encryption).into();
+            if v.packet_encoding != crate::enums::PacketEncoding::Empty {
+                base["packet_encoding"] = wire(&v.packet_encoding).into();
+            }
+            if v.vmess_global_padding {
+                base["global_padding"] = true.into();
+            }
+            if v.vmess_authenticated_length {
+                base["authenticated_length"] = true.into();
+            }
+            apply_mux(&mut base);
+            apply_transport(&mut base);
+            apply_tls(&mut base, false);
+        }
+        Profile::Vless(v) => {
+            base["uuid"] = v.uuid.clone().into();
+            base["packet_encoding"] = if v.packet_encoding == crate::enums::PacketEncoding::Empty {
+                "xudp".into()
+            } else {
+                wire(&v.packet_encoding).into()
+            };
+            if v.flow != crate::enums::Flow::Empty {
+                base["flow"] = wire(&v.flow).into();
+            } else {
+                apply_mux(&mut base);
+            }
+            apply_transport(&mut base);
+            apply_tls(&mut base, false);
+        }
+        Profile::Trojan(v) => {
+            base["password"] = v.password.clone().into();
+            apply_mux(&mut base);
+            apply_transport(&mut base);
+            apply_tls(&mut base, false);
+        }
+        Profile::Shadowsocks(v) => {
+            base["method"] = wire(&v.method).into();
+            base["password"] = v.password.clone().into();
+            match &v.transport {
+                Transport::Tcp(tc) if tc.header_type == HeaderType::Http => {
+                    base["plugin"] = "obfs-local".into();
+                    base["plugin_opts"] = format!("obfs=http;obfs-host={};", tc.host).into();
+                }
+                other => {
+                    let mut args = String::new();
+                    match other {
+                        Transport::Ws(w) => {
+                            args.push_str("mode=websocket;");
+                            args.push_str(&format!("host={};", w.host));
+                            let path = w
+                                .path
+                                .replace('\\', "\\\\")
+                                .replace('=', "\\=")
+                                .replace(',', "\\,");
+                            args.push_str(&format!("path={path};"));
+                        }
+                        Transport::Quic(_) => args.push_str("mode=quic;"),
+                        _ => {}
+                    }
+                    if v.tls.security == Security::Tls {
+                        args.push_str("tls;");
+                    }
+                    if !args.is_empty() {
+                        base["plugin"] = "v2ray-plugin".into();
+                        let opts = format!("{args}mux=0;");
+                        base["plugin_opts"] = opts.trim_end_matches(';').to_string().into();
+                    }
+                }
+            }
+            apply_mux(&mut base);
+        }
+        Profile::Socks(v) => {
+            base["version"] = "5".into();
+            if !v.username.is_empty() && !v.password.is_empty() {
+                base["username"] = v.username.clone().into();
+                base["password"] = v.password.clone().into();
+            }
+        }
+        Profile::Http(v) => {
+            if !v.username.is_empty() && !v.password.is_empty() {
+                base["username"] = v.username.clone().into();
+                base["password"] = v.password.clone().into();
+            }
+            apply_tls(&mut base, false);
+        }
+        Profile::Wireguard(v) => {
+            let reserved: Vec<i64> = v.reserved.iter().map(|&b| b as i64).collect();
+            let mut peer = json!({
+                "address": v.endpoint.address,
+                "port": v.endpoint.port,
+                "public_key": v.peer_public_key,
+                "allowed_ips": ["0.0.0.0/0", "::/0"],
+            });
+            if !v.pre_shared_key.is_empty() {
+                peer["pre_shared_key"] = v.pre_shared_key.clone().into();
+            }
+            if v.persistent_keepalive != 0 {
+                peer["persistent_keepalive_interval"] = v.persistent_keepalive.into();
+            }
+            if !reserved.is_empty() {
+                peer["reserved"] = reserved.into();
+            }
+            let mut wg = json!({
+                "type": "wireguard",
+                "tag": "proxy",
+                "address": split_csv(&v.local_address).unwrap_or_else(|| vec![v.local_address.clone()]),
+                "private_key": v.secret_key,
+                "mtu": if v.mtu != 0 { v.mtu } else { 1408 },
+                "peers": [peer],
+            });
+            if v.workers != 0 {
+                wg["workers"] = v.workers.into();
+            }
+            return wg;
+        }
+        Profile::Hysteria2(v) => {
+            base["password"] = v.password.clone().into();
+            if v.obfs_type == crate::enums::Hysteria2Obfs::Salamander && !v.obfs_password.is_empty()
+            {
+                base["obfs"] = json!({ "type": "salamander", "password": v.obfs_password });
+            }
+            if v.up_mbps > 0 {
+                base["up_mbps"] = v.up_mbps.into();
+            }
+            if v.down_mbps > 0 {
+                base["down_mbps"] = v.down_mbps.into();
+            }
+            if !v.ports.trim().is_empty() && v.ports.contains([':', '-', ',']) {
+                base.as_object_mut().unwrap().remove("server_port");
+                base["server_ports"] = json!(build_server_ports(&v.ports));
+                let hop = v.hop_interval.parse::<f64>().ok();
+                base["hop_interval"] = match hop {
+                    Some(h) if h.is_finite() && h >= 5.0 => format!("{}s", num_str(h)),
+                    _ => "30s".to_string(),
+                }
+                .into();
+            }
+            apply_tls(&mut base, true);
+        }
+        Profile::Tuic(v) => {
+            base["uuid"] = v.uuid.clone().into();
+            base["password"] = v.password.clone().into();
+            base["congestion_control"] = wire(&v.congestion_control).into();
+            if !v.udp_relay_mode.is_empty() {
+                base["udp_relay_mode"] = v.udp_relay_mode.clone().into();
+            }
+            if v.zero_rtt {
+                base["zero_rtt_handshake"] = true.into();
+            }
+            if v.udp_over_stream {
+                base["udp_over_stream"] = true.into();
+            }
+            if !v.heartbeat.is_empty() {
+                base["heartbeat"] = v.heartbeat.clone().into();
+            }
+            apply_tls(&mut base, true);
+        }
+        Profile::Anytls(v) => {
+            base["password"] = v.password.clone().into();
+            if !v.idle_session_check_interval.is_empty() {
+                base["idle_session_check_interval"] = v.idle_session_check_interval.clone().into();
+            }
+            if !v.idle_session_timeout.is_empty() {
+                base["idle_session_timeout"] = v.idle_session_timeout.clone().into();
+            }
+            if v.min_idle_session != 0 {
+                base["min_idle_session"] = v.min_idle_session.into();
+            }
+            apply_tls(&mut base, true);
+        }
+        Profile::Naive(v) => {
+            if !v.username.is_empty() {
+                base["username"] = v.username.clone().into();
+            }
+            base["password"] = v.password.clone().into();
+            if v.insecure_concurrency > 0 {
+                base["insecure_concurrency"] = v.insecure_concurrency.into();
+            }
+            if v.naive_quic {
+                base["quic"] = true.into();
+            }
+            base["quic_congestion_control"] = wire(&v.congestion_control).into();
+            apply_tls(&mut base, true);
+        }
+        Profile::Shadowtls(v) => {
+            base["version"] = v.version.into();
+            if !v.password.is_empty() {
+                base["password"] = v.password.clone().into();
+            }
+            apply_tls(&mut base, true);
+        }
+        Profile::Custom(_) => {
+            // Caller guards against this; return an empty marker instead of panicking.
+            return Value::Null;
+        }
+    }
+    base
+}
+
+fn wire_protocol(p: &Profile) -> String {
+    wire(&p.protocol())
+}
+
+// ---------- DNS ----------
+
+fn parse_hosts(v: &str) -> Option<Value> {
+    if v.trim().is_empty() {
+        return None;
+    }
+    if let Ok(Value::Object(o)) = serde_json::from_str::<Value>(v.trim()) {
+        return Some(Value::Object(o));
+    }
+    let mut out = Map::new();
+    for line in v.split('\n') {
+        let mut parts = line.splitn(2, '=');
+        let host = parts.next().unwrap_or("").trim();
+        let ip = parts.next().unwrap_or("").trim();
+        if host.is_empty() || ip.is_empty() {
+            continue;
+        }
+        match out.get_mut(host) {
+            Some(Value::Array(a)) => a.push(ip.to_string().into()),
+            Some(slot) => {
+                let prev = slot.clone();
+                *slot = json!([prev, ip]);
+            }
+            None => {
+                out.insert(host.to_string(), ip.to_string().into());
+            }
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(Value::Object(out))
+    }
+}
+
+fn build_singbox_dns_rule_for_domains(
+    domains: &[String],
+    server: &str,
+    rule_set_tags: &mut Tags,
+) -> Option<Value> {
+    let mut rule = json!({ "server": server });
+    for d in domains {
+        parse_singbox_domain(d, &mut rule, rule_set_tags);
+    }
+    if has_match_fields(
+        &rule,
+        &[
+            "rule_set",
+            "domain",
+            "domain_suffix",
+            "domain_keyword",
+            "domain_regex",
+        ],
+    ) {
+        Some(rule)
+    } else {
+        None
+    }
+}
+
+fn build_singbox_dns(
+    s: &AdvancedSettings,
+    routing_rules: &[RoutingRule],
+    extra_rule_set_tags: &mut Tags,
+) -> Value {
+    let remote = split_list(s.remote_dns.as_deref().unwrap_or(""), &DEFAULT_REMOTE_DNS)[0].clone();
+    let domestic = split_list(s.domestic_dns.as_deref().unwrap_or(""), &["223.5.5.5"])[0].clone();
+    let hosts = parse_hosts(s.dns_hosts.as_deref().unwrap_or(""));
+
+    let mut remote_server = json!({ "type": "udp", "tag": "remote", "server": remote });
+    if s.dns_via_proxy {
+        remote_server["detour"] = "proxy".into();
+    }
+    let mut servers = vec![
+        remote_server,
+        json!({ "type": "udp", "tag": "local", "server": domestic }),
+    ];
+    let mut rules: Vec<Value> = Vec::new();
+    let mut dns_rule_set_tags = Tags::new();
+
+    if let Some(hosts) = hosts {
+        servers.push(json!({ "type": "hosts", "tag": "hosts", "predefined": hosts }));
+        rules.push(json!({ "ip_accept_any": true, "server": "hosts" }));
+    }
+    if s.fake_dns {
+        servers.push(json!({ "type": "fakeip", "tag": "fakeip", "inet4_range": FAKEIP_INET4_RANGE, "inet6_range": "fc00::/18" }));
+        rules.push(json!({ "query_type": ["A", "AAAA"], "server": "fakeip" }));
+    }
+    if s.routing_mode == RoutingMode::Rules {
+        for r in routing_rules {
+            if !r.enabled {
+                continue;
+            }
+            let Some(domain) = &r.domain else { continue };
+            if domain.is_empty() {
+                continue;
+            }
+            let server = match r.outbound_tag.as_str() {
+                "direct" => "local",
+                "proxy" => "remote",
+                _ => continue,
+            };
+            if let Some(dr) =
+                build_singbox_dns_rule_for_domains(domain, server, &mut dns_rule_set_tags)
+            {
+                rules.push(dr);
+            }
+        }
+    }
+    rules.push(json!({ "ip_is_private": true, "server": "local" }));
+
+    let mut dns = json!({
+        "servers": servers,
+        "final": "remote",
+        "strategy": if s.ipv6_enabled.unwrap_or(false) { "prefer_ipv4" } else { "ipv4_only" },
+    });
+    if !rules.is_empty() {
+        dns.as_object_mut()
+            .unwrap()
+            .insert("rules".into(), Value::Array(rules));
+    }
+    tag_extend(extra_rule_set_tags, &dns_rule_set_tags);
+    dns
+}
+
+// ---------- structured routing ----------
+
+fn build_base_singbox_rule(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
+    let mut out = if rule.outbound_tag == "block" {
+        json!({ "action": "reject" })
+    } else {
+        let tag = if rule.outbound_tag.is_empty() {
+            "proxy"
+        } else {
+            &rule.outbound_tag
+        };
+        json!({ "outbound": resolve(tag) })
+    };
+    if let Some(port) = rule.port.as_deref().filter(|p| !p.trim().is_empty()) {
+        for item in split_csv(port).unwrap_or_default() {
+            if item.contains('-') {
+                push_str(&mut out, "port_range", item.replace('-', ":"));
+            } else if let Ok(n) = item.parse::<i64>() {
+                push_num(&mut out, "port", n);
+            }
+        }
+    }
+    if let Some(net) = &rule.network {
+        out["network"] = json!(split_csv(&wire(net)).unwrap_or_default());
+    }
+    if let Some(proto) = &rule.protocol {
+        if !proto.is_empty() {
+            out["protocol"] = json!(proto);
+        }
+    }
+    out
+}
+
+fn parse_singbox_domain(value: &str, rule: &mut Value, rule_set_tags: &mut Tags) -> bool {
+    let domain = value.trim();
+    if domain.is_empty()
+        || domain.starts_with('#')
+        || domain.starts_with("ext:")
+        || domain.starts_with("ext-domain:")
+    {
+        return false;
+    }
+    if let Some(rest) = domain.strip_prefix("geosite:") {
+        let tag = format!("geosite-{}", rest.to_lowercase());
+        push_str(rule, "rule_set", tag.clone());
+        tag_insert(rule_set_tags, tag);
+        return true;
+    }
+    if let Some(rest) = domain.strip_prefix("regexp:") {
+        push_str(rule, "domain_regex", rest.replace("\\,", ","));
+        return true;
+    }
+    if let Some(rest) = domain.strip_prefix("domain:") {
+        push_str(rule, "domain_suffix", rest.to_string());
+        return true;
+    }
+    if let Some(rest) = domain.strip_prefix("full:") {
+        push_str(rule, "domain", rest.to_string());
+        return true;
+    }
+    if let Some(rest) = domain.strip_prefix("keyword:") {
+        push_str(rule, "domain_keyword", rest.to_string());
+        return true;
+    }
+    if let Some(rest) = domain.strip_prefix("dotless:") {
+        push_str(rule, "domain_keyword", rest.to_string());
+        return true;
+    }
+    push_str(rule, "domain_keyword", domain.to_string());
+    true
+}
+
+fn parse_singbox_ip(value: &str, rule: &mut Value, rule_set_tags: &mut Tags) -> bool {
+    let ip = value.trim();
+    if ip.is_empty() || ip.starts_with("ext:") || ip.starts_with("ext-ip:") {
+        return false;
+    }
+    if ip == "geoip:private" {
+        rule["ip_is_private"] = true.into();
+        return true;
+    }
+    if ip == "geoip:!private" {
+        rule["ip_is_private"] = false.into();
+        return true;
+    }
+    if let Some(rest) = ip.strip_prefix("geoip:!") {
+        let tag = format!("geoip-{}", rest.to_lowercase());
+        push_str(rule, "rule_set", tag.clone());
+        rule["invert"] = true.into();
+        tag_insert(rule_set_tags, tag);
+        return true;
+    }
+    if let Some(rest) = ip.strip_prefix("geoip:") {
+        let tag = format!("geoip-{}", rest.to_lowercase());
+        push_str(rule, "rule_set", tag.clone());
+        tag_insert(rule_set_tags, tag);
+        return true;
+    }
+    push_str(rule, "ip_cidr", ip.to_string());
+    true
+}
+
+fn build_rule_set_objects(rule_set_tags: &Tags, srs_dir: &str) -> Option<Vec<Value>> {
+    if rule_set_tags.is_empty() {
+        return None;
+    }
+    Some(
+        rule_set_tags
+            .iter()
+            .map(|tag| {
+                json!({
+                    "type": "local", "format": "binary", "tag": tag,
+                    "path": if srs_dir.is_empty() { format!("{tag}.srs") } else { format!("{srs_dir}/{tag}.srs") },
+                })
+            })
+            .collect(),
+    )
+}
+
+struct StructuredRules {
+    rules: Vec<Value>,
+    ip_rules: Vec<Value>,
+    rule_set_tags: Tags,
+}
+
+fn build_structured_singbox_rules(
+    routing_rules: &[RoutingRule],
+    resolve: &dyn Fn(&str) -> String,
+) -> StructuredRules {
+    let mut rules = Vec::new();
+    let mut ip_rules = Vec::new();
+    let mut rule_set_tags = Tags::new();
+
+    for item in routing_rules {
+        if !item.enabled {
+            continue;
+        }
+        let base = build_base_singbox_rule(item, resolve);
+        let mut emitted = false;
+
+        if let Some(domain) = &item.domain {
+            if !domain.is_empty() {
+                let mut domain_rule = base.clone();
+                for d in domain {
+                    parse_singbox_domain(d, &mut domain_rule, &mut rule_set_tags);
+                }
+                if has_match_fields(
+                    &domain_rule,
+                    &[
+                        "rule_set",
+                        "domain",
+                        "domain_suffix",
+                        "domain_keyword",
+                        "domain_regex",
+                    ],
+                ) {
+                    rules.push(domain_rule);
+                    emitted = true;
+                }
+            }
+        }
+        if let Some(ip) = &item.ip {
+            if !ip.is_empty() {
+                let mut ip_rule = base.clone();
+                for addr in ip {
+                    parse_singbox_ip(addr, &mut ip_rule, &mut rule_set_tags);
+                }
+                if has_match_fields(&ip_rule, &["rule_set", "ip_cidr", "ip_is_private"]) {
+                    rules.push(ip_rule.clone());
+                    ip_rules.push(ip_rule);
+                    emitted = true;
+                }
+            }
+        }
+        if !emitted && has_match_fields(&base, &["port", "port_range", "network", "protocol"]) {
+            rules.push(base);
+        }
+    }
+
+    StructuredRules {
+        rules,
+        ip_rules,
+        rule_set_tags,
+    }
+}
+
+fn build_singbox_resolve_rule(s: &AdvancedSettings) -> Value {
+    json!({ "action": "resolve", "strategy": wire(&s.domain_strategy4_singbox) })
+}
+
+// ---------- tun inbounds ----------
+
+fn uid_of(key: &str) -> Option<i64> {
+    key.split(':').nth(1).and_then(|x| x.parse::<i64>().ok())
+}
+
+fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
+    let force_uids: Vec<i64> = s
+        .app_filter
+        .iter()
+        .filter(|(_, m)| **m == AppFilterMode::ForceProxy)
+        .filter_map(|(k, _)| uid_of(k))
+        .collect();
+    let bypass_uids: Vec<i64> = s
+        .app_filter
+        .iter()
+        .filter(|(_, m)| **m == AppFilterMode::Bypass)
+        .filter_map(|(k, _)| uid_of(k))
+        .collect();
+
+    let stack = wire(&s.singbox_stack);
+    let v6 = s.ipv6_enabled.unwrap_or(false);
+    let main_addr = if v6 {
+        json!(["198.18.0.1/15", "fdfe:dcba:9876::1/64"])
+    } else {
+        json!(["198.18.0.1/15"])
+    };
+    let mut exclude_uid = vec![0i64];
+    exclude_uid.extend(bypass_uids.iter().copied());
+    exclude_uid.extend(force_uids.iter().copied());
+
+    let main_tun = json!({
+        "type": "tun", "tag": "tun-in",
+        "address": main_addr, "mtu": 9000, "auto_route": true,
+        "stack": stack, "strict_route": s.strict_route,
+        "exclude_uid": exclude_uid,
+    });
+    let mut inbounds = vec![main_tun];
+    if !force_uids.is_empty() {
+        let force_addr = if v6 {
+            json!(["198.19.0.1/16", "fdfe:dcba:9877::1/64"])
+        } else {
+            json!(["198.19.0.1/16"])
+        };
+        inbounds.push(json!({
+            "type": "tun", "tag": "tun-force",
+            "address": force_addr, "mtu": 9000, "auto_route": true,
+            // Both tuns auto_route, so the force tun MUST own a separate iproute2
+            // table + rule range — otherwise it tries to add the default route to
+            // tun-in's table (2022) and sing-box FATALs with "add route 0: file
+            // exists". The kernel filters packets into each tun by uid, then each
+            // tun's default route lives in its own table.
+            "iproute2_table_index": 2023, "iproute2_rule_index": 9010,
+            "stack": stack, "strict_route": s.strict_route,
+            "include_uid": force_uids,
+        }));
+    }
+    inbounds
+}
+
+// ---------- route ----------
+
+fn build_singbox_route(
+    s: &AdvancedSettings,
+    routing_rules: &[RoutingRule],
+    extra_rule_set_tags: &Tags,
+    resolve: &dyn Fn(&str) -> String,
+    srs_dir: &str,
+) -> Value {
+    let mut rules: Vec<Value> = Vec::new();
+    let mut rule_set_tags: Tags = Tags::new();
+    let ds = s.domain_strategy;
+    let private_rule = json!({ "ip_is_private": true, "outbound": "direct" });
+    let mut retry_ip_rules: Vec<Value> = vec![private_rule.clone()];
+
+    if s.routing_mode == RoutingMode::Rules {
+        let structured = build_structured_singbox_rules(routing_rules, resolve);
+        if ds == DomainStrategy::IpOnDemand {
+            rules.push(build_singbox_resolve_rule(s));
+        }
+        rules.push(private_rule.clone());
+        rules.extend(structured.rules.iter().cloned());
+        retry_ip_rules = std::iter::once(private_rule.clone())
+            .chain(structured.ip_rules.iter().cloned())
+            .collect();
+        tag_extend(&mut rule_set_tags, &structured.rule_set_tags);
+    } else {
+        if ds == DomainStrategy::IpOnDemand {
+            rules.push(build_singbox_resolve_rule(s));
+        }
+        rules.push(private_rule);
+    }
+
+    if ds == DomainStrategy::IpIfNonMatch {
+        rules.push(build_singbox_resolve_rule(s));
+        rules.extend(retry_ip_rules.iter().cloned());
+    }
+
+    let has_force = s
+        .app_filter
+        .values()
+        .any(|m| *m == AppFilterMode::ForceProxy);
+    if has_force {
+        rules.insert(0, json!({ "inbound": ["tun-force"], "outbound": "proxy" }));
+    }
+    if s.domain_sniffing {
+        rules.insert(0, json!({ "protocol": ["dns"], "action": "hijack-dns" }));
+        rules.insert(0, json!({ "action": "sniff" }));
+    }
+
+    tag_extend(&mut rule_set_tags, extra_rule_set_tags);
+
+    let mut route = json!({
+        "rules": rules,
+        "final": "proxy",
+        "auto_detect_interface": true,
+        "default_domain_resolver": { "server": "local" },
+    });
+    if let Some(rs) = build_rule_set_objects(&rule_set_tags, srs_dir) {
+        if !rs.is_empty() {
+            route["rule_set"] = json!(rs);
+        }
+    }
+    route
+}
+
+// ---------- full config ----------
+
+const SPECIAL_OUTBOUND_TAGS: [&str; 3] = ["proxy", "direct", "block"];
+
+struct ProfileTargets {
+    outbounds: Vec<Value>,
+    endpoints: Vec<Value>,
+    resolved: std::collections::HashMap<String, String>,
+}
+
+fn build_singbox_profile_targets(
+    active: &Profile,
+    s: &AdvancedSettings,
+    routing_rules: &[RoutingRule],
+    profiles: &[Profile],
+) -> ProfileTargets {
+    let mut resolved = std::collections::HashMap::new();
+    let mut outbounds = Vec::new();
+    let mut endpoints = Vec::new();
+    if s.routing_mode == RoutingMode::Rules {
+        let mut referenced: Vec<String> = Vec::new();
+        for r in routing_rules {
+            if r.enabled
+                && !SPECIAL_OUTBOUND_TAGS.contains(&r.outbound_tag.as_str())
+                && !referenced.contains(&r.outbound_tag)
+            {
+                referenced.push(r.outbound_tag.clone());
+            }
+        }
+        for id in referenced {
+            if id == active.meta().id {
+                resolved.insert(id, "proxy".to_string());
+                continue;
+            }
+            match profiles.iter().find(|p| p.meta().id == id) {
+                Some(profile) if !matches!(profile, Profile::Custom(_)) => {
+                    let mut target = build_singbox_outbound(profile, s);
+                    if let Some(o) = target.as_object_mut() {
+                        o.insert("tag".into(), id.clone().into());
+                    }
+                    if matches!(profile, Profile::Wireguard(_)) {
+                        endpoints.push(target);
+                    } else {
+                        outbounds.push(target);
+                    }
+                    resolved.insert(id.clone(), id);
+                }
+                _ => {
+                    resolved.insert(id, "proxy".to_string());
+                }
+            }
+        }
+    }
+    ProfileTargets {
+        outbounds,
+        endpoints,
+        resolved,
+    }
+}
+
+/// Build-time inputs the neutral builder can't infer.
+#[derive(Default, Clone, Copy)]
+pub struct SingboxBuildOpts<'a> {
+    pub no_tun: bool,
+    pub srs_dir: &'a str,
+}
+
+pub fn build_singbox_config(
+    p: &Profile,
+    s: &AdvancedSettings,
+    routing_rules: &[RoutingRule],
+    profiles: &[Profile],
+    opts: SingboxBuildOpts,
+) -> Result<Value, String> {
+    if matches!(p, Profile::Custom(_)) {
+        return Err("custom profiles run on Xray, not sing-box".to_string());
+    }
+    let socks_port = s.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+    let proxy = build_singbox_outbound(p, s);
+    let is_endpoint = matches!(p, Profile::Wireguard(_));
+    let targets = build_singbox_profile_targets(p, s, routing_rules, profiles);
+    let mut shared_rule_set_tags = Tags::new();
+    let dns = build_singbox_dns(s, routing_rules, &mut shared_rule_set_tags);
+
+    let resolve = |tag: &str| -> String {
+        if SPECIAL_OUTBOUND_TAGS.contains(&tag) {
+            tag.to_string()
+        } else {
+            targets
+                .resolved
+                .get(tag)
+                .cloned()
+                .unwrap_or_else(|| "proxy".into())
+        }
+    };
+
+    let listen = if s.allow_non_localhost {
+        "0.0.0.0"
+    } else {
+        "127.0.0.1"
+    };
+    let mut inbounds = vec![json!({
+        "type": "mixed", "tag": "socks-in", "listen": listen, "listen_port": socks_port,
+    })];
+    if !opts.no_tun {
+        inbounds.extend(build_singbox_tun_inbounds(s));
+    }
+
+    let direct = json!({ "type": "direct", "tag": "direct" });
+    let mut outbounds: Vec<Value> = Vec::new();
+    if !is_endpoint {
+        outbounds.push(proxy.clone());
+    }
+    outbounds.extend(targets.outbounds.iter().cloned());
+    outbounds.push(direct);
+
+    let route = build_singbox_route(
+        s,
+        routing_rules,
+        &shared_rule_set_tags,
+        &resolve,
+        opts.srs_dir,
+    );
+
+    let log_level = s
+        .log_level
+        .map(|l| wire(&l))
+        .unwrap_or_else(|| "warning".into());
+    let mut cfg = json!({
+        "log": { "level": log_level, "timestamp": true },
+        "dns": dns,
+        "inbounds": inbounds,
+        "outbounds": outbounds,
+        "route": route,
+    });
+
+    let mut endpoints: Vec<Value> = Vec::new();
+    if is_endpoint {
+        endpoints.push(proxy);
+    }
+    endpoints.extend(targets.endpoints);
+    if !endpoints.is_empty() {
+        cfg.as_object_mut()
+            .unwrap()
+            .insert("endpoints".into(), Value::Array(endpoints));
+    }
+    Ok(cfg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIXTURES: &str = include_str!("../tests/fixtures/singbox_config.json");
+
+    #[test]
+    fn build_matches_reference() {
+        let cases: Vec<Value> = serde_json::from_str(FIXTURES).unwrap();
+        assert!(cases.len() >= 12, "expected a healthy corpus");
+        for c in &cases {
+            let label = c["label"].as_str().unwrap();
+            let uri = c["uri"].as_str().unwrap();
+            let settings: AdvancedSettings = serde_json::from_value(c["settings"].clone()).unwrap();
+            let rules: Vec<RoutingRule> =
+                serde_json::from_value(c["routingRules"].clone()).unwrap();
+            let srs = c["srsDir"].as_str().unwrap_or("");
+            // Cases exercising editor-only fields carry a flat profile (a URI can't
+            // express them); upgrade it through the migration. Otherwise parse the URI.
+            let profile = if c.get("profile").is_some_and(|p| !p.is_null()) {
+                let mut flat = c["profile"].clone();
+                crate::migrate::migrate_profile(&mut flat);
+                serde_json::from_value(flat)
+                    .unwrap_or_else(|e| panic!("migrate profile for {label}: {e}"))
+            } else {
+                crate::share::parse_share_link(uri, None)
+                    .unwrap_or_else(|| panic!("parse failed for {label}: {uri}"))
+            };
+            let opts = SingboxBuildOpts {
+                no_tun: false,
+                srs_dir: srs,
+            };
+            let built = build_singbox_config(
+                &profile,
+                &settings,
+                &rules,
+                std::slice::from_ref(&profile),
+                opts,
+            )
+            .unwrap_or_else(|e| panic!("build failed for {label}: {e}"));
+            assert_eq!(built, c["config"], "config mismatch for {label}");
+        }
+    }
+}
