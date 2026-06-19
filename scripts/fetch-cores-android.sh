@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
 # ============================================================
-# scripts/fetch-bin.sh
+# scripts/fetch-cores-android.sh
 # Download the core binaries (xray, tun2socks).
 #
 # These binaries are intentionally NOT committed to git (see
 # .gitignore). Run this once before building a release zip.
 #
 # Usage:
-#   scripts/fetch-bin.sh            # fetch pinned versions
-#   XRAY_VERSION=v25.5.16 scripts/fetch-bin.sh
+#   scripts/fetch-cores-android.sh            # fetch pinned versions
+#   XRAY_VERSION=v25.5.16 scripts/fetch-cores-android.sh
 # ============================================================
 set -euo pipefail
 
-# ---- pinned versions (override via env) ----
-XRAY_VERSION="${XRAY_VERSION:-v26.3.27}"
-TUN2SOCKS_VERSION="${TUN2SOCKS_VERSION:-v2.6.0}"
-# sing-box runs Hysteria2/TUIC profiles (second core). Pin a 1.11.x line whose
-# config schema matches singbox-config.ts (mixed inbound, tls/utls, hysteria2/tuic).
-SINGBOX_VERSION="${SINGBOX_VERSION:-v1.13.13}"
+# ---- pinned versions (single source of truth; override via env) ----
+# shellcheck source=scripts/core-versions.sh
+. "$(dirname "$0")/core-versions.sh"
 
 # Honour PROJECT_ROOT so the flake `nix run` wrapper can point us at the user's
 # working tree — $0 there resolves into the read-only /nix/store copy.

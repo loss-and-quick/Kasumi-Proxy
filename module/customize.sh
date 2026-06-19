@@ -26,27 +26,17 @@ esac
 # 3. Extract the rest of the payload, preserving its layout. The arch bin/ dirs
 #    are skipped — the matching one was flattened into $MODPATH/bin above — as is
 #    the installer's own META-INF/customize.sh. Everything else (scripts,
-#    webroot, bin/kasumi-proxyctl, bin/utils.sh, …) ships as-is, so adding a
-#    payload file needs no change here.
+#    webroot, …) ships as-is, so adding a payload file needs no change here.
 ui_print "- Extracting management scripts and Webroot components..."
 unzip -o "$ZIPFILE" -x "bin/arm64-v8a/*" "bin/x86_64/*" "META-INF/*" "customize.sh" -d "$MODPATH/"
 
 # 4. Enforce strict executable permissions natively
 ui_print "- Setting executable permissions..."
 chmod 755 "$MODPATH/bin/"*
-chmod 755 "$MODPATH/bin/kasumi-proxyctl"
 
 ui_print "- Setup /data/adb/kasumi-proxy directory"
 # Keep any existing state across re-installs/upgrades; only create when absent.
 mkdir -p "/data/adb/kasumi-proxy"
-
-ui_print "- Setup secret token for files"
-RANDOM_TOKEN=$(tr -dc 'a-zA-Z0-9' </dev/urandom | fold -w 150 | head -n 1)
-FILE_ACTION="$MODPATH/action.sh"
-FILE_CGI="$MODPATH/webroot/cgi-bin/exec"
-[ -f "$FILE_ACTION" ] && sed -i "s/__SECRET_TOKEN__/$RANDOM_TOKEN/g" "$FILE_ACTION"
-[ -f "$FILE_CGI" ] && sed -i "s/__SECRET_TOKEN__/$RANDOM_TOKEN/g" "$FILE_CGI"
-chmod 755 "$FILE_CGI"
 
 ui_print "Kasumi Proxy configuration deployment complete!"
 

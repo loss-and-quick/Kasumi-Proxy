@@ -92,7 +92,7 @@ The repo is one Rust workspace + the React UI, with two thin shells over a share
 │   ├── module.prop customize.sh service.sh action.sh uninstall.sh META-INF/
 │   ├── bin/             # kasumi-proxy daemon + xray/sing-box/tun2socks (built/fetched, gitignored)
 │   └── webroot/         # built UI (generated, gitignored)
-├── scripts/             # fetch-bin, build-daemon-android, build-webroot, package-release
+├── scripts/             # fetch-cores-{android,desktop}, build-daemon-android, build-webroot, package-release
 ├── Cargo.toml           # Rust workspace manifest
 └── flake.nix            # Nix dev shell + crane-tauri desktop build + android daemon toolchain
 ```
