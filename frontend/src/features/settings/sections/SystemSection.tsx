@@ -1,0 +1,119 @@
+import { useEffect, useState } from "react";
+import { Card, Icon, ListRow, RowToggle, SectionLabel } from "../../../components";
+import { DEFAULT_LOG_ROTATE_KB } from "../../../generated/defaults";
+import { useT } from "../../../i18n";
+import {
+  autostartSupported,
+  isAutostartEnabled,
+  setAutostartEnabled,
+} from "../../../lib/autostart";
+import type { AdvancedSettings } from "../../../lib/bridge";
+
+/** Desktop-only "launch the app on login" toggle (OS-level, via the autostart
+ * plugin). Renders nothing where unsupported (the Android WebUI). */
+function LaunchOnLoginRow() {
+  const t = useT();
+  const [on, setOn] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    void isAutostartEnabled().then((v) => {
+      if (alive) setOn(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!autostartSupported()) return null;
+
+  return (
+    <RowToggle
+      icon="autorenew"
+      title={t("settings.launchOnLogin")}
+      sub={t("settings.launchOnLoginSub")}
+      on={on}
+      onChange={(value) => {
+        setOn(value); // optimistic; revert if the plugin call fails
+        void setAutostartEnabled(value).catch(() => setOn(!value));
+      }}
+    />
+  );
+}
+
+export function SystemSection({
+  settings,
+  set,
+  onOpenBackup,
+  onOpenLogs,
+}: {
+  settings: AdvancedSettings;
+  set: <K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) => void;
+  onOpenBackup: () => void;
+  onOpenLogs: () => void;
+}) {
+  const t = useT();
+
+  return (
+    <>
+      <SectionLabel>{t("settings.system")}</SectionLabel>
+      <Card style={{ padding: "4px 14px" }}>
+        <RowToggle
+          icon="autorenew"
+          title={t("settings.autoStart")}
+          sub={t("settings.autoStartSub")}
+          on={settings.autoStart ?? true}
+          onChange={(value) => set("autoStart", value)}
+        />
+        <LaunchOnLoginRow />
+        <RowToggle
+          icon="content_cut"
+          title={t("settings.dedupOnUpdate")}
+          sub={t("settings.dedupOnUpdateSub")}
+          on={settings.dedupOnUpdate ?? false}
+          onChange={(value) => set("dedupOnUpdate", value)}
+        />
+        <ListRow
+          icon="backup"
+          title={t("settings.backup")}
+          sub={t("settings.backupSub")}
+          onClick={onOpenBackup}
+          right={<Icon name="chevron_right" style={{ color: "var(--on-surface-faint)" }} />}
+        />
+        <ListRow
+          icon="description"
+          title={t("settings.connectionLog")}
+          sub={t("settings.connectionLogSub")}
+          onClick={onOpenLogs}
+          right={<Icon name="chevron_right" style={{ color: "var(--on-surface-faint)" }} />}
+        />
+        <div style={{ padding: "12px 0 4px" }}>
+          <div className="field-label">{t("settings.logLevel")}</div>
+          <select
+            className="select-box"
+            value={settings.logLevel ?? "warning"}
+            onChange={(e) =>
+              set("logLevel", e.target.value as NonNullable<AdvancedSettings["logLevel"]>)
+            }
+          >
+            <option value="debug">{t("settings.logLevel.debug")}</option>
+            <option value="info">{t("settings.logLevel.info")}</option>
+            <option value="warning">{t("settings.logLevel.warning")}</option>
+            <option value="error">{t("settings.logLevel.error")}</option>
+            <option value="none">{t("settings.logLevel.none")}</option>
+          </select>
+        </div>
+        <div style={{ padding: "12px 0 4px" }}>
+          <div className="field-label">{t("settings.logRotateMaxKb")}</div>
+          <input
+            type="number"
+            className="input"
+            min={64}
+            value={settings.logRotateMaxKb ?? DEFAULT_LOG_ROTATE_KB}
+            onChange={(e) => set("logRotateMaxKb", Number(e.target.value))}
+          />
+        </div>
+      </Card>
+    </>
+  );
+}
