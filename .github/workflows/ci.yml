@@ -244,6 +244,16 @@ jobs:
           bun install --frozen-lockfile
           ( cd frontend && bun run build )
 
+      - name: Stub the wintun bundle resource (compile-smoke doesn't bundle)
+        if: steps.changes.outputs.relevant == 'true'
+        shell: bash
+        run: |
+          # tauri-build validates declared bundle.resources at compile time. The
+          # real wintun.dll is fetched only for the nightly/release bundle; a
+          # placeholder satisfies the path check for this compile-only job.
+          mkdir -p src-tauri/binaries
+          : > src-tauri/binaries/wintun.dll
+
       - name: Compile the Tauri app (no bundle)
         if: steps.changes.outputs.relevant == 'true'
         run: cargo build -p kasumi-desktop
