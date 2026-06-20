@@ -151,9 +151,19 @@ pub fn run() {
     let builder = specta_builder();
 
     // Regenerate the frontend's generated files on every debug build, so a Rust
-    // type/default change fails `tsc` until the frontend is updated.
+    // type/default change fails `tsc` until the frontend is updated. Guard on the
+    // source tree existing: a shipped debug build (run from anywhere but the build
+    // tree) has no `frontend/src/generated` to write to, and the export would panic
+    // on startup — skip it there instead of crashing.
     #[cfg(debug_assertions)]
-    export_generated();
+    if std::path::Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../frontend/src/generated"
+    ))
+    .is_dir()
+    {
+        export_generated();
+    }
 
     #[allow(unused_mut)]
     let mut tb = tauri::Builder::default();
