@@ -13,7 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  nightly:
+  # ── Cheap gate: decide whether a nightly is warranted at all, so the two heavy
+  #    build jobs below can fan out in parallel instead of one waiting on the other. ──
+  check:
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.check.outputs.skip }}
@@ -26,15 +28,19 @@ jobs:
       - name: Check whether a nightly build is warranted
         id: check
         run: |
-          # Paths whose changes actually affect the shipped artifact (docs/ci/chore
-          # commits must not trigger a nightly). Kept in sync with release.yml.
+          # Paths whose changes actually affect a shipped artifact — the Android
+          # module or the desktop installers (docs/ci/chore commits must not trigger
+          # a nightly). Kept in sync with release.yml's change detection.
           paths=(
             'module/*.sh'
             'module/bin/kasumi-proxyctl'
             'module/bin/utils.sh'
             'module/webroot/cgi-bin/'
             'frontend/src/'
+            'crates/'
+            'src-tauri/'
             'scripts/fetch-cores-android.sh'
+            'scripts/fetch-cores-desktop.sh'
             'scripts/core-versions.sh'
             'scripts/package-release.sh'
           )
@@ -53,22 +59,30 @@ jobs:
             since_release=$(git log "$last_tag"..HEAD --oneline -- "${paths[@]}" 2>/dev/null | wc -l)
           fi
 
-          echo "recent=$recent" >> "$GITHUB_OUTPUT"
-          echo "since_release=$since_release" >> "$GITHUB_OUTPUT"
           if [ "$recent" -gt 0 ] && [ "$since_release" -gt 0 ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
           else
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # ── Android module debug zip. Mirrors release.yml's `module`/`desktop` split;
+  #    runs in parallel with `desktop` once `check` clears them both. ──
+  module:
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Bun
-        if: steps.check.outputs.skip != 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       - name: Cache Bun dependencies
-        if: steps.check.outputs.skip != 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.bun/install/cache
@@ -76,27 +90,23 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - name: Setup Rust (android targets)
-        if: steps.check.outputs.skip != 'true'
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: stable
           targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Install cargo-ndk
-        if: steps.check.outputs.skip != 'true'
         uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
         with:
           tool: cargo-ndk
 
       - name: Setup Go
-        if: steps.check.outputs.skip != 'true'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26'
           cache: false
 
       - name: Cache Go build & modules
-        if: steps.check.outputs.skip != 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -106,30 +116,25 @@ jobs:
           restore-keys: go-${{ runner.os }}-
 
       - name: Setup NDK
-        if: steps.check.outputs.skip != 'true'
         id: setup-ndk
         uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
         with:
           ndk-version: r28
 
       - name: Clone geodat2srs
-        if: steps.check.outputs.skip != 'true'
-        run: git clone https://github.com/loss-and-quick/geodat2srs.git $HOME/geodat2srs
+        run: git clone https://github.com/loss-and-quick/geodat2srs.git "$HOME/geodat2srs"
 
       - name: Install UI dependencies
-        if: steps.check.outputs.skip != 'true'
         # bun workspace rooted at the repo — install from root against the single bun.lock.
         run: bun install --frozen-lockfile
 
       - name: Lint & test
-        if: steps.check.outputs.skip != 'true'
         run: |
           bunx biome check
           bun run frontend/scripts/check-i18n.ts
           ( cd frontend && bunx vitest run )
 
       - name: Build debug zip
-        if: steps.check.outputs.skip != 'true'
         env:
           NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
@@ -138,7 +143,6 @@ jobs:
           BUILD_NAME="kasumi-proxy-${version}-debug-${sha}" scripts/package-release.sh
 
       - name: Upload artifact
-        if: steps.check.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: kasumi-proxy-debug-${{ github.sha }}
@@ -148,8 +152,8 @@ jobs:
   # ── Desktop installers as nightly artifacts (unsigned), same fetch+bundle path
   #    as the release workflow but uploaded to the run instead of a GitHub release. ──
   desktop:
-    needs: nightly
-    if: needs.nightly.outputs.skip != 'true'
+    needs: check
+    if: needs.check.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:

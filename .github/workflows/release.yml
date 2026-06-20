@@ -27,7 +27,11 @@ concurrency:
 # trailing comment) so a moved tag cannot silently change what runs with the
 # `contents: write` token. Bump the SHA + comment together when upgrading.
 jobs:
-  release:
+  # ── Prepare the release: decide whether to cut one, bump the version, regenerate
+  #    update.json/changelog, commit+tag, and create the (empty) GitHub release. The
+  #    two build jobs below then attach their artifacts to it in parallel — neither
+  #    waits on the other, and the heavy Android/desktop toolchains stay out of here. ──
+  prepare:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.bump.outputs.version }}
@@ -66,7 +70,10 @@ jobs:
               'module/bin/utils.sh' \
               'module/webroot/cgi-bin/' \
               'frontend/src/' \
+              'crates/' \
+              'src-tauri/' \
               'scripts/fetch-cores-android.sh' \
+              'scripts/fetch-cores-desktop.sh' \
               'scripts/core-versions.sh' \
               'scripts/package-release.sh' \
               2>/dev/null | wc -l)
@@ -94,19 +101,23 @@ jobs:
             echo "bump=${{ inputs.bump || 'patch' }}" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "xray_old=$pinned_xray" >> "$GITHUB_OUTPUT"
-          echo "t2s_old=$pinned_t2s" >> "$GITHUB_OUTPUT"
-          echo "sb_old=$pinned_sb" >> "$GITHUB_OUTPUT"
-          echo "skip=$skip" >> "$GITHUB_OUTPUT"
-          echo "bins_changed=$bins_changed" >> "$GITHUB_OUTPUT"
-          echo "xray_version=$latest_xray" >> "$GITHUB_OUTPUT"
-          echo "t2s_version=$latest_t2s" >> "$GITHUB_OUTPUT"
-          echo "sb_version=$latest_sb" >> "$GITHUB_OUTPUT"
+          {
+            echo "xray_old=$pinned_xray"
+            echo "t2s_old=$pinned_t2s"
+            echo "sb_old=$pinned_sb"
+            echo "skip=$skip"
+            echo "bins_changed=$bins_changed"
+            echo "xray_version=$latest_xray"
+            echo "t2s_version=$latest_t2s"
+            echo "sb_version=$latest_sb"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Sync core pins + nix hashes
         # When upstream cores advanced, write the new versions into the pinned
         # source of truth (core-versions.sh) and regenerate the nix FOD hashes
         # (core-hashes.json), so the next build — and the committed flake — match.
+        # Both build jobs check out the tag, so the synced pins are authoritative
+        # for the Android and desktop core fetches; no per-build version override.
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
         env:
           XRAY_NEW: ${{ steps.changes.outputs.xray_version }}
@@ -134,54 +145,13 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
-      - name: Setup Rust (android targets)
-        if: steps.changes.outputs.skip != 'true'
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: stable
-          targets: aarch64-linux-android,x86_64-linux-android
-
-      - name: Install cargo-ndk
-        if: steps.changes.outputs.skip != 'true'
-        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
-        with:
-          tool: cargo-ndk
-
-      - name: Setup Go
-        if: steps.changes.outputs.skip != 'true'
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.26'
-          cache: false
-
-      - name: Cache Go build & modules
-        if: steps.changes.outputs.skip != 'true'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-geodat2srs
-          restore-keys: go-${{ runner.os }}-
-
-      - name: Setup NDK
-        if: steps.changes.outputs.skip != 'true'
-        id: setup-ndk
-        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
-        with:
-          # Mirror flake.nix NDK 28.0.13004108 (== r28).
-          ndk-version: r28
-
-      - name: Clone geodat2srs
-        if: steps.changes.outputs.skip != 'true'
-        run: git clone https://github.com/loss-and-quick/geodat2srs.git $HOME/geodat2srs
-
       - name: Install UI dependencies
         if: steps.changes.outputs.skip != 'true'
         # bun workspace rooted at the repo — install from root against the single bun.lock.
         run: bun install --frozen-lockfile
 
       - name: Lint & test
+        # Gate the release on a green frontend before any version is bumped or tagged.
         if: steps.changes.outputs.skip != 'true'
         run: |
           bunx biome check
@@ -198,15 +168,6 @@ jobs:
             version=$(scripts/bump-version.sh ${{ inputs.bump || 'patch' }})
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Build release zip
-        if: steps.changes.outputs.skip != 'true'
-        env:
-          NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          XRAY_VERSION: ${{ steps.changes.outputs.xray_version }}
-          TUN2SOCKS_VERSION: ${{ steps.changes.outputs.t2s_version }}
-          SINGBOX_VERSION: ${{ steps.changes.outputs.sb_version }}
-        run: scripts/package-release.sh
 
       - name: Generate update.json
         if: steps.changes.outputs.skip != 'true'
@@ -243,24 +204,102 @@ jobs:
           fi
 
       - name: Create GitHub Release
+        # Created empty here; the module and desktop jobs attach their artifacts to
+        # this tag in parallel. target_commitish points at the just-pushed bump
+        # commit, so the tag the build jobs check out carries the bumped version.
         if: steps.changes.outputs.skip != 'true'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.bump.outputs.version }}
           target_commitish: ${{ github.ref_name }}
           name: Kasumi Proxy ${{ steps.bump.outputs.version }}
-          files: build/kasumi-proxy-${{ steps.bump.outputs.version }}.zip
           generate_release_notes: true
 
-  # ── Desktop installers (Linux deb/AppImage), uploaded to the release the job
-  #    above created. Cores are fetched per-target into src-tauri/binaries/ and
-  #    bundled via the externalBin overlay. Signing is opt-in: it runs only when the
-  #    GPG secret is set, else unsigned. Windows/macOS aren't shipped yet — the
-  #    backend's process layer is POSIX-only — so the matrix is Linux-only for now;
-  #    adding a target is a new matrix row once those ports land. ──
+  # ── Android module zip → uploaded to the release `prepare` created. Runs in
+  #    parallel with `desktop`; the committed core-versions.sh on the tag pins the
+  #    core fetch. ──
+  module:
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.prepare.outputs.version }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Setup Rust (android targets)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
+        with:
+          tool: cargo-ndk
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26'
+          cache: false
+
+      - name: Cache Go build & modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-geodat2srs
+          restore-keys: go-${{ runner.os }}-
+
+      - name: Setup NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
+        with:
+          # Mirror flake.nix NDK 28.0.13004108 (== r28).
+          ndk-version: r28
+
+      - name: Clone geodat2srs
+        run: git clone https://github.com/loss-and-quick/geodat2srs.git "$HOME/geodat2srs"
+
+      - name: Install UI dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build release zip
+        env:
+          NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: scripts/package-release.sh
+
+      - name: Upload to the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          files: build/kasumi-proxy-${{ needs.prepare.outputs.version }}.zip
+
+  # ── Desktop installers (Linux deb/AppImage) → uploaded to the same release. Cores
+  #    are fetched per-target into src-tauri/binaries/ and bundled via the externalBin
+  #    overlay. AppImage GPG signing is opt-in (active only when the secret is set).
+  #    Windows/macOS aren't shipped yet — the backend's process layer is POSIX-only —
+  #    so the matrix is Linux-only; adding a target is a new matrix row once those
+  #    ports land. ──
   desktop:
-    needs: release
-    if: needs.release.outputs.skip != 'true'
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -272,7 +311,7 @@ jobs:
       - name: Checkout the released tag
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.release.outputs.version }}
+          ref: ${{ needs.prepare.outputs.version }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
@@ -345,5 +384,5 @@ jobs:
       - name: Upload to the release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          tag_name: ${{ needs.release.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.version }}
           files: dist/*
