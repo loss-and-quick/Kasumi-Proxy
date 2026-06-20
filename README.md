@@ -69,8 +69,21 @@ If you come from v2rayNG, NekoBox, or Matsuri, here is what changes on Android:
 
 State and logs live under `/data/adb/kasumi-proxy/`.
 
-**Linux desktop:** build with `nix build .#kasumi-desktop` (see below); a packaged installer is a
-work in progress.
+**Linux desktop:** install the `.deb` or run the `.AppImage` from the latest release, or build with
+`nix build .#kasumi-desktop` (see below).
+
+### Verifying release signatures
+
+Release `.AppImage` bundles are GPG-signed with the project's release key
+([`release-signing-key.asc`](release-signing-key.asc), fingerprint
+`2AA0 03A9 D670 653C FAA8  F7B0 88BE 4761 6D49 65E9`):
+
+```sh
+gpg --import release-signing-key.asc
+# AppImage signatures are embedded; extract and verify against the imported key:
+./Kasumi*.AppImage --appimage-extract '.appimage_signature'
+gpg --verify squashfs-root/.appimage_signature Kasumi*.AppImage
+```
 
 ---
 
