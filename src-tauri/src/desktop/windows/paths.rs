@@ -54,8 +54,8 @@ pub struct DesktopPaths {
     pub singbox_bin: String,
     pub tun2socks_bin: String,
     pub geodat2srs_bin: String,
-    /// The wintun driver DLL bundled next to the cores; its presence is what makes
-    /// a real tun possible (both sing-box and tun2socks dlopen it).
+    /// The wintun driver DLL bundled next to the cores. tun2socks loads it from
+    /// disk (the xray path needs it); sing-box embeds its own copy.
     pub wintun_dll: String,
 }
 

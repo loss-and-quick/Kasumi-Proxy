@@ -92,10 +92,10 @@ fi
 copy_one "$TMP/sb" "sing-box$EXT" "$OUT/sing-box-$TARGET$EXT"
 
 # ---- wintun (Windows only) ----
-# sing-box's tun inbound and tun2socks both dlopen wintun.dll from the directory
-# of the loading exe — i.e. next to the bundled cores. Staged WITHOUT a target
-# suffix: it ships as a Tauri bundle *resource* placed next to the app exe, not as
-# an externalBin sidecar (those only handle executables, and append `.exe`).
+# tun2socks loads wintun.dll from its own directory (the xray data-path needs it).
+# sing-box embeds its own copy, so this is only for the tun2socks path. Staged
+# WITHOUT a target suffix: it ships as a Tauri bundle *resource* placed next to the
+# app exe, not as an externalBin sidecar (those only handle executables + add .exe).
 if [ -n "$EXT" ]; then
 	dl "https://www.wintun.net/builds/wintun-$WINTUN_VERSION.zip" "$TMP/wintun.zip"
 	mkdir -p "$TMP/wintun"

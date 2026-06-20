@@ -107,9 +107,8 @@ impl DesktopPlatform {
         if !exists(&self.p.singbox_bin).await {
             return self.fail("sing-box binary missing").await;
         }
-        if !exists(&self.p.wintun_dll).await {
-            return self.fail("wintun.dll missing — cannot create a tun").await;
-        }
+        // sing-box embeds its own wintun.dll (go:embed, loaded from memory), so the
+        // tun comes up without a wintun.dll on disk — unlike the xray/tun2socks path.
         if !exists(&cfg).await {
             return self.fail("config missing").await;
         }
@@ -150,6 +149,8 @@ impl DesktopPlatform {
         if !exists(&self.p.xray_bin).await {
             return self.fail("xray binary missing").await;
         }
+        // tun2socks loads wintun.dll from its own directory (unlike sing-box, which
+        // embeds it), so the xray path genuinely needs the bundled DLL on disk.
         if !exists(&self.p.wintun_dll).await {
             return self.fail("wintun.dll missing — cannot create a tun").await;
         }
@@ -334,13 +335,13 @@ impl Platform for DesktopPlatform {
     async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {
         let xray = self.core_version(CoreEngine::Xray).await;
         let singbox = self.core_version(CoreEngine::SingBox).await;
-        // A real tun needs the wintun driver DLL bundled next to the cores.
-        let tun = exists(&self.p.wintun_dll).await;
         Ok(PlatformCapabilities {
             cores: InstalledCores { xray, singbox },
             // Desktop fetches over reqwest, never a curl spawn.
             curl: false,
-            tun,
+            // sing-box embeds wintun, so a tun is always possible on Windows; the
+            // xray path additionally needs the bundled wintun.dll (checked at start).
+            tun: true,
             bridge: "desktop".into(),
         })
     }
