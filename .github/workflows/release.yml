@@ -369,6 +369,10 @@ jobs:
       - name: Build desktop bundles
         shell: bash
         env:
+          # linuxdeploy/appimagetool mount themselves with FUSE, which the runner
+          # doesn't provide — extract-and-run instead, or AppImage bundling aborts
+          # the whole job ("failed to run linuxdeploy") after the .deb is built.
+          APPIMAGE_EXTRACT_AND_RUN: 1
           # Linux AppImage GPG signing — active only when the key/passphrase are set.
           SIGN: ${{ secrets.GPG_PRIVATE_KEY != '' && '1' || '' }}
           SIGN_KEY: ${{ secrets.GPG_KEY_ID }}
