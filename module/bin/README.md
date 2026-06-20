@@ -1,8 +1,10 @@
 # Bundled Binaries
 
-These binaries are **not committed to git** — they are fetched by
-`scripts/fetch-bin.sh` into `bin/arm64-v8a/`, `bin/x86_64/`, and `bin/`.
-Pinned versions live in that script; override via env vars
+These binaries are **not committed to git** — the cores are fetched by
+`scripts/fetch-cores-android.sh` into `bin/arm64-v8a/` and `bin/x86_64/`, and the
+`kasumi-proxy` daemon is cross-built per arch by
+`scripts/build-daemon-android.sh`. Pinned core versions live in
+`scripts/core-versions.sh`; override via env vars
 `XRAY_VERSION` / `TUN2SOCKS_VERSION` / `SINGBOX_VERSION`.
 
 ---
@@ -34,5 +36,5 @@ Pinned versions live in that script; override via env vars
 ## Fetching
 
 ```sh
-scripts/fetch-bin.sh
+scripts/fetch-cores-android.sh
 ```

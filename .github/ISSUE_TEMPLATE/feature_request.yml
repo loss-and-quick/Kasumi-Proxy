@@ -15,8 +15,9 @@ body:
     attributes:
       label: Area
       options:
-        - Web UI (control-center)
-        - Proxy core / routing (module)
+        - Web UI / desktop UI (frontend)
+        - Data path / routing (Android module or Linux desktop)
+        - Desktop app (Tauri — tray, autostart, packaging)
         - Protocols / config generation
         - Build / release / CI
         - Other

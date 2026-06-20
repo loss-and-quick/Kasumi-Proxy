@@ -13,8 +13,8 @@
 
 <!-- Tick all that apply — this maps to the two-layer split in AGENTS.md. -->
 
-- [ ] `control-center/` — React Web UI
-- [ ] `module/` — Magisk/KernelSU/APatch payload (shell, `kasumi-proxyctl`, `cgi-bin/exec`)
+- [ ] `frontend/` — React Web UI
+- [ ] `module/` — Magisk/KernelSU/APatch payload (shell + packaged `kasumi-proxy` backend)
 - [ ] `scripts/` — build / release helpers
 - [ ] CI / `.github/`
 - [ ] Docs only
@@ -23,7 +23,7 @@
 
 <!-- Run the checks relevant to the layer you touched and tick them. -->
 
-Web UI (`control-center/`):
+Web UI (`frontend/`):
 
 - [ ] `bun run check` — Biome lint + format clean
 - [ ] `bun run test` — vitest green
@@ -32,7 +32,7 @@ Web UI (`control-center/`):
 
 Module shell (`module/`):
 
-- [ ] `shellcheck -s sh module/*.sh module/bin/kasumi-proxyctl module/webroot/cgi-bin/exec`
+- [ ] `shellcheck -s sh module/*.sh`
 
 ## Checklist
 

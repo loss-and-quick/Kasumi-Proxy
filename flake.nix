@@ -1,16 +1,27 @@
 {
-  description = "Kasumi Proxy — Magisk transparent proxy module (Xray-core / sing-box) with a React control center";
+  description = "Kasumi Proxy — transparent proxy (Xray-core / sing-box) — Rust backend + Tauri 2 app + React UI, shipped as a KSU/Magisk/APatch module";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    crane.url = "github:ipetkov/crane";
+    crane-tauri.url = "github:JPHutchins/crane-tauri";
+    bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
+    bun2nix.inputs.nixpkgs.follows = "nixpkgs";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
+  # The logic lives in nix/ (one file per concern); this flake just wires it up.
   outputs =
     {
       self,
       nixpkgs,
       flake-utils,
+      crane,
+      crane-tauri,
+      bun2nix,
+      rust-overlay,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -19,106 +30,45 @@
           inherit system;
           config.allowUnfree = true;
           config.android_sdk.accept_license = true;
+          # bun2nix → `bun2nix` (hook / fetchBunDeps); rust-overlay → `rust-bin`
+          # (a toolchain carrying the android std targets for the daemon
+          # cross-build). Neither overrides `pkgs.rustc`/`pkgs.cargo`, so crane's
+          # host build is unaffected.
+          overlays = [
+            bun2nix.overlays.default
+            rust-overlay.overlays.default
+          ];
         };
+        root = ./.;
 
-        androidComposition = pkgs.androidenv.composeAndroidPackages {
-          includeNDK = true;
-          ndkVersions = [ "28.0.13004108" ];
-          platformVersions = [ "35" ];
-          cmdLineToolsVersion = "12.0";
-          platformToolsVersion = "36.0.2";
-          buildToolsVersions = [ "35.0.0" ];
+        toolchain = import ./nix/toolchain.nix { inherit pkgs crane; };
+        version = import ./nix/version.nix { inherit pkgs root; };
+        cores = import ./nix/cores.nix { inherit pkgs root version; };
+        desktop = import ./nix/desktop.nix {
+          inherit
+            pkgs
+            root
+            crane-tauri
+            toolchain
+            version
+            cores
+            ;
         };
-        androidSdk = androidComposition.androidsdk;
-        ndkRoot = "${androidSdk}/libexec/android-sdk/ndk/28.0.13004108";
-        # NDK prebuilt host tag depends on build system
-        ndkHost = if pkgs.stdenv.isAarch64 then "linux-aarch64" else "linux-x86_64";
-
-        commonTools = with pkgs; [
-          bun
-          curl
-          unzip
-          zip
-          jq
-          shellcheck
-          git
-          go
-        ];
       in
       {
-        devShells.default = pkgs.mkShell {
-          packages = commonTools ++ [ androidSdk ];
-          ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
-          NDK_ROOT = ndkRoot;
+        # Reproducible desktop build: `nix build .#kasumi-desktop` (GTK-wrapped,
+        # cores bundled).
+        packages = {
+          inherit (desktop) frontend kasumi-desktop;
+          default = desktop.kasumi-desktop;
+          tauri-unwrapped = desktop.tauri.app;
         };
 
-        # `nix run .#build-geodat2srs` — build geodat2srs for Android targets
-        apps.build-geodat2srs = {
-          type = "app";
-          program = toString (
-            pkgs.writeShellScript "build-geodat2srs" ''
-              set -euo pipefail
-              SRC="$HOME/geodat2srs"
-              # Write into the caller's working tree, not the read-only store copy.
-              BIN="''${PROJECT_ROOT:-$PWD}/module/bin"
-              if [ ! -d "$SRC" ]; then
-                ${pkgs.git}/bin/git clone https://github.com/loss-and-quick/geodat2srs.git "$SRC"
-              fi
-              export PATH=${
-                pkgs.lib.makeBinPath [
-                  pkgs.go
-                  pkgs.git
-                  pkgs.coreutils
-                ]
-              }:$PATH
-              NDK="${ndkRoot}"
-              CC_ARM64="$NDK/toolchains/llvm/prebuilt/${ndkHost}/bin/aarch64-linux-android35-clang"
-              CC_AMD64="$NDK/toolchains/llvm/prebuilt/${ndkHost}/bin/x86_64-linux-android35-clang"
-              echo "→ Building geodat2srs android/arm64"
-              cd "$SRC" && CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC="$CC_ARM64" go build -o "$BIN/arm64-v8a/geodat2srs" .
-              echo "→ Building geodat2srs android/amd64"
-              cd "$SRC" && CGO_ENABLED=1 GOOS=android GOARCH=amd64 CC="$CC_AMD64" go build -o "$BIN/x86_64/geodat2srs" .
-              chmod 755 "$BIN/arm64-v8a/geodat2srs" "$BIN/x86_64/geodat2srs"
-            ''
-          );
-        };
+        checks.clippy = desktop.clippy;
 
-        # `nix run .#fetch-bin` — download core binaries into bin/
-        apps.fetch-bin = {
-          type = "app";
-          program = toString (
-            pkgs.writeShellScript "fetch-bin" ''
-              export PATH=${
-                pkgs.lib.makeBinPath [
-                  pkgs.curl
-                  pkgs.unzip
-                  pkgs.coreutils
-                ]
-              }:$PATH
-              # Target the caller's working tree, not the read-only store copy.
-              export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-              exec ${pkgs.bash}/bin/bash "${self}/scripts/fetch-bin.sh" "$@"
-            ''
-          );
-        };
+        devShells = import ./nix/shells.nix { inherit pkgs toolchain; };
 
-        # `nix run .#build-webroot` — build the React app into webroot/
-        apps.build-webroot = {
-          type = "app";
-          program = toString (
-            pkgs.writeShellScript "build-webroot" ''
-              export PATH=${
-                pkgs.lib.makeBinPath [
-                  pkgs.bun
-                  pkgs.coreutils
-                ]
-              }:$PATH
-              # Target the caller's working tree, not the read-only store copy.
-              export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-              exec ${pkgs.bash}/bin/bash "${self}/scripts/build-webroot.sh" "$@"
-            ''
-          );
-        };
+        apps = import ./nix/apps.nix { inherit pkgs self toolchain; };
       }
     );
 }

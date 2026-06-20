@@ -1,0 +1,43 @@
+[package]
+name = "kasumi-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Kasumi Proxy — Tauri 2 desktop (and future mobile) app over the neutral Rust backend."
+rust-version = "1.77.2"
+
+[lib]
+# The Tauri mobile/desktop entry point lives in the lib; the bin is a thin shim.
+name = "kasumi_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+anyhow = "1"
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "net", "io-util", "time", "sync"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-log = "2"
+libc = "0.2"
+specta = { version = "2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "0.0.12"
+specta-serde = "0.0.12"
+specta-zod = "0.0.3"
+tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+strum = { version = "0.26", features = ["derive"] }
+
+kasumi-core = { path = "../crates/kasumi-core" }
+kasumi-backend = { path = "../crates/kasumi-backend" }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-window-state = "2"
+
+[dev-dependencies]
+tempfile = "3"

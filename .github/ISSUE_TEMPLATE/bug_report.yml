@@ -5,9 +5,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the report! Kasumi Proxy is a **root module** (Magisk / KernelSU / APatch),
-        not a VPN app. Please fill in the environment fields — most issues are
-        root-method or core specific.
+        Thanks for the report! Kasumi Proxy runs on **rooted Android** (a
+        Magisk / KernelSU / APatch module) and on **Linux desktop** (a Tauri app).
+        Please fill in the environment fields — most issues are platform,
+        root-method, or core specific.
 
   - type: checkboxes
     id: preflight
@@ -19,32 +20,44 @@ body:
         - label: I am on the latest release
           required: true
 
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android (root module)
+        - Linux desktop (Tauri app)
+    validations:
+      required: true
+
   - type: input
     id: version
     attributes:
-      label: Module version
-      description: From the Web UI footer or `module.prop` (e.g. v0.3.2)
-      placeholder: v0.3.2
+      label: Version
+      description: From the Web UI footer / desktop Settings, or `module.prop` (e.g. v0.3.4)
+      placeholder: v0.3.4
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / device
+      description: Android → version + device/ROM; Linux → distro + desktop/compositor (X11/Wayland).
+      placeholder: "Android 14 — Pixel 7 (stock)  ·  or  ·  NixOS — Hyprland (Wayland)"
     validations:
       required: true
 
   - type: dropdown
     id: root
     attributes:
-      label: Root solution
+      label: Root solution (Android only)
       options:
+        - "N/A — Linux desktop"
         - Magisk
         - KernelSU
         - APatch
         - Other / not sure
-    validations:
-      required: true
-
-  - type: input
-    id: android
-    attributes:
-      label: Android version & device / ROM
-      placeholder: "Android 14 — Pixel 7 (stock)"
     validations:
       required: true
 
@@ -57,6 +70,7 @@ body:
         - Xray-core
         - sing-box
         - Both / not sure
+        - "N/A — not a proxying issue (UI, build, etc.)"
     validations:
       required: true
 
@@ -83,5 +97,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: Paste logs from the Web UI **Logs** page or `/data/adb/kasumi-proxy/`. Redact secrets (UUIDs, passwords, server addresses).
+      description: From the Web UI / desktop **Logs** page, or `/data/adb/kasumi-proxy/` (Android) / `$XDG_DATA_HOME/kasumi-proxy/` (desktop). Redact secrets (UUIDs, passwords, server addresses).
       render: shell

@@ -1,20 +1,22 @@
 # ── Release-time build artifacts (produced by scripts/) ──────────
-# Core binaries fetched by fetch-bin.sh — track only the source files.
+# Cores fetched by fetch-cores-android.sh + the kasumi-proxy daemon built by
+# build-daemon-android.sh — track only the docs/licenses.
 module/bin/*
-!module/bin/kasumi-proxyctl
-!module/bin/utils.sh
 !module/bin/README.md
 !module/bin/licenses/
 !module/bin/licenses/*
 
-# Production webroot built by build-webroot.sh — track only the source CGI.
+# Production webroot built by build-webroot.sh.
 module/webroot/*
-!module/webroot/cgi-bin/
+
+# Desktop cores fetched by fetch-cores-desktop.sh for bundle.externalBin.
+src-tauri/binaries/
 
 # ── Node / Vite ──────────────────────────────────────────────────
 node_modules/
-control-center/dist/
-control-center/tsconfig.tsbuildinfo
+frontend/dist/
+# tsc -b incremental build cache (per-package, machine-specific)
+*.tsbuildinfo
 coverage/
 .npm/
 package-lock.json
@@ -23,6 +25,12 @@ package-lock.json
 build/
 dist/
 *.zip
+
+# ── Local build cache ────────────────────────────────────────────
+.cache/
+
+# ── Rust / Cargo ─────────────────────────────────────────────────
+/target/
 
 # ── Nix / direnv ─────────────────────────────────────────────────
 .direnv/

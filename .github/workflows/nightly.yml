@@ -15,6 +15,8 @@ concurrency:
 jobs:
   nightly:
     runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -31,8 +33,9 @@ jobs:
             'module/bin/kasumi-proxyctl'
             'module/bin/utils.sh'
             'module/webroot/cgi-bin/'
-            'control-center/src/'
-            'scripts/fetch-bin.sh'
+            'frontend/src/'
+            'scripts/fetch-cores-android.sh'
+            'scripts/core-versions.sh'
             'scripts/package-release.sh'
           )
 
@@ -69,8 +72,21 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('control-center/bun.lock') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+
+      - name: Setup Rust (android targets)
+        if: steps.check.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        if: steps.check.outputs.skip != 'true'
+        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
+        with:
+          tool: cargo-ndk
 
       - name: Setup Go
         if: steps.check.outputs.skip != 'true'
@@ -102,16 +118,15 @@ jobs:
 
       - name: Install UI dependencies
         if: steps.check.outputs.skip != 'true'
-        working-directory: control-center
+        # bun workspace rooted at the repo — install from root against the single bun.lock.
         run: bun install --frozen-lockfile
 
       - name: Lint & test
         if: steps.check.outputs.skip != 'true'
-        working-directory: control-center
         run: |
-          bun run check
-          bun run check:i18n
-          bun run test
+          bunx biome check
+          bun run frontend/scripts/check-i18n.ts
+          ( cd frontend && bunx vitest run )
 
       - name: Build debug zip
         if: steps.check.outputs.skip != 'true'
@@ -128,4 +143,76 @@ jobs:
         with:
           name: kasumi-proxy-debug-${{ github.sha }}
           path: build/*.zip
+          retention-days: 7
+
+  # ── Desktop installers as nightly artifacts (unsigned), same fetch+bundle path
+  #    as the release workflow but uploaded to the run instead of a GitHub release. ──
+  desktop:
+    needs: nightly
+    if: needs.nightly.outputs.skip != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      - name: Install Tauri CLI
+        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
+        with:
+          tool: tauri-cli
+
+      - name: Linux desktop deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      - name: Build the UI
+        run: |
+          bun install --frozen-lockfile
+          ( cd frontend && bun run build )
+
+      - name: Fetch desktop cores
+        shell: bash
+        run: scripts/fetch-cores-desktop.sh ${{ matrix.target }}
+
+      - name: Build desktop bundles
+        shell: bash
+        run: |
+          ver=$(scripts/app-version.sh)  # product version from module.prop
+          cargo tauri build --target ${{ matrix.target }} \
+            --config src-tauri/tauri.bundle.conf.json \
+            --config "{\"version\":\"$ver\"}"
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          dir="target/${{ matrix.target }}/release/bundle"
+          mkdir -p dist
+          find "$dir" -type f \( -name '*.deb' -o -name '*.AppImage' \) \
+            -exec cp {} dist/ \;
+          ls -la dist
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kasumi-desktop-${{ matrix.target }}-${{ github.sha }}
+          path: dist/*
           retention-days: 7

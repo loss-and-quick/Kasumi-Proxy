@@ -29,6 +29,9 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      skip: ${{ steps.changes.outputs.skip }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -62,8 +65,9 @@ jobs:
               'module/bin/kasumi-proxyctl' \
               'module/bin/utils.sh' \
               'module/webroot/cgi-bin/' \
-              'control-center/src/' \
-              'scripts/fetch-bin.sh' \
+              'frontend/src/' \
+              'scripts/fetch-cores-android.sh' \
+              'scripts/core-versions.sh' \
               'scripts/package-release.sh' \
               2>/dev/null | wc -l)
             [ "$code_commits" -gt 0 ] && has_code_commits=true
@@ -71,9 +75,9 @@ jobs:
           [ "$has_code_commits" = "true" ] && skip=false
 
           # 2. Upstream binary updates
-          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
-          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
-          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/fetch-bin.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
 
           latest_xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
           latest_t2s=$(gh release view --repo xjasonlyu/tun2socks --json tagName -q .tagName)
@@ -94,9 +98,27 @@ jobs:
           echo "t2s_old=$pinned_t2s" >> "$GITHUB_OUTPUT"
           echo "sb_old=$pinned_sb" >> "$GITHUB_OUTPUT"
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "bins_changed=$bins_changed" >> "$GITHUB_OUTPUT"
           echo "xray_version=$latest_xray" >> "$GITHUB_OUTPUT"
           echo "t2s_version=$latest_t2s" >> "$GITHUB_OUTPUT"
           echo "sb_version=$latest_sb" >> "$GITHUB_OUTPUT"
+
+      - name: Sync core pins + nix hashes
+        # When upstream cores advanced, write the new versions into the pinned
+        # source of truth (core-versions.sh) and regenerate the nix FOD hashes
+        # (core-hashes.json), so the next build — and the committed flake — match.
+        if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
+        env:
+          XRAY_NEW: ${{ steps.changes.outputs.xray_version }}
+          T2S_NEW: ${{ steps.changes.outputs.t2s_version }}
+          SB_NEW: ${{ steps.changes.outputs.sb_version }}
+        run: |
+          sed -i -E \
+            -e "s|(XRAY_VERSION=\"\\\$\{XRAY_VERSION:-)[^}]*|\1${XRAY_NEW}|" \
+            -e "s|(TUN2SOCKS_VERSION=\"\\\$\{TUN2SOCKS_VERSION:-)[^}]*|\1${T2S_NEW}|" \
+            -e "s|(SINGBOX_VERSION=\"\\\$\{SINGBOX_VERSION:-)[^}]*|\1${SB_NEW}|" \
+            scripts/core-versions.sh
+          scripts/update-core-hashes.sh
 
       - name: Setup Bun
         if: steps.changes.outputs.skip != 'true'
@@ -109,8 +131,21 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('control-center/bun.lock') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+
+      - name: Setup Rust (android targets)
+        if: steps.changes.outputs.skip != 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        if: steps.changes.outputs.skip != 'true'
+        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
+        with:
+          tool: cargo-ndk
 
       - name: Setup Go
         if: steps.changes.outputs.skip != 'true'
@@ -143,16 +178,15 @@ jobs:
 
       - name: Install UI dependencies
         if: steps.changes.outputs.skip != 'true'
-        working-directory: control-center
+        # bun workspace rooted at the repo — install from root against the single bun.lock.
         run: bun install --frozen-lockfile
 
       - name: Lint & test
         if: steps.changes.outputs.skip != 'true'
-        working-directory: control-center
         run: |
-          bun run check
-          bun run check:i18n
-          bun run test
+          bunx biome check
+          bun run frontend/scripts/check-i18n.ts
+          ( cd frontend && bunx vitest run )
 
       - name: Bump version
         if: steps.changes.outputs.skip != 'true'
@@ -197,7 +231,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add module/module.prop update.json CHANGELOG.md
+          git add module/module.prop update.json CHANGELOG.md \
+            scripts/core-versions.sh scripts/core-hashes.json
           # The version/changelog may already be committed (a hand-prepared
           # skip_bump release, or a re-run) — don't fail when there is nothing new.
           if git diff --cached --quiet; then
@@ -216,3 +251,99 @@ jobs:
           name: Kasumi Proxy ${{ steps.bump.outputs.version }}
           files: build/kasumi-proxy-${{ steps.bump.outputs.version }}.zip
           generate_release_notes: true
+
+  # ── Desktop installers (Linux deb/AppImage), uploaded to the release the job
+  #    above created. Cores are fetched per-target into src-tauri/binaries/ and
+  #    bundled via the externalBin overlay. Signing is opt-in: it runs only when the
+  #    GPG secret is set, else unsigned. Windows/macOS aren't shipped yet — the
+  #    backend's process layer is POSIX-only — so the matrix is Linux-only for now;
+  #    adding a target is a new matrix row once those ports land. ──
+  desktop:
+    needs: release
+    if: needs.release.outputs.skip != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.release.outputs.version }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      - name: Install Tauri CLI
+        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
+        with:
+          tool: tauri-cli
+
+      - name: Linux desktop deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      - name: Build the UI
+        run: |
+          bun install --frozen-lockfile
+          ( cd frontend && bun run build )
+
+      - name: Fetch desktop cores
+        shell: bash
+        run: scripts/fetch-cores-desktop.sh ${{ matrix.target }}
+
+      - name: Import GPG key (Linux signing, optional)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fi
+
+      - name: Build desktop bundles
+        shell: bash
+        env:
+          # Linux AppImage GPG signing — active only when the key/passphrase are set.
+          SIGN: ${{ secrets.GPG_PRIVATE_KEY != '' && '1' || '' }}
+          SIGN_KEY: ${{ secrets.GPG_KEY_ID }}
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          # Inject the real product version (module.prop is the single source of
+          # truth) so the bundles aren't the 0.0.0 placeholder.
+          ver=$(scripts/app-version.sh)
+          cargo tauri build --target "${{ matrix.target }}" \
+            --config src-tauri/tauri.bundle.conf.json \
+            --config "{\"version\":\"$ver\"}"
+
+      - name: Collect artifacts
+        id: collect
+        shell: bash
+        run: |
+          dir="target/${{ matrix.target }}/release/bundle"
+          mkdir -p dist
+          find "$dir" -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.sig' \) \
+            -exec cp {} dist/ \;
+          ls -la dist
+
+      - name: Upload to the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.release.outputs.version }}
+          files: dist/*
