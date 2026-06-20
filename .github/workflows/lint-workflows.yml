@@ -1,0 +1,45 @@
+name: Lint Workflows
+
+# Lint the workflow files themselves. actionlint catches what YAML validity can't:
+# undefined `needs`/job references, bad `${{ }}` expressions, unknown action inputs,
+# and (via its shellcheck integration) shell issues in `run:` blocks. A broken
+# `needs:` reference once shipped silently because nothing here guarded it.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install actionlint
+        # Pinned by version; the download is verified against the release's own
+        # published checksums. taiki-e/install-action doesn't carry actionlint, and
+        # curl|bash of an upstream script pins nothing — this does both.
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          base="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          # Keep the release filename so the checksum line resolves to it.
+          curl -fsSL "${base}/${tarball}" -o "${tarball}"
+          curl -fsSL "${base}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" -o checksums.txt
+          grep " ${tarball}\$" checksums.txt | sha256sum -c -
+          tar -xzf "${tarball}" actionlint
+          install -m 0755 actionlint /usr/local/bin/actionlint
+          rm -f actionlint "${tarball}" checksums.txt
+
+      # shellcheck ships on the runner, so actionlint also lints embedded `run:`
+      # scripts. -color for readable annotations in the job log.
+      - name: Run actionlint
+        run: actionlint -color
