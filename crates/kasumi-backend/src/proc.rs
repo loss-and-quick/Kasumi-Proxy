@@ -28,10 +28,24 @@ pub struct RunOpts {
     pub stdin: Option<String>,
 }
 
+/// Keep a spawned child from popping a console window. On Windows a GUI process
+/// spawning a console subsystem child (our `ip`/`route`/`netsh`/`powershell` calls
+/// and the cores) flashes a black console for each one unless `CREATE_NO_WINDOW` is
+/// set — see tauri-apps/tauri#13230. A no-op everywhere else.
+fn hide_console(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = cmd;
+}
+
 /// Run an external command to completion, capturing stdout/stderr as text.
 pub async fn run(argv: &[String], opts: RunOpts) -> std::io::Result<RunResult> {
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
+    hide_console(&mut cmd);
     if let Some(env) = &opts.env {
         cmd.env_clear();
         cmd.envs(env);
@@ -149,6 +163,7 @@ pub async fn spawn_logged(
     cmd.stdout(Stdio::from(log));
     cmd.stderr(Stdio::from(err));
     cmd.kill_on_drop(kill_on_drop);
+    hide_console(&mut cmd);
     cmd.spawn()
 }
 
