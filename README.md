@@ -9,7 +9,7 @@
   <a href="https://github.com/loss-and-quick/Kasumi-Proxy/releases/latest"><img src="https://img.shields.io/github/v/release/loss-and-quick/Kasumi-Proxy?sort=semver" alt="Latest release" /></a>
   <a href="https://github.com/loss-and-quick/Kasumi-Proxy/issues"><img src="https://img.shields.io/github/issues/loss-and-quick/Kasumi-Proxy" alt="Open issues" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/loss-and-quick/Kasumi-Proxy" alt="License: GPL v3" /></a>
-  <img src="https://img.shields.io/badge/platform-Android%20(root)%20%C2%B7%20Linux-blue" alt="Platform: Android (root) / Linux" />
+  <img src="https://img.shields.io/badge/platform-Android%20(root)%20%C2%B7%20Linux%20%C2%B7%20Windows-blue" alt="Platform: Android (root) / Linux / Windows" />
 </p>
 
 > A system-level transparent proxy for **rooted Android** and **Linux desktop** — routes all
