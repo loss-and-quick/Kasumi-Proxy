@@ -14,6 +14,10 @@ on:
         description: 'Skip version bump (use current version)'
         type: boolean
         default: false
+      force:
+        description: 'Force a release even when change detection finds nothing'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -99,6 +103,12 @@ jobs:
             echo "bump=minor" >> "$GITHUB_OUTPUT"
           else
             echo "bump=${{ inputs.bump || 'patch' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Manual override: a workflow_dispatch with force=true releases even when
+          # nothing changed (empty on schedule/non-dispatch runs, so it's a no-op there).
+          if [ "${{ inputs.force }}" = "true" ]; then
+            skip=false
           fi
 
           {
