@@ -1,8 +1,8 @@
-//! Desktop sing-box config finalisation: tun iface names + the Linux-specific
-//! proxy-server bypass.
+//! Desktop sing-box config finalisation: tun iface names + the proxy-server bypass.
+//! Shared by the Linux and Windows desktop platforms (pure config manipulation).
 //!
-//! On a Linux desktop tun, `auto_route` + `auto_detect_interface` alone do NOT keep
-//! the core's own uplink to the VPN server out of the tunnel — that connection gets
+//! On a desktop tun, `auto_route` + `auto_detect_interface` alone do NOT keep the
+//! core's own uplink to the VPN server out of the tunnel — that connection gets
 //! captured by the tun and loops, causing timeouts. The fix is `route_exclude_address`
 //! on the tun inbound with the resolved server IPs (and literal DNS server IPs),
 //! which excludes them at the OS routing level regardless of fwmark.
@@ -15,7 +15,7 @@ use serde_json::Value;
 use kasumi_backend::fs::{read_text, write_text};
 use kasumi_backend::lifecycle::inject_singbox_ifaces;
 
-use super::net::{cidr, is_literal_ip, resolve_ips};
+use crate::desktop::net::{cidr, is_literal_ip, resolve_ips};
 
 /// Outbound server hosts + literal DNS server IPs to keep off the tun.
 fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {

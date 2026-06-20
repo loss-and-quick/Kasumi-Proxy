@@ -8,17 +8,14 @@
 //!
 //! The exact set of installed routes is persisted so teardown is idempotent.
 
-use std::collections::HashSet;
-
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use kasumi_backend::fs::read_text;
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
-use super::net::{cidr, resolve_ips};
+use crate::desktop::{run_out, silent};
+
 use super::paths::{IP, TUN_ADDR};
-use super::{run_out, silent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
@@ -55,73 +52,6 @@ fn parse_default_route(out: &str) -> Option<(String, String)> {
     Some((gw, dev))
 }
 
-/// Add a non-loopback string host to the set.
-fn add_host(hosts: &mut HashSet<String>, h: Option<&Value>) {
-    if let Some(s) = h.and_then(Value::as_str) {
-        if !s.is_empty() && s != "127.0.0.1" {
-            hosts.insert(s.to_string());
-        }
-    }
-}
-
-/// Proxy-server hosts from a built xray config (all protocol shapes).
-fn collect_xray_servers(cfg: &Value) -> HashSet<String> {
-    let mut hosts = HashSet::new();
-    for ob in cfg
-        .get("outbounds")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let Some(s) = ob.get("settings") else {
-            continue;
-        };
-        for v in s
-            .get("vnext")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            add_host(&mut hosts, v.get("address"));
-        }
-        for sv in s
-            .get("servers")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            add_host(&mut hosts, sv.get("address"));
-        }
-        // wireguard peers: "host:port"
-        for p in s
-            .get("peers")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(ep) = p.get("endpoint").and_then(Value::as_str) {
-                let host = strip_endpoint_host(ep);
-                if !host.is_empty() && host != "127.0.0.1" {
-                    hosts.insert(host);
-                }
-            }
-        }
-    }
-    hosts
-}
-
-/// `host:port` (or `[v6]:port`) → bare host.
-fn strip_endpoint_host(ep: &str) -> String {
-    let no_port = match ep.rfind(':') {
-        Some(i) => &ep[..i],
-        None => ep,
-    };
-    no_port
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .to_string()
-}
-
 /// Nameserver IPs from /etc/resolv.conf (so DNS keeps working during bring-up).
 async fn read_resolvers() -> Vec<String> {
     let text = read_text("/etc/resolv.conf").await.unwrap_or_default();
@@ -138,19 +68,11 @@ async fn read_resolvers() -> Vec<String> {
     ips
 }
 
-/// Resolve every server host in the xray config to bypass CIDRs (+ resolvers).
+/// Resolve every server host in the xray config to bypass CIDRs, plus the resolv.conf
+/// nameservers. The config parsing + resolution is shared; only the resolver source
+/// is Linux-specific.
 pub async fn resolve_bypass_cidrs(xray_cfg_text: &str) -> Vec<String> {
-    let cfg: Value = serde_json::from_str(xray_cfg_text).unwrap_or(Value::Null);
-    let mut out = HashSet::new();
-    for host in collect_xray_servers(&cfg) {
-        for ip in resolve_ips(&host).await {
-            out.insert(cidr(&ip));
-        }
-    }
-    for ip in read_resolvers().await {
-        out.insert(cidr(&ip));
-    }
-    out.into_iter().collect()
+    crate::desktop::net::resolve_bypass_cidrs(xray_cfg_text, &read_resolvers().await).await
 }
 
 /// Bring up xray routing: host-route the bypass CIDRs via the uplink, address + up
@@ -209,32 +131,5 @@ mod tests {
             Some(("192.168.1.1".to_string(), "wlan0".to_string()))
         );
         assert_eq!(parse_default_route("unreachable default"), None);
-    }
-
-    #[test]
-    fn strips_endpoint_host() {
-        assert_eq!(strip_endpoint_host("1.2.3.4:51820"), "1.2.3.4");
-        assert_eq!(strip_endpoint_host("[2001:db8::1]:51820"), "2001:db8::1");
-        assert_eq!(
-            strip_endpoint_host("vpn.example.com:443"),
-            "vpn.example.com"
-        );
-    }
-
-    #[test]
-    fn collects_servers_across_protocol_shapes() {
-        let cfg = serde_json::json!({
-            "outbounds": [
-                { "settings": { "vnext": [{ "address": "a.example" }] } },
-                { "settings": { "servers": [{ "address": "b.example" }, { "address": "127.0.0.1" }] } },
-                { "settings": { "peers": [{ "endpoint": "c.example:51820" }] } },
-            ]
-        });
-        let hosts = collect_xray_servers(&cfg);
-        assert!(hosts.contains("a.example"));
-        assert!(hosts.contains("b.example"));
-        assert!(hosts.contains("c.example"));
-        // Loopback is never bypass-routed.
-        assert!(!hosts.contains("127.0.0.1"));
     }
 }

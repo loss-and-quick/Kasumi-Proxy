@@ -1,23 +1,28 @@
-//! Linux desktop `Platform`: the OS-specific half of the data-path, owning native
-//! tun + `ip` routing ([`routing`]) and the active-uplink monitor ([`network`]).
+//! Desktop `Platform`: OS-neutral helpers plus the per-OS implementation. The
+//! native tun + routing live in [`linux`] / [`windows`]; the shared command
+//! helpers below and the DNS/address utilities ([`net`]) are reused by both.
 //! Neutral lifecycle steps (config build, geo sync, core/tun2socks spawn, liveness
-//! verify) come from `kasumi-backend`. No Magisk, no per-uid app filter.
+//! verify) come from `kasumi-backend`.
 
 pub mod elevate;
 pub mod net;
-pub mod network;
-pub mod paths;
-pub mod platform;
-pub mod routing;
 pub mod singbox;
 
-pub use platform::DesktopPlatform;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::DesktopPlatform;
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::DesktopPlatform;
 
 use kasumi_backend::proc::{run, RunOpts};
 
 /// Run a command, discarding output and returning its exit code. The desktop path
-/// shells out to `ip`, so a `&str`-slice wrapper over the process layer keeps the
-/// call sites readable.
+/// shells out to the OS routing tools (`ip` on Linux, `route`/`netsh` on Windows),
+/// so a `&str`-slice wrapper over the process layer keeps the call sites readable.
 pub(crate) async fn silent(args: &[&str]) -> i32 {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     kasumi_backend::proc::silent(&argv).await

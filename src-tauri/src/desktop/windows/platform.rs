@@ -1,6 +1,7 @@
-//! The Linux desktop `Platform`: thin orchestration over the neutral lifecycle
-//! steps, owning only the OS-specific parts — a native tun + `ip` routing. No
-//! Magisk, no per-uid app filter.
+//! The Windows desktop `Platform`: thin orchestration over the neutral lifecycle
+//! steps, owning only the OS-specific parts — a wintun tun + `route`/`netsh`
+//! routing. sing-box drives its own tun (auto_route); the xray path bridges a
+//! wintun device through tun2socks and installs the routing by hand.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -22,11 +23,13 @@ use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
 
+use crate::desktop::singbox::prepare_singbox_config;
+
 use super::network::run_watcher;
-use super::paths::{DesktopPaths, FWMARK, IP};
-use super::routing::{apply_xray_routing, clear_xray_routing, resolve_bypass_cidrs};
-use super::silent;
-use super::singbox::prepare_singbox_config;
+use super::paths::DesktopPaths;
+use super::routing::{
+    adapter_ifindex, apply_xray_routing, clear_xray_routing, resolve_bypass_cidrs,
+};
 
 pub struct DesktopPlatform {
     p: DesktopPaths,
@@ -67,7 +70,7 @@ impl DesktopPlatform {
         if !exists(bin).await {
             return None;
         }
-        let (code, out) = super::run_out(&[bin, "version"]).await;
+        let (code, out) = crate::desktop::run_out(&[bin, "version"]).await;
         if code != 0 {
             return None;
         }
@@ -92,8 +95,8 @@ impl DesktopPlatform {
         None
     }
 
-    /// sing-box bring-up: it owns its own tun (auto_route) — no tun2socks/manual
-    /// routing. The proxy-server bypass is baked into the config as
+    /// sing-box bring-up: it owns its own wintun tun (auto_route) — no tun2socks /
+    /// manual routing. The proxy-server bypass is baked into the config as
     /// `route_exclude_address` by `prepare_singbox_config`.
     async fn start_singbox(&self) -> anyhow::Result<()> {
         let cfg = self.p.backend.singbox_config.to_string_lossy().into_owned();
@@ -103,6 +106,9 @@ impl DesktopPlatform {
             .log(kasumi_core::contract::LogTarget::Singbox);
         if !exists(&self.p.singbox_bin).await {
             return self.fail("sing-box binary missing").await;
+        }
+        if !exists(&self.p.wintun_dll).await {
+            return self.fail("wintun.dll missing — cannot create a tun").await;
         }
         if !exists(&cfg).await {
             return self.fail("config missing").await;
@@ -136,13 +142,16 @@ impl DesktopPlatform {
         Ok(())
     }
 
-    /// xray bring-up: spawn xray (its own SOCKS), bridge a userspace tun to it via
-    /// tun2socks, then install the Linux routing (server bypass + split-default).
+    /// xray bring-up: spawn xray (its own SOCKS), bridge a wintun tun to it via
+    /// tun2socks, then install the Windows routing (server bypass + split-default).
     async fn start_xray(&self, socks_port: u16) -> anyhow::Result<()> {
         let cfg = self.p.backend.xray_config.to_string_lossy().into_owned();
         let log = self.p.backend.log(kasumi_core::contract::LogTarget::Xray);
         if !exists(&self.p.xray_bin).await {
             return self.fail("xray binary missing").await;
+        }
+        if !exists(&self.p.wintun_dll).await {
+            return self.fail("wintun.dll missing — cannot create a tun").await;
         }
         if !exists(&cfg).await {
             return self.fail("config missing").await;
@@ -168,19 +177,26 @@ impl DesktopPlatform {
             .p
             .backend
             .log(kasumi_core::contract::LogTarget::Tun2socks);
-        let t2s =
-            spawn_tun2socks(&self.p.tun2socks_bin, &tun, socks_port, &t2s_log, FWMARK).await?;
+        // Windows tun2socks needs no fwmark — the server bypass is a host route.
+        let t2s = spawn_tun2socks(&self.p.tun2socks_bin, &tun, socks_port, &t2s_log, None).await?;
         let _ = write_text(
             &self.p.tun2socks_pidfile,
             &t2s.id().unwrap_or(0).to_string(),
         )
         .await;
-        // tun2socks creates the tun device; wait for it before addressing/routing.
-        for _ in 0..20 {
-            if silent(&[IP, "link", "show", &tun]).await == 0 {
+        // tun2socks creates the wintun adapter; wait for it before addressing/routing.
+        let mut up = false;
+        for _ in 0..40 {
+            if adapter_ifindex(&tun).await.is_some() {
+                up = true;
                 break;
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        if !up {
+            return self
+                .fail("tun adapter never came up — see tun2socks log")
+                .await;
         }
         apply_xray_routing(&tun, &bypass, &self.p.route_state_file).await?;
         Ok(())
@@ -189,7 +205,7 @@ impl DesktopPlatform {
 
 impl Default for DesktopPlatform {
     fn default() -> Self {
-        Self::new().expect("desktop paths resolve (HOME set)")
+        Self::new().expect("desktop paths resolve (APPDATA set)")
     }
 }
 
@@ -200,29 +216,6 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// RX/TX bytes for `iface` from /proc/net/dev, or (0, 0).
-async fn iface_traffic(iface: Option<&str>) -> (u64, u64) {
-    let Some(iface) = iface else {
-        return (0, 0);
-    };
-    let Some(dev) = read_text("/proc/net/dev").await else {
-        return (0, 0);
-    };
-    for line in dev.lines() {
-        let Some((name, rest)) = line.split_once(':') else {
-            continue;
-        };
-        if name.trim() != iface {
-            continue;
-        }
-        let f: Vec<&str> = rest.split_whitespace().collect();
-        let rx = f.first().and_then(|x| x.parse().ok()).unwrap_or(0);
-        let tx = f.get(8).and_then(|x| x.parse().ok()).unwrap_or(0);
-        return (rx, tx);
-    }
-    (0, 0)
-}
-
 #[async_trait]
 impl Platform for DesktopPlatform {
     fn paths(&self) -> &BackendPaths {
@@ -230,11 +223,9 @@ impl Platform for DesktopPlatform {
     }
 
     async fn boot_init(&self) -> anyhow::Result<()> {
-        // Unlike Android (RUN_DIR ⊂ DATADIR), the desktop runtime dir lives under
-        // XDG_RUNTIME_DIR — a different base — so both must be created explicitly.
         let _ = tokio::fs::create_dir_all(&self.p.datadir).await;
         let _ = tokio::fs::create_dir_all(&self.p.run_dir).await;
-        // Fresh start: seed the lifecycle channel so a stale value can't make status
+        // Fresh start: seed the lifecycle state so a stale value can't make status
         // lie before the first command.
         self.set_service_state("stopped").await;
         remove_file(&self.p.service_started_file).await;
@@ -277,7 +268,7 @@ impl Platform for DesktopPlatform {
 
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {
         // Stop the core first, gracefully: a sing-box auto_route core removes its
-        // own ip rules + tun on SIGTERM. Then tear down the xray manual routing
+        // own routes + tun on terminate. Then tear down the xray manual routing
         // (no-op for sing-box — no route-state file) and the tun2socks helper.
         kill_if_running(
             read_pidfile(&self.p.pidfile).await,
@@ -318,14 +309,12 @@ impl Platform for DesktopPlatform {
             error = (!reason.is_empty()).then_some(reason);
         } else if raw == "connecting" || raw == "running" {
             // "running" = process up; the Service's connectivity probe refines this
-            // to Connected / NoInternet (see android platform).
+            // to Connected / NoInternet.
             state = RunState::Connecting;
         }
-        let tun = read_text(&self.p.tun_iface_file)
-            .await
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
-        let (rx, tx) = iface_traffic(tun.as_deref()).await;
+        // Per-interface byte counters aren't wired on Windows yet (no /proc/net/dev;
+        // reading them needs iphlpapi) — report 0/0 rather than spawn PowerShell at
+        // the 1 Hz status cadence.
         let started = read_pidfile(&self.p.service_started_file).await;
         let uptime_sec = if raw == "running" && started > 0 {
             now_secs().saturating_sub(started as u64)
@@ -335,8 +324,8 @@ impl Platform for DesktopPlatform {
         Ok(ServiceState {
             state,
             error,
-            download_bytes: rx,
-            upload_bytes: tx,
+            download_bytes: 0,
+            upload_bytes: 0,
             uptime_sec,
             engine: self.running_engine().await,
         })
@@ -345,7 +334,8 @@ impl Platform for DesktopPlatform {
     async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {
         let xray = self.core_version(CoreEngine::Xray).await;
         let singbox = self.core_version(CoreEngine::SingBox).await;
-        let tun = exists("/dev/net/tun").await;
+        // A real tun needs the wintun driver DLL bundled next to the cores.
+        let tun = exists(&self.p.wintun_dll).await;
         Ok(PlatformCapabilities {
             cores: InstalledCores { xray, singbox },
             // Desktop fetches over reqwest, never a curl spawn.
@@ -379,13 +369,13 @@ impl Platform for DesktopPlatform {
         if engine != CoreEngine::SingBox {
             return;
         }
-        // Desktop runs sing-box as a root binary terminating from the tun fd: that
-        // needs the gvisor stack. The "system" stack would require a kernel nftables
-        // output redirect we don't set up here. (See singbox-gvisor-stack.)
+        // Windows sing-box terminates the tun through wintun with the kernel
+        // "system" stack (gvisor is the Linux root-binary path). Pin it so a config
+        // built for another platform can't leave a stack we don't support here.
         if let Some(inbounds) = config.get_mut("inbounds").and_then(Value::as_array_mut) {
             for ib in inbounds {
                 if ib.get("type").and_then(Value::as_str) == Some("tun") {
-                    ib["stack"] = Value::String("gvisor".into());
+                    ib["stack"] = Value::String("system".into());
                 }
             }
         }
@@ -419,12 +409,6 @@ impl Platform for DesktopPlatform {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn iface_traffic_handles_absent_iface() {
-        assert_eq!(iface_traffic(None).await, (0, 0));
-        assert_eq!(iface_traffic(Some("definitely-not-an-iface")).await, (0, 0));
-    }
 
     #[test]
     fn now_secs_is_nonzero() {
