@@ -55,6 +55,53 @@ async fn dispatch(
     service.dispatch(cmd).await.map_err(|e| e.0)
 }
 
+/// Show + focus the main window (from the tray, or a second-launch attempt).
+#[cfg(desktop)]
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// A system tray with show/quit, so closing the window only hides it — the
+/// data-path daemon has to keep running in the background.
+#[cfg(desktop)]
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let show = MenuItem::with_id(app, "show", "Show Kasumi Proxy", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("Kasumi Proxy")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 /// Build the desktop [`Service`] (boot init → probe cores → background loops). Run
 /// on the app's async runtime during setup.
 async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
@@ -108,8 +155,36 @@ pub fn run() {
     #[cfg(debug_assertions)]
     export_generated();
 
-    tauri::Builder::default()
-        .invoke_handler(builder.invoke_handler())
+    #[allow(unused_mut)]
+    let mut tb = tauri::Builder::default();
+
+    // Desktop UX plugins. single-instance MUST be registered first: a second
+    // launch focuses the running window instead of starting a second backend.
+    #[cfg(desktop)]
+    {
+        tb = tb
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                show_main(app);
+            }))
+            .plugin(tauri_plugin_window_state::Builder::default().build())
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None,
+            ));
+    }
+
+    tb.invoke_handler(builder.invoke_handler())
+        .on_window_event(|window, event| {
+            // Closing the window must NOT exit: the data-path daemon keeps running.
+            // Hide to the tray instead; the tray's Quit really exits.
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
+            #[cfg(not(desktop))]
+            let _ = (window, event);
+        })
         .setup(move |app| {
             builder.mount_events(app);
 
@@ -120,6 +195,9 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            #[cfg(desktop)]
+            setup_tray(app)?;
 
             let platform: Arc<dyn Platform> = Arc::new(
                 DesktopPlatform::new()

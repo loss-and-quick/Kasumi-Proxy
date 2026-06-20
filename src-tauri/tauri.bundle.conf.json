@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "externalBin": [
+      "binaries/xray",
+      "binaries/sing-box",
+      "binaries/tun2socks"
+    ]
+  }
+}
