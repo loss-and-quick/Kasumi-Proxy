@@ -199,6 +199,11 @@ jobs:
 
       - name: Build desktop bundles
         shell: bash
+        env:
+          # linuxdeploy/appimagetool mount themselves with FUSE, which the runner
+          # doesn't provide — extract-and-run instead, or AppImage bundling aborts
+          # the whole job ("failed to run linuxdeploy") after the .deb is built.
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
           ver=$(scripts/app-version.sh)  # product version from module.prop
           cargo tauri build --target ${{ matrix.target }} \
