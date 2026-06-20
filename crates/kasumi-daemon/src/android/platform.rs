@@ -169,8 +169,14 @@ async fn core_version(engine: CoreEngine) -> Option<String> {
 /// Spawn tun2socks for `iface`, persist its pid, wait for the iface to appear.
 async fn bring_up_tun2socks(iface: &str, socks_port: u16, pidfile: &str, log_name: &str) {
     let log = format!("{DATADIR}/{log_name}");
-    if let Ok(child) =
-        spawn_tun2socks(TUN2SOCKS_BIN, iface, socks_port, Path::new(&log), FWMARK).await
+    if let Ok(child) = spawn_tun2socks(
+        TUN2SOCKS_BIN,
+        iface,
+        socks_port,
+        Path::new(&log),
+        Some(FWMARK),
+    )
+    .await
     {
         let pid = child.id().unwrap_or(0);
         let _ = write_text(pidfile, &pid.to_string()).await;

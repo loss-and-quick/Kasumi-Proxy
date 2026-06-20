@@ -313,23 +313,27 @@ pub async fn spawn_core(
 }
 
 /// Spawn tun2socks bridging `iface` to the SOCKS port, logging to `log_path`.
-/// `fwmark` keeps tun2socks' own upstream socket out of the tunnel.
+/// `fwmark`, when set, marks tun2socks' own upstream socket so an `ip rule` can
+/// keep it out of the tunnel — that's a Linux SO_MARK feature. Windows has no
+/// fwmark (its server bypass is a host route), so it passes `None`.
 pub async fn spawn_tun2socks(
     bin: &str,
     iface: &str,
     socks_port: u16,
     log_path: &Path,
-    fwmark: u32,
+    fwmark: Option<u32>,
 ) -> std::io::Result<Child> {
-    let argv = [
+    let mut argv = vec![
         bin.to_owned(),
         "-device".into(),
         format!("tun://{iface}"),
         "-proxy".into(),
         format!("socks5://127.0.0.1:{socks_port}"),
-        "-fwmark".into(),
-        fwmark.to_string(),
     ];
+    if let Some(mark) = fwmark {
+        argv.push("-fwmark".into());
+        argv.push(mark.to_string());
+    }
     spawn_logged(&argv, &std::collections::HashMap::new(), log_path, false).await
 }
 
