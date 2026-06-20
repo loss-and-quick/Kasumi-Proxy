@@ -1,3 +1,30 @@
+## v0.4.0 — 2026-06-20
+
+### Cross-platform: Rust backend + Tauri desktop
+
+Base migration off the TypeScript (txiki.js) backend to a Rust workspace
+(`kasumi-core` / `kasumi-backend` / `kasumi-daemon`), with two thin shells over
+one shared `Service`:
+
+- **Android** — the same KSU/Magisk/APatch module, now a Rust `kasumi-proxy`
+  daemon (axum HTTP webroot + token-gated typed WS).
+- **Linux desktop (new)** — a Tauri 2 app owning the data path with a real TUN:
+  system tray + minimize-to-tray, autostart, single-instance, and window-state.
+
+Highlights:
+
+- Nested `Profile` model; the frontend runs on TypeScript bindings + Zod schemas
+  + runtime defaults **generated from the Rust types** — one source of truth, no
+  hand-duplicated values.
+- Versioned on-disk migrations (flat → nested) — existing installs keep their
+  profiles (verified on a 324-profile device dump).
+- Truthful **5-state status** (`stopped / connecting / connected / noInternet /
+  failed`) via an end-to-end probe; per-profile diagnostics stream as they finish.
+- Desktop installers (deb / appimage / nsis / msi) bundle the cores;
+  `nix build .#kasumi-desktop` is self-contained.
+
+---
+
 ## v0.3.4 — 2026-06-10
 
 ### Changes
