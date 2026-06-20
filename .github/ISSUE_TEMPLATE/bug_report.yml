@@ -6,9 +6,9 @@ body:
     attributes:
       value: |
         Thanks for the report! Kasumi Proxy runs on **rooted Android** (a
-        Magisk / KernelSU / APatch module) and on **Linux desktop** (a Tauri app).
-        Please fill in the environment fields — most issues are platform,
-        root-method, or core specific.
+        Magisk / KernelSU / APatch module) and on **Linux / Windows desktop** (a
+        Tauri app). Please fill in the environment fields — most issues are
+        platform, root-method, or core specific.
 
   - type: checkboxes
     id: preflight
@@ -27,6 +27,7 @@ body:
       options:
         - Android (root module)
         - Linux desktop (Tauri app)
+        - Windows desktop (Tauri app)
     validations:
       required: true
 
@@ -43,8 +44,8 @@ body:
     id: os
     attributes:
       label: OS / device
-      description: Android → version + device/ROM; Linux → distro + desktop/compositor (X11/Wayland).
-      placeholder: "Android 14 — Pixel 7 (stock)  ·  or  ·  NixOS — Hyprland (Wayland)"
+      description: Android → version + device/ROM; Linux → distro + desktop/compositor (X11/Wayland); Windows → edition + build.
+      placeholder: "Android 14 — Pixel 7 (stock)  ·  NixOS — Hyprland (Wayland)  ·  Windows 11 23H2"
     validations:
       required: true
 
@@ -53,7 +54,7 @@ body:
     attributes:
       label: Root solution (Android only)
       options:
-        - "N/A — Linux desktop"
+        - "N/A — Linux / Windows desktop"
         - Magisk
         - KernelSU
         - APatch
@@ -97,5 +98,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: From the Web UI / desktop **Logs** page, or `/data/adb/kasumi-proxy/` (Android) / `$XDG_DATA_HOME/kasumi-proxy/` (desktop). Redact secrets (UUIDs, passwords, server addresses).
+      description: From the Web UI / desktop **Logs** page, or `/data/adb/kasumi-proxy/` (Android) / `$XDG_DATA_HOME/kasumi-proxy/` (Linux) / `%APPDATA%\kasumi-proxy\` (Windows). Redact secrets (UUIDs, passwords, server addresses).
       render: shell
