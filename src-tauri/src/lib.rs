@@ -150,20 +150,12 @@ pub fn run() {
 
     let builder = specta_builder();
 
-    // Regenerate the frontend's generated files on every debug build, so a Rust
-    // type/default change fails `tsc` until the frontend is updated. Guard on the
-    // source tree existing: a shipped debug build (run from anywhere but the build
-    // tree) has no `frontend/src/generated` to write to, and the export would panic
-    // on startup — skip it there instead of crashing.
-    #[cfg(debug_assertions)]
-    if std::path::Path::new(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../frontend/src/generated"
-    ))
-    .is_dir()
-    {
-        export_generated();
-    }
+    // NB: the frontend's generated files are NOT regenerated here. `cargo tauri
+    // build` ships `debug_assertions` enabled even in a release profile, so a
+    // `#[cfg(debug_assertions)]` block runs in distributed bundles too — and the
+    // export writes to the build machine's source path (`CARGO_MANIFEST_DIR/..`),
+    // which panics on startup anywhere else. Regeneration is the `codegen` bin's
+    // job (run by the CI drift check and on demand), never the app's.
 
     #[allow(unused_mut)]
     let mut tb = tauri::Builder::default();
