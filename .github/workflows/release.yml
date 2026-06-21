@@ -413,7 +413,27 @@ jobs:
           cp src-tauri/binaries/wintun.dll "$out/"
           : > "$out/portable.dat"
           ver=$(scripts/app-version.sh)
-          ( cd dist/portable && 7z a -tzip "../kasumi-proxy-${ver}-portable.zip" Kasumi-Proxy >/dev/null )
+          ( cd dist/portable && 7z a -tzip "../kasumi-proxy-${ver}-windows-portable.zip" Kasumi-Proxy >/dev/null )
+          rm -rf dist/portable
+          ls -la dist
+
+      - name: Assemble Linux portable zip
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Portable build: app binary + cores (suffix stripped) + a `portable.dat`
+          # marker that pins all state next to the binary at runtime (USB-stick run).
+          t="${{ matrix.target }}"
+          out="dist/portable/Kasumi-Proxy"
+          mkdir -p "$out"
+          cp "target/$t/release/kasumi-desktop" "$out/"
+          for c in xray sing-box tun2socks; do
+            cp "src-tauri/binaries/$c-$t" "$out/$c"
+          done
+          chmod +x "$out"/*
+          : > "$out/portable.dat"
+          ver=$(scripts/app-version.sh)
+          ( cd dist/portable && zip -qr "../kasumi-proxy-${ver}-linux-portable.zip" Kasumi-Proxy )
           rm -rf dist/portable
           ls -la dist
 
