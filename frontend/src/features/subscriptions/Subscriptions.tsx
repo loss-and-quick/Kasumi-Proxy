@@ -25,6 +25,7 @@ import {
   uid,
 } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
+import { copyText } from "../profiles/clipboard";
 
 export default function Subscriptions() {
   const subs = useAppStore((s) => s.subscriptions);
@@ -40,9 +41,78 @@ export default function Subscriptions() {
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importGroup, setImportGroup] = useState(groups[0]?.id ?? "g-main");
 
   const enabledCount = subs.filter((s) => s.enabled).length;
   const importedCount = subs.reduce((n, s) => n + s.count, 0);
+
+  const exportCopy = async (text: string, count: number) => {
+    setExportOpen(false);
+    notify((await copyText(text)) ? t("subs.exportCopied", { count }) : text);
+  };
+
+  const copySubUrl = async (sub: Subscription) => {
+    notify((await copyText(sub.url)) ? t("subs.urlCopied") : sub.url);
+  };
+
+  const exportUrls = () => {
+    const urls = subs.map((s) => s.url.trim()).filter(Boolean);
+    if (!urls.length) return notify(t("subs.exportEmpty"));
+    return exportCopy(urls.join("\n"), urls.length);
+  };
+
+  const exportJson = () => {
+    if (!subs.length) return notify(t("subs.exportEmpty"));
+    // Config-only fields; runtime/bookkeeping (id, count, lastUpdated, lastError,
+    // prev/nextProfile) is intentionally dropped so the dump is portable.
+    const payload = subs.map((s) => ({
+      remarks: s.remarks,
+      url: s.url,
+      enabled: s.enabled,
+      groupId: s.groupId,
+      autoUpdate: s.autoUpdate,
+      interval: s.interval,
+      allowInsecure: s.allowInsecure,
+      userAgent: s.userAgent,
+      filter: s.filter,
+      updateMode: s.updateMode,
+    }));
+    return exportCopy(JSON.stringify(payload, null, 2), payload.length);
+  };
+
+  const openImport = () => {
+    setImportOpen(true);
+    // The UI runs in a secure context (http://127.0.0.1), so prefill from the
+    // clipboard; leave the field untouched if it's empty or unreadable.
+    navigator.clipboard
+      .readText()
+      .then((txt) => {
+        const v = txt.trim();
+        if (v) setImportText(v);
+      })
+      .catch(() => {});
+  };
+
+  const importSubs = async () => {
+    const text = importText.trim();
+    if (!text) return notify(t("subs.importEmpty"));
+    let parsed: Subscription[];
+    try {
+      parsed = parseSubscriptionsInput(text, importGroup);
+    } catch {
+      return notify(t("subs.importInvalid"));
+    }
+    if (!parsed.length) return notify(t("subs.importInvalid"));
+    // Sequential so each functional patch sees the previous insert (avoids
+    // racing the persisted state write).
+    for (const sub of parsed) await upsertSub(sub);
+    setImportText("");
+    setImportOpen(false);
+    notify(t("subs.imported", { count: parsed.length }));
+  };
 
   return (
     <div className="app-region screen-enter">
@@ -51,6 +121,12 @@ export default function Subscriptions() {
         subtitle={t("subs.subtitle", { active: enabledCount, imported: importedCount })}
         actions={
           <>
+            <IconBtn name="content_paste" title={t("subs.import")} onClick={openImport} />
+            <IconBtn
+              name="ios_share"
+              title={t("subs.export")}
+              onClick={() => setExportOpen(true)}
+            />
             <IconBtn
               name="cloud_sync"
               title={t("subs.updateAll")}
@@ -73,6 +149,7 @@ export default function Subscriptions() {
               onUpdate={() => void updateSub(s.id)}
               onEdit={() => setEdit(s)}
               onDelete={() => setConfirmDel(s)}
+              onCopyUrl={() => void copySubUrl(s)}
             />
           ))}
         </div>
@@ -96,6 +173,51 @@ export default function Subscriptions() {
           </div>
         </Card>
       </div>
+
+      <Sheet open={importOpen} title={t("subs.import")} onClose={() => setImportOpen(false)}>
+        <Field
+          label={t("subs.importLabel")}
+          value={importText}
+          onChange={setImportText}
+          area
+          mono={false}
+          hint={t("subs.importHint")}
+        />
+        <div className="field-label">{t("subs.edit.targetGroup")}</div>
+        <select
+          className="select-box"
+          value={importGroup}
+          onChange={(e) => setImportGroup(e.target.value)}
+        >
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <Btn variant="text" onClick={() => setImportOpen(false)}>
+            {t("subs.confirmDel.cancel")}
+          </Btn>
+          <Btn variant="filled" onClick={() => void importSubs()} disabled={!importText.trim()}>
+            {t("subs.importBtn")}
+          </Btn>
+        </div>
+      </Sheet>
+
+      <Sheet open={exportOpen} title={t("subs.export")} onClose={() => setExportOpen(false)}>
+        <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginBottom: 12 }}>
+          {t("subs.exportHint")}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Btn variant="tonal" block icon="link" onClick={() => void exportUrls()}>
+            {t("subs.exportUrls")}
+          </Btn>
+          <Btn variant="tonal" block icon="data_object" onClick={() => void exportJson()}>
+            {t("subs.exportJson")}
+          </Btn>
+        </div>
+      </Sheet>
 
       <SubEditSheet
         open={!!edit}
@@ -146,6 +268,54 @@ export default function Subscriptions() {
   );
 }
 
+// Parse the import text into subscriptions. JSON (an exported dump, object or
+// array) is read field-by-field; anything else is treated as a whitespace-
+// separated list of URLs. Throws on malformed JSON so the caller can report it.
+function parseSubscriptionsInput(text: string, groupId: string): Subscription[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const deriveRemarks = (url: string) => {
+    try {
+      return new URL(url).hostname || url;
+    } catch {
+      return url;
+    }
+  };
+  const make = (p: Partial<Subscription> & { url: string }): Subscription => ({
+    id: uid(),
+    remarks: p.remarks?.trim() || deriveRemarks(p.url.trim()),
+    url: p.url.trim(),
+    enabled: p.enabled ?? true,
+    groupId: p.groupId ?? groupId,
+    autoUpdate: p.autoUpdate ?? false,
+    interval: p.interval ?? 360,
+    allowInsecure: p.allowInsecure ?? false,
+    userAgent: p.userAgent ?? "",
+    filter: p.filter ?? "",
+    updateMode: p.updateMode ?? "auto",
+    lastUpdated: "",
+    count: 0,
+    lastError: null,
+  });
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    const parsed: unknown = JSON.parse(trimmed);
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
+    return arr
+      .filter(
+        (x): x is Partial<Subscription> & { url: string } =>
+          !!x &&
+          typeof (x as { url?: unknown }).url === "string" &&
+          (x as { url: string }).url.trim() !== "",
+      )
+      .map(make);
+  }
+  return trimmed
+    .split(/\s+/)
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .map((url) => make({ url }));
+}
+
 function SubCard({
   s,
   revealed,
@@ -154,6 +324,7 @@ function SubCard({
   onUpdate,
   onEdit,
   onDelete,
+  onCopyUrl,
 }: {
   s: Subscription;
   revealed: boolean;
@@ -162,6 +333,7 @@ function SubCard({
   onUpdate: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCopyUrl: () => void;
 }) {
   const t = useT();
   const { formatDateTime } = useFormatters();
@@ -266,6 +438,7 @@ function SubCard({
           </span>
         )}
         <div style={{ flex: 1 }} />
+        <IconBtn sm name="content_copy" onClick={onCopyUrl} title={t("subs.copyUrl")} />
         <IconBtn sm name="edit" onClick={onEdit} title={t("subs.editAction")} />
         <IconBtn sm name="delete" onClick={onDelete} title={t("subs.deleteAction")} />
         <Btn variant="tonal" sm icon="refresh" onClick={onUpdate}>

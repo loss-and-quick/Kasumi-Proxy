@@ -248,6 +248,29 @@ const es = {
   },
   "subs.updateAll": "Actualizar todo",
   "subs.add": "Añadir",
+  "subs.export": "Exportar",
+  "subs.copyUrl": "Copiar URL",
+  "subs.urlCopied": "URL copiada",
+  "subs.exportHint":
+    "Copia tus suscripciones al portapapeles para hacer una copia de seguridad o moverlas a otro dispositivo.",
+  "subs.exportUrls": "Copiar URL",
+  "subs.exportJson": "Copiar como JSON",
+  "subs.exportEmpty": "No hay suscripciones para exportar",
+  "subs.import": "Importar",
+  "subs.importLabel": "URL de suscripciones o JSON",
+  "subs.importHint":
+    "Pega URL de suscripciones (una por línea) o un volcado JSON exportado desde otro dispositivo.",
+  "subs.importBtn": "Importar",
+  "subs.importEmpty": "Nada que importar",
+  "subs.importInvalid": "No se pudo analizar la entrada",
+  "subs.imported": plural("count", {
+    one: "# suscripción importada",
+    other: "# suscripciones importadas",
+  }),
+  "subs.exportCopied": plural("count", {
+    one: "# suscripción copiada",
+    other: "# suscripciones copiadas",
+  }),
   "subs.addBtn": "Añadir suscripción",
   "subs.infoText":
     "Cada suscripción importa sus servidores a un grupo seleccionado. Al actualizarse, esos perfiles se refrescan intentando conservar tu selección activa cuando sea posible.",
