@@ -98,6 +98,8 @@ body {
   /* No bottom nav on desktop: drop its scroll clearance and lower the FAB. */
   .device.wide .scroll { padding-bottom: 32px; }
   .device.wide .fab { bottom: calc(28px + var(--window-inset-bottom, 0px)); }
+  /* The snackbar clears the bottom nav on mobile; there is none on desktop. */
+  .device.wide .snackbar { bottom: calc(24px + var(--window-inset-bottom, 0px)); }
   /* Full-width primary actions look absurd stretched across a desktop card. */
   .device.wide .primary-actions { max-width: 480px; }
 }
