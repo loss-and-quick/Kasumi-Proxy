@@ -17,7 +17,9 @@ use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
 use crate::desktop::{run_out, silent};
 
-use super::paths::{TUN_ADDR, TUN_MASK};
+/// The userspace tun's address + mask; `/15` covers the 198.18/15 test net.
+const TUN_ADDR: &str = "198.18.0.1";
+const TUN_MASK: &str = "255.254.0.0";
 
 /// The two halves of a split-default route, as (dest, mask) pairs. Each overrides
 /// `0.0.0.0/0` for its half without touching the real default.

@@ -8,15 +8,22 @@ pub mod elevate;
 pub mod net;
 pub mod singbox;
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub mod paths;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub mod platform;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub use platform::DesktopPlatform;
+
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use linux::DesktopPlatform;
+pub(crate) use linux::{network, routing, LinuxOs as OsSeam};
 
 #[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "windows")]
-pub use windows::DesktopPlatform;
+pub(crate) use windows::{network, routing, WindowsOs as OsSeam};
 
 use kasumi_backend::proc::{run, RunOpts};
 
