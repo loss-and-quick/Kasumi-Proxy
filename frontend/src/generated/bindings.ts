@@ -74,6 +74,12 @@ export type AdvancedSettings_Deserialize = {
 	appFilter?: { [key in string]: AppFilterMode },
 	dedupOnUpdate?: boolean,
 	allowNonLocalhost?: boolean,
+	/**  Headless geosite/geoip auto-update: refresh the asset files on an interval. */
+	assetAutoUpdate?: boolean,
+	/**  Asset auto-update interval in minutes (shared by all asset files). */
+	assetUpdateInterval?: number,
+	/**  Fetch mode for both manual and headless asset downloads. */
+	assetUpdateMode?: FetchMode,
 };
 
 /**
@@ -121,6 +127,12 @@ export type AdvancedSettings_Serialize = {
 	appFilter: { [key in string]: AppFilterMode },
 	dedupOnUpdate: boolean,
 	allowNonLocalhost: boolean,
+	/**  Headless geosite/geoip auto-update: refresh the asset files on an interval. */
+	assetAutoUpdate: boolean,
+	/**  Asset auto-update interval in minutes (shared by all asset files). */
+	assetUpdateInterval: number,
+	/**  Fetch mode for both manual and headless asset downloads. */
+	assetUpdateMode: FetchMode,
 };
 
 export type Anytls = {

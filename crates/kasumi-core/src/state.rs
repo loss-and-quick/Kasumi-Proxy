@@ -24,6 +24,9 @@ pub const DEFAULT_REMOTE_DNS: [&str; 2] = ["1.1.1.1", "8.8.8.8"];
 pub const FAKEIP_INET4_RANGE: &str = "198.18.0.0/15";
 // Default log-rotation cap (KB).
 pub const DEFAULT_LOG_ROTATE_KB: i64 = 512;
+// Default interval (minutes) for the headless geosite/geoip auto-update (24h). One
+// global cadence covers every asset file; the UI offers a few coarse presets.
+pub const DEFAULT_ASSET_UPDATE_INTERVAL: i64 = 1440;
 
 /// The base group that must always exist (default `groupId`, can't be deleted).
 pub const BASE_GROUP_ID: &str = "g-main";
@@ -250,6 +253,13 @@ pub struct AdvancedSettings {
     pub app_filter: BTreeMap<String, AppFilterMode>,
     pub dedup_on_update: bool,
     pub allow_non_localhost: bool,
+    /// Headless geosite/geoip auto-update: refresh the asset files on an interval.
+    pub asset_auto_update: bool,
+    /// Asset auto-update interval in minutes (shared by all asset files).
+    pub asset_update_interval: i64,
+    /// Fetch mode for both manual and headless asset downloads.
+    #[serde(default)]
+    pub asset_update_mode: FetchMode,
 }
 
 impl Default for AdvancedSettings {
@@ -295,6 +305,9 @@ impl Default for AdvancedSettings {
             app_filter: BTreeMap::new(),
             dedup_on_update: false,
             allow_non_localhost: false,
+            asset_auto_update: false,
+            asset_update_interval: DEFAULT_ASSET_UPDATE_INTERVAL,
+            asset_update_mode: FetchMode::default(),
         }
     }
 }
