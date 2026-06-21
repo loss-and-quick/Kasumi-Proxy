@@ -1,0 +1,46 @@
+# Path-based PR labels (actions/labeler v5). Maps changed files to the same
+# taxonomy as the PR template's "Affected layer" + the platform:* labels the bug
+# form sets on issues. A PR can carry several (e.g. a desktop change touching both
+# the linux dir and the frontend).
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "frontend/**"
+          - "package.json"
+          - "bun.lock"
+          - "biome.json"
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "crates/**"
+          - "src-tauri/**"
+          - "Cargo.toml"
+          - "Cargo.lock"
+
+"platform:linux":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src-tauri/src/desktop/linux/**"
+
+"platform:windows":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src-tauri/src/desktop/windows/**"
+
+"platform:android":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "module/**"
+          - "crates/kasumi-daemon/**"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
