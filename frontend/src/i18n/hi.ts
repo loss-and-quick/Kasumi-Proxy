@@ -259,6 +259,16 @@ const hi = {
   "subs.exportUrls": "URL कॉपी करें",
   "subs.exportJson": "JSON के रूप में कॉपी करें",
   "subs.exportEmpty": "निर्यात के लिए कोई सदस्यता नहीं",
+  "subs.import": "आयात",
+  "subs.importLabel": "सदस्यता URL या JSON",
+  "subs.importHint": "सदस्यता URL (प्रति पंक्ति एक) या किसी अन्य डिवाइस से निर्यात किया गया JSON पेस्ट करें।",
+  "subs.importBtn": "आयात करें",
+  "subs.importEmpty": "आयात करने के लिए कुछ नहीं",
+  "subs.importInvalid": "इनपुट का विश्लेषण नहीं किया जा सका",
+  "subs.imported": plural("count", {
+    one: "# सदस्यता आयात की गई",
+    other: "# सदस्यताएँ आयात की गईं",
+  }),
   "subs.exportCopied": plural("count", {
     one: "# सदस्यता कॉपी की गई",
     other: "# सदस्यताएँ कॉपी की गईं",

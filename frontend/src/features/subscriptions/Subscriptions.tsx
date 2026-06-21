@@ -42,6 +42,9 @@ export default function Subscriptions() {
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importGroup, setImportGroup] = useState(groups[0]?.id ?? "g-main");
 
   const enabledCount = subs.filter((s) => s.enabled).length;
   const importedCount = subs.reduce((n, s) => n + s.count, 0);
@@ -76,6 +79,37 @@ export default function Subscriptions() {
     return exportCopy(JSON.stringify(payload, null, 2), payload.length);
   };
 
+  const openImport = () => {
+    setImportOpen(true);
+    // The UI runs in a secure context (http://127.0.0.1), so prefill from the
+    // clipboard; leave the field untouched if it's empty or unreadable.
+    navigator.clipboard
+      .readText()
+      .then((txt) => {
+        const v = txt.trim();
+        if (v) setImportText(v);
+      })
+      .catch(() => {});
+  };
+
+  const importSubs = async () => {
+    const text = importText.trim();
+    if (!text) return notify(t("subs.importEmpty"));
+    let parsed: Subscription[];
+    try {
+      parsed = parseSubscriptionsInput(text, importGroup);
+    } catch {
+      return notify(t("subs.importInvalid"));
+    }
+    if (!parsed.length) return notify(t("subs.importInvalid"));
+    // Sequential so each functional patch sees the previous insert (avoids
+    // racing the persisted state write).
+    for (const sub of parsed) await upsertSub(sub);
+    setImportText("");
+    setImportOpen(false);
+    notify(t("subs.imported", { count: parsed.length }));
+  };
+
   return (
     <div className="app-region screen-enter">
       <AppBar
@@ -83,6 +117,7 @@ export default function Subscriptions() {
         subtitle={t("subs.subtitle", { active: enabledCount, imported: importedCount })}
         actions={
           <>
+            <IconBtn name="content_paste" title={t("subs.import")} onClick={openImport} />
             <IconBtn
               name="ios_share"
               title={t("subs.export")}
@@ -133,6 +168,37 @@ export default function Subscriptions() {
           </div>
         </Card>
       </div>
+
+      <Sheet open={importOpen} title={t("subs.import")} onClose={() => setImportOpen(false)}>
+        <Field
+          label={t("subs.importLabel")}
+          value={importText}
+          onChange={setImportText}
+          area
+          mono={false}
+          hint={t("subs.importHint")}
+        />
+        <div className="field-label">{t("subs.edit.targetGroup")}</div>
+        <select
+          className="select-box"
+          value={importGroup}
+          onChange={(e) => setImportGroup(e.target.value)}
+        >
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <Btn variant="text" onClick={() => setImportOpen(false)}>
+            {t("subs.confirmDel.cancel")}
+          </Btn>
+          <Btn variant="filled" onClick={() => void importSubs()} disabled={!importText.trim()}>
+            {t("subs.importBtn")}
+          </Btn>
+        </div>
+      </Sheet>
 
       <Sheet open={exportOpen} title={t("subs.export")} onClose={() => setExportOpen(false)}>
         <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginBottom: 12 }}>
@@ -195,6 +261,54 @@ export default function Subscriptions() {
       </Dialog>
     </div>
   );
+}
+
+// Parse the import text into subscriptions. JSON (an exported dump, object or
+// array) is read field-by-field; anything else is treated as a whitespace-
+// separated list of URLs. Throws on malformed JSON so the caller can report it.
+function parseSubscriptionsInput(text: string, groupId: string): Subscription[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  const deriveRemarks = (url: string) => {
+    try {
+      return new URL(url).hostname || url;
+    } catch {
+      return url;
+    }
+  };
+  const make = (p: Partial<Subscription> & { url: string }): Subscription => ({
+    id: uid(),
+    remarks: p.remarks?.trim() || deriveRemarks(p.url.trim()),
+    url: p.url.trim(),
+    enabled: p.enabled ?? true,
+    groupId: p.groupId ?? groupId,
+    autoUpdate: p.autoUpdate ?? false,
+    interval: p.interval ?? 360,
+    allowInsecure: p.allowInsecure ?? false,
+    userAgent: p.userAgent ?? "",
+    filter: p.filter ?? "",
+    updateMode: p.updateMode ?? "auto",
+    lastUpdated: "",
+    count: 0,
+    lastError: null,
+  });
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    const parsed: unknown = JSON.parse(trimmed);
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
+    return arr
+      .filter(
+        (x): x is Partial<Subscription> & { url: string } =>
+          !!x &&
+          typeof (x as { url?: unknown }).url === "string" &&
+          (x as { url: string }).url.trim() !== "",
+      )
+      .map(make);
+  }
+  return trimmed
+    .split(/\s+/)
+    .map((u) => u.trim())
+    .filter(Boolean)
+    .map((url) => make({ url }));
 }
 
 function SubCard({

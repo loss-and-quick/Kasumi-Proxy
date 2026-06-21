@@ -264,6 +264,17 @@ const pt = {
   "subs.exportUrls": "Copiar URLs",
   "subs.exportJson": "Copiar como JSON",
   "subs.exportEmpty": "Nenhuma assinatura para exportar",
+  "subs.import": "Importar",
+  "subs.importLabel": "URLs de assinaturas ou JSON",
+  "subs.importHint":
+    "Cole URLs de assinaturas (uma por linha) ou um JSON exportado de outro dispositivo.",
+  "subs.importBtn": "Importar",
+  "subs.importEmpty": "Nada para importar",
+  "subs.importInvalid": "Não foi possível analisar a entrada",
+  "subs.imported": plural("count", {
+    one: "# assinatura importada",
+    other: "# assinaturas importadas",
+  }),
   "subs.exportCopied": plural("count", {
     one: "# assinatura copiada",
     other: "# assinaturas copiadas",

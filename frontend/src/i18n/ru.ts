@@ -272,6 +272,19 @@ const ru = {
   "subs.exportUrls": "Скопировать URL",
   "subs.exportJson": "Скопировать как JSON",
   "subs.exportEmpty": "Нет подписок для экспорта",
+  "subs.import": "Импорт",
+  "subs.importLabel": "URL подписок или JSON",
+  "subs.importHint":
+    "Вставьте URL подписок (по одной на строку) или JSON, экспортированный с другого устройства.",
+  "subs.importBtn": "Импортировать",
+  "subs.importEmpty": "Нечего импортировать",
+  "subs.importInvalid": "Не удалось разобрать ввод",
+  "subs.imported": plural("count", {
+    one: "Импортирована # подписка",
+    few: "Импортированы # подписки",
+    many: "Импортировано # подписок",
+    other: "Импортировано # подписки",
+  }),
   "subs.exportCopied": plural("count", {
     one: "Скопирована # подписка",
     few: "Скопированы # подписки",

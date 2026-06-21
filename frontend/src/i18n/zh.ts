@@ -259,6 +259,16 @@ const zh = {
   "subs.exportUrls": "复制 URL",
   "subs.exportJson": "复制为 JSON",
   "subs.exportEmpty": "没有可导出的订阅",
+  "subs.import": "导入",
+  "subs.importLabel": "订阅 URL 或 JSON",
+  "subs.importHint": "粘贴订阅 URL（每行一个）或从其他设备导出的 JSON。",
+  "subs.importBtn": "导入",
+  "subs.importEmpty": "没有可导入的内容",
+  "subs.importInvalid": "无法解析输入内容",
+  "subs.imported": plural("count", {
+    one: "已导入 # 个订阅",
+    other: "已导入 # 个订阅",
+  }),
   "subs.exportCopied": plural("count", {
     one: "已复制 # 个订阅",
     other: "已复制 # 个订阅",

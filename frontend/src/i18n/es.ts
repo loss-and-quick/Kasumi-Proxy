@@ -264,6 +264,17 @@ const es = {
   "subs.exportUrls": "Copiar URL",
   "subs.exportJson": "Copiar como JSON",
   "subs.exportEmpty": "No hay suscripciones para exportar",
+  "subs.import": "Importar",
+  "subs.importLabel": "URL de suscripciones o JSON",
+  "subs.importHint":
+    "Pega URL de suscripciones (una por línea) o un volcado JSON exportado desde otro dispositivo.",
+  "subs.importBtn": "Importar",
+  "subs.importEmpty": "Nada que importar",
+  "subs.importInvalid": "No se pudo analizar la entrada",
+  "subs.imported": plural("count", {
+    one: "# suscripción importada",
+    other: "# suscripciones importadas",
+  }),
   "subs.exportCopied": plural("count", {
     one: "# suscripción copiada",
     other: "# suscripciones copiadas",
