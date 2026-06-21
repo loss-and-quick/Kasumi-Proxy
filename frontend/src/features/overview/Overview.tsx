@@ -428,7 +428,6 @@ function QuickAction({
   return (
     <Card
       onClick={onClick}
-      className="flat"
       style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 12, padding: 14 }}
     >
       <div
