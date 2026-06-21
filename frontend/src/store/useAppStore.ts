@@ -449,7 +449,7 @@ export const useAppStore = create<Store>((set, get) => {
           meta: {
             ...src.meta,
             id: uid(),
-            remarks: `${src.meta.remarks} (copy)`,
+            remarks: `${src.meta.remarks} (${translateCurrent("store.profile.copySuffix")})`,
             subId: null,
             ping: null,
             speed: null,
