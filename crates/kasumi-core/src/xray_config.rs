@@ -747,15 +747,36 @@ pub fn build_xray_config(
         .map(|l| wire(&l))
         .unwrap_or_else(|| "warning".into());
 
+    // Optional auth on the user-facing socks/http inbound (Settings →
+    // socksUsername/socksPassword, both required). xray gates socks behind
+    // `auth: "password"` + `accounts`; http just takes `accounts`.
+    let socks_auth = s
+        .socks_username
+        .as_deref()
+        .filter(|u| !u.is_empty())
+        .zip(s.socks_password.as_deref().filter(|p| !p.is_empty()));
+    let socks_settings = match socks_auth {
+        Some((u, p)) => {
+            json!({ "auth": "password", "accounts": [{ "user": u, "pass": p }], "udp": true })
+        }
+        None => json!({ "auth": "noauth", "udp": true }),
+    };
+    let http_settings = match socks_auth {
+        Some((u, p)) => {
+            json!({ "allowTransparent": false, "accounts": [{ "user": u, "pass": p }] })
+        }
+        None => json!({ "allowTransparent": false }),
+    };
+
     let mut inbounds = vec![
         json!({
             "tag": "socks-in", "port": socks_port, "listen": listen, "protocol": "socks",
-            "settings": { "auth": "noauth", "udp": true },
+            "settings": socks_settings,
             "sniffing": { "enabled": s.domain_sniffing, "destOverride": ["http", "tls", "quic"], "routeOnly": s.route_only },
         }),
         json!({
             "tag": "http-in", "port": http_port, "listen": listen, "protocol": "http",
-            "settings": { "allowTransparent": false },
+            "settings": http_settings,
         }),
     ];
     if has_force {
@@ -811,5 +832,31 @@ mod tests {
                     .unwrap_or_else(|e| panic!("build failed for {label}: {e}"));
             assert_eq!(built, c["config"], "config mismatch for {label}");
         }
+    }
+
+    #[test]
+    fn socks_auth_gates_the_local_inbounds() {
+        let p =
+            crate::share::parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None)
+                .unwrap();
+        let mut s = AdvancedSettings {
+            socks_username: Some("alice".into()),
+            socks_password: Some("s3cret".into()),
+            ..Default::default()
+        };
+        let cfg = build_xray_config(&p, &s, &[], std::slice::from_ref(&p)).unwrap();
+        let inbounds = cfg["inbounds"].as_array().unwrap();
+        let socks = inbounds.iter().find(|i| i["tag"] == "socks-in").unwrap();
+        assert_eq!(socks["settings"]["auth"], "password");
+        assert_eq!(socks["settings"]["accounts"][0]["user"], "alice");
+        assert_eq!(socks["settings"]["accounts"][0]["pass"], "s3cret");
+        let http = inbounds.iter().find(|i| i["tag"] == "http-in").unwrap();
+        assert_eq!(http["settings"]["accounts"][0]["user"], "alice");
+
+        // A half-set credential leaves the inbound open (no accidental lockout).
+        s.socks_password = Some(String::new());
+        let cfg = build_xray_config(&p, &s, &[], std::slice::from_ref(&p)).unwrap();
+        let socks = cfg["inbounds"].as_array().unwrap()[0].clone();
+        assert_eq!(socks["settings"]["auth"], "noauth");
     }
 }
