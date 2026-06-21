@@ -1,24 +1,29 @@
 name: CI
 
 on:
-  # Run on every PR so the required checks always report a status (a required
-  # check that never runs blocks merges forever). Path scoping is applied inside
-  # each job via its "Detect changes" step, not with top-level path filters.
   pull_request:
   push:
     branches: [main]
 
 jobs:
-  # ── Frontend: bun workspace (lockfile at the repo root), biome, build, tests ──
-  frontend:
+  # ── One cheap job computes which areas a PR touches; the heavy jobs gate on its
+  #    outputs (`needs` + job-level `if`), so an irrelevant area's job never starts
+  #    (no runner spun up — notably the Windows one). A skipped job doesn't satisfy a
+  #    required status check, so the single required check is the `ci` aggregator at
+  #    the bottom, not the individual jobs. ──
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.detect.outputs.frontend }}
+      rust: ${{ steps.detect.outputs.rust }}
+      desktop: ${{ steps.detect.outputs.desktop }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Detect changes
-        id: changes
+        id: detect
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             base="${{ github.event.pull_request.base.sha }}"
@@ -27,47 +32,62 @@ jobs:
             base="${{ github.event.before }}"
             head="${{ github.sha }}"
           fi
+          # No usable base (first push, force-push, shallow clone) → run everything.
           if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0
+            {
+              echo "frontend=true"
+              echo "rust=true"
+              echo "desktop=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          if git diff --name-only "$base" "$head" | grep -Eq '^(frontend/|module/|scripts/|package\.json|bun\.lock|biome\.json)'; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
+          files=$(git diff --name-only "$base" "$head")
+          match() { printf '%s\n' "$files" | grep -Eq "$1"; }
+          fe=false; rs=false; dk=false
+          match '^(frontend/|module/|scripts/|package\.json|bun\.lock|biome\.json)' && fe=true
+          match '^(crates/|src-tauri/|Cargo\.(toml|lock)|flake\.(nix|lock))' && rs=true
+          match '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))' && dk=true
+          {
+            echo "frontend=$fe"
+            echo "rust=$rs"
+            echo "desktop=$dk"
+          } >> "$GITHUB_OUTPUT"
+
+  # ── Frontend: bun workspace (lockfile at the repo root), biome, build, tests ──
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
-        if: steps.changes.outputs.relevant == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       - name: Install dependencies
-        if: steps.changes.outputs.relevant == 'true'
         # The bun workspace is rooted at the repo; install from the root so the
         # frontend member and its deps resolve against the single bun.lock.
         run: bun install --frozen-lockfile
 
       - name: Biome check (format + lint)
-        if: steps.changes.outputs.relevant == 'true'
         run: bunx biome check
 
       - name: Build (tsc + vite)
-        if: steps.changes.outputs.relevant == 'true'
         working-directory: frontend
         run: bun run build
 
       - name: Unit tests
-        if: steps.changes.outputs.relevant == 'true'
         working-directory: frontend
         run: bunx vitest run
 
       - name: i18n dictionaries
-        if: steps.changes.outputs.relevant == 'true'
         run: bun run frontend/scripts/check-i18n.ts
 
       - name: ShellCheck
-        if: steps.changes.outputs.relevant == 'true'
         run: |
           # The module is now a thin launcher over the Rust daemon: service.sh /
           # action.sh / uninstall.sh run under Android sh; customize.sh runs under
@@ -80,44 +100,24 @@ jobs:
   # ── Rust workspace: fmt, clippy, tests, and generated-bindings drift, all in
   #    the flake devshell (carries the rust toolchain + webkit for src-tauri). ──
   rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - name: Detect changes
-        id: changes
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.event.pull_request.head.sha }}"
-          else
-            base="${{ github.event.before }}"
-            head="${{ github.sha }}"
-          fi
-          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          if git diff --name-only "$base" "$head" | grep -Eq '^(crates/|src-tauri/|Cargo\.(toml|lock)|flake\.(nix|lock))'; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Install Nix
-        if: steps.changes.outputs.relevant == 'true'
         uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
         with:
           extra-conf: |
             accept-flake-config = true
 
       - name: Nix store cache
-        if: steps.changes.outputs.relevant == 'true'
         uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b # v8
 
       - name: fmt + clippy + test + codegen drift
-        if: steps.changes.outputs.relevant == 'true'
         run: |
           nix develop --command bash -euo pipefail -c '
             cargo fmt --all --check
@@ -135,40 +135,21 @@ jobs:
   #    platform/linker breakage without the slow installer. macOS is still deferred
   #    (no Platform port yet). ──
   desktop-linux:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - name: Detect changes
-        id: changes
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.event.pull_request.head.sha }}"
-          else
-            base="${{ github.event.before }}"
-            head="${{ github.sha }}"
-          fi
-          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          if git diff --name-only "$base" "$head" | grep -Eq '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))'; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Setup Rust
-        if: steps.changes.outputs.relevant == 'true'
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: stable
           targets: x86_64-unknown-linux-gnu
 
       - name: Linux desktop deps
-        if: steps.changes.outputs.relevant == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -176,19 +157,16 @@ jobs:
             libayatana-appindicator3-dev patchelf
 
       - name: Setup Bun
-        if: steps.changes.outputs.relevant == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       - name: Build the UI (generate_context embeds frontendDist)
-        if: steps.changes.outputs.relevant == 'true'
         run: |
           bun install --frozen-lockfile
           ( cd frontend && bun run build )
 
       - name: Compile the Tauri app (no bundle)
-        if: steps.changes.outputs.relevant == 'true'
         run: cargo build -p kasumi-desktop
 
   # ── Windows desktop compile smoke. Mirrors desktop-linux: the `rust` job runs on
@@ -198,54 +176,32 @@ jobs:
   #    portable Rust shelling out to ip/iptables — so the `rust` workspace job already
   #    compiles it on every PR. Only the rarer NDK cross-link is left to nightly.) ──
   desktop-windows:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
-      - name: Detect changes
-        id: changes
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.event.pull_request.head.sha }}"
-          else
-            base="${{ github.event.before }}"
-            head="${{ github.sha }}"
-          fi
-          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          if git diff --name-only "$base" "$head" | grep -Eq '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))'; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Setup Rust
-        if: steps.changes.outputs.relevant == 'true'
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           toolchain: stable
           targets: x86_64-pc-windows-msvc
 
       - name: Setup Bun
-        if: steps.changes.outputs.relevant == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       - name: Build the UI (generate_context embeds frontendDist)
-        if: steps.changes.outputs.relevant == 'true'
         shell: bash
         run: |
           bun install --frozen-lockfile
           ( cd frontend && bun run build )
 
       - name: Stub the wintun bundle resource (compile-smoke doesn't bundle)
-        if: steps.changes.outputs.relevant == 'true'
         shell: bash
         run: |
           # tauri-build validates declared bundle.resources at compile time. The
@@ -255,5 +211,25 @@ jobs:
           : > src-tauri/binaries/wintun.dll
 
       - name: Compile the Tauri app (no bundle)
-        if: steps.changes.outputs.relevant == 'true'
         run: cargo build -p kasumi-desktop
+
+  # ── The single required status check. It always runs and aggregates the gated
+  #    jobs above: a skipped area (its files weren't touched) is fine; only a real
+  #    failure or cancellation fails CI. Point branch protection at THIS context so
+  #    path-skipped jobs never block a merge. ──
+  ci:
+    needs: [changes, frontend, rust, desktop-linux, desktop-windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify no required job failed
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          echo "job results: $results"
+          for r in $results; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "a CI job did not pass"
+              exit 1
+            fi
+          done
+          echo "all CI jobs passed or were skipped"
