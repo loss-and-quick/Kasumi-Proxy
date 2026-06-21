@@ -53,10 +53,16 @@ const es = {
     other: "Importados # perfiles",
   }),
   "activity.subUpdated": "Suscripción actualizada · {name}",
-  "activity.pingComplete": "Ping completado · {count} perfiles",
+  "activity.pingComplete": plural("count", {
+    one: "Ping completado · # perfil",
+    other: "Ping completado · # perfiles",
+  }),
   "activity.bestSelected": "Mejor perfil seleccionado · {remarks}",
   "activity.backupRestored": "Copia de seguridad restaurada",
-  "activity.speedTestComplete": "Test de velocidad completo · {count} perfiles",
+  "activity.speedTestComplete": plural("count", {
+    one: "Test de velocidad completo · # perfil",
+    other: "Test de velocidad completo · # perfiles",
+  }),
   "activity.unreachableRemoved": plural("count", {
     one: "Eliminado # perfil inalcanzable",
     other: "Eliminados # perfiles inalcanzables",
@@ -509,10 +515,13 @@ const es = {
   "profiles.manageGroups": "Grupos",
   "profiles.groups.title": "Grupos",
   "profiles.groups.newPlaceholder": "Nombre del nuevo grupo",
-  "profiles.groups.count": "{count} perfiles",
+  "profiles.groups.count": plural("count", { one: "# perfil", other: "# perfiles" }),
   "profiles.groups.reorder": "Reordenar grupo",
   "profiles.confirmDelGroup.title": "¿Eliminar grupo?",
-  "profiles.confirmDelGroup.body": "y sus {count} perfiles se eliminarán permanentemente.",
+  "profiles.confirmDelGroup.body": plural("count", {
+    one: "y su # perfil se eliminará permanentemente.",
+    other: "y sus # perfiles se eliminarán permanentemente.",
+  }),
   "profiles.confirmDelGroup.cancel": "Cancelar",
   "profiles.confirmDelGroup.delete": "Eliminar",
   "profiles.deleted": "Perfil eliminado",
@@ -668,12 +677,18 @@ const es = {
   }),
   "store.ping.started": "Haciendo ping…",
   "store.ping.complete": "Ping completado",
-  "store.ping.removeUnreachable": "Se eliminaron {count} perfiles inaccesibles",
+  "store.ping.removeUnreachable": plural("count", {
+    one: "Se eliminó # perfil inaccesible",
+    other: "Se eliminaron # perfiles inaccesibles",
+  }),
   "store.ping.noUnreachable": "No se encontraron perfiles inaccesibles",
   "store.ping.selectBest": "Perfil óptimo activado",
   "store.ping.noPingData": "Primero ejecuta un test de ping",
   "store.ping.testFailed": "Error en la prueba: {error}",
-  "store.dedup.done": "Se eliminaron {count} duplicados",
+  "store.dedup.done": plural("count", {
+    one: "Se eliminó # duplicado",
+    other: "Se eliminaron # duplicados",
+  }),
   "store.dedup.none": "No se encontraron duplicados",
   "store.sub.updateFailed": "Error al actualizar: {name}",
   "store.sub.updating": "Actualizando {name}…",
@@ -697,7 +712,10 @@ const es = {
   "store.backup.invalidStructure": "Estructura de copia no válida",
   "store.backup.restored": "Copia restaurada",
   "store.backup.merged": "Copia combinada",
-  "store.backup.profilesSkipped": "Se omitieron {count} perfiles no válidos",
+  "store.backup.profilesSkipped": plural("count", {
+    one: "Se omitió # perfil no válido",
+    other: "Se omitieron # perfiles no válidos",
+  }),
 
   // app filter
   "appFilter.title": "Filtro de apps",
