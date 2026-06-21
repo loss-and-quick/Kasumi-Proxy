@@ -1048,9 +1048,20 @@ pub fn build_singbox_config(
     } else {
         "127.0.0.1"
     };
-    let mut inbounds = vec![json!({
+    // Optional auth on the user-facing mixed inbound (Settings →
+    // socksUsername/socksPassword, both required). sing-box takes a `users` list.
+    let socks_auth = s
+        .socks_username
+        .as_deref()
+        .filter(|u| !u.is_empty())
+        .zip(s.socks_password.as_deref().filter(|p| !p.is_empty()));
+    let mut socks_in = json!({
         "type": "mixed", "tag": "socks-in", "listen": listen, "listen_port": socks_port,
-    })];
+    });
+    if let Some((u, p)) = socks_auth {
+        socks_in["users"] = json!([{ "username": u, "password": p }]);
+    }
+    let mut inbounds = vec![socks_in];
     if !opts.no_tun {
         inbounds.extend(build_singbox_tun_inbounds(s));
     }
@@ -1138,5 +1149,41 @@ mod tests {
             .unwrap_or_else(|e| panic!("build failed for {label}: {e}"));
             assert_eq!(built, c["config"], "config mismatch for {label}");
         }
+    }
+
+    #[test]
+    fn socks_auth_adds_users_to_the_mixed_inbound() {
+        let p = crate::share::parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        let mut s = AdvancedSettings::default();
+        s.socks_username = Some("alice".into());
+        s.socks_password = Some("s3cret".into());
+        let cfg = build_singbox_config(
+            &p,
+            &s,
+            &[],
+            std::slice::from_ref(&p),
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let socks = cfg["inbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["tag"] == "socks-in")
+            .unwrap();
+        assert_eq!(socks["users"][0]["username"], "alice");
+        assert_eq!(socks["users"][0]["password"], "s3cret");
+
+        // No creds → no users list (open inbound).
+        let cfg = build_singbox_config(
+            &p,
+            &AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let socks = &cfg["inbounds"].as_array().unwrap()[0];
+        assert!(socks.get("users").is_none());
     }
 }
