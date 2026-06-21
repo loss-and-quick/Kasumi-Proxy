@@ -1,12 +1,11 @@
-//! Linux desktop `Platform`: the OS-specific half of the data-path, owning native
-//! tun + `ip` routing ([`routing`]) and the active-uplink monitor ([`network`]).
-//! Neutral lifecycle steps (config build, geo sync, core/tun2socks spawn, liveness
-//! verify) come from `kasumi-backend`. No Magisk, no per-uid app filter. Shared
-//! command helpers and DNS/address utilities live one level up in [`super`].
+//! Linux desktop specifics: the OS-specific half of the data-path, owning native
+//! tun + `ip` routing ([`routing`]) and the active-uplink monitor ([`network`]),
+//! plus the [`DesktopOs`](crate::desktop::platform::DesktopOs) seam ([`os`]). The
+//! shared `Platform` impl, paths and command/DNS helpers live one level up in
+//! [`super`]. No Magisk, no per-uid app filter.
 
-mod network;
-mod paths;
-mod platform;
-mod routing;
+pub(crate) mod network;
+mod os;
+pub(crate) mod routing;
 
-pub use platform::DesktopPlatform;
+pub(crate) use os::LinuxOs;

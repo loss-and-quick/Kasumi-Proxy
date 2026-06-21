@@ -1,7 +1,11 @@
-//! The Windows desktop `Platform`: thin orchestration over the neutral lifecycle
-//! steps, owning only the OS-specific parts — a wintun tun + `route`/`netsh`
-//! routing. sing-box drives its own tun (auto_route); the xray path bridges a
-//! wintun device through tun2socks and installs the routing by hand.
+//! The desktop `Platform`: thin orchestration over the neutral lifecycle steps,
+//! shared by Linux and Windows. The bring-up flow, status reporting and teardown are
+//! identical across both OSes; the handful of genuine differences (tun2socks fwmark,
+//! tun-up wait, byte counters, tun capability, sing-box stack, the wintun precheck)
+//! are funnelled through the [`DesktopOs`] seam, implemented per-OS in `linux::os` /
+//! `windows::os`. The native tun + routing live in `routing`/`network`. Neutral
+//! lifecycle steps (config build, geo sync, core/tun2socks spawn, liveness verify)
+//! come from `kasumi-backend`.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -23,22 +27,54 @@ use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
 
+use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
+use crate::desktop::{network, routing, OsSeam};
 
-use super::network::run_watcher;
-use super::paths::DesktopPaths;
-use super::routing::{
-    adapter_ifindex, apply_xray_routing, clear_xray_routing, resolve_bypass_cidrs,
-};
+/// The per-OS seam: only the parts of the data-path that genuinely differ between
+/// Linux and Windows. Everything else lives in the shared [`DesktopPlatform`].
+#[async_trait]
+pub(crate) trait DesktopOs: Send + Sync {
+    fn new() -> anyhow::Result<Self>
+    where
+        Self: Sized;
+
+    /// fwmark stamped on tun2socks' upstream socket so it stays out of the tunnel.
+    /// Linux pins one; Windows uses a host route instead and returns `None`.
+    fn tun2socks_fwmark(&self) -> Option<u32>;
+
+    /// Extra precheck before the xray/tun2socks path (Windows: the bundled
+    /// `wintun.dll` must be on disk). Linux has nothing to check.
+    async fn precheck_xray(&self, p: &DesktopPaths) -> anyhow::Result<()>;
+
+    /// Wait for the freshly-created tun `name` to come up before addressing/routing.
+    /// Linux is best-effort (proceeds even on timeout, matching its `ip` flow);
+    /// Windows errors if the wintun adapter never appears.
+    async fn await_tun_up(&self, name: &str) -> anyhow::Result<()>;
+
+    /// RX/TX byte counters for `iface`, or `(0, 0)` where unsupported (Windows has
+    /// no `/proc/net/dev`).
+    async fn iface_traffic(&self, iface: Option<&str>) -> (u64, u64);
+
+    /// Whether a tun is creatable right now (Linux checks `/dev/net/tun`; Windows
+    /// always can — sing-box embeds wintun, the xray path checks the DLL at start).
+    async fn tun_capable(&self) -> bool;
+
+    /// The sing-box tun stack to pin: `"gvisor"` for the Linux root-binary path,
+    /// `"system"` for Windows (wintun + kernel stack).
+    fn singbox_stack(&self) -> &'static str;
+}
 
 pub struct DesktopPlatform {
     p: DesktopPaths,
+    os: OsSeam,
 }
 
 impl DesktopPlatform {
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
             p: DesktopPaths::resolve()?,
+            os: OsSeam::new()?,
         })
     }
 
@@ -95,9 +131,10 @@ impl DesktopPlatform {
         None
     }
 
-    /// sing-box bring-up: it owns its own wintun tun (auto_route) — no tun2socks /
-    /// manual routing. The proxy-server bypass is baked into the config as
-    /// `route_exclude_address` by `prepare_singbox_config`.
+    /// sing-box bring-up: it owns its own tun (auto_route) — no tun2socks/manual
+    /// routing. The proxy-server bypass is baked into the config as
+    /// `route_exclude_address` by `prepare_singbox_config`. On Windows the tun comes
+    /// up from sing-box's embedded wintun (no DLL on disk needed, unlike xray).
     async fn start_singbox(&self) -> anyhow::Result<()> {
         let cfg = self.p.backend.singbox_config.to_string_lossy().into_owned();
         let log = self
@@ -107,8 +144,6 @@ impl DesktopPlatform {
         if !exists(&self.p.singbox_bin).await {
             return self.fail("sing-box binary missing").await;
         }
-        // sing-box embeds its own wintun.dll (go:embed, loaded from memory), so the
-        // tun comes up without a wintun.dll on disk — unlike the xray/tun2socks path.
         if !exists(&cfg).await {
             return self.fail("config missing").await;
         }
@@ -141,26 +176,22 @@ impl DesktopPlatform {
         Ok(())
     }
 
-    /// xray bring-up: spawn xray (its own SOCKS), bridge a wintun tun to it via
-    /// tun2socks, then install the Windows routing (server bypass + split-default).
+    /// xray bring-up: spawn xray (its own SOCKS), bridge a userspace tun to it via
+    /// tun2socks, then install the OS routing (server bypass + split-default).
     async fn start_xray(&self, socks_port: u16) -> anyhow::Result<()> {
         let cfg = self.p.backend.xray_config.to_string_lossy().into_owned();
         let log = self.p.backend.log(kasumi_core::contract::LogTarget::Xray);
         if !exists(&self.p.xray_bin).await {
             return self.fail("xray binary missing").await;
         }
-        // tun2socks loads wintun.dll from its own directory (unlike sing-box, which
-        // embeds it), so the xray path genuinely needs the bundled DLL on disk.
-        if !exists(&self.p.wintun_dll).await {
-            return self.fail("wintun.dll missing — cannot create a tun").await;
-        }
+        self.os.precheck_xray(&self.p).await?;
         if !exists(&cfg).await {
             return self.fail("config missing").await;
         }
 
         // Resolve the server-bypass set before any tun route is up (needs DNS).
         let cfg_text = read_text(&cfg).await.unwrap_or_default();
-        let bypass = resolve_bypass_cidrs(&cfg_text).await;
+        let bypass = routing::resolve_bypass_cidrs(&cfg_text).await;
 
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
         let child = spawn_core(&self.p.xray_bin, &cfg, &log, &dat_dir, false).await?;
@@ -178,35 +209,29 @@ impl DesktopPlatform {
             .p
             .backend
             .log(kasumi_core::contract::LogTarget::Tun2socks);
-        // Windows tun2socks needs no fwmark — the server bypass is a host route.
-        let t2s = spawn_tun2socks(&self.p.tun2socks_bin, &tun, socks_port, &t2s_log, None).await?;
+        let t2s = spawn_tun2socks(
+            &self.p.tun2socks_bin,
+            &tun,
+            socks_port,
+            &t2s_log,
+            self.os.tun2socks_fwmark(),
+        )
+        .await?;
         let _ = write_text(
             &self.p.tun2socks_pidfile,
             &t2s.id().unwrap_or(0).to_string(),
         )
         .await;
-        // tun2socks creates the wintun adapter; wait for it before addressing/routing.
-        let mut up = false;
-        for _ in 0..40 {
-            if adapter_ifindex(&tun).await.is_some() {
-                up = true;
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(250)).await;
-        }
-        if !up {
-            return self
-                .fail("tun adapter never came up — see tun2socks log")
-                .await;
-        }
-        apply_xray_routing(&tun, &bypass, &self.p.route_state_file).await?;
+        // tun2socks creates the tun device; wait for it before addressing/routing.
+        self.os.await_tun_up(&tun).await?;
+        routing::apply_xray_routing(&tun, &bypass, &self.p.route_state_file).await?;
         Ok(())
     }
 }
 
 impl Default for DesktopPlatform {
     fn default() -> Self {
-        Self::new().expect("desktop paths resolve (APPDATA set)")
+        Self::new().expect("desktop paths resolve")
     }
 }
 
@@ -224,6 +249,9 @@ impl Platform for DesktopPlatform {
     }
 
     async fn boot_init(&self) -> anyhow::Result<()> {
+        // Unlike Android (RUN_DIR ⊂ DATADIR), the desktop runtime dir may live under
+        // a different base (XDG_RUNTIME_DIR / %LOCALAPPDATA%), so both must be created
+        // explicitly.
         let _ = tokio::fs::create_dir_all(&self.p.datadir).await;
         let _ = tokio::fs::create_dir_all(&self.p.run_dir).await;
         // Fresh start: seed the lifecycle state so a stale value can't make status
@@ -278,7 +306,7 @@ impl Platform for DesktopPlatform {
             true,
         )
         .await;
-        clear_xray_routing(&self.p.route_state_file).await;
+        routing::clear_xray_routing(&self.p.route_state_file).await;
         kill_if_running(
             read_pidfile(&self.p.tun2socks_pidfile).await,
             Some(&self.p.tun2socks_bin),
@@ -313,9 +341,11 @@ impl Platform for DesktopPlatform {
             // to Connected / NoInternet.
             state = RunState::Connecting;
         }
-        // Per-interface byte counters aren't wired on Windows yet (no /proc/net/dev;
-        // reading them needs iphlpapi) — report 0/0 rather than spawn PowerShell at
-        // the 1 Hz status cadence.
+        let tun = read_text(&self.p.tun_iface_file)
+            .await
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let (rx, tx) = self.os.iface_traffic(tun.as_deref()).await;
         let started = read_pidfile(&self.p.service_started_file).await;
         let uptime_sec = if raw == "running" && started > 0 {
             now_secs().saturating_sub(started as u64)
@@ -325,8 +355,8 @@ impl Platform for DesktopPlatform {
         Ok(ServiceState {
             state,
             error,
-            download_bytes: 0,
-            upload_bytes: 0,
+            download_bytes: rx,
+            upload_bytes: tx,
             uptime_sec,
             engine: self.running_engine().await,
         })
@@ -339,9 +369,7 @@ impl Platform for DesktopPlatform {
             cores: InstalledCores { xray, singbox },
             // Desktop fetches over reqwest, never a curl spawn.
             curl: false,
-            // sing-box embeds wintun, so a tun is always possible on Windows; the
-            // xray path additionally needs the bundled wintun.dll (checked at start).
-            tun: true,
+            tun: self.os.tun_capable().await,
             bridge: "desktop".into(),
         })
     }
@@ -370,13 +398,14 @@ impl Platform for DesktopPlatform {
         if engine != CoreEngine::SingBox {
             return;
         }
-        // Windows sing-box terminates the tun through wintun with the kernel
-        // "system" stack (gvisor is the Linux root-binary path). Pin it so a config
-        // built for another platform can't leave a stack we don't support here.
+        // Pin the sing-box tun stack so a config built for another platform can't
+        // leave a stack we don't support here (gvisor for the Linux root-binary path
+        // terminating from the tun fd; system/wintun on Windows).
+        let stack = self.os.singbox_stack();
         if let Some(inbounds) = config.get_mut("inbounds").and_then(Value::as_array_mut) {
             for ib in inbounds {
                 if ib.get("type").and_then(Value::as_str) == Some("tun") {
-                    ib["stack"] = Value::String("system".into());
+                    ib["stack"] = Value::String(stack.into());
                 }
             }
         }
@@ -384,7 +413,7 @@ impl Platform for DesktopPlatform {
 
     fn watch_network_change(&self) -> Option<mpsc::Receiver<()>> {
         let (tx, rx) = mpsc::channel(1);
-        tokio::spawn(run_watcher(tx));
+        tokio::spawn(network::run_watcher(tx));
         Some(rx)
     }
 

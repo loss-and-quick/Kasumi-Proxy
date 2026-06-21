@@ -10,7 +10,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::paths::IP;
+use super::os::IP;
 use super::routing::read_default_route;
 
 /// The uplink device currently owning the default route, or `None`.

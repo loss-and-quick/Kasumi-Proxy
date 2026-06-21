@@ -15,7 +15,7 @@ use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
 use crate::desktop::{run_out, silent};
 
-use super::paths::{IP, TUN_ADDR};
+use super::os::{IP, TUN_ADDR};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
