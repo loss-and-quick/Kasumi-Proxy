@@ -82,20 +82,26 @@ impl DesktopPaths {
             .or_else(|| env("LOCALAPPDATA"))
             .unwrap_or_else(|| data_home.clone());
 
-        let datadir = format!("{data_home}/kasumi-proxy");
-        let run_dir = format!("{runtime_base}/kasumi-proxy/run");
+        // Normalize the bases too, in case an override used forward slashes.
+        let norm = |s: &str| s.replace('/', r"\");
+        let bin = norm(&bin);
+        let data_home = norm(&data_home);
+        let runtime_base = norm(&runtime_base);
+
+        let datadir = format!(r"{data_home}\kasumi-proxy");
+        let run_dir = format!(r"{runtime_base}\kasumi-proxy\run");
 
         let backend = BackendPaths {
             data_dir: PathBuf::from(&datadir),
             srs_dir: PathBuf::from(&datadir),
             dat_dir: PathBuf::from(&datadir),
-            app_state: PathBuf::from(format!("{datadir}/app-state.json")),
-            profiles: PathBuf::from(format!("{datadir}/profiles.json")),
-            xray_config: PathBuf::from(format!("{datadir}/config.json")),
-            singbox_config: PathBuf::from(format!("{datadir}/singbox.json")),
-            engine_file: PathBuf::from(format!("{datadir}/engine")),
+            app_state: PathBuf::from(format!(r"{datadir}\app-state.json")),
+            profiles: PathBuf::from(format!(r"{datadir}\profiles.json")),
+            xray_config: PathBuf::from(format!(r"{datadir}\config.json")),
+            singbox_config: PathBuf::from(format!(r"{datadir}\singbox.json")),
+            engine_file: PathBuf::from(format!(r"{datadir}\engine")),
             run_dir: PathBuf::from(&run_dir),
-            ws_info: PathBuf::from(format!("{run_dir}/ws.json")),
+            ws_info: PathBuf::from(format!(r"{run_dir}\ws.json")),
             // The Tauri webview loads the UI natively (no loopback HTTP server), so
             // the backend serves no webroot. `KASUMI_WEBROOT` only matters for the
             // standalone daemon path, kept for parity.
@@ -105,20 +111,20 @@ impl DesktopPaths {
         Ok(Self {
             datadir: datadir.clone(),
             run_dir: run_dir.clone(),
-            pidfile: format!("{run_dir}/core.pid"),
-            tun2socks_pidfile: format!("{run_dir}/tun2socks.pid"),
-            route_state_file: format!("{run_dir}/desktop-route.json"),
-            socks_port_file: format!("{datadir}/local-socks-port"),
-            engine_file: format!("{datadir}/engine"),
-            tun_iface_file: format!("{datadir}/tun-iface"),
-            tun2_iface_file: format!("{datadir}/tun2-iface"),
-            service_state_file: format!("{datadir}/service-state"),
-            service_started_file: format!("{datadir}/service-started"),
-            xray_bin: format!("{bin}/xray.exe"),
-            singbox_bin: format!("{bin}/sing-box.exe"),
-            tun2socks_bin: format!("{bin}/tun2socks.exe"),
-            geodat2srs_bin: format!("{bin}/geodat2srs.exe"),
-            wintun_dll: format!("{bin}/wintun.dll"),
+            pidfile: format!(r"{run_dir}\core.pid"),
+            tun2socks_pidfile: format!(r"{run_dir}\tun2socks.pid"),
+            route_state_file: format!(r"{run_dir}\desktop-route.json"),
+            socks_port_file: format!(r"{datadir}\local-socks-port"),
+            engine_file: format!(r"{datadir}\engine"),
+            tun_iface_file: format!(r"{datadir}\tun-iface"),
+            tun2_iface_file: format!(r"{datadir}\tun2-iface"),
+            service_state_file: format!(r"{datadir}\service-state"),
+            service_started_file: format!(r"{datadir}\service-started"),
+            xray_bin: format!(r"{bin}\xray.exe"),
+            singbox_bin: format!(r"{bin}\sing-box.exe"),
+            tun2socks_bin: format!(r"{bin}\tun2socks.exe"),
+            geodat2srs_bin: format!(r"{bin}\geodat2srs.exe"),
+            wintun_dll: format!(r"{bin}\wintun.dll"),
             backend,
         })
     }
@@ -147,9 +153,9 @@ mod tests {
         std::env::set_var("KASUMI_DATA_HOME", r"C:\kasumi-test-home");
         std::env::set_var("KASUMI_RUNTIME_DIR", r"C:\kasumi-test-run");
         let p = DesktopPaths::resolve().unwrap();
-        assert_eq!(p.datadir, r"C:\kasumi-test-home/kasumi-proxy");
-        assert_eq!(p.run_dir, r"C:\kasumi-test-run/kasumi-proxy/run");
-        assert!(p.xray_bin.ends_with("/xray.exe"));
+        assert_eq!(p.datadir, r"C:\kasumi-test-home\kasumi-proxy");
+        assert_eq!(p.run_dir, r"C:\kasumi-test-run\kasumi-proxy\run");
+        assert!(p.xray_bin.ends_with(r"\xray.exe"));
         std::env::remove_var("KASUMI_DATA_HOME");
         std::env::remove_var("KASUMI_RUNTIME_DIR");
     }
