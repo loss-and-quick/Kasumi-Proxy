@@ -839,9 +839,11 @@ mod tests {
         let p =
             crate::share::parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None)
                 .unwrap();
-        let mut s = AdvancedSettings::default();
-        s.socks_username = Some("alice".into());
-        s.socks_password = Some("s3cret".into());
+        let mut s = AdvancedSettings {
+            socks_username: Some("alice".into()),
+            socks_password: Some("s3cret".into()),
+            ..Default::default()
+        };
         let cfg = build_xray_config(&p, &s, &[], std::slice::from_ref(&p)).unwrap();
         let inbounds = cfg["inbounds"].as_array().unwrap();
         let socks = inbounds.iter().find(|i| i["tag"] == "socks-in").unwrap();

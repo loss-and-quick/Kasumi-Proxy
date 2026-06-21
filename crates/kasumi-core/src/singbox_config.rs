@@ -1154,9 +1154,11 @@ mod tests {
     #[test]
     fn socks_auth_adds_users_to_the_mixed_inbound() {
         let p = crate::share::parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
-        let mut s = AdvancedSettings::default();
-        s.socks_username = Some("alice".into());
-        s.socks_password = Some("s3cret".into());
+        let s = AdvancedSettings {
+            socks_username: Some("alice".into()),
+            socks_password: Some("s3cret".into()),
+            ..Default::default()
+        };
         let cfg = build_singbox_config(
             &p,
             &s,
