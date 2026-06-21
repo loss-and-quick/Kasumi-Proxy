@@ -44,15 +44,6 @@ const vi = {
   "overview.pingAll": "Ping tất cả",
   "overview.backupRestore": "Sao lưu và khôi phục",
   "overview.recentActivity": "Hoạt động gần đây",
-  "overview.activity.running": "Dịch vụ đang chạy · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# hồ sơ", other: "# hồ sơ" }, runtime)} trong ${pluralPart(Number(groups), { one: "# nhóm", other: "# nhóm" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# đăng ký đang bật",
-    other: "# đăng ký đang bật",
-  }),
   "activity.serviceStarted": "Dịch vụ đã khởi động · {remarks}",
   "activity.serviceStopped": "Dịch vụ đã dừng",
   "activity.serviceRestarted": "Dịch vụ đã khởi động lại · {remarks}",
@@ -75,7 +66,6 @@ const vi = {
   "activity.profileSaved": "Đã lưu hồ sơ · {remarks}",
   "time.now": "vừa xong",
   "time.ago": "{n}{unit} trước",
-  "time.unit.s": "s",
   "time.unit.m": "ph",
   "time.unit.h": "g",
   // profiles
@@ -282,13 +272,9 @@ const vi = {
   "subs.edit.userAgentPh": "mặc định",
   "subs.edit.filter": "Bộ lọc (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "Bật",
-  "subs.edit.enabledSub": "Đưa vào cập nhật và danh sách hồ sơ",
   "subs.edit.autoUpdate": "Tự động cập nhật",
   "subs.edit.autoUpdateSub": "Làm mới theo lịch",
   "subs.edit.interval": "Khoảng thời gian (hh:mm)",
-  "subs.edit.insecure": "Cho phép URL không an toàn",
-  "subs.edit.insecureSub": "Bỏ qua xác minh TLS khi tải",
   "subs.edit.urlInsecureHint": "HTTP không mã hóa — đăng ký này có thể bị giả mạo khi truyền.",
   "subs.edit.validationRemarks": "Bắt buộc nhập ghi chú",
   "subs.edit.validationUrl": "Bắt buộc nhập URL đăng ký",
@@ -575,7 +561,6 @@ const vi = {
   "settings.assetDownload": "Tải xuống",
   "settings.assetDelete": "Xóa",
   "settings.assetLinks": "Liên kết sẵn cho geoip.dat / geosite.dat",
-  "settings.assetKnownSource": "Nguồn đã biết",
   "settings.assetUse": "Sử dụng",
   "settings.assetNotDownloaded": "Chưa tải về",
   "settings.proxyRunningWarning": "Proxy đang chạy. Dừng lại để thay đổi các cài đặt này.",
@@ -603,7 +588,6 @@ const vi = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL kiểm tra tốc độ",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "English",
   "routingSheet.outbound.profiles": "Hồ sơ",
   "routingSheet.outboundProfileHint":
     "Định tuyến qua hồ sơ này khi hồ sơ đang chạy dùng cùng lõi; nếu không sẽ quay về proxy chính.",
@@ -613,7 +597,6 @@ const vi = {
   "settings.rulePreset.private": "LAN trực tiếp",
   "settings.rulePreset.cn": "Trung Quốc trực tiếp",
   "settings.rulePreset.blockQuic": "Chặn QUIC",
-  "settings.assetInstallBundle": "Cài bộ khuyến nghị",
   "rulesIo.title": "Quy tắc định tuyến: nhập / xuất",
   "rulesIo.export": "Xuất quy tắc",
   "rulesIo.exportLabel": "JSON quy tắc hiện tại",
@@ -624,8 +607,6 @@ const vi = {
   "rulesIo.qrTitle": "Mã QR quy tắc định tuyến",
   "rulesIo.mergeHint": "Gộp thêm các quy tắc đã nhập; Thay thế ghi đè toàn bộ.",
   "rulesIo.summary": plural("count", { other: "# quy tắc" }),
-  "settings.language.ru": "Русский",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "Cơ sở dữ liệu geoip mặc định của Xray",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -664,22 +645,11 @@ const vi = {
   "store.ping.testFailed": "Kiểm tra thất bại: {error}",
   "store.dedup.done": "Đã xóa {count} mục trùng",
   "store.dedup.none": "Không tìm thấy mục trùng",
-  "store.sub.urlRequired": "Bắt buộc nhập URL đăng ký",
-  "store.sub.invalidFilter": "Regex bộ lọc không hợp lệ",
   "store.sub.updateFailed": "Cập nhật thất bại: {name}",
-  "store.sub.invalidFilterNotify": "Bộ lọc không hợp lệ: {name}",
   "store.sub.updating": "Đang cập nhật {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# hồ sơ", other: "# hồ sơ" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# hồ sơ", other: "# hồ sơ" }, runtime)} · đã ánh xạ lại hồ sơ đang hoạt động`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# hồ sơ", other: "# hồ sơ" }, runtime)} · đã gỡ hồ sơ đang hoạt động`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};

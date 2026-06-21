@@ -43,15 +43,6 @@ const hi = {
   "overview.pingAll": "सभी को पिंग करें",
   "overview.backupRestore": "बैकअप और पुनर्स्थापना",
   "overview.recentActivity": "हाल की गतिविधि",
-  "overview.activity.running": "सेवा चल रही है · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }, runtime)} · ${pluralPart(Number(groups), { one: "# समूह", other: "# समूह" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# सक्रिय सदस्यता",
-    other: "# सक्रिय सदस्यताएँ",
-  }),
   "activity.serviceStarted": "सेवा शुरू · {remarks}",
   "activity.serviceStopped": "सेवा बंद",
   "activity.serviceRestarted": "सेवा पुनः शुरू · {remarks}",
@@ -74,7 +65,6 @@ const hi = {
   "activity.profileSaved": "प्रोफ़ाइल सहेजी · {remarks}",
   "time.now": "अभी",
   "time.ago": "{n}{unit} पहले",
-  "time.unit.s": "से",
   "time.unit.m": "मि",
   "time.unit.h": "घ",
   // profiles
@@ -281,13 +271,9 @@ const hi = {
   "subs.edit.userAgentPh": "default",
   "subs.edit.filter": "फ़िल्टर (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "सक्षम",
-  "subs.edit.enabledSub": "अपडेट और प्रोफ़ाइल सूची में शामिल करें",
   "subs.edit.autoUpdate": "स्वचालित अपडेट",
   "subs.edit.autoUpdateSub": "निर्धारित समय पर ताज़ा करें",
   "subs.edit.interval": "अंतराल (hh:mm)",
-  "subs.edit.insecure": "असुरक्षित URL की अनुमति दें",
-  "subs.edit.insecureSub": "फ़ेच करते समय TLS सत्यापन छोड़ें",
   "subs.edit.urlInsecureHint": "अनएन्क्रिप्टेड HTTP — यह सदस्यता ट्रांज़िट में बदली जा सकती है।",
   "subs.edit.validationRemarks": "टिप्पणी आवश्यक है",
   "subs.edit.validationUrl": "सदस्यता URL आवश्यक है",
@@ -573,7 +559,6 @@ const hi = {
   "settings.assetDownload": "डाउनलोड",
   "settings.assetDelete": "हटाएँ",
   "settings.assetLinks": "geoip.dat / geosite.dat के लिए तैयार लिंक",
-  "settings.assetKnownSource": "ज्ञात स्रोत",
   "settings.assetUse": "उपयोग करें",
   "settings.assetNotDownloaded": "अभी डाउनलोड नहीं किया गया",
   "settings.proxyRunningWarning": "प्रॉक्सी चल रहा है। इन सेटिंग्स को बदलने के लिए इसे बंद करें।",
@@ -601,7 +586,6 @@ const hi = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "स्पीड टेस्ट URL",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "English",
   "routingSheet.outbound.profiles": "प्रोफ़ाइल",
   "routingSheet.outboundProfileHint":
     "जब सक्रिय प्रोफ़ाइल समान कोर का उपयोग करती है तब इस प्रोफ़ाइल से रूट होता है; अन्यथा मुख्य प्रॉक्सी पर वापस आ जाता है।",
@@ -611,7 +595,6 @@ const hi = {
   "settings.rulePreset.private": "LAN सीधा",
   "settings.rulePreset.cn": "चीन सीधा",
   "settings.rulePreset.blockQuic": "QUIC ब्लॉक करें",
-  "settings.assetInstallBundle": "अनुशंसित सेट इंस्टॉल करें",
   "rulesIo.title": "रूटिंग नियम: आयात / निर्यात",
   "rulesIo.export": "नियम निर्यात करें",
   "rulesIo.exportLabel": "वर्तमान नियमों का JSON",
@@ -622,8 +605,6 @@ const hi = {
   "rulesIo.qrTitle": "रूटिंग नियम QR कोड",
   "rulesIo.mergeHint": "मर्ज आयातित नियम जोड़ता है; रिप्लेस सभी वर्तमान नियमों को बदल देता है।",
   "rulesIo.summary": plural("count", { one: "# नियम", other: "# नियम" }),
-  "settings.language.ru": "Русский",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "डिफ़ॉल्ट Xray geoip डेटाबेस",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -662,22 +643,11 @@ const hi = {
   "store.ping.testFailed": "परीक्षण विफल: {error}",
   "store.dedup.done": "{count} डुप्लिकेट हटाये",
   "store.dedup.none": "कोई डुप्लिकेट नहीं मिला",
-  "store.sub.urlRequired": "सदस्यता URL आवश्यक है",
-  "store.sub.invalidFilter": "अमान्य फ़िल्टर regex",
   "store.sub.updateFailed": "अपडेट विफल: {name}",
-  "store.sub.invalidFilterNotify": "अमान्य फ़िल्टर: {name}",
   "store.sub.updating": "{name} अपडेट किया जा रहा है…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }, runtime)} · सक्रिय प्रोफ़ाइल पुनः मैप की गई`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }, runtime)} · सक्रिय प्रोफ़ाइल हटा दी गई`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};

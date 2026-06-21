@@ -44,15 +44,6 @@ const pt = {
   "overview.pingAll": "Testar ping de todos",
   "overview.backupRestore": "Backup e restauração",
   "overview.recentActivity": "Atividade recente",
-  "overview.activity.running": "Serviço em execução · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# perfil", other: "# perfis" }, runtime)} em ${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# assinatura ativa",
-    other: "# assinaturas ativas",
-  }),
   "activity.serviceStarted": "Serviço iniciado · {remarks}",
   "activity.serviceStopped": "Serviço parado",
   "activity.serviceRestarted": "Serviço reiniciado · {remarks}",
@@ -78,7 +69,6 @@ const pt = {
   "activity.profileSaved": "Perfil salvo · {remarks}",
   "time.now": "agora",
   "time.ago": "há {n}{unit}",
-  "time.unit.s": "s",
   "time.unit.m": "min",
   "time.unit.h": "h",
   // profiles
@@ -285,13 +275,9 @@ const pt = {
   "subs.edit.userAgentPh": "padrão",
   "subs.edit.filter": "Filtro (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "Ativado",
-  "subs.edit.enabledSub": "Incluir nas atualizações e na lista de perfis",
   "subs.edit.autoUpdate": "Atualização automática",
   "subs.edit.autoUpdateSub": "Atualizar em um intervalo programado",
   "subs.edit.interval": "Intervalo (hh:mm)",
-  "subs.edit.insecure": "Permitir URL insegura",
-  "subs.edit.insecureSub": "Ignorar verificação TLS ao buscar",
   "subs.edit.urlInsecureHint":
     "HTTP não criptografado — esta assinatura pode ser adulterada em trânsito.",
   "subs.edit.validationRemarks": "Nome obrigatório",
@@ -579,7 +565,6 @@ const pt = {
   "settings.assetDownload": "Baixar",
   "settings.assetDelete": "Excluir",
   "settings.assetLinks": "Links prontos para geoip.dat / geosite.dat",
-  "settings.assetKnownSource": "Fonte conhecida",
   "settings.assetUse": "Usar",
   "settings.assetNotDownloaded": "Ainda não baixado",
   "settings.proxyRunningWarning": "O proxy está ativo. Pare-o para alterar estas configurações.",
@@ -607,7 +592,6 @@ const pt = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL de teste de velocidade",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "Inglês",
   "routingSheet.outbound.profiles": "Perfis",
   "routingSheet.outboundProfileHint":
     "Roteia por este perfil quando o perfil ativo usa o mesmo núcleo; caso contrário, usa o proxy principal.",
@@ -617,7 +601,6 @@ const pt = {
   "settings.rulePreset.private": "LAN direto",
   "settings.rulePreset.cn": "China direto",
   "settings.rulePreset.blockQuic": "Bloquear QUIC",
-  "settings.assetInstallBundle": "Instalar conjunto recomendado",
   "rulesIo.title": "Regras de roteamento: importar / exportar",
   "rulesIo.export": "Exportar regras",
   "rulesIo.exportLabel": "JSON das regras atuais",
@@ -628,8 +611,6 @@ const pt = {
   "rulesIo.qrTitle": "QR code das regras",
   "rulesIo.mergeHint": "Mesclar acrescenta as regras importadas; Substituir sobrescreve todas.",
   "rulesIo.summary": plural("count", { one: "# regra", other: "# regras" }),
-  "settings.language.ru": "Russo",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "Base geoip padrão do Xray",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -669,22 +650,11 @@ const pt = {
   "store.ping.testFailed": "Falha no teste: {error}",
   "store.dedup.done": "{count} duplicados removidos",
   "store.dedup.none": "Nenhum duplicado encontrado",
-  "store.sub.urlRequired": "A URL da assinatura é obrigatória",
-  "store.sub.invalidFilter": "Regex de filtro inválida",
   "store.sub.updateFailed": "Falha ao atualizar: {name}",
-  "store.sub.invalidFilterNotify": "Filtro inválido: {name}",
   "store.sub.updating": "Atualizando {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfis" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfis" }, runtime)} · perfil ativo remapeado`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfis" }, runtime)} · perfil ativo removido`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};

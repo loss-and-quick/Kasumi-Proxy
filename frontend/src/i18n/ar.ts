@@ -43,41 +43,6 @@ const ar = {
   "overview.pingAll": "اختبار Ping للجميع",
   "overview.backupRestore": "نسخ احتياطي واستعادة",
   "overview.recentActivity": "النشاط الأخير",
-  "overview.activity.running": "الخدمة قيد التشغيل · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(
-      Number(profiles),
-      {
-        zero: "لا ملفات تعريف",
-        one: "ملف تعريف واحد",
-        two: "ملفا تعريف",
-        few: "# ملفات تعريف",
-        many: "# ملف تعريف",
-        other: "# ملف تعريف",
-      },
-      runtime,
-    )} ضمن ${pluralPart(
-      Number(groups),
-      {
-        zero: "دون مجموعات",
-        one: "مجموعة واحدة",
-        two: "مجموعتان",
-        few: "# مجموعات",
-        many: "# مجموعة",
-        other: "# مجموعة",
-      },
-      runtime,
-    )}`;
-  },
-  "overview.activity.subs": plural("n", {
-    zero: "لا اشتراكات نشطة",
-    one: "اشتراك نشط واحد",
-    two: "اشتراكان نشطان",
-    few: "# اشتراكات نشطة",
-    many: "# اشتراكًا نشطًا",
-    other: "# اشتراك نشط",
-  }),
   "activity.serviceStarted": "بدأ الخدمة · {remarks}",
   "activity.serviceStopped": "توقفت الخدمة",
   "activity.serviceRestarted": "أُعيد تشغيل الخدمة · {remarks}",
@@ -112,7 +77,6 @@ const ar = {
   "activity.profileSaved": "تم حفظ الملف التعريفي · {remarks}",
   "time.now": "الآن",
   "time.ago": "منذ {n}{unit}",
-  "time.unit.s": "ث",
   "time.unit.m": "د",
   "time.unit.h": "س",
   // profiles
@@ -370,13 +334,9 @@ const ar = {
   "subs.edit.userAgentPh": "الافتراضي",
   "subs.edit.filter": "عامل التصفية (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "مفعّل",
-  "subs.edit.enabledSub": "تضمينه في التحديثات وقائمة الملفات التعريفية",
   "subs.edit.autoUpdate": "تحديث تلقائي",
   "subs.edit.autoUpdateSub": "التحديث وفق جدول زمني",
   "subs.edit.interval": "الفاصل (hh:mm)",
-  "subs.edit.insecure": "السماح برابط غير آمن",
-  "subs.edit.insecureSub": "تجاوز التحقق من TLS عند الجلب",
   "subs.edit.urlInsecureHint": "HTTP غير مشفّر — قد يتم العبث بهذا الاشتراك أثناء النقل.",
   "subs.edit.validationRemarks": "الاسم مطلوب",
   "subs.edit.validationUrl": "رابط الاشتراك مطلوب",
@@ -710,7 +670,6 @@ const ar = {
   "settings.assetDownload": "تنزيل",
   "settings.assetDelete": "حذف",
   "settings.assetLinks": "روابط جاهزة لـ geoip.dat / geosite.dat",
-  "settings.assetKnownSource": "مصدر معروف",
   "settings.assetUse": "استخدام",
   "settings.assetNotDownloaded": "لم يتم تنزيله بعد",
   "settings.proxyRunningWarning": "الوكيل يعمل. أوقفه لتغيير هذه الإعدادات.",
@@ -738,7 +697,6 @@ const ar = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "رابط اختبار السرعة",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "English",
   "routingSheet.outbound.profiles": "الملفات",
   "routingSheet.outboundProfileHint":
     "يتم التوجيه عبر هذا الملف عندما يستخدم الملف النشط النواة نفسها؛ وإلا يعود إلى الوكيل الرئيسي.",
@@ -748,7 +706,6 @@ const ar = {
   "settings.rulePreset.private": "الشبكة المحلية مباشرة",
   "settings.rulePreset.cn": "الصين مباشرة",
   "settings.rulePreset.blockQuic": "حظر QUIC",
-  "settings.assetInstallBundle": "تثبيت المجموعة الموصى بها",
   "rulesIo.title": "قواعد التوجيه: استيراد / تصدير",
   "rulesIo.export": "تصدير القواعد",
   "rulesIo.exportLabel": "JSON القواعد الحالية",
@@ -766,8 +723,6 @@ const ar = {
     many: "# قاعدة",
     other: "# قاعدة",
   }),
-  "settings.language.ru": "Русский",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "قاعدة بيانات geoip الافتراضية لـ Xray",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -810,10 +765,7 @@ const ar = {
   "store.ping.testFailed": "فشل الاختبار: {error}",
   "store.dedup.done": "تم حذف {count} تكرارات",
   "store.dedup.none": "لا توجد تكرارات",
-  "store.sub.urlRequired": "رابط الاشتراك مطلوب",
-  "store.sub.invalidFilter": "عامل التصفية regex غير صالح",
   "store.sub.updateFailed": "فشل التحديث: {name}",
-  "store.sub.invalidFilterNotify": "عامل تصفية غير صالح: {name}",
   "store.sub.updating": "جارٍ تحديث {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
@@ -829,36 +781,6 @@ const ar = {
       },
       runtime,
     )}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(
-      Number(count),
-      {
-        zero: "لا ملفات تعريف",
-        one: "ملف تعريف واحد",
-        two: "ملفا تعريف",
-        few: "# ملفات تعريف",
-        many: "# ملف تعريف",
-        other: "# ملف تعريف",
-      },
-      runtime,
-    )} · تمت إعادة ربط الملف التعريفي النشط`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(
-      Number(count),
-      {
-        zero: "لا ملفات تعريف",
-        one: "ملف تعريف واحد",
-        two: "ملفا تعريف",
-        few: "# ملفات تعريف",
-        many: "# ملف تعريف",
-        other: "# ملف تعريف",
-      },
-      runtime,
-    )} · تمت إزالة الملف التعريفي النشط`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};
