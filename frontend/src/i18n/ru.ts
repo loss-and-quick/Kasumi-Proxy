@@ -44,17 +44,6 @@ const ru = {
   "overview.pingAll": "Пинговать все",
   "overview.backupRestore": "Резервная копия и восстановление",
   "overview.recentActivity": "Недавняя активность",
-  "overview.activity.running": "Сервис запущен · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# профиль", few: "# профиля", many: "# профилей", other: "# профиля" }, runtime)} в ${pluralPart(Number(groups), { one: "# группе", few: "# группах", many: "# группах", other: "# группах" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# активная подписка",
-    few: "# активные подписки",
-    many: "# активных подписок",
-    other: "# активной подписки",
-  }),
   "activity.serviceStarted": "Сервис запущен · {remarks}",
   "activity.serviceStopped": "Сервис остановлен",
   "activity.serviceRestarted": "Сервис перезапущен · {remarks}",
@@ -86,7 +75,6 @@ const ru = {
   "activity.profileSaved": "Профиль сохранён · {remarks}",
   "time.now": "сейчас",
   "time.ago": "{n}{unit} назад",
-  "time.unit.s": "с",
   "time.unit.m": "м",
   "time.unit.h": "ч",
   // profiles
@@ -298,13 +286,9 @@ const ru = {
   "subs.edit.userAgentPh": "по умолчанию",
   "subs.edit.filter": "Фильтр (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "Включено",
-  "subs.edit.enabledSub": "Учитывать при обновлениях и в списке профилей",
   "subs.edit.autoUpdate": "Автообновление",
   "subs.edit.autoUpdateSub": "Обновлять по расписанию",
   "subs.edit.interval": "Интервал (чч:мм)",
-  "subs.edit.insecure": "Разрешить небезопасный URL",
-  "subs.edit.insecureSub": "Пропускать проверку TLS при загрузке",
   "subs.edit.urlInsecureHint":
     "Незашифрованное соединение (HTTP) — подписку могут подменить при передаче.",
   "subs.edit.validationRemarks": "Название обязательно",
@@ -606,7 +590,6 @@ const ru = {
   "settings.assetDownload": "Скачать",
   "settings.assetDelete": "Удалить",
   "settings.assetLinks": "Готовые ссылки для geoip.dat / geosite.dat",
-  "settings.assetKnownSource": "Известный источник",
   "settings.assetUse": "Использовать",
   "settings.assetNotDownloaded": "Ещё не скачано",
   "settings.proxyRunningWarning": "Прокси запущен. Остановите его, чтобы изменить эти настройки.",
@@ -634,7 +617,6 @@ const ru = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL для теста скорости",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "English",
   "routingSheet.outbound.profiles": "Профили",
   "routingSheet.outboundProfileHint":
     "Трафик пойдёт через этот профиль, если активный профиль использует то же ядро; иначе — через основной прокси.",
@@ -644,7 +626,6 @@ const ru = {
   "settings.rulePreset.private": "Локальные напрямую",
   "settings.rulePreset.cn": "Китай напрямую",
   "settings.rulePreset.blockQuic": "Блок QUIC",
-  "settings.assetInstallBundle": "Установить набор",
   "rulesIo.title": "Правила маршрутизации: импорт / экспорт",
   "rulesIo.export": "Экспорт правил",
   "rulesIo.exportLabel": "JSON текущих правил",
@@ -661,8 +642,6 @@ const ru = {
     many: "# правил",
     other: "# правил",
   }),
-  "settings.language.ru": "Русский",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "Стандартная geoip-база Xray",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -707,22 +686,11 @@ const ru = {
   "store.ping.testFailed": "Тест не удался: {error}",
   "store.dedup.done": "Удалено {count} дубликатов",
   "store.dedup.none": "Дубликатов не найдено",
-  "store.sub.urlRequired": "URL подписки обязателен",
-  "store.sub.invalidFilter": "Некорректный regex фильтра",
   "store.sub.updateFailed": "Не удалось обновить: {name}",
-  "store.sub.invalidFilterNotify": "Некорректный фильтр: {name}",
   "store.sub.updating": "Обновление {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# профиль", few: "# профиля", many: "# профилей", other: "# профиля" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# профиль", few: "# профиля", many: "# профилей", other: "# профиля" }, runtime)} · активный профиль переназначен`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# профиль", few: "# профиля", many: "# профилей", other: "# профиля" }, runtime)} · активный профиль удалён`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};

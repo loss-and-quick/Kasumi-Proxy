@@ -44,15 +44,6 @@ const es = {
   "overview.pingAll": "Hacer ping a todos",
   "overview.backupRestore": "Copia y restauración",
   "overview.recentActivity": "Actividad reciente",
-  "overview.activity.running": "Servicio en ejecución · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# perfil", other: "# perfiles" }, runtime)} en ${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# suscripción activa",
-    other: "# suscripciones activas",
-  }),
   "activity.serviceStarted": "Servicio iniciado · {remarks}",
   "activity.serviceStopped": "Servicio detenido",
   "activity.serviceRestarted": "Servicio reiniciado · {remarks}",
@@ -78,7 +69,6 @@ const es = {
   "activity.profileSaved": "Perfil guardado · {remarks}",
   "time.now": "ahora",
   "time.ago": "hace {n}{unit}",
-  "time.unit.s": "s",
   "time.unit.m": "min",
   "time.unit.h": "h",
   // profiles
@@ -285,13 +275,9 @@ const es = {
   "subs.edit.userAgentPh": "predeterminado",
   "subs.edit.filter": "Filtro (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "Activado",
-  "subs.edit.enabledSub": "Incluir en las actualizaciones y en la lista de perfiles",
   "subs.edit.autoUpdate": "Actualización automática",
   "subs.edit.autoUpdateSub": "Actualizar según una programación",
   "subs.edit.interval": "Intervalo (hh:mm)",
-  "subs.edit.insecure": "Permitir URL insegura",
-  "subs.edit.insecureSub": "Omitir la verificación TLS al descargar",
   "subs.edit.urlInsecureHint":
     "HTTP sin cifrar: esta suscripción podría ser manipulada en tránsito.",
   "subs.edit.validationRemarks": "El nombre es obligatorio",
@@ -580,7 +566,6 @@ const es = {
   "settings.assetDownload": "Descargar",
   "settings.assetDelete": "Eliminar",
   "settings.assetLinks": "Enlaces listos para geoip.dat / geosite.dat",
-  "settings.assetKnownSource": "Fuente conocida",
   "settings.assetUse": "Usar",
   "settings.assetNotDownloaded": "Aún no se ha descargado",
   "settings.proxyRunningWarning": "El proxy está activo. Detenlo para cambiar estos ajustes.",
@@ -608,7 +593,6 @@ const es = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL de prueba de velocidad",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "Inglés",
   "routingSheet.outbound.profiles": "Perfiles",
   "routingSheet.outboundProfileHint":
     "Se enruta por este perfil cuando el perfil activo usa el mismo núcleo; de lo contrario, usa el proxy principal.",
@@ -618,7 +602,6 @@ const es = {
   "settings.rulePreset.private": "LAN directo",
   "settings.rulePreset.cn": "China directo",
   "settings.rulePreset.blockQuic": "Bloquear QUIC",
-  "settings.assetInstallBundle": "Instalar conjunto recomendado",
   "rulesIo.title": "Reglas de enrutamiento: importar / exportar",
   "rulesIo.export": "Exportar reglas",
   "rulesIo.exportLabel": "JSON de reglas actuales",
@@ -629,8 +612,6 @@ const es = {
   "rulesIo.qrTitle": "Código QR de reglas",
   "rulesIo.mergeHint": "Combinar añade las reglas importadas; Reemplazar sobrescribe todas.",
   "rulesIo.summary": plural("count", { one: "# regla", other: "# reglas" }),
-  "settings.language.ru": "Ruso",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "Base de datos geoip predeterminada de Xray",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -670,22 +651,11 @@ const es = {
   "store.ping.testFailed": "Error en la prueba: {error}",
   "store.dedup.done": "Se eliminaron {count} duplicados",
   "store.dedup.none": "No se encontraron duplicados",
-  "store.sub.urlRequired": "La URL de la suscripción es obligatoria",
-  "store.sub.invalidFilter": "Regex de filtro no válida",
   "store.sub.updateFailed": "Error al actualizar: {name}",
-  "store.sub.invalidFilterNotify": "Filtro no válido: {name}",
   "store.sub.updating": "Actualizando {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfiles" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfiles" }, runtime)} · perfil activo reasignado`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfiles" }, runtime)} · perfil activo eliminado`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};

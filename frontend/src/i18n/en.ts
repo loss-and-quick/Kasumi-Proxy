@@ -45,15 +45,6 @@ const en = {
   "overview.pingAll": "Ping all",
   "overview.backupRestore": "Backup & restore",
   "overview.recentActivity": "Recent activity",
-  "overview.activity.running": "Service running · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# profile", other: "# profiles" }, runtime)} across ${pluralPart(Number(groups), { one: "# group", other: "# groups" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# active subscription",
-    other: "# active subscriptions",
-  }),
   "activity.serviceStarted": "Service started · {remarks}",
   "activity.serviceStopped": "Service stopped",
   "activity.serviceRestarted": "Service restarted · {remarks}",
@@ -79,7 +70,6 @@ const en = {
   "activity.profileSaved": "Profile saved · {remarks}",
   "time.now": "now",
   "time.ago": "{n}{unit} ago",
-  "time.unit.s": "s",
   "time.unit.m": "m",
   "time.unit.h": "h",
   // profiles
@@ -292,13 +282,9 @@ const en = {
   "subs.edit.userAgentPh": "default",
   "subs.edit.filter": "Filter (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "Enabled",
-  "subs.edit.enabledSub": "Include in updates & profile list",
   "subs.edit.autoUpdate": "Auto-update",
   "subs.edit.autoUpdateSub": "Refresh on a schedule",
   "subs.edit.interval": "Interval (hh:mm)",
-  "subs.edit.insecure": "Allow insecure URL",
-  "subs.edit.insecureSub": "Skip TLS verification when fetching",
   "subs.edit.urlInsecureHint":
     "Unencrypted HTTP — this subscription could be tampered with in transit.",
   "subs.edit.validationRemarks": "Remarks required",
@@ -585,7 +571,6 @@ const en = {
   "settings.assetDownload": "Download",
   "settings.assetDelete": "Delete",
   "settings.assetLinks": "Ready links for geoip.dat / geosite.dat",
-  "settings.assetKnownSource": "Known source",
   "settings.assetUse": "Use",
   "settings.assetNotDownloaded": "Not downloaded yet",
   "settings.proxyRunningWarning": "Proxy is running. Stop it to change these settings.",
@@ -613,7 +598,6 @@ const en = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "Speed test URL",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "English",
   "routingSheet.outbound.profiles": "Profiles",
   "routingSheet.outboundProfileHint":
     "Routes via this profile when the active profile uses the same core; otherwise it falls back to the main proxy.",
@@ -623,7 +607,6 @@ const en = {
   "settings.rulePreset.private": "Direct LAN",
   "settings.rulePreset.cn": "Direct China",
   "settings.rulePreset.blockQuic": "Block QUIC",
-  "settings.assetInstallBundle": "Install recommended set",
   "rulesIo.title": "Routing rules: import / export",
   "rulesIo.export": "Export rules",
   "rulesIo.exportLabel": "Current rules JSON",
@@ -634,8 +617,6 @@ const en = {
   "rulesIo.qrTitle": "Routing rules QR code",
   "rulesIo.mergeHint": "Merge appends the imported rules; Replace overwrites all current rules.",
   "rulesIo.summary": plural("count", { one: "# rule", other: "# rules" }),
-  "settings.language.ru": "Русский",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "Default Xray geoip database",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -692,22 +673,11 @@ const en = {
   "store.ping.testFailed": "Test failed: {error}",
   "store.dedup.done": "Removed {count} duplicates",
   "store.dedup.none": "No duplicates found",
-  "store.sub.urlRequired": "Subscription URL is required",
-  "store.sub.invalidFilter": "Invalid filter regex",
   "store.sub.updateFailed": "Update failed: {name}",
-  "store.sub.invalidFilterNotify": "Invalid filter: {name}",
   "store.sub.updating": "Updating {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# profile", other: "# profiles" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# profile", other: "# profiles" }, runtime)} · active profile remapped`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}: ${pluralPart(Number(count), { one: "# profile", other: "# profiles" }, runtime)} · active profile removed`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};

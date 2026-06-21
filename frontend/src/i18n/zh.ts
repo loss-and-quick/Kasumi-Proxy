@@ -43,15 +43,6 @@ const zh = {
   "overview.pingAll": "全部测速",
   "overview.backupRestore": "备份与恢复",
   "overview.recentActivity": "最近活动",
-  "overview.activity.running": "服务运行中 · {remarks}",
-  "overview.activity.profiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { groups = 0, profiles = 0 } = vars ?? {};
-    return `${pluralPart(Number(profiles), { one: "# 个配置", other: "# 个配置" }, runtime)} · ${pluralPart(Number(groups), { one: "# 个分组", other: "# 个分组" }, runtime)}`;
-  },
-  "overview.activity.subs": plural("n", {
-    one: "# 个已启用订阅",
-    other: "# 个已启用订阅",
-  }),
   "activity.serviceStarted": "服务已启动 · {remarks}",
   "activity.serviceStopped": "服务已停止",
   "activity.serviceRestarted": "服务已重启 · {remarks}",
@@ -74,7 +65,6 @@ const zh = {
   "activity.profileSaved": "配置已保存 · {remarks}",
   "time.now": "刚刚",
   "time.ago": "{n}{unit}前",
-  "time.unit.s": "秒",
   "time.unit.m": "分",
   "time.unit.h": "时",
   // profiles
@@ -284,13 +274,9 @@ const zh = {
   "subs.edit.userAgentPh": "默认",
   "subs.edit.filter": "过滤器（正则）",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.enabled": "启用",
-  "subs.edit.enabledSub": "参与更新并显示在配置列表中",
   "subs.edit.autoUpdate": "自动更新",
   "subs.edit.autoUpdateSub": "按计划自动刷新",
   "subs.edit.interval": "间隔（hh:mm）",
-  "subs.edit.insecure": "允许不安全 URL",
-  "subs.edit.insecureSub": "获取时跳过 TLS 验证",
   "subs.edit.urlInsecureHint": "未加密的 HTTP —— 此订阅在传输中可能被篡改。",
   "subs.edit.validationRemarks": "备注不能为空",
   "subs.edit.validationUrl": "订阅 URL 不能为空",
@@ -573,7 +559,6 @@ const zh = {
   "settings.assetDownload": "下载",
   "settings.assetDelete": "删除",
   "settings.assetLinks": "geoip.dat / geosite.dat 现成链接",
-  "settings.assetKnownSource": "已知来源",
   "settings.assetUse": "使用",
   "settings.assetNotDownloaded": "尚未下载",
   "settings.proxyRunningWarning": "代理正在运行。请先停止代理再修改这些设置。",
@@ -601,7 +586,6 @@ const zh = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "测速 URL",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
-  "settings.language.en": "English",
   "routingSheet.outbound.profiles": "配置",
   "routingSheet.outboundProfileHint": "当活动配置使用相同内核时通过此配置路由；否则回退到主代理。",
   "settings.routingImportExport": "导入 / 导出",
@@ -610,7 +594,6 @@ const zh = {
   "settings.rulePreset.private": "局域网直连",
   "settings.rulePreset.cn": "中国直连",
   "settings.rulePreset.blockQuic": "拦截 QUIC",
-  "settings.assetInstallBundle": "安装推荐资源",
   "rulesIo.title": "路由规则：导入 / 导出",
   "rulesIo.export": "导出规则",
   "rulesIo.exportLabel": "当前规则 JSON",
@@ -621,8 +604,6 @@ const zh = {
   "rulesIo.qrTitle": "路由规则二维码",
   "rulesIo.mergeHint": "合并将追加导入的规则；替换将覆盖所有当前规则。",
   "rulesIo.summary": plural("count", { other: "# 条规则" }),
-  "settings.language.ru": "Русский",
-  "settings.language.vi": "Tiếng Việt",
   "settings.link.geoip-loyal.label": "geoip.dat · Loyalsoldier",
   "settings.link.geoip-loyal.note": "默认 Xray geoip 数据库",
   "settings.link.geosite-loyal.label": "geosite.dat · Loyalsoldier",
@@ -661,22 +642,11 @@ const zh = {
   "store.ping.testFailed": "测试失败：{error}",
   "store.dedup.done": "已删除 {count} 个重复配置",
   "store.dedup.none": "未发现重复配置",
-  "store.sub.urlRequired": "订阅 URL 不能为空",
-  "store.sub.invalidFilter": "过滤正则无效",
   "store.sub.updateFailed": "更新失败：{name}",
-  "store.sub.invalidFilterNotify": "过滤器无效：{name}",
   "store.sub.updating": "正在更新 {name}…",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}：${pluralPart(Number(count), { one: "# 个配置", other: "# 个配置" }, runtime)}`;
-  },
-  "store.sub.updatedProfilesRemapped": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}：${pluralPart(Number(count), { one: "# 个配置", other: "# 个配置" }, runtime)} · 活动配置已重新映射`;
-  },
-  "store.sub.updatedProfilesRemoved": (vars: Vars | undefined, runtime: MessageRuntime) => {
-    const { count = 0, name = "" } = vars ?? {};
-    return `${name}：${pluralPart(Number(count), { one: "# 个配置", other: "# 个配置" }, runtime)} · 活动配置已移除`;
   },
   "store.asset.downloadFailed": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { mode = "other", name = "" } = vars ?? {};
