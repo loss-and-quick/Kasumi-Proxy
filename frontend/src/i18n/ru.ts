@@ -645,6 +645,23 @@ const ru = {
     "Это Xray geo-базы. Те же правила в стиле Xray автоматически конвертируются для sing-box внутри приложения.",
   "settings.assetUpdateAll": "Обновить все",
   "settings.assetAdd": "Добавить файл",
+  "settings.assetAutoUpdate": "Автообновление",
+  "settings.assetAutoUpdateSub": "Обновлять geosite/geoip по расписанию",
+  "settings.assetUpdateInterval": "Интервал обновления",
+  "settings.assetAutoUpdateWarning":
+    "При изменении гео-данных активное соединение ненадолго перезапустится, чтобы применить их.",
+  "settings.assetIntervalHours": plural("count", {
+    one: "Каждый # час",
+    few: "Каждые # часа",
+    many: "Каждые # часов",
+    other: "Каждые # часа",
+  }),
+  "settings.assetIntervalDays": plural("count", {
+    one: "Каждый # день",
+    few: "Каждые # дня",
+    many: "Каждые # дней",
+    other: "Каждые # дня",
+  }),
   "settings.assetDownload": "Скачать",
   "settings.assetDelete": "Удалить",
   "settings.assetLinks": "Готовые ссылки для geoip.dat / geosite.dat",

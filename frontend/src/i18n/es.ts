@@ -606,6 +606,13 @@ const es = {
     "Estas son las bases de datos geo de Xray. Las mismas reglas de estilo Xray se convierten automáticamente internamente para sing-box.",
   "settings.assetUpdateAll": "Actualizar todo",
   "settings.assetAdd": "Añadir archivo",
+  "settings.assetAutoUpdate": "Actualización automática",
+  "settings.assetAutoUpdateSub": "Actualizar geosite/geoip según una programación",
+  "settings.assetUpdateInterval": "Intervalo de actualización",
+  "settings.assetAutoUpdateWarning":
+    "Cuando los datos geográficos cambian, la conexión activa se reinicia brevemente para aplicarlos.",
+  "settings.assetIntervalHours": plural("count", { one: "Cada # hora", other: "Cada # horas" }),
+  "settings.assetIntervalDays": plural("count", { one: "Cada # día", other: "Cada # días" }),
   "settings.assetDownload": "Descargar",
   "settings.assetDelete": "Eliminar",
   "settings.assetLinks": "Enlaces listos para geoip.dat / geosite.dat",

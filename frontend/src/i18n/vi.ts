@@ -601,6 +601,13 @@ const vi = {
     "Đây là các cơ sở dữ liệu geo của Xray. Các quy tắc kiểu Xray tương tự sẽ được chuyển đổi tự động cho sing-box ở bên trong.",
   "settings.assetUpdateAll": "Cập nhật tất cả",
   "settings.assetAdd": "Thêm tệp",
+  "settings.assetAutoUpdate": "Tự động cập nhật",
+  "settings.assetAutoUpdateSub": "Cập nhật geosite/geoip theo lịch",
+  "settings.assetUpdateInterval": "Khoảng thời gian cập nhật",
+  "settings.assetAutoUpdateWarning":
+    "Khi dữ liệu địa lý thay đổi, kết nối đang hoạt động sẽ khởi động lại trong giây lát để áp dụng.",
+  "settings.assetIntervalHours": plural("count", { one: "Mỗi # giờ", other: "Mỗi # giờ" }),
+  "settings.assetIntervalDays": plural("count", { one: "Mỗi # ngày", other: "Mỗi # ngày" }),
   "settings.assetDownload": "Tải xuống",
   "settings.assetDelete": "Xóa",
   "settings.assetLinks": "Liên kết sẵn cho geoip.dat / geosite.dat",
