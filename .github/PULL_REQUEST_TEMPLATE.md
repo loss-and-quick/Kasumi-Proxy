@@ -1,8 +1,8 @@
 <!--
   Thanks for contributing to Kasumi Proxy!
   Keep the title as a scoped Conventional Commit, e.g.
-    fix(config): reuse splitCsv in sing-box generator
-    feat(profiles): group management sheet
+    fix(singbox): skip uTLS for QUIC outbounds
+    feat(desktop): proxy mode selection
 -->
 
 ## Summary
@@ -11,17 +11,25 @@
 
 ## Affected layer
 
-<!-- Tick all that apply — this maps to the two-layer split in AGENTS.md. -->
+<!-- Tick all that apply (see AGENTS.md "Layout"). These mirror the auto-applied labels. -->
 
 - [ ] `frontend/` — React Web UI
-- [ ] `module/` — Magisk/KernelSU/APatch payload (shell + packaged `kasumi-proxy` backend)
+- [ ] `crates/` · `src-tauri/` — Rust core / backend / Tauri desktop
+- [ ] `module/` — Android installable zip (thin launcher over the Rust daemon)
 - [ ] `scripts/` — build / release helpers
 - [ ] CI / `.github/`
 - [ ] Docs only
 
 ## Verification
 
-<!-- Run the checks relevant to the layer you touched and tick them. -->
+<!-- Run the checks relevant to the layer you touched and tick them (AGENTS.md "Verify before declaring done"). The supported Rust path is the nix dev shell. -->
+
+Rust (`crates/` · `src-tauri/`):
+
+- [ ] `cargo fmt --all --check`
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
+- [ ] `cargo test --workspace`
+- [ ] Codegen drift: `cargo run -p kasumi-desktop --bin codegen` leaves `git` clean
 
 Web UI (`frontend/`):
 
@@ -37,7 +45,8 @@ Module shell (`module/`):
 ## Checklist
 
 - [ ] Title is a scoped Conventional Commit; commits are logically split
-- [ ] No build artifacts committed (`module/bin/<abi>/`, `geoip`/`geosite`, built `module/webroot/` — all gitignored on purpose)
+- [ ] No build artifacts committed (`module/bin/<abi>/`, `geoip`/`geosite`, built `module/webroot/`, `src-tauri/gen/` — all gitignored on purpose)
+- [ ] Generated `frontend/src/generated/` was regenerated from Rust, not hand-edited
 - [ ] If user-visible strings changed: `i18n/en.ts` **and every** locale file updated (no partial translations)
 - [ ] Renames touching the project id were grepped in all case forms (`kasumi-proxy`, `Kasumi Proxy`, camelCase)
 
