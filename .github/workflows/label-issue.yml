@@ -1,0 +1,74 @@
+name: Label issue
+
+# Issue Forms can't set a label from a dropdown answer, so derive labels from the
+# rendered bug-report fields: "Platform" → platform:* and "Area" → component label,
+# mirroring the path-based labels actions/labeler puts on PRs (.github/labeler.yml).
+# Runs on open/edit and keeps exactly one label per group in sync with the choice.
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const body = context.payload.issue.body || "";
+            // The form renders each dropdown as a "### <Label>" section.
+            const field = (name) => {
+              const m = body.match(new RegExp(`#+\\s*${name}\\s*\\n+\\s*([^\\n]+)`, "i"));
+              return m ? m[1].trim().toLowerCase() : "";
+            };
+
+            // Each group is single-select: keep the one matched label, drop the rest.
+            const groups = [
+              {
+                answer: field("Platform"),
+                map: [
+                  { needle: "android", label: "platform:android" },
+                  { needle: "linux", label: "platform:linux" },
+                  { needle: "windows", label: "platform:windows" },
+                ],
+              },
+              {
+                answer: field("Area"),
+                map: [
+                  { needle: "frontend", label: "frontend" },
+                  { needle: "backend", label: "backend" },
+                  { needle: "build", label: "ci" },
+                  { needle: "documentation", label: "documentation" },
+                ],
+              },
+            ];
+
+            const current = context.payload.issue.labels.map((l) => l.name);
+            const toRemove = [];
+            const toAdd = [];
+            for (const g of groups) {
+              const all = g.map.map((e) => e.label);
+              const want = g.map.find((e) => g.answer.includes(e.needle))?.label;
+              for (const l of current) {
+                if (all.includes(l) && l !== want) toRemove.push(l);
+              }
+              if (want && !current.includes(want)) toAdd.push(want);
+            }
+
+            for (const name of toRemove) {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: context.issue.number,
+                name,
+              }).catch(() => {});
+            }
+            if (toAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: context.issue.number,
+                labels: toAdd,
+              });
+            }
