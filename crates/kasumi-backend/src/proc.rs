@@ -41,14 +41,25 @@ fn hide_console(cmd: &mut Command) {
     let _ = cmd;
 }
 
+/// Set the child's env. POSIX starts from a clean slate (the Android/Linux
+/// data-path wants no inherited surprises). Windows KEEPS the inherited
+/// environment and only overlays `env` — clearing it drops `SystemRoot`/`windir`,
+/// without which `ws2_32` can't load its Winsock provider catalog and the cores
+/// fail to open any socket ("The requested service provider could not be loaded or
+/// initialized").
+fn set_env(cmd: &mut Command, env: &HashMap<String, String>) {
+    #[cfg(unix)]
+    cmd.env_clear();
+    cmd.envs(env);
+}
+
 /// Run an external command to completion, capturing stdout/stderr as text.
 pub async fn run(argv: &[String], opts: RunOpts) -> std::io::Result<RunResult> {
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
     hide_console(&mut cmd);
     if let Some(env) = &opts.env {
-        cmd.env_clear();
-        cmd.envs(env);
+        set_env(&mut cmd, env);
     }
     if let Some(cwd) = &opts.cwd {
         cmd.current_dir(cwd);
@@ -157,8 +168,7 @@ pub async fn spawn_logged(
     let err = log.try_clone()?;
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
-    cmd.env_clear();
-    cmd.envs(env);
+    set_env(&mut cmd, env);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::from(log));
     cmd.stderr(Stdio::from(err));
