@@ -208,9 +208,13 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
           ver=$(scripts/app-version.sh)  # product version from module.prop
+          # Nightly artifacts are unsigned: override the global
+          # `bundle.createUpdaterArtifacts` so `tauri build` doesn't demand the
+          # minisign key (only release.yml signs). The updater never points at
+          # nightly, so no .sig is needed here.
           cargo tauri build --target ${{ matrix.target }} \
             --config src-tauri/tauri.bundle.conf.json \
-            --config "{\"version\":\"$ver\"}"
+            --config "{\"version\":\"$ver\",\"bundle\":{\"createUpdaterArtifacts\":false}}"
 
       - name: Collect artifacts
         shell: bash
