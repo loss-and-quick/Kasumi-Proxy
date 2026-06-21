@@ -256,6 +256,8 @@ const vi = {
   "subs.updateAll": "Cập nhật tất cả",
   "subs.add": "Thêm",
   "subs.export": "Xuất",
+  "subs.copyUrl": "Sao chép URL",
+  "subs.urlCopied": "Đã sao chép URL",
   "subs.exportHint":
     "Sao chép các đăng ký của bạn vào bộ nhớ tạm để sao lưu hoặc chuyển sang thiết bị khác.",
   "subs.exportUrls": "Sao chép URL",

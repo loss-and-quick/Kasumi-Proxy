@@ -259,6 +259,8 @@ const pt = {
   "subs.updateAll": "Atualizar tudo",
   "subs.add": "Adicionar",
   "subs.export": "Exportar",
+  "subs.copyUrl": "Copiar URL",
+  "subs.urlCopied": "URL copiada",
   "subs.exportHint":
     "Copie suas assinaturas para a área de transferência para fazer backup ou movê-las para outro dispositivo.",
   "subs.exportUrls": "Copiar URLs",

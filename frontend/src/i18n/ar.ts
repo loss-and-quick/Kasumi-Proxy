@@ -337,6 +337,8 @@ const ar = {
   "subs.updateAll": "تحديث الكل",
   "subs.add": "إضافة",
   "subs.export": "تصدير",
+  "subs.copyUrl": "نسخ الرابط",
+  "subs.urlCopied": "تم نسخ الرابط",
   "subs.exportHint": "انسخ اشتراكاتك إلى الحافظة لإنشاء نسخة احتياطية أو نقلها إلى جهاز آخر.",
   "subs.exportUrls": "نسخ عناوين URL",
   "subs.exportJson": "نسخ بصيغة JSON",

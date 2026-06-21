@@ -255,6 +255,8 @@ const zh = {
   "subs.updateAll": "全部更新",
   "subs.add": "添加",
   "subs.export": "导出",
+  "subs.copyUrl": "复制 URL",
+  "subs.urlCopied": "已复制 URL",
   "subs.exportHint": "将订阅复制到剪贴板以进行备份或迁移到其他设备。",
   "subs.exportUrls": "复制 URL",
   "subs.exportJson": "复制为 JSON",

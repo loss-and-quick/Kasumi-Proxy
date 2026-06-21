@@ -255,6 +255,8 @@ const hi = {
   "subs.updateAll": "सभी अपडेट करें",
   "subs.add": "जोड़ें",
   "subs.export": "निर्यात",
+  "subs.copyUrl": "URL कॉपी करें",
+  "subs.urlCopied": "URL कॉपी किया गया",
   "subs.exportHint": "बैकअप लेने या किसी अन्य डिवाइस पर ले जाने के लिए अपनी सदस्यताएँ क्लिपबोर्ड पर कॉपी करें।",
   "subs.exportUrls": "URL कॉपी करें",
   "subs.exportJson": "JSON के रूप में कॉपी करें",

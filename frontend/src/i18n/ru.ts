@@ -267,6 +267,8 @@ const ru = {
   "subs.updateAll": "Обновить все",
   "subs.add": "Добавить",
   "subs.export": "Экспорт",
+  "subs.copyUrl": "Скопировать URL",
+  "subs.urlCopied": "URL скопирован",
   "subs.exportHint":
     "Скопируйте подписки в буфер обмена для резервной копии или переноса на другое устройство.",
   "subs.exportUrls": "Скопировать URL",

@@ -54,6 +54,10 @@ export default function Subscriptions() {
     notify((await copyText(text)) ? t("subs.exportCopied", { count }) : text);
   };
 
+  const copySubUrl = async (sub: Subscription) => {
+    notify((await copyText(sub.url)) ? t("subs.urlCopied") : sub.url);
+  };
+
   const exportUrls = () => {
     const urls = subs.map((s) => s.url.trim()).filter(Boolean);
     if (!urls.length) return notify(t("subs.exportEmpty"));
@@ -145,6 +149,7 @@ export default function Subscriptions() {
               onUpdate={() => void updateSub(s.id)}
               onEdit={() => setEdit(s)}
               onDelete={() => setConfirmDel(s)}
+              onCopyUrl={() => void copySubUrl(s)}
             />
           ))}
         </div>
@@ -319,6 +324,7 @@ function SubCard({
   onUpdate,
   onEdit,
   onDelete,
+  onCopyUrl,
 }: {
   s: Subscription;
   revealed: boolean;
@@ -327,6 +333,7 @@ function SubCard({
   onUpdate: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onCopyUrl: () => void;
 }) {
   const t = useT();
   const { formatDateTime } = useFormatters();
@@ -431,6 +438,7 @@ function SubCard({
           </span>
         )}
         <div style={{ flex: 1 }} />
+        <IconBtn sm name="content_copy" onClick={onCopyUrl} title={t("subs.copyUrl")} />
         <IconBtn sm name="edit" onClick={onEdit} title={t("subs.editAction")} />
         <IconBtn sm name="delete" onClick={onDelete} title={t("subs.deleteAction")} />
         <Btn variant="tonal" sm icon="refresh" onClick={onUpdate}>

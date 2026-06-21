@@ -266,6 +266,8 @@ const en = {
   "subs.updateAll": "Update all",
   "subs.add": "Add",
   "subs.export": "Export",
+  "subs.copyUrl": "Copy URL",
+  "subs.urlCopied": "URL copied",
   "subs.exportHint":
     "Copy your subscriptions to the clipboard to back them up or move them to another device.",
   "subs.exportUrls": "Copy URLs",

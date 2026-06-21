@@ -259,6 +259,8 @@ const es = {
   "subs.updateAll": "Actualizar todo",
   "subs.add": "Añadir",
   "subs.export": "Exportar",
+  "subs.copyUrl": "Copiar URL",
+  "subs.urlCopied": "URL copiada",
   "subs.exportHint":
     "Copia tus suscripciones al portapapeles para hacer una copia de seguridad o moverlas a otro dispositivo.",
   "subs.exportUrls": "Copiar URL",
