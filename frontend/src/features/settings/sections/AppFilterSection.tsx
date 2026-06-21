@@ -21,18 +21,21 @@ export function AppFilterSection({
         <ListRow
           icon="smart_toy"
           title={t("appFilter.openPage")}
-          sub={
-            count > 0
-              ? t("appFilter.subtitle", { n: count })
-              : mode === "none"
-                ? t("appFilter.captureNone")
-                : t("appFilter.captureAll")
-          }
+          sub={t("appFilter.openPageSub")}
           onClick={onOpenAppFilter}
           right={
-            <span style={{ fontSize: 20, color: "var(--on-surface-variant)", paddingRight: 4 }}>
-              ›
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 12, color: "var(--on-surface-faint)" }}>
+                {count > 0
+                  ? t("appFilter.subtitle", { n: count })
+                  : mode === "none"
+                    ? t("appFilter.captureNone")
+                    : t("appFilter.captureAll")}
+              </span>
+              <span style={{ fontSize: 20, color: "var(--on-surface-variant)", paddingRight: 4 }}>
+                ›
+              </span>
+            </div>
           }
         />
       </Card>
