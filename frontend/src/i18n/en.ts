@@ -265,6 +265,16 @@ const en = {
   },
   "subs.updateAll": "Update all",
   "subs.add": "Add",
+  "subs.export": "Export",
+  "subs.exportHint":
+    "Copy your subscriptions to the clipboard to back them up or move them to another device.",
+  "subs.exportUrls": "Copy URLs",
+  "subs.exportJson": "Copy as JSON",
+  "subs.exportEmpty": "No subscriptions to export",
+  "subs.exportCopied": plural("count", {
+    one: "Copied # subscription",
+    other: "Copied # subscriptions",
+  }),
   "subs.addBtn": "Add subscription",
   "subs.infoText":
     "Each subscription imports its servers into a selected group. Updating refreshes those profiles while keeping your active selection where possible.",

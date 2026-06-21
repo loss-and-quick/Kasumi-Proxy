@@ -258,6 +258,16 @@ const pt = {
   },
   "subs.updateAll": "Atualizar tudo",
   "subs.add": "Adicionar",
+  "subs.export": "Exportar",
+  "subs.exportHint":
+    "Copie suas assinaturas para a área de transferência para fazer backup ou movê-las para outro dispositivo.",
+  "subs.exportUrls": "Copiar URLs",
+  "subs.exportJson": "Copiar como JSON",
+  "subs.exportEmpty": "Nenhuma assinatura para exportar",
+  "subs.exportCopied": plural("count", {
+    one: "# assinatura copiada",
+    other: "# assinaturas copiadas",
+  }),
   "subs.addBtn": "Adicionar assinatura",
   "subs.infoText":
     "Cada assinatura importa seus servidores para um grupo selecionado. Ao atualizar, esses perfis são renovados mantendo sua seleção ativa sempre que possível.",

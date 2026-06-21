@@ -25,6 +25,7 @@ import {
   uid,
 } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
+import { copyText } from "../profiles/clipboard";
 
 export default function Subscriptions() {
   const subs = useAppStore((s) => s.subscriptions);
@@ -40,9 +41,40 @@ export default function Subscriptions() {
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [exportOpen, setExportOpen] = useState(false);
 
   const enabledCount = subs.filter((s) => s.enabled).length;
   const importedCount = subs.reduce((n, s) => n + s.count, 0);
+
+  const exportCopy = async (text: string, count: number) => {
+    setExportOpen(false);
+    notify((await copyText(text)) ? t("subs.exportCopied", { count }) : text);
+  };
+
+  const exportUrls = () => {
+    const urls = subs.map((s) => s.url.trim()).filter(Boolean);
+    if (!urls.length) return notify(t("subs.exportEmpty"));
+    return exportCopy(urls.join("\n"), urls.length);
+  };
+
+  const exportJson = () => {
+    if (!subs.length) return notify(t("subs.exportEmpty"));
+    // Config-only fields; runtime/bookkeeping (id, count, lastUpdated, lastError,
+    // prev/nextProfile) is intentionally dropped so the dump is portable.
+    const payload = subs.map((s) => ({
+      remarks: s.remarks,
+      url: s.url,
+      enabled: s.enabled,
+      groupId: s.groupId,
+      autoUpdate: s.autoUpdate,
+      interval: s.interval,
+      allowInsecure: s.allowInsecure,
+      userAgent: s.userAgent,
+      filter: s.filter,
+      updateMode: s.updateMode,
+    }));
+    return exportCopy(JSON.stringify(payload, null, 2), payload.length);
+  };
 
   return (
     <div className="app-region screen-enter">
@@ -51,6 +83,11 @@ export default function Subscriptions() {
         subtitle={t("subs.subtitle", { active: enabledCount, imported: importedCount })}
         actions={
           <>
+            <IconBtn
+              name="ios_share"
+              title={t("subs.export")}
+              onClick={() => setExportOpen(true)}
+            />
             <IconBtn
               name="cloud_sync"
               title={t("subs.updateAll")}
@@ -96,6 +133,20 @@ export default function Subscriptions() {
           </div>
         </Card>
       </div>
+
+      <Sheet open={exportOpen} title={t("subs.export")} onClose={() => setExportOpen(false)}>
+        <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginBottom: 12 }}>
+          {t("subs.exportHint")}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <Btn variant="tonal" block icon="link" onClick={() => void exportUrls()}>
+            {t("subs.exportUrls")}
+          </Btn>
+          <Btn variant="tonal" block icon="data_object" onClick={() => void exportJson()}>
+            {t("subs.exportJson")}
+          </Btn>
+        </div>
+      </Sheet>
 
       <SubEditSheet
         open={!!edit}

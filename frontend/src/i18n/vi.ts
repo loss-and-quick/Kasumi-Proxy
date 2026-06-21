@@ -255,6 +255,16 @@ const vi = {
   },
   "subs.updateAll": "Cập nhật tất cả",
   "subs.add": "Thêm",
+  "subs.export": "Xuất",
+  "subs.exportHint":
+    "Sao chép các đăng ký của bạn vào bộ nhớ tạm để sao lưu hoặc chuyển sang thiết bị khác.",
+  "subs.exportUrls": "Sao chép URL",
+  "subs.exportJson": "Sao chép dạng JSON",
+  "subs.exportEmpty": "Không có đăng ký để xuất",
+  "subs.exportCopied": plural("count", {
+    one: "Đã sao chép # đăng ký",
+    other: "Đã sao chép # đăng ký",
+  }),
   "subs.addBtn": "Thêm đăng ký",
   "subs.infoText":
     "Mỗi đăng ký sẽ nhập các máy chủ của nó vào một nhóm đã chọn. Khi cập nhật, các hồ sơ đó sẽ được làm mới và cố gắng giữ nguyên lựa chọn đang hoạt động của bạn.",

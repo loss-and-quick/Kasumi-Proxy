@@ -254,6 +254,15 @@ const zh = {
   },
   "subs.updateAll": "全部更新",
   "subs.add": "添加",
+  "subs.export": "导出",
+  "subs.exportHint": "将订阅复制到剪贴板以进行备份或迁移到其他设备。",
+  "subs.exportUrls": "复制 URL",
+  "subs.exportJson": "复制为 JSON",
+  "subs.exportEmpty": "没有可导出的订阅",
+  "subs.exportCopied": plural("count", {
+    one: "已复制 # 个订阅",
+    other: "已复制 # 个订阅",
+  }),
   "subs.addBtn": "添加订阅",
   "subs.infoText":
     "每个订阅会将其节点导入到所选分组。更新时会刷新这些配置，并尽可能保留当前活动配置。",
