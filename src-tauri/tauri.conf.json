@@ -29,7 +29,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage"],
+    "createUpdaterArtifacts": true,
+    "targets": ["deb", "appimage", "nsis", "msi"],
     "category": "Utility",
     "shortDescription": "System-wide transparent proxy (Xray-core / sing-box).",
     "longDescription": "Kasumi Proxy routes all traffic through Xray-core or sing-box with a native TUN and policy routing, managed from a clean React UI.",
@@ -50,6 +51,15 @@
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/loss-and-quick/Kasumi-Proxy/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI5MkM0OURFOEZBMzE5OTUKUldTVkdhT1Aza2tzS1FNa2NuV1VCd25XcFBGZFFkYUo3VjRwV21jc1BCMHF2MjlYQmpvQ1FubnMK",
+      "windows": { "installMode": "passive" }
     }
   }
 }

@@ -13,6 +13,7 @@ import { getRuntimeBridgeMode } from "../../lib/ksu-webui";
 import { defaultCoreFor } from "../../lib/profile-utils";
 import { uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
+import { AboutSection } from "./sections/AboutSection";
 import { AdvancedSection } from "./sections/AdvancedSection";
 import { AppFilterSection } from "./sections/AppFilterSection";
 import { AssetFilesSection } from "./sections/AssetFilesSection";
@@ -239,6 +240,7 @@ export default function Settings({
           onOpenBackup={onOpenBackup}
           onOpenLogs={onOpenLogs}
         />
+        <AboutSection />
         <div style={{ height: 10 }} />
       </div>
 
