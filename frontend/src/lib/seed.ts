@@ -14,7 +14,8 @@ import type {
   Tls,
   Transport,
 } from "../generated/bindings";
-import type { AppState, Subscription } from "./bridge";
+import { EMPTY_SETTINGS } from "../store/defaults";
+import type { AdvancedSettings, AppState, Subscription } from "./bridge";
 import { emptyProfile, type ProfileOf } from "./profile-utils";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -203,34 +204,12 @@ export const ROUTING_RULES_SEED: RoutingRule[] = [];
 
 export const ASSET_FILES_SEED: AssetFile[] = [];
 
-export const SETTINGS_SEED = {
-  routingMode: "global" as const,
-  domainSniffing: true,
-  routeOnly: false,
-  domainStrategy: "IPIfNonMatch",
-  domainStrategy4Singbox: "prefer_ipv4",
-  strictRoute: false,
-  singboxStack: "gvisor",
-  dnsViaProxy: true,
-  fakeDns: false,
-  preferIpv6: false,
-  mux: false,
-  muxConcurrency: 8,
-  muxXudpConcurrency: 8,
-  muxXudp443: "reject" as "reject" | "proxy" | undefined,
+// Demo settings: the runtime defaults with a couple of tweaks to exercise the UI.
+export const SETTINGS_SEED: AdvancedSettings = {
+  ...EMPTY_SETTINGS,
   fragment: true,
-  fragmentPackets: "tlshello",
   mtu: 1500,
-  pingConcurrency: 3,
-  speedConcurrency: 1,
-  autoStart: true,
-  coreByProtocol: {},
-  appCaptureMode: "all" as "all" | "none",
-  appFilter: {} as Record<string, "force-proxy" | "bypass">,
-  logRotateMaxKb: 512,
-  dedupOnUpdate: false,
-  allowNonLocalhost: false,
-} as const;
+};
 
 export function seedAppState(): AppState {
   return {

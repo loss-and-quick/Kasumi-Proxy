@@ -1,36 +1,20 @@
-import { DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL } from "../generated/defaults";
+import {
+  DEFAULT_ADVANCED_SETTINGS,
+  DEFAULT_DELAY_TEST_URL,
+  DEFAULT_SPEED_TEST_URL,
+} from "../generated/defaults";
 import type { AdvancedSettings } from "../lib/bridge";
 
+// The app's runtime default settings: the Rust serde defaults (generated, the single
+// source) plus the few optional fields the UI surfaces with a concrete value where
+// Rust leaves them unset (`None`).
 export const EMPTY_SETTINGS: AdvancedSettings = {
-  routingMode: "global",
-  domainSniffing: true,
-  routeOnly: false,
-  domainStrategy: "IPIfNonMatch",
-  domainStrategy4Singbox: "prefer_ipv4",
-  strictRoute: false,
-  singboxStack: "gvisor",
-  dnsViaProxy: true,
-  fakeDns: false,
-  preferIpv6: false,
-  mux: false,
-  muxConcurrency: 8,
-  pingConcurrency: 3,
-  speedConcurrency: 1,
-  autoStart: true,
+  ...DEFAULT_ADVANCED_SETTINGS,
   muxXudpConcurrency: 8,
   muxXudp443: "reject",
-  fragment: false,
-  fragmentPackets: "tlshello",
-  mtu: 1350,
   ipv6Enabled: false,
   delayTestUrl: DEFAULT_DELAY_TEST_URL,
   speedTestUrl: DEFAULT_SPEED_TEST_URL,
-  coreByProtocol: {},
-  appCaptureMode: "all",
-  appFilter: {},
-  logRotateMaxKb: 512,
-  dedupOnUpdate: false,
-  allowNonLocalhost: false,
 };
 
 export function mergeSettings(settings?: Partial<AdvancedSettings>): AdvancedSettings {

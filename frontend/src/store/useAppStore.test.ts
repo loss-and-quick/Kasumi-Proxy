@@ -18,34 +18,11 @@ type BridgeMock = {
 };
 
 import { uid } from "../lib/utils";
+import { EMPTY_SETTINGS } from "./defaults";
 
 const DEFAULT_SETTINGS: AdvancedSettings = {
-  routingMode: "global",
-  domainSniffing: true,
-  routeOnly: false,
-  domainStrategy: "IPIfNonMatch",
-  domainStrategy4Singbox: "prefer_ipv4",
-  strictRoute: false,
-  singboxStack: "gvisor",
-  dnsViaProxy: true,
-  fakeDns: false,
-  preferIpv6: false,
-  mux: false,
-  muxConcurrency: 8,
-  pingConcurrency: 3,
-  speedConcurrency: 1,
+  ...EMPTY_SETTINGS,
   autoStart: false,
-  muxXudpConcurrency: 8,
-  muxXudp443: "reject",
-  fragment: false,
-  fragmentPackets: "tlshello",
-  mtu: 1350,
-  logRotateMaxKb: 512,
-  coreByProtocol: {},
-  appCaptureMode: "all",
-  appFilter: {},
-  dedupOnUpdate: false,
-  allowNonLocalhost: false,
 };
 
 const DEFAULT_STATUS: ServiceStatus = {
