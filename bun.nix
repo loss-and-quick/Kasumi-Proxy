@@ -53,6 +53,22 @@
     url = "https://registry.npmjs.org/@biomejs/cli-win32-x64/-/cli-win32-x64-2.4.16.tgz";
     hash = "sha512-Kp85jgoBHa05gix6UIRjfCDiUV3w/8VIdZ247VyyO2gEjaw12WEVhdIjlxp/AMzXxqxQwbxNTDVZ3Mwd2RG5rw==";
   };
+  "@dnd-kit/accessibility@3.1.1" = fetchurl {
+    url = "https://registry.npmjs.org/@dnd-kit/accessibility/-/accessibility-3.1.1.tgz";
+    hash = "sha512-2P+YgaXF+gRsIihwwY1gCsQSYnu9Zyj2py8kY5fFvUM1qm2WA2u639R6YNVfU4GWr+ZM5mqEsfHZZLoRONbemw==";
+  };
+  "@dnd-kit/core@6.3.1" = fetchurl {
+    url = "https://registry.npmjs.org/@dnd-kit/core/-/core-6.3.1.tgz";
+    hash = "sha512-xkGBRQQab4RLwgXxoqETICr6S5JlogafbhNsidmrkVv2YRs5MLwpjoF2qpiGjQt8S9AoxtIV603s0GIUpY5eYQ==";
+  };
+  "@dnd-kit/sortable@10.0.0" = fetchurl {
+    url = "https://registry.npmjs.org/@dnd-kit/sortable/-/sortable-10.0.0.tgz";
+    hash = "sha512-+xqhmIIzvAYMGfBYYnbKuNicfSsk4RksY2XdmJhT+HAC01nix6fHCztU68jooFiMUB01Ky3F0FyOvhG/BZrWkg==";
+  };
+  "@dnd-kit/utilities@3.2.2" = fetchurl {
+    url = "https://registry.npmjs.org/@dnd-kit/utilities/-/utilities-3.2.2.tgz";
+    hash = "sha512-+MKAJEOfaBe5SmV6t34p80MMKhjvUz0vRrvVJbPT0WElzaOJ/1xs+D+KDv+tD/NE5ujfrChEcshd4fLn0wpiqg==";
+  };
   "@emnapi/core@1.10.0" = fetchurl {
     url = "https://registry.npmjs.org/@emnapi/core/-/core-1.10.0.tgz";
     hash = "sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==";
@@ -193,6 +209,14 @@
   "@tauri-apps/plugin-autostart@2.5.1" = fetchurl {
     url = "https://registry.npmjs.org/@tauri-apps/plugin-autostart/-/plugin-autostart-2.5.1.tgz";
     hash = "sha512-zS/xx7yzveCcotkA+8TqkI2lysmG2wvQXv2HGAVExITmnFfHAdj1arGsbbfs3o6EktRHf6l34pJxc3YGG2mg7w==";
+  };
+  "@tauri-apps/plugin-process@2.3.1" = fetchurl {
+    url = "https://registry.npmjs.org/@tauri-apps/plugin-process/-/plugin-process-2.3.1.tgz";
+    hash = "sha512-nCa4fGVaDL/B9ai03VyPOjfAHRHSBz5v6F/ObsB73r/dA3MHHhZtldaDMIc0V/pnUw9ehzr2iEG+XkSEyC0JJA==";
+  };
+  "@tauri-apps/plugin-updater@2.9.0" = fetchurl {
+    url = "https://registry.npmjs.org/@tauri-apps/plugin-updater/-/plugin-updater-2.9.0.tgz";
+    hash = "sha512-j++sgY8XpeDvzImTrzWA08OqqGqgkNyxczLD7FjNJJx/uXxMZFz5nDcfkyoI/rCjYuj2101Tci/r/HFmOmoxCg==";
   };
   "@tybys/wasm-util@0.10.2" = fetchurl {
     url = "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.2.tgz";

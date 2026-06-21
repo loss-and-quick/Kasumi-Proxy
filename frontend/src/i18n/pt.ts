@@ -509,6 +509,7 @@ const pt = {
   "profiles.groups.title": "Grupos",
   "profiles.groups.newPlaceholder": "Nome do novo grupo",
   "profiles.groups.count": "{count} perfis",
+  "profiles.groups.reorder": "Reordenar grupo",
   "profiles.confirmDelGroup.title": "Excluir grupo?",
   "profiles.confirmDelGroup.body": "e os seus {count} perfis serão removidos permanentemente.",
   "profiles.confirmDelGroup.cancel": "Cancelar",
