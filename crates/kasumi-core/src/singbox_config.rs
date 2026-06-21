@@ -143,7 +143,10 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
     if !tls.ech.is_empty() {
         t["ech"] = json!({ "enabled": true, "config": [tls.ech] });
     }
-    if tls.fingerprint != Fingerprint::Empty {
+    // QUIC outbounds (hysteria2/tuic) drive their own TLS stack and reject a uTLS
+    // config — sing-box errors `unsupported usage for uTLS` on every dial.
+    let quic = matches!(p, Profile::Hysteria2(_) | Profile::Tuic(_));
+    if tls.fingerprint != Fingerprint::Empty && !quic {
         t["utls"] = json!({ "enabled": true, "fingerprint": wire(&tls.fingerprint) });
     }
     if tls.security == Security::Reality {
