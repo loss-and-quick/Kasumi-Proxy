@@ -28,6 +28,21 @@ body:
         - Android (root module)
         - Linux desktop (Tauri app)
         - Windows desktop (Tauri app)
+        - Not platform-specific (build / CI / UI)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the app? Drives the component label — pick "Other" if unsure.
+      options:
+        - Web UI (frontend)
+        - Proxy core / backend
+        - Build / CI / release
+        - Documentation
+        - Other / not sure
     validations:
       required: true
 
