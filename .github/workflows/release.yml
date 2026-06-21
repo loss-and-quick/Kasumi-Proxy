@@ -301,12 +301,11 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.version }}
           files: build/kasumi-proxy-${{ needs.prepare.outputs.version }}.zip
 
-  # ── Desktop installers (Linux deb/AppImage) → uploaded to the same release. Cores
-  #    are fetched per-target into src-tauri/binaries/ and bundled via the externalBin
-  #    overlay. AppImage GPG signing is opt-in (active only when the secret is set).
-  #    Windows/macOS aren't shipped yet — the backend's process layer is POSIX-only —
-  #    so the matrix is Linux-only; adding a target is a new matrix row once those
-  #    ports land. ──
+  # ── Desktop installers (Linux deb/AppImage, Windows NSIS/MSI + portable zip) →
+  #    uploaded to the same release. Cores are fetched per-target into
+  #    src-tauri/binaries/ and bundled via the externalBin overlay. AppImage GPG
+  #    signing is opt-in (active only when the secret is set). macOS isn't shipped
+  #    yet (no Platform port) — adding it is a new matrix row. ──
   desktop:
     needs: prepare
     if: needs.prepare.outputs.skip != 'true'
@@ -316,6 +315,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout the released tag
@@ -391,8 +392,29 @@ jobs:
         run: |
           dir="target/${{ matrix.target }}/release/bundle"
           mkdir -p dist
-          find "$dir" -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.sig' \) \
+          find "$dir" -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*-setup.exe' -o -name '*.msi' -o -name '*.sig' \) \
             -exec cp {} dist/ \;
+          ls -la dist
+
+      - name: Assemble Windows portable zip
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Portable build: app exe + cores (suffix stripped) + wintun.dll + a
+          # `portable.dat` marker that pins all state next to the exe at runtime.
+          t="${{ matrix.target }}"
+          out="dist/portable/Kasumi-Proxy"
+          mkdir -p "$out"
+          cp "target/$t/release/kasumi-desktop.exe" "$out/"
+          for c in xray sing-box tun2socks; do
+            cp "src-tauri/binaries/$c-$t.exe" "$out/$c.exe"
+          done
+          cp src-tauri/binaries/wintun.dll "$out/"
+          : > "$out/portable.dat"
+          ver=$(scripts/app-version.sh)
+          ( cd dist/portable && 7z a -tzip "../kasumi-proxy-${ver}-portable.zip" Kasumi-Proxy >/dev/null )
+          rm -rf dist/portable
           ls -la dist
 
       - name: Upload to the release
