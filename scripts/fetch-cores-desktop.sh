@@ -91,6 +91,20 @@ else
 fi
 copy_one "$TMP/sb" "sing-box$EXT" "$OUT/sing-box-$TARGET$EXT"
 
+# ---- wintun (Windows only) ----
+# tun2socks loads wintun.dll from its own directory (the xray data-path needs it).
+# sing-box embeds its own copy, so this is only for the tun2socks path. Staged
+# WITHOUT a target suffix: it ships as a Tauri bundle *resource* placed next to the
+# app exe, not as an externalBin sidecar (those only handle executables + add .exe).
+if [ -n "$EXT" ]; then
+	dl "https://www.wintun.net/builds/wintun-$WINTUN_VERSION.zip" "$TMP/wintun.zip"
+	mkdir -p "$TMP/wintun"
+	unzip -o "$TMP/wintun.zip" -d "$TMP/wintun" >/dev/null
+	# Release zip lays out wintun/bin/<arch>/wintun.dll for amd64/arm64/x86/arm —
+	# scope the search to amd64 so we don't pick another arch's DLL.
+	copy_one "$TMP/wintun/wintun/bin/amd64" "wintun.dll" "$OUT/wintun.dll"
+fi
+
 [ -n "$EXT" ] || chmod 755 "$OUT/xray-$TARGET" "$OUT/tun2socks-$TARGET" "$OUT/sing-box-$TARGET"
 
 echo "✅ staged → src-tauri/binaries/ (suffix $TARGET$EXT):"
@@ -98,3 +112,4 @@ for c in xray sing-box tun2socks; do
 	f="$OUT/$c-$TARGET$EXT"
 	[ -f "$f" ] && printf '   %-12s %s\n' "$c" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $c"
 done
+[ -z "$EXT" ] || { f="$OUT/wintun.dll"; [ -f "$f" ] && printf '   %-12s %s\n' "wintun.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: wintun.dll"; }

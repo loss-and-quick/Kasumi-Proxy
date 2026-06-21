@@ -5,6 +5,11 @@ edition.workspace = true
 license.workspace = true
 description = "Kasumi Proxy — Tauri 2 desktop (and future mobile) app over the neutral Rust backend."
 rust-version = "1.77.2"
+# This crate has a second bin (`codegen`). Without default-run, `cargo tauri build`
+# picks the alphabetically-first binary (`codegen` < `kasumi-desktop`) as the app
+# and bundles THAT — shipping a binary that just runs codegen and crashes on launch
+# (tauri-apps/tauri#4807, #13420). Pin the app binary explicitly.
+default-run = "kasumi-desktop"
 
 [lib]
 # The Tauri mobile/desktop entry point lives in the lib; the bin is a thin shim.
@@ -23,7 +28,6 @@ async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "net", "io-util", "time", "sync"] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-log = "2"
-libc = "0.2"
 specta = { version = "2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "0.0.12"
 specta-serde = "0.0.12"
@@ -38,6 +42,18 @@ kasumi-backend = { path = "../crates/kasumi-backend" }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-window-state = "2"
+
+# Linux pkexec elevation reads geteuid (desktop/elevate.rs).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Windows UAC elevation (ShellExecuteW runas + IsUserAnAdmin) — see desktop/elevate.rs.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [dev-dependencies]
 tempfile = "3"

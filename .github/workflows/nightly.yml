@@ -160,6 +160,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -215,8 +217,29 @@ jobs:
         run: |
           dir="target/${{ matrix.target }}/release/bundle"
           mkdir -p dist
-          find "$dir" -type f \( -name '*.deb' -o -name '*.AppImage' \) \
+          find "$dir" -type f \
+            \( -name '*.deb' -o -name '*.AppImage' -o -name '*-setup.exe' -o -name '*.msi' \) \
             -exec cp {} dist/ \;
+          ls -la dist
+
+      - name: Assemble Windows portable zip
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          # Portable build: app exe + cores (suffix stripped) + wintun.dll + a
+          # `portable.dat` marker that pins all state next to the exe at runtime.
+          t="${{ matrix.target }}"
+          out="dist/portable/Kasumi-Proxy"
+          mkdir -p "$out"
+          cp "target/$t/release/kasumi-desktop.exe" "$out/"
+          for c in xray sing-box tun2socks; do
+            cp "src-tauri/binaries/$c-$t.exe" "$out/$c.exe"
+          done
+          cp src-tauri/binaries/wintun.dll "$out/"
+          : > "$out/portable.dat"
+          ver=$(scripts/app-version.sh)
+          ( cd dist/portable && 7z a -tzip "../kasumi-proxy-${ver}-portable.zip" Kasumi-Proxy >/dev/null )
+          rm -rf dist/portable
           ls -la dist
 
       - name: Upload desktop artifact
