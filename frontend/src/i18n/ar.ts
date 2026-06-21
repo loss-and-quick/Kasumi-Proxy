@@ -612,6 +612,7 @@ const ar = {
   "profiles.groups.title": "المجموعات",
   "profiles.groups.newPlaceholder": "اسم المجموعة الجديدة",
   "profiles.groups.count": "{count} ملف تعريفي",
+  "profiles.groups.reorder": "إعادة ترتيب المجموعة",
   "profiles.confirmDelGroup.title": "حذف المجموعة؟",
   "profiles.confirmDelGroup.body": "وملفاتها التعريفية ({count}) ستُحذف نهائيًا.",
   "profiles.confirmDelGroup.cancel": "إلغاء",

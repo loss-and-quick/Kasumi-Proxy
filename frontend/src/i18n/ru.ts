@@ -534,6 +534,7 @@ const ru = {
   "profiles.groups.title": "Группы",
   "profiles.groups.newPlaceholder": "Название новой группы",
   "profiles.groups.count": "{count} профилей",
+  "profiles.groups.reorder": "Переместить группу",
   "profiles.confirmDelGroup.title": "Удалить группу?",
   "profiles.confirmDelGroup.body": "и её профили ({count}) будут удалены безвозвратно.",
   "profiles.confirmDelGroup.cancel": "Отмена",

@@ -501,6 +501,7 @@ const hi = {
   "profiles.groups.title": "समूह",
   "profiles.groups.newPlaceholder": "नए समूह का नाम",
   "profiles.groups.count": "{count} प्रोफ़ाइल",
+  "profiles.groups.reorder": "समूह का क्रम बदलें",
   "profiles.confirmDelGroup.title": "समूह हटाएं?",
   "profiles.confirmDelGroup.body": "और इसके {count} प्रोफ़ाइल स्थायी रूप से हटा दिए जाएंगे।",
   "profiles.confirmDelGroup.cancel": "रद्द करें",

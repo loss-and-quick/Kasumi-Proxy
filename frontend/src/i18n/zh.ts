@@ -501,6 +501,7 @@ const zh = {
   "profiles.groups.title": "分组",
   "profiles.groups.newPlaceholder": "新分组名称",
   "profiles.groups.count": "{count} 个配置",
+  "profiles.groups.reorder": "重新排序分组",
   "profiles.confirmDelGroup.title": "删除分组？",
   "profiles.confirmDelGroup.body": "及其 {count} 个配置将被永久删除。",
   "profiles.confirmDelGroup.cancel": "取消",

@@ -88,6 +88,7 @@ interface Store extends AppState {
   addGroup: (name: string) => Promise<string>;
   renameGroup: (id: string, name: string) => Promise<void>;
   removeGroup: (id: string) => Promise<void>;
+  reorderGroups: (from: number, to: number) => Promise<void>;
 
   // subscriptions
   upsertSub: (s: Subscription) => Promise<void>;
@@ -685,6 +686,14 @@ export const useAppStore = create<Store>((set, get) => {
     },
     renameGroup(id, name) {
       return patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
+    },
+    reorderGroups(from, to) {
+      return patch((s) => {
+        // g-main stays pinned at index 0: never move it, never drop above it.
+        const pinned = s.groups[0]?.id === "g-main" ? 1 : 0;
+        if (from < pinned) return {};
+        return { groups: moveItemByIndex(s.groups, from, Math.max(pinned, to)) };
+      });
     },
     async removeGroup(id) {
       if (id === "g-main") return;

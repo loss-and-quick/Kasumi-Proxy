@@ -515,6 +515,7 @@ const en = {
   "profiles.groups.title": "Groups",
   "profiles.groups.newPlaceholder": "New group name",
   "profiles.groups.count": "{count} profiles",
+  "profiles.groups.reorder": "Reorder group",
   "profiles.confirmDelGroup.title": "Delete group?",
   "profiles.confirmDelGroup.body": "and its {count} profiles will be permanently removed.",
   "profiles.confirmDelGroup.cancel": "Cancel",

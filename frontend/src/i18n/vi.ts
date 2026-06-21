@@ -505,6 +505,7 @@ const vi = {
   "profiles.groups.title": "Nhóm",
   "profiles.groups.newPlaceholder": "Tên nhóm mới",
   "profiles.groups.count": "{count} hồ sơ",
+  "profiles.groups.reorder": "Sắp xếp lại nhóm",
   "profiles.confirmDelGroup.title": "Xóa nhóm?",
   "profiles.confirmDelGroup.body": "và {count} hồ sơ của nhóm sẽ bị xóa vĩnh viễn.",
   "profiles.confirmDelGroup.cancel": "Hủy",

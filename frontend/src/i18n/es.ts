@@ -510,6 +510,7 @@ const es = {
   "profiles.groups.title": "Grupos",
   "profiles.groups.newPlaceholder": "Nombre del nuevo grupo",
   "profiles.groups.count": "{count} perfiles",
+  "profiles.groups.reorder": "Reordenar grupo",
   "profiles.confirmDelGroup.title": "¿Eliminar grupo?",
   "profiles.confirmDelGroup.body": "y sus {count} perfiles se eliminarán permanentemente.",
   "profiles.confirmDelGroup.cancel": "Cancelar",
