@@ -378,6 +378,11 @@ jobs:
           SIGN: ${{ secrets.GPG_PRIVATE_KEY != '' && '1' || '' }}
           SIGN_KEY: ${{ secrets.GPG_KEY_ID }}
           APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          # minisign key for the auto-updater — makes `tauri build` emit a `.sig`
+          # next to each updatable artifact (AppImage / NSIS). Distinct from the
+          # GPG key above, which signs the AppImage file for manual verification.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           # Inject the real product version (module.prop is the single source of
           # truth) so the bundles aren't the 0.0.0 placeholder.
@@ -442,3 +447,73 @@ jobs:
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
           files: dist/*
+
+      # Per-platform slice of the updater manifest: the `.sig` content + the asset
+      # URL. The `updater-manifest` job merges every platform's slice into one
+      # latest.json (the updater endpoint must list all platforms in a single file).
+      - name: Build updater manifest fragment
+        shell: bash
+        run: |
+          case "${{ matrix.target }}" in
+            *linux*)   plat=linux-x86_64;   sig=$(find dist -maxdepth 1 -name '*.AppImage.sig' | head -1) ;;
+            *windows*) plat=windows-x86_64; sig=$(find dist -maxdepth 1 -name '*-setup.exe.sig' | head -1) ;;
+            *)         plat=""; sig="" ;;
+          esac
+          if [ -z "${sig:-}" ]; then
+            echo "no updater signature for ${{ matrix.target }} (signing key unset?) — skipping"
+            exit 0
+          fi
+          # GitHub rewrites spaces in uploaded asset names to dots — match that so
+          # the URL resolves (the AppImage carries the "Kasumi Proxy" product name).
+          asset=$(basename "${sig%.sig}" | tr ' ' '.')
+          tag="${{ needs.prepare.outputs.version }}"
+          url="https://github.com/loss-and-quick/Kasumi-Proxy/releases/download/${tag}/${asset}"
+          mkdir -p frag
+          jq -n --arg p "$plat" --arg s "$(cat "$sig")" --arg u "$url" \
+            '{($p): {signature: $s, url: $u}}' > "frag/${plat}.json"
+          cat "frag/${plat}.json"
+
+      - name: Upload updater manifest fragment
+        if: hashFiles('frag/*.json') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: updater-frag-${{ matrix.target }}
+          path: frag/*.json
+          retention-days: 1
+
+  # ── Merge the per-platform updater slices into a single latest.json and attach
+  #    it to the release — this is the static endpoint the desktop updater polls. ──
+  updater-manifest:
+    needs: [prepare, desktop]
+    if: needs.prepare.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download manifest fragments
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: updater-frag-*
+          path: frag
+          merge-multiple: true
+
+      - name: Assemble latest.json
+        shell: bash
+        run: |
+          if ! compgen -G "frag/*.json" >/dev/null; then
+            echo "no updater fragments — skipping latest.json"
+            exit 0
+          fi
+          tag="${{ needs.prepare.outputs.version }}"
+          platforms=$(jq -s 'add' frag/*.json)
+          jq -n \
+            --arg version "${tag#v}" \
+            --arg pub "$(date -u +%FT%TZ)" \
+            --argjson platforms "$platforms" \
+            '{version: $version, pub_date: $pub, platforms: $platforms}' > latest.json
+          cat latest.json
+
+      - name: Upload latest.json to the release
+        if: hashFiles('latest.json') != ''
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          files: latest.json
