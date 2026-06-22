@@ -143,10 +143,15 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
     if !tls.ech.is_empty() {
         t["ech"] = json!({ "enabled": true, "config": [tls.ech] });
     }
-    // QUIC outbounds (hysteria2/tuic) drive their own TLS stack and reject a uTLS
-    // config — sing-box errors `unsupported usage for uTLS` on every dial.
-    let quic = matches!(p, Profile::Hysteria2(_) | Profile::Tuic(_));
-    if tls.fingerprint != Fingerprint::Empty && !quic {
+    // Some outbounds reject a uTLS config: hysteria2/tuic drive their own QUIC TLS
+    // stack (sing-box errors `unsupported usage for uTLS` on every dial), and the
+    // naive outbound uses a chromium-style TLS (`uTLS is not supported on naive
+    // outbound` at init). Skip uTLS for those.
+    let no_utls = matches!(
+        p,
+        Profile::Hysteria2(_) | Profile::Tuic(_) | Profile::Naive(_)
+    );
+    if tls.fingerprint != Fingerprint::Empty && !no_utls {
         t["utls"] = json!({ "enabled": true, "fingerprint": wire(&tls.fingerprint) });
     }
     if tls.security == Security::Reality {
@@ -1187,5 +1192,43 @@ mod tests {
         .unwrap();
         let socks = &cfg["inbounds"].as_array().unwrap()[0];
         assert!(socks.get("users").is_none());
+    }
+
+    #[test]
+    fn naive_outbound_omits_utls() {
+        let build = |uri: &str| {
+            let p = crate::share::parse_share_link(uri, None).unwrap();
+            build_singbox_config(
+                &p,
+                &AdvancedSettings::default(),
+                &[],
+                std::slice::from_ref(&p),
+                SingboxBuildOpts::default(),
+            )
+            .unwrap()
+        };
+        let proxy = |cfg: &Value| {
+            cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["tag"] == "proxy")
+                .cloned()
+                .unwrap()
+        };
+
+        // sing-box rejects uTLS on the naive outbound (`uTLS is not supported on
+        // naive outbound`), so the builder must omit it even though the profile
+        // carries a default fingerprint.
+        let naive = proxy(&build("naive+https://user:pw@n.ex:443?sni=s.ex&fp=chrome"));
+        assert_eq!(naive["type"], "naive");
+        assert!(
+            naive["tls"]["utls"].is_null(),
+            "naive tls must not carry utls"
+        );
+
+        // A protocol that does accept uTLS still gets it (guard against an over-broad skip).
+        let anytls = proxy(&build("anytls://pw@a.ex:443?sni=s.ex&fp=chrome"));
+        assert_eq!(anytls["tls"]["utls"]["enabled"], true);
     }
 }
