@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { acquireSheet } from "../lib/sheetPresence";
+import { useEscapeToClose } from "../lib/useEscapeToClose";
 import { useSwipeDownToDismiss } from "../lib/useSwipeDownToDismiss";
 import type { ToastItem } from "../store/useAppStore";
 import { Icon, IconBtn } from "./icons";
@@ -35,6 +36,9 @@ export const Sheet = ({
   const [closing, setClosing] = useState(false);
   const requestClose = useCallback(() => setClosing(true), []);
   const swipe = useSwipeDownToDismiss(sheetRef, requestClose);
+
+  // Escape slides the sheet out like every other close path.
+  useEscapeToClose(open, requestClose);
 
   // Register presence so the desktop side rail steps aside while open.
   useEffect(() => {
@@ -113,6 +117,9 @@ export const Dialog = ({
   const shown = useRef({ icon, iconColor, title, children, actions });
   if (open) shown.current = { icon, iconColor, title, children, actions };
   const view = shown.current;
+
+  // Escape cancels the dialog (same as the scrim / cancel action).
+  useEscapeToClose(open, onClose);
 
   useEffect(() => {
     if (open) {

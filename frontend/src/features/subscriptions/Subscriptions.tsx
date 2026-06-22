@@ -627,7 +627,11 @@ function SubEditSheet({
               if (e.key === "Enter") {
                 e.currentTarget.blur();
               }
-              if (e.key === "Escape") setNewGroupName(null);
+              // Cancel the inline new-group field without closing the edit sheet.
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setNewGroupName(null);
+              }
             }}
             style={{ flex: 1 }}
           />
