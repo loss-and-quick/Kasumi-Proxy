@@ -7,4 +7,8 @@
 
 pub mod client;
 pub mod proto;
+pub mod remote;
 pub mod server;
+
+pub use client::Client;
+pub use remote::RemotePlatform;
