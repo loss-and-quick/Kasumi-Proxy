@@ -205,19 +205,17 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
         </SortableContext>
       </DndContext>
 
-      {confirmDel && (
-        <Suspense fallback={null}>
-          <DeleteGroupDialog
-            group={confirmDel}
-            count={countOf(confirmDel.id)}
-            onClose={() => setConfirmDel(null)}
-            onConfirm={(group) => {
-              void removeGroup(group.id);
-              setConfirmDel(null);
-            }}
-          />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <DeleteGroupDialog
+          group={confirmDel}
+          count={confirmDel ? countOf(confirmDel.id) : 0}
+          onClose={() => setConfirmDel(null)}
+          onConfirm={(group) => {
+            void removeGroup(group.id);
+            setConfirmDel(null);
+          }}
+        />
+      </Suspense>
     </Sheet>
   );
 }
