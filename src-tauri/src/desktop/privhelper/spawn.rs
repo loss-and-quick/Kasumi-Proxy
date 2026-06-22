@@ -47,7 +47,7 @@ fn find_elevator() -> Option<PathBuf> {
 }
 
 /// The unix socket the helper binds, inside the GUI-resolved run dir.
-pub fn socket_path(paths: &DesktopPaths) -> String {
+fn socket_path(paths: &DesktopPaths) -> String {
     format!("{}/helper.sock", paths.run_dir)
 }
 

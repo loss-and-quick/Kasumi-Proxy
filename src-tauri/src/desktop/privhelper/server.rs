@@ -38,16 +38,6 @@ pub async fn dispatch(platform: &Arc<dyn Platform>, req: PrivRequest) -> PrivRep
                 message: e.to_string(),
             },
         },
-        PrivRequest::Capabilities => match platform.capabilities().await {
-            Ok(c) => PrivReply::Capabilities {
-                xray: c.cores.xray,
-                singbox: c.cores.singbox,
-                tun: c.tun,
-            },
-            Err(e) => PrivReply::Err {
-                message: e.to_string(),
-            },
-        },
         PrivRequest::ProxyStatus => match platform.proxy_status().await {
             Ok(p) => PrivReply::Proxy {
                 running: p.running,
