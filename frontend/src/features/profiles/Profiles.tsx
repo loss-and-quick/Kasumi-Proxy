@@ -407,19 +407,17 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         </Suspense>
       )}
 
-      {confirmDel && (
-        <Suspense fallback={null}>
-          <DeleteProfileDialog
-            profile={confirmDel}
-            onClose={() => setConfirmDel(null)}
-            onConfirm={(profile) => {
-              removeProfile(profile.meta.id);
-              notify(t("profiles.deleted"));
-              setConfirmDel(null);
-            }}
-          />
-        </Suspense>
-      )}
+      <Suspense fallback={null}>
+        <DeleteProfileDialog
+          profile={confirmDel}
+          onClose={() => setConfirmDel(null)}
+          onConfirm={(profile) => {
+            removeProfile(profile.meta.id);
+            notify(t("profiles.deleted"));
+            setConfirmDel(null);
+          }}
+        />
+      </Suspense>
     </div>
   );
 }

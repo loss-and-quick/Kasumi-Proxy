@@ -347,6 +347,8 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 
 .dialog { position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop 0.2s cubic-bezier(.2,.9,.2,1); }
 @keyframes pop { from { transform: translateY(-50%) scale(0.9); opacity: 0; } }
+.dialog.leaving { pointer-events: none; animation: pop-out 0.2s cubic-bezier(.4,0,1,1) forwards; }
+@keyframes pop-out { to { transform: translateY(-50%) scale(0.92); opacity: 0; } }
 .dialog-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
 .dialog-title { font-size: 21px; font-weight: 600; margin-bottom: 8px; }
 .dialog-text { font-size: 14px; color: var(--on-surface-variant); line-height: 1.5; }
