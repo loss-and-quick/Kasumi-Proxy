@@ -37,8 +37,11 @@ export function pingLabel(v: number | null) {
   return `${v} ms`;
 }
 
-export const Ping = ({ value }: { value: number | null }) => (
-  <span className={`mono ${pingClass(value)}`} style={{ fontSize: 12, fontWeight: 600 }}>
+export const Ping = ({ value, animate }: { value: number | null; animate?: boolean }) => (
+  <span
+    className={`mono ${animate ? "metric-pop " : ""}${pingClass(value)}`}
+    style={{ fontSize: 12, fontWeight: 600 }}
+  >
     {pingLabel(value)}
   </span>
 );
@@ -52,9 +55,15 @@ export function speedLabel(bps: number | null | undefined): string {
   return `${bps} B/s`;
 }
 
-export const Speed = ({ value }: { value: number | null | undefined }) => (
+export const Speed = ({
+  value,
+  animate,
+}: {
+  value: number | null | undefined;
+  animate?: boolean;
+}) => (
   <span
-    className={`mono ${value == null ? "ping-na" : value < 0 ? "ping-bad" : "ping-good"}`}
+    className={`mono ${animate ? "metric-pop " : ""}${value == null ? "ping-na" : value < 0 ? "ping-bad" : "ping-good"}`}
     style={{ fontSize: 12, fontWeight: 600 }}
   >
     {speedLabel(value)}
