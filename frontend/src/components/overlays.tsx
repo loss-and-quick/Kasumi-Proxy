@@ -50,7 +50,7 @@ export const Sheet = ({
             : undefined
         }
       >
-        <div className="sheet-grab" {...swipe.handlers}>
+        <div className="sheet-grab" onPointerDown={swipe.onPointerDown}>
           <div className="sheet-handle" />
           <div className="sheet-head">
             <div className="sheet-title">{title}</div>
