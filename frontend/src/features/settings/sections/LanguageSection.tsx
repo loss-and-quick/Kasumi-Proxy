@@ -1,4 +1,4 @@
-import { Card, SectionLabel } from "../../../components";
+import { Card, SectionLabel, Select } from "../../../components";
 import { type Lang, LOCALES, useT } from "../../../i18n";
 
 export function LanguageSection({ lang, setLang }: { lang: Lang; setLang: (lang: Lang) => void }) {
@@ -8,17 +8,14 @@ export function LanguageSection({ lang, setLang }: { lang: Lang; setLang: (lang:
     <>
       <SectionLabel>{t("settings.language")}</SectionLabel>
       <Card style={{ padding: 14 }}>
-        <select
-          className="select-box"
+        <Select
           value={lang}
-          onChange={(e) => setLang(e.target.value as Lang)}
-        >
-          {Object.entries(LOCALES).map(([code, { label }]) => (
-            <option key={code} value={code}>
-              {label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => setLang(v as Lang)}
+          options={Object.entries(LOCALES).map(([code, { label }]) => ({
+            value: code,
+            label,
+          }))}
+        />
       </Card>
     </>
   );

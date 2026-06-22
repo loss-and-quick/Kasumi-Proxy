@@ -53,16 +53,16 @@ export function RoutingSection({
     <>
       <SectionLabel>{t("settings.routing")}</SectionLabel>
       <Card style={{ padding: 14 }}>
-        <div className="field-label">{t("settings.routingMode")}</div>
-        <select
-          className="select-box"
+        <Select
+          label={t("settings.routingMode")}
           value={settings.routingMode}
-          onChange={(e) => setRoutingMode(e.target.value as AdvancedSettings["routingMode"])}
-        >
-          <option value="global">{t("settings.routingGlobal")}</option>
-          <option value="custom">{t("settings.routingCustom")}</option>
-          <option value="rules">{t("settings.routingRulesEditor")}</option>
-        </select>
+          onChange={(v) => setRoutingMode(v as AdvancedSettings["routingMode"])}
+          options={[
+            { value: "global", label: t("settings.routingGlobal") },
+            { value: "custom", label: t("settings.routingCustom") },
+            { value: "rules", label: t("settings.routingRulesEditor") },
+          ]}
+        />
         <div style={{ padding: "10px 4px 4px" }}>
           <Select
             label={t("settings.domainStrategy4Xray")}

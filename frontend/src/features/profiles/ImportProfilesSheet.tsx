@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Btn, Field, Sheet } from "../../components";
+import { Btn, Field, Select, Sheet } from "../../components";
 import type { Group } from "../../generated/bindings";
 import { useT } from "../../i18n";
 
@@ -55,18 +55,12 @@ export function ImportProfilesSheet({
         mono={false}
         hint={t("profiles.import.linksHint")}
       />
-      <div className="field-label">{t("profiles.import.targetGroup")}</div>
-      <select
-        className="select-box"
+      <Select
+        label={t("profiles.import.targetGroup")}
         value={importGroup}
-        onChange={(e) => setImportGroup(e.target.value)}
-      >
-        {groups.map((group) => (
-          <option key={group.id} value={group.id}>
-            {group.name}
-          </option>
-        ))}
-      </select>
+        onChange={setImportGroup}
+        options={groups.map((group) => ({ value: group.id, label: group.name }))}
+      />
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
         <Btn variant="outline" icon="qr_code_scanner" onClick={onScanQr}>
           {t("profiles.import.scanQr")}

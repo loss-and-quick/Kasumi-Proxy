@@ -3,7 +3,7 @@
 // Runtime log viewer with copy / refresh.
 // ============================================================
 import { useCallback, useEffect, useState } from "react";
-import { Btn, Dialog, Sheet } from "../../components";
+import { Btn, Dialog, Select, Sheet } from "../../components";
 import { useT } from "../../i18n";
 import type { LogTarget } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
@@ -74,16 +74,16 @@ export default function Logs({ onClose }: { onClose: () => void }) {
         >
           <div>
             <div className="field-label">{t("logs.target")}</div>
-            <select
-              className="select-box"
+            <Select
               value={target}
-              onChange={(e) => setTarget(e.target.value as LogTarget)}
-            >
-              <option value="daemon">{t("logs.target.daemon")}</option>
-              <option value="xray">{t("logs.target.xray")}</option>
-              <option value="singbox">{t("logs.target.singbox")}</option>
-              <option value="tun2socks">{t("logs.target.tun2socks")}</option>
-            </select>
+              onChange={(v) => setTarget(v as LogTarget)}
+              options={[
+                { value: "daemon", label: t("logs.target.daemon") },
+                { value: "xray", label: t("logs.target.xray") },
+                { value: "singbox", label: t("logs.target.singbox") },
+                { value: "tun2socks", label: t("logs.target.tun2socks") },
+              ]}
+            />
           </div>
           <div>
             <div className="field-label">{t("logs.lines")}</div>

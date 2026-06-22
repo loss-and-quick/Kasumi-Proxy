@@ -1,4 +1,4 @@
-import { Btn, Card, IconBtn, ListRow, SectionLabel } from "../../../components";
+import { Btn, Card, IconBtn, ListRow, SectionLabel, Select } from "../../../components";
 import type { AssetFile } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
 import type { ResourceUpdateMode } from "../../../lib/bridge";
@@ -55,16 +55,16 @@ export function AssetFilesSection({
           </Btn>
         </div>
         <div style={{ marginBottom: 12 }}>
-          <div className="field-label">{t("common.updateMode")}</div>
-          <select
-            className="select-box"
+          <Select
+            label={t("common.updateMode")}
             value={resourceUpdateMode}
-            onChange={(e) => setResourceUpdateMode(e.target.value as ResourceUpdateMode)}
-          >
-            <option value="auto">{t("common.mode.auto")}</option>
-            <option value="proxy">{t("common.mode.proxy")}</option>
-            <option value="direct">{t("common.mode.direct")}</option>
-          </select>
+            onChange={(v) => setResourceUpdateMode(v as ResourceUpdateMode)}
+            options={[
+              { value: "auto", label: t("common.mode.auto") },
+              { value: "proxy", label: t("common.mode.proxy") },
+              { value: "direct", label: t("common.mode.direct") },
+            ]}
+          />
         </div>
         {assetFiles.map((asset) => (
           <ListRow

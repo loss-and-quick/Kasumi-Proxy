@@ -1,4 +1,4 @@
-import { Card, Field, RowToggle, SectionLabel } from "../../../components";
+import { Card, Field, RowToggle, SectionLabel, Select } from "../../../components";
 import { useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
@@ -37,17 +37,15 @@ export function ConnectionSection({
               placeholder="8"
               onChange={(value) => set("muxXudpConcurrency", Number(value))}
             />
-            <div className="field-label">{t("settings.quicInMux")}</div>
-            <select
-              className="select-box"
+            <Select
+              label={t("settings.quicInMux")}
               value={settings.muxXudp443 ?? "reject"}
-              onChange={(e) =>
-                set("muxXudp443", e.target.value as NonNullable<AdvancedSettings["muxXudp443"]>)
-              }
-            >
-              <option value="reject">{t("settings.quicReject")}</option>
-              <option value="proxy">{t("settings.quicProxy")}</option>
-            </select>
+              onChange={(v) => set("muxXudp443", v as NonNullable<AdvancedSettings["muxXudp443"]>)}
+              options={[
+                { value: "reject", label: t("settings.quicReject") },
+                { value: "proxy", label: t("settings.quicProxy") },
+              ]}
+            />
           </div>
         )}
         <RowToggle
@@ -59,16 +57,16 @@ export function ConnectionSection({
         />
         {settings.fragment && (
           <div style={{ padding: "0 4px 12px 54px" }}>
-            <div className="field-label">{t("settings.fragmentPackets")}</div>
-            <select
-              className="select-box"
+            <Select
+              label={t("settings.fragmentPackets")}
               value={settings.fragmentPackets}
-              onChange={(e) => set("fragmentPackets", e.target.value)}
-            >
-              <option value="tlshello">{t("settings.fragmentPackets.tlshello")}</option>
-              <option value="1-3">{t("settings.fragmentPackets.1-3")}</option>
-              <option value="1-2">{t("settings.fragmentPackets.1-2")}</option>
-            </select>
+              onChange={(v) => set("fragmentPackets", v)}
+              options={[
+                { value: "tlshello", label: t("settings.fragmentPackets.tlshello") },
+                { value: "1-3", label: t("settings.fragmentPackets.1-3") },
+                { value: "1-2", label: t("settings.fragmentPackets.1-2") },
+              ]}
+            />
             <Field
               label={t("settings.fragmentLength")}
               value={settings.fragmentLength ?? "50-100"}

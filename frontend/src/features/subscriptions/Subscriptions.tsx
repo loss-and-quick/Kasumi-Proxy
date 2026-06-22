@@ -12,6 +12,7 @@ import {
   Icon,
   IconBtn,
   RowToggle,
+  Select,
   Sheet,
   Switch,
 } from "../../components";
@@ -184,17 +185,11 @@ export default function Subscriptions() {
           hint={t("subs.importHint")}
         />
         <div className="field-label">{t("subs.edit.targetGroup")}</div>
-        <select
-          className="select-box"
+        <Select
           value={importGroup}
-          onChange={(e) => setImportGroup(e.target.value)}
-        >
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+          onChange={setImportGroup}
+          options={groups.map((g) => ({ value: g.id, label: g.name }))}
+        />
         <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
           <Btn variant="text" onClick={() => setImportOpen(false)}>
             {t("subs.confirmDel.cancel")}
@@ -583,18 +578,12 @@ function SubEditSheet({
             style={{ flex: 1 }}
           />
         ) : (
-          <select
-            className="select-box"
+          <Select
             value={d.groupId ?? groupOptions[0]?.value ?? "g-main"}
-            onChange={(e) => set("groupId", e.target.value)}
+            onChange={(v) => set("groupId", v)}
             style={{ flex: 1 }}
-          >
-            {groupOptions.map((g) => (
-              <option key={g.value} value={g.value}>
-                {g.label}
-              </option>
-            ))}
-          </select>
+            options={groupOptions.map((g) => ({ value: g.value, label: g.label }))}
+          />
         )}
         <IconBtn
           name={newGroupName !== null ? "close" : "add"}
@@ -620,16 +609,16 @@ function SubEditSheet({
         />
       </div>
       <div className="field-label">{t("common.updateMode")}</div>
-      <select
-        className="select-box"
+      <Select
         value={d.updateMode}
-        onChange={(e) => set("updateMode", e.target.value as Subscription["updateMode"])}
-        style={{ width: "100%", marginBottom: 14 }}
-      >
-        <option value="auto">{t("common.mode.auto")}</option>
-        <option value="proxy">{t("common.mode.proxy")}</option>
-        <option value="direct">{t("common.mode.direct")}</option>
-      </select>
+        onChange={(v) => set("updateMode", v as Subscription["updateMode"])}
+        style={{ marginBottom: 14 }}
+        options={[
+          { value: "auto", label: t("common.mode.auto") },
+          { value: "proxy", label: t("common.mode.proxy") },
+          { value: "direct", label: t("common.mode.direct") },
+        ]}
+      />
       <RowToggle
         icon="autorenew"
         title={t("subs.edit.autoUpdate")}
