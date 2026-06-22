@@ -269,24 +269,55 @@ body {
 
 .field { margin-bottom: 14px; }
 .field-label { display: block; font-size: 12px; font-weight: 600; color: var(--on-surface-variant); letter-spacing: 0.3px; margin-bottom: 6px; text-transform: uppercase; }
-.input, .select-box, textarea.input {
+.input, .select-trigger, textarea.input {
   width: 100%; font-family: var(--font-mono); font-size: 14px; color: var(--on-surface); background: var(--sc);
   border: 1px solid transparent; border-bottom: 2px solid var(--outline); border-radius: 10px 10px 4px 4px; padding: 12px 13px;
   transition: border-color var(--dur-fast), background-color var(--dur-fast); outline: none;
 }
 .input::placeholder { color: var(--on-surface-faint); }
-/* background-color (not the `background` shorthand) so the select's arrow
-   background-image survives focus instead of being reset to none. */
-.input:focus, textarea.input:focus, .select-box:focus { border-bottom-color: var(--primary); background-color: var(--sc-high); }
+.input:focus, textarea.input:focus { border-bottom-color: var(--primary); background-color: var(--sc-high); }
 textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .input-row { display: flex; gap: 10px; }
 .input-row > .field { flex: 1; margin-bottom: 0; }
-.select-box {
-  font-family: var(--font-ui); appearance: none;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='%23aeb3bd'><path d='M7 10l5 5 5-5z'/></svg>");
-  background-repeat: no-repeat; background-position: right 8px center; padding-right: 36px; cursor: pointer;
+
+/* ---------- Custom select: a styled trigger + a portalled Material menu, so the
+   dropdown looks identical on every platform (no OS-native <select> popup). ---- */
+.select-trigger {
+  display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer;
+  font-family: var(--font-ui);
 }
-.select-box option { background: var(--sc-high); color: var(--on-surface); }
+.select-trigger:focus-visible { border-bottom-color: var(--primary); background-color: var(--sc-high); }
+.select-trigger[aria-expanded="true"] { border-bottom-color: var(--primary); background-color: var(--sc-high); }
+.select-trigger:disabled { opacity: 0.5; cursor: default; }
+.select-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-value.placeholder { color: var(--on-surface-faint); }
+.select-arrow { font-size: 20px; color: var(--on-surface-variant); flex: 0 0 auto; transition: transform var(--dur-fast) var(--ease-enter); }
+.select-arrow.up { transform: rotate(180deg); }
+
+.select-overlay { position: fixed; inset: 0; z-index: 60; background: none; border: none; padding: 0; cursor: default; }
+.select-menu {
+  position: fixed; z-index: 61; margin: 6px 0; min-width: 120px; overflow-y: auto;
+  background: var(--sc-high); border: 1px solid var(--outline-variant); border-radius: 14px;
+  padding: 6px; box-shadow: 0 12px 32px -8px oklch(0 0 0 / 0.6);
+  transform-origin: top center; animation: select-in var(--dur-fast) var(--ease-enter);
+}
+.select-menu.up { transform-origin: bottom center; animation-name: select-in-up; }
+@keyframes select-in { from { opacity: 0; transform: scaleY(0.92) translateY(-4px); } }
+@keyframes select-in-up { from { opacity: 0; transform: scaleY(0.92) translateY(4px); } }
+.select-group {
+  padding: 8px 12px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--on-surface-faint);
+}
+.select-option {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  font-family: var(--font-ui); font-size: 14px; color: var(--on-surface);
+  background: none; border: none; border-radius: 9px; padding: 10px 12px;
+  transition: background var(--dur-fast);
+}
+.select-option-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-option.active { background: var(--sc-highest); }
+.select-option.selected { color: var(--on-primary-container); background: var(--primary-container); }
+.select-check { font-size: 20px; flex: 0 0 auto; }
 
 .botnav {
   position: absolute; bottom: 0; left: 0; right: 0; height: calc(78px + var(--window-inset-bottom, 0px)); background: var(--sc);
