@@ -122,6 +122,14 @@ jobs:
       - name: Nix store cache
         uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b # v8
 
+      - name: Stub the libcronet bundle resource (clippy/codegen build the app)
+        run: |
+          # clippy/codegen compile kasumi-desktop, whose tauri.linux.conf.json
+          # declares the libcronet.so resource; tauri-build checks the path exists.
+          # The real lib is fetched only for the bundle — a placeholder suffices.
+          mkdir -p src-tauri/binaries
+          : > src-tauri/binaries/libcronet.so
+
       - name: fmt + clippy + test + codegen drift
         run: |
           nix develop --command bash -euo pipefail -c '
@@ -171,6 +179,13 @@ jobs:
           bun install --frozen-lockfile
           ( cd frontend && bun run build )
 
+      - name: Stub the libcronet bundle resource (compile-smoke doesn't bundle)
+        run: |
+          # tauri-build validates tauri.linux.conf.json's libcronet.so resource at
+          # compile time; the real lib is fetched only for the bundle. Placeholder.
+          mkdir -p src-tauri/binaries
+          : > src-tauri/binaries/libcronet.so
+
       - name: Compile the Tauri app (no bundle)
         run: cargo build -p kasumi-desktop
 
@@ -206,14 +221,15 @@ jobs:
           bun install --frozen-lockfile
           ( cd frontend && bun run build )
 
-      - name: Stub the wintun bundle resource (compile-smoke doesn't bundle)
+      - name: Stub the bundle resources (compile-smoke doesn't bundle)
         shell: bash
         run: |
           # tauri-build validates declared bundle.resources at compile time. The
-          # real wintun.dll is fetched only for the nightly/release bundle; a
-          # placeholder satisfies the path check for this compile-only job.
+          # real wintun.dll / libcronet.dll are fetched only for the nightly/release
+          # bundle; placeholders satisfy the path check for this compile-only job.
           mkdir -p src-tauri/binaries
           : > src-tauri/binaries/wintun.dll
+          : > src-tauri/binaries/libcronet.dll
 
       - name: Compile the Tauri app (no bundle)
         run: cargo build -p kasumi-desktop
