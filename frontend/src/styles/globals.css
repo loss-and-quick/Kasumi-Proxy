@@ -321,6 +321,10 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .group-rename-input:focus { border-color: var(--primary); }
 
 .list-row { display: flex; align-items: center; gap: 14px; padding: 14px 4px; cursor: pointer; }
+/* Give row icons their own compositing layer so they keep a stable size: while a
+   row is dragged it sits on a transient transform layer, and the mask-based icons
+   would otherwise re-rasterize (popping size) when that layer is torn down on drop. */
+.list-row .material-symbols-rounded { transform: translateZ(0); }
 .list-row + .list-row { border-top: 1px solid var(--outline-variant); }
 .list-row.dragging { position: relative; z-index: 2; background: var(--surface); box-shadow: 0 6px 20px oklch(0 0 0 / 0.28); border-radius: 12px; }
 .list-row .lr-drag { flex: 0 0 auto; width: 24px; height: 40px; display: flex; align-items: center; justify-content: center; color: var(--on-surface-faint); cursor: grab; touch-action: none; }

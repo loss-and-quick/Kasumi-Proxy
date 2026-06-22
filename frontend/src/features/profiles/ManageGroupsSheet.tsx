@@ -41,7 +41,9 @@ function Sortable({ id, children }: { id: string; children: (b: SortableBindings
   });
   return children({
     setNodeRef,
-    style: { transform: CSS.Transform.toString(transform), transition },
+    // Translate only: CSS.Transform also appends scaleX/scaleY, which we never need
+    // for a vertical reorder and which would scale the masked icons.
+    style: { transform: CSS.Translate.toString(transform), transition },
     attributes,
     listeners,
     isDragging,
