@@ -2,9 +2,9 @@
 
 ### Cross-platform: Rust backend + Tauri desktop
 
-Base migration off the TypeScript (txiki.js) backend to a Rust workspace
-(`kasumi-core` / `kasumi-backend` / `kasumi-daemon`), with two thin shells over
-one shared `Service`:
+Base migration off the original Bash backend (with its React WebUI) to a Rust
+workspace (`kasumi-core` / `kasumi-backend` / `kasumi-daemon`), with two thin
+shells over one shared `Service`:
 
 - **Android** — the same KSU/Magisk/APatch module, now a Rust `kasumi-proxy`
   daemon (axum HTTP webroot + token-gated typed WS).
