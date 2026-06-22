@@ -54,10 +54,16 @@ const en = {
     other: "Imported # profiles",
   }),
   "activity.subUpdated": "Subscription updated · {name}",
-  "activity.pingComplete": "Ping complete · {count} profiles",
+  "activity.pingComplete": plural("count", {
+    one: "Ping complete · # profile",
+    other: "Ping complete · # profiles",
+  }),
   "activity.bestSelected": "Best profile selected · {remarks}",
   "activity.backupRestored": "Backup restored",
-  "activity.speedTestComplete": "Speed test complete · {count} profiles",
+  "activity.speedTestComplete": plural("count", {
+    one: "Speed test complete · # profile",
+    other: "Speed test complete · # profiles",
+  }),
   "activity.unreachableRemoved": plural("count", {
     one: "Removed # unreachable profile",
     other: "Removed # unreachable profiles",
@@ -514,10 +520,13 @@ const en = {
   "profiles.manageGroups": "Manage groups",
   "profiles.groups.title": "Groups",
   "profiles.groups.newPlaceholder": "New group name",
-  "profiles.groups.count": "{count} profiles",
+  "profiles.groups.count": plural("count", { one: "# profile", other: "# profiles" }),
   "profiles.groups.reorder": "Reorder group",
   "profiles.confirmDelGroup.title": "Delete group?",
-  "profiles.confirmDelGroup.body": "and its {count} profiles will be permanently removed.",
+  "profiles.confirmDelGroup.body": plural("count", {
+    one: "and its # profile will be permanently removed.",
+    other: "and its # profiles will be permanently removed.",
+  }),
   "profiles.confirmDelGroup.cancel": "Cancel",
   "profiles.confirmDelGroup.delete": "Delete",
   "profiles.deleted": "Profile deleted",
@@ -690,12 +699,18 @@ const en = {
   }),
   "store.ping.started": "Pinging…",
   "store.ping.complete": "Ping complete",
-  "store.ping.removeUnreachable": "Removed {count} unreachable profiles",
+  "store.ping.removeUnreachable": plural("count", {
+    one: "Removed # unreachable profile",
+    other: "Removed # unreachable profiles",
+  }),
   "store.ping.noUnreachable": "No unreachable profiles found",
   "store.ping.selectBest": "Activated best profile",
   "store.ping.noPingData": "Run a ping test first",
   "store.ping.testFailed": "Test failed: {error}",
-  "store.dedup.done": "Removed {count} duplicates",
+  "store.dedup.done": plural("count", {
+    one: "Removed # duplicate",
+    other: "Removed # duplicates",
+  }),
   "store.dedup.none": "No duplicates found",
   "store.sub.updateFailed": "Update failed: {name}",
   "store.sub.updating": "Updating {name}…",
@@ -719,7 +734,10 @@ const en = {
   "store.backup.invalidStructure": "Invalid backup structure",
   "store.backup.restored": "Backup restored",
   "store.backup.merged": "Backup merged",
-  "store.backup.profilesSkipped": "Skipped {count} invalid profiles",
+  "store.backup.profilesSkipped": plural("count", {
+    one: "Skipped # invalid profile",
+    other: "Skipped # invalid profiles",
+  }),
 } satisfies Record<string, MessageValue>;
 
 export default en;
