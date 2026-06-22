@@ -154,6 +154,32 @@ export const Dialog = ({
 };
 
 export const Toast = ({ msg }: { msg: string | null }) => {
-  if (!msg) return null;
-  return <div className="snackbar">{msg}</div>;
+  // Keep the last message mounted through a slide/fade-out so the snackbar
+  // doesn't vanish instantly when the message clears.
+  const [shown, setShown] = useState<string | null>(msg);
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (msg) {
+      setShown(msg);
+      setLeaving(false);
+    } else {
+      setLeaving((wasLeaving) => wasLeaving || shown !== null);
+    }
+  }, [msg, shown]);
+
+  if (shown === null) return null;
+  return (
+    <div
+      className={`snackbar${leaving ? " leaving" : ""}`}
+      onAnimationEnd={(e) => {
+        if (leaving && e.target === e.currentTarget) {
+          setShown(null);
+          setLeaving(false);
+        }
+      }}
+    >
+      {shown}
+    </div>
+  );
 };
