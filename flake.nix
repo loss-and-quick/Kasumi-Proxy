@@ -35,6 +35,9 @@
       bun2nix,
       rust-overlay,
     }:
+    # Per-system outputs (packages/checks/devShells/apps) merged with the
+    # system-independent NixOS module: modules aren't per-system, so it must sit
+    # beside the eachDefaultSystem set, not inside it.
     flake-utils.lib.eachDefaultSystem (
       system:
       let
@@ -82,5 +85,9 @@
 
         apps = import ./nix/apps.nix { inherit pkgs self toolchain; };
       }
-    );
+    )
+    // {
+      # `programs.kasumi-proxy.enable = true;` — see nix/nixos-module.nix.
+      nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+    };
 }
