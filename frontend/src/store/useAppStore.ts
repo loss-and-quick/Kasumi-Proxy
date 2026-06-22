@@ -39,6 +39,16 @@ import {
   upsertProfileFront,
 } from "./state-mutations";
 
+/** A queued, auto-dismissing notification shown by the <Toaster>. */
+export interface ToastItem {
+  id: string;
+  msg: string;
+}
+
+// Most toasts the stack shows at once; older ones drop off as new ones arrive.
+const TOAST_LIMIT = 3;
+const TOAST_DURATION_MS = 2600;
+
 const LEGACY_DEFAULT_ASSET_IDS = new Set(["asset-geoip", "asset-geosite"]);
 
 function stripLegacyDefaultAssets(assetFiles: AssetFile[]): AssetFile[] {
@@ -54,12 +64,13 @@ interface Store extends AppState {
   busy: boolean; // true while a service lifecycle op is in flight
   pinging: Set<string>; // profile ids currently being pinged
   speedTesting: Set<string>; // profile ids currently being speed-tested
-  toast: string | null;
+  toasts: ToastItem[];
   recentActivity: ActivityEvent[];
 
   hydrate: () => Promise<void>;
   flush: () => Promise<void>;
   notify: (msg: string) => void;
+  dismissToast: (id: string) => void;
 
   // service
   setActive: (id: string) => Promise<void>;
@@ -225,7 +236,7 @@ export const useAppStore = create<Store>((set, get) => {
     busy: false,
     pinging: new Set<string>(),
     speedTesting: new Set<string>(),
-    toast: null,
+    toasts: [],
     recentActivity: [],
     caps: null,
     uploadRate: 0,
@@ -317,10 +328,14 @@ export const useAppStore = create<Store>((set, get) => {
     },
     notify(msg) {
       showNativeToast(msg);
-      set({ toast: msg });
+      const id = uid();
+      set((s) => ({ toasts: [...s.toasts, { id, msg }].slice(-TOAST_LIMIT) }));
       setTimeout(() => {
-        if (get().toast === msg) set({ toast: null });
-      }, 2600);
+        get().dismissToast(id);
+      }, TOAST_DURATION_MS);
+    },
+    dismissToast(id) {
+      set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
     },
 
     async refreshStatus() {

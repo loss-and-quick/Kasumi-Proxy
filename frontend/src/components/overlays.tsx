@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { acquireSheet } from "../lib/sheetPresence";
 import { useSwipeDownToDismiss } from "../lib/useSwipeDownToDismiss";
+import type { ToastItem } from "../store/useAppStore";
 import { Icon, IconBtn } from "./icons";
 
 function Scrim({ onClose, leaving }: { onClose: () => void; leaving?: boolean }) {
@@ -153,33 +154,52 @@ export const Dialog = ({
   );
 };
 
-export const Toast = ({ msg }: { msg: string | null }) => {
-  // Keep the last message mounted through a slide/fade-out so the snackbar
-  // doesn't vanish instantly when the message clears.
-  const [shown, setShown] = useState<string | null>(msg);
-  const [leaving, setLeaving] = useState(false);
+type ToastView = ToastItem & { leaving: boolean };
+
+export const Toaster = ({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastItem[];
+  onDismiss: (id: string) => void;
+}) => {
+  // Mirror the store queue locally, but keep just-removed toasts around with a
+  // `leaving` flag so they can play their exit animation before unmounting.
+  const [view, setView] = useState<ToastView[]>([]);
 
   useEffect(() => {
-    if (msg) {
-      setShown(msg);
-      setLeaving(false);
-    } else {
-      setLeaving((wasLeaving) => wasLeaving || shown !== null);
-    }
-  }, [msg, shown]);
+    setView((prev) => {
+      const live = new Set(toasts.map((t) => t.id));
+      const next = prev.map((v) => (live.has(v.id) || v.leaving ? v : { ...v, leaving: true }));
+      for (const t of toasts) {
+        if (!next.some((v) => v.id === t.id)) next.push({ ...t, leaving: false });
+      }
+      return next;
+    });
+  }, [toasts]);
 
-  if (shown === null) return null;
+  if (!view.length) return null;
   return (
-    <div
-      className={`snackbar${leaving ? " leaving" : ""}`}
-      onAnimationEnd={(e) => {
-        if (leaving && e.target === e.currentTarget) {
-          setShown(null);
-          setLeaving(false);
-        }
-      }}
-    >
-      {shown}
+    <div className="snackbar-stack">
+      {view.map((item) => (
+        <button
+          type="button"
+          key={item.id}
+          className={`snackbar${item.leaving ? " leaving" : ""}`}
+          // Tap anywhere (incl. the × affordance) to dismiss.
+          onClick={() => onDismiss(item.id)}
+          onAnimationEnd={(e) => {
+            if (item.leaving && e.target === e.currentTarget) {
+              setView((prev) => prev.filter((v) => v.id !== item.id));
+            }
+          }}
+        >
+          <span className="snackbar-msg">{item.msg}</span>
+          <span className="snackbar-close" aria-hidden="true">
+            <Icon name="close" />
+          </span>
+        </button>
+      ))}
     </div>
   );
 };

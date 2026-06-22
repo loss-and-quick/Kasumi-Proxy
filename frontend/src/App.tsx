@@ -6,7 +6,7 @@
 // contexts.
 // ============================================================
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Icon, Toast } from "./components";
+import { Icon, Toaster } from "./components";
 import Overview from "./features/overview/Overview";
 import { useT } from "./i18n";
 import { configureKsuWebUi, hasKsuNativeApi } from "./lib/ksu-webui";
@@ -46,7 +46,8 @@ function getInitialTab(): Tab {
 export default function App() {
   const hydrate = useAppStore((s) => s.hydrate);
   const hydrated = useAppStore((s) => s.hydrated);
-  const toast = useAppStore((s) => s.toast);
+  const toasts = useAppStore((s) => s.toasts);
+  const dismissToast = useAppStore((s) => s.dismissToast);
   const t = useT();
 
   const [tab, setTab] = useState<Tab>(getInitialTab);
@@ -184,7 +185,7 @@ export default function App() {
           <AppFilterPage onBack={() => setAppFilterOpen(false)} />
         </Suspense>
       )}
-      {!nativeToast && <Toast msg={toast} />}
+      {!nativeToast && <Toaster toasts={toasts} onDismiss={dismissToast} />}
     </div>
   );
 }
