@@ -15,7 +15,7 @@ use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
 use crate::desktop::{run_out, silent};
 
-use super::os::{IP, TUN_ADDR};
+use super::os::{ip, TUN_ADDR};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
@@ -28,7 +28,7 @@ struct RouteState {
 
 /// The current default route's gateway + uplink device, or `None`.
 pub async fn read_default_route() -> Option<(String, String)> {
-    let (code, out) = run_out(&[IP, "route", "show", "default"]).await;
+    let (code, out) = run_out(&[ip(), "route", "show", "default"]).await;
     if code != 0 {
         return None;
     }
@@ -87,13 +87,13 @@ pub async fn apply_xray_routing(
     };
 
     for c in bypass {
-        silent(&[IP, "route", "replace", c, "via", &gw, "dev", &dev]).await;
+        silent(&[ip(), "route", "replace", c, "via", &gw, "dev", &dev]).await;
     }
 
-    silent(&[IP, "addr", "add", TUN_ADDR, "dev", tun]).await;
-    silent(&[IP, "link", "set", tun, "up"]).await;
-    silent(&[IP, "route", "replace", "0.0.0.0/1", "dev", tun]).await;
-    silent(&[IP, "route", "replace", "128.0.0.0/1", "dev", tun]).await;
+    silent(&[ip(), "addr", "add", TUN_ADDR, "dev", tun]).await;
+    silent(&[ip(), "link", "set", tun, "up"]).await;
+    silent(&[ip(), "route", "replace", "0.0.0.0/1", "dev", tun]).await;
+    silent(&[ip(), "route", "replace", "128.0.0.0/1", "dev", tun]).await;
 
     let state = RouteState {
         tun: tun.to_string(),
@@ -111,10 +111,10 @@ pub async fn clear_xray_routing(route_state_file: &str) {
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };
-    silent(&[IP, "route", "del", "0.0.0.0/1", "dev", &state.tun]).await;
-    silent(&[IP, "route", "del", "128.0.0.0/1", "dev", &state.tun]).await;
+    silent(&[ip(), "route", "del", "0.0.0.0/1", "dev", &state.tun]).await;
+    silent(&[ip(), "route", "del", "128.0.0.0/1", "dev", &state.tun]).await;
     for c in &state.bypass {
-        silent(&[IP, "route", "del", c]).await;
+        silent(&[ip(), "route", "del", c]).await;
     }
     kasumi_backend::fs::remove_file(route_state_file).await;
 }

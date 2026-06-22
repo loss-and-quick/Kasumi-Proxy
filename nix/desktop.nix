@@ -72,9 +72,14 @@ let
     ];
     buildInputs = tauriLibs;
     # Point the app at the bundled cores by default (the desktop Platform reads
-    # KASUMI_BIN_DIR); --set-default lets a dev still override it.
+    # KASUMI_BIN_DIR); --set-default lets a dev still override it. KASUMI_IP_DIR
+    # hands the elevated data-path an absolute `ip`: after the pkexec re-exec the
+    # root instance inherits pkexec's scrubbed PATH, which on NixOS has no `ip`
+    # (no /usr/sbin/ip), so a bare PATH lookup fails. elevate.rs forwards both vars
+    # across the pkexec boundary.
     preFixup = ''
       gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${cores.desktopCores}/bin")
+      gappsWrapperArgs+=(--set-default KASUMI_IP_DIR "${pkgs.iproute2}/bin")
     '';
     installPhase = ''
       mkdir -p $out/bin

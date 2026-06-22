@@ -10,7 +10,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
-use super::os::IP;
+use super::os::ip;
 use super::routing::read_default_route;
 
 /// The uplink device currently owning the default route, or `None`.
@@ -23,7 +23,7 @@ async fn active_uplink() -> Option<String> {
 pub async fn run_watcher(tx: mpsc::Sender<()>) {
     let mut last = active_uplink().await;
     loop {
-        let child = Command::new(IP)
+        let child = Command::new(ip())
             .args(["monitor", "route"])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
