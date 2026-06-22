@@ -1,13 +1,13 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { acquireSheet } from "../lib/sheetPresence";
 import { useSwipeDownToDismiss } from "../lib/useSwipeDownToDismiss";
 import { Icon, IconBtn } from "./icons";
 
-function Scrim({ onClose }: { onClose: () => void }) {
+function Scrim({ onClose, leaving }: { onClose: () => void; leaving?: boolean }) {
   return (
     <button
       type="button"
-      className="scrim"
+      className={`scrim${leaving ? " leaving" : ""}`}
       aria-label="Close"
       onClick={onClose}
       style={{ appearance: "none", border: "none", padding: 0 }}
@@ -29,22 +29,41 @@ export const Sheet = ({
   headRight?: ReactNode;
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
-  const swipe = useSwipeDownToDismiss(sheetRef, onClose);
+  // Play an exit animation before unmounting so every close path
+  // (swipe, close button, scrim) slides out instead of popping.
+  const [closing, setClosing] = useState(false);
+  const requestClose = useCallback(() => setClosing(true), []);
+  const swipe = useSwipeDownToDismiss(sheetRef, requestClose);
+
+  // Register presence so the desktop side rail steps aside while open.
   useEffect(() => {
     if (!open) return;
     return acquireSheet();
   }, [open]);
+
+  // Reset the closing flag whenever the sheet (re)opens.
+  useEffect(() => {
+    if (open) setClosing(false);
+  }, [open]);
+
+  const onTransitionEnd = (e: React.TransitionEvent) => {
+    if (closing && e.target === e.currentTarget && e.propertyName === "transform") onClose();
+  };
+
   if (!open) return null;
   return (
     <>
-      <Scrim onClose={onClose} />
+      <Scrim onClose={requestClose} leaving={closing} />
       <div
         ref={sheetRef}
-        className="sheet"
+        className={`sheet${closing ? " leaving" : ""}`}
+        onTransitionEnd={onTransitionEnd}
         style={
-          swipe.offset
+          // `leaving` slides fully out; otherwise follow the drag. Disable the
+          // transition only mid-drag so the gesture tracks the pointer 1:1.
+          closing || swipe.offset
             ? {
-                transform: `translateY(${swipe.offset}px)`,
+                transform: `translateY(${closing ? "100%" : `${swipe.offset}px`})`,
                 transition: swipe.dragging ? "none" : undefined,
               }
             : undefined
@@ -55,7 +74,7 @@ export const Sheet = ({
           <div className="sheet-head">
             <div className="sheet-title">{title}</div>
             {headRight}
-            <IconBtn name="close" sm onClick={onClose} />
+            <IconBtn name="close" sm onClick={requestClose} />
           </div>
         </div>
         <div className="sheet-body">{children}</div>
