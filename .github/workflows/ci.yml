@@ -133,8 +133,16 @@ jobs:
           extra-conf: |
             accept-flake-config = true
 
-      - name: Nix store cache
-        uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b # v8
+      # ── Nix store cache (cachix). Pulls the devshell closure from our public
+      #    cache as a substituter and pushes anything newly built at the end. Reads
+      #    need no token (public cache), so fork PRs benefit too; pushes use the
+      #    CACHIX_AUTH_TOKEN secret (absent on forks → read-only there). Replaces the
+      #    retired magic-nix-cache, whose GHA backend was a no-op. ──
+      - name: Cachix
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: kasumi-proxy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       # ── Cache the cargo registry + workspace build artifacts. The compile of
       #    clippy --all-targets + test + codegen (hundreds of crates: tauri, specta,
