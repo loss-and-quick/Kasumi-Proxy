@@ -1,11 +1,21 @@
 name: Core compatibility
 
-# Early-warning sweep: run the config-validation harness against the LATEST
-# upstream xray / sing-box, so a core release whose schema drifted from our config
-# generators is caught BEFORE the Monday release auto-bumps to it. The release
-# itself also gates on this (release.yml), but this surfaces drift a few days
-# earlier as a tracking issue.
+# Runs the config-validation harness against real cores so a core version whose
+# schema drifted from our config generators is caught. Two entry points:
+#   - pull_request touching scripts/core-versions.sh: validates the versions the
+#     PR pins, so a MANUAL bump (not just the release auto-bump) can't merge a pin
+#     our generators don't match.
+#   - schedule / workflow_dispatch: validates the LATEST upstream cores for early
+#     warning (a deduped tracking issue) before the release ever bumps to them.
+# The release auto-bump is additionally gated in release.yml.
 on:
+  pull_request:
+    # Anything that can change whether a real core accepts our generated configs:
+    # the pinned versions (a manual bump), how cores are staged, or the generators.
+    paths:
+      - scripts/core-versions.sh
+      - scripts/fetch-cores-desktop.sh
+      - crates/kasumi-core/**
   schedule:
     - cron: "0 0 * * 0"  # Sunday — a day before the Monday release cron
   workflow_dispatch:
@@ -14,9 +24,9 @@ permissions:
   contents: read
   issues: write
 
-# A single in-flight run; a new commit/schedule supersedes the previous.
+# One in-flight run per ref; a new push/schedule supersedes the previous.
 concurrency:
-  group: core-compat
+  group: core-compat-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,34 +41,43 @@ jobs:
           toolchain: stable
           targets: x86_64-unknown-linux-gnu
 
-      - name: Resolve latest upstream core versions
-        id: latest
+      - name: Resolve target core versions
+        id: versions
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
-          sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Validate exactly what the PR pins (catches a hand-edited bump).
+            # shellcheck source=scripts/core-versions.sh
+            . scripts/core-versions.sh
+            xray="$XRAY_VERSION"; sb="$SINGBOX_VERSION"
+            echo "Validating PR-pinned cores: xray $xray, sing-box $sb"
+          else
+            # Early warning: validate what the next release would bump TO.
+            xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
+            sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
+            echo "Validating latest upstream cores: xray $xray, sing-box $sb"
+          fi
           echo "xray=$xray" >> "$GITHUB_OUTPUT"
           echo "singbox=$sb" >> "$GITHUB_OUTPUT"
-          echo "Testing generators against xray $xray, sing-box $sb"
 
-      - name: Validate generated configs against the latest cores
+      - name: Validate generated configs against the cores
         id: check
         env:
-          XRAY_VERSION: ${{ steps.latest.outputs.xray }}
-          SINGBOX_VERSION: ${{ steps.latest.outputs.singbox }}
+          XRAY_VERSION: ${{ steps.versions.outputs.xray }}
+          SINGBOX_VERSION: ${{ steps.versions.outputs.singbox }}
         run: scripts/check-core-compat.sh
 
-      # ── Anti-spam issue bookkeeping. One tracking issue at a time, deduped by a
-      #    fixed title: a persistent drift never opens a second issue, and a drift
-      #    that clears auto-closes the open one. Runs whether the check passed or
-      #    failed (but is skipped when the job was cancelled). ──
-      - name: Open or update the drift issue
-        if: failure() && steps.check.conclusion == 'failure'
+      # ── Early-warning issue bookkeeping (schedule/dispatch only; on a PR the red
+      #    check is the signal). One tracking issue at a time, deduped by a fixed
+      #    title: a persistent drift never opens a second, and a drift that clears
+      #    auto-closes the open one — so at most one open issue, ever. ──
+      - name: Open the drift issue
+        if: failure() && github.event_name != 'pull_request' && steps.check.conclusion == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
-          XRAY_VERSION: ${{ steps.latest.outputs.xray }}
-          SINGBOX_VERSION: ${{ steps.latest.outputs.singbox }}
+          XRAY_VERSION: ${{ steps.versions.outputs.xray }}
+          SINGBOX_VERSION: ${{ steps.versions.outputs.singbox }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           title="Core compatibility: generated configs rejected by a new core"
@@ -85,7 +104,7 @@ jobs:
           fi
 
       - name: Close the drift issue when compatibility is restored
-        if: success()
+        if: success() && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
