@@ -8,8 +8,11 @@ on:
 permissions:
   contents: write
 
+# Per-ref: a newer run on the same branch supersedes the older one, but nightly
+# runs on different branches don't fight over one global slot (a static group
+# cancelled whichever started second — see two manual dispatches racing).
 concurrency:
-  group: nightly
+  group: nightly-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
