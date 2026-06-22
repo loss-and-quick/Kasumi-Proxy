@@ -308,9 +308,9 @@ const pt = {
   "subs.edit.userAgentPh": "padrão",
   "subs.edit.filter": "Filtro (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.autoUpdate": "Atualização automática",
-  "subs.edit.autoUpdateSub": "Atualizar em um intervalo programado",
-  "subs.edit.interval": "Intervalo (hh:mm)",
+  "subs.autoUpdate": "Atualização automática",
+  "subs.autoUpdateSub": "Atualizar em um intervalo programado",
+  "subs.interval": "Intervalo (hh:mm)",
   "subs.edit.urlInsecureHint":
     "HTTP não criptografado — esta assinatura pode ser adulterada em trânsito.",
   "subs.edit.validationRemarks": "Nome obrigatório",

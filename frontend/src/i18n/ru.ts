@@ -327,9 +327,9 @@ const ru = {
   "subs.edit.userAgentPh": "по умолчанию",
   "subs.edit.filter": "Фильтр (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.autoUpdate": "Автообновление",
-  "subs.edit.autoUpdateSub": "Обновлять по расписанию",
-  "subs.edit.interval": "Интервал (чч:мм)",
+  "subs.autoUpdate": "Автообновление",
+  "subs.autoUpdateSub": "Обновлять по расписанию",
+  "subs.interval": "Интервал (чч:мм)",
   "subs.edit.urlInsecureHint":
     "Незашифрованное соединение (HTTP) — подписку могут подменить при передаче.",
   "subs.edit.validationRemarks": "Название обязательно",

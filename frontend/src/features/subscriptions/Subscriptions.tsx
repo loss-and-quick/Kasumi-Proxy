@@ -225,15 +225,15 @@ export default function Subscriptions() {
         <div style={{ marginTop: 14 }}>
           <RowToggle
             icon="autorenew"
-            title={t("subs.edit.autoUpdate")}
-            sub={t("subs.edit.autoUpdateSub")}
+            title={t("subs.autoUpdate")}
+            sub={t("subs.autoUpdateSub")}
             on={importAutoUpdate}
             onChange={setImportAutoUpdate}
           />
           {importAutoUpdate && (
             <div style={{ paddingLeft: 54 }}>
               <Field
-                label={t("subs.edit.interval")}
+                label={t("subs.interval")}
                 value={minutesToClock(importInterval)}
                 type="time"
                 onChange={(v) => setImportInterval(clockToMinutes(v))}
@@ -675,15 +675,15 @@ function SubEditSheet({
       />
       <RowToggle
         icon="autorenew"
-        title={t("subs.edit.autoUpdate")}
-        sub={t("subs.edit.autoUpdateSub")}
+        title={t("subs.autoUpdate")}
+        sub={t("subs.autoUpdateSub")}
         on={d.autoUpdate}
         onChange={(v) => set("autoUpdate", v)}
       />
       {d.autoUpdate && (
         <div style={{ paddingLeft: 54 }}>
           <Field
-            label={t("subs.edit.interval")}
+            label={t("subs.interval")}
             value={minutesToClock(d.interval)}
             type="time"
             onChange={(v) => set("interval", clockToMinutes(v))}
