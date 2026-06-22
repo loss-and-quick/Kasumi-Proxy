@@ -526,6 +526,7 @@ const en = {
   "profiles.groups.newPlaceholder": "New group name",
   "profiles.groups.count": plural("count", { one: "# profile", other: "# profiles" }),
   "profiles.groups.reorder": "Reorder group",
+  "profiles.groups.lockedActive": "Can't delete a group that holds the active profile",
   "profiles.confirmDelGroup.title": "Delete group?",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "and its # profile will be permanently removed.",

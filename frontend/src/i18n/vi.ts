@@ -516,6 +516,7 @@ const vi = {
   "profiles.groups.newPlaceholder": "Tên nhóm mới",
   "profiles.groups.count": plural("count", { one: "# hồ sơ", other: "# hồ sơ" }),
   "profiles.groups.reorder": "Sắp xếp lại nhóm",
+  "profiles.groups.lockedActive": "Không thể xóa nhóm chứa hồ sơ đang hoạt động",
   "profiles.confirmDelGroup.title": "Xóa nhóm?",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "và # hồ sơ của nhóm sẽ bị xóa vĩnh viễn.",

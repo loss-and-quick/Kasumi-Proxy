@@ -635,6 +635,7 @@ const ar = {
     other: "# ملف تعريفي",
   }),
   "profiles.groups.reorder": "إعادة ترتيب المجموعة",
+  "profiles.groups.lockedActive": "لا يمكن حذف مجموعة تحتوي على الملف النشط",
   "profiles.confirmDelGroup.title": "حذف المجموعة؟",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "وملفها التعريفي الوحيد سيُحذف نهائيًا.",
