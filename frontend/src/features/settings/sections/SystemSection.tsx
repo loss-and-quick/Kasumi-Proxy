@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Card, Icon, ListRow, RowToggle, SectionLabel } from "../../../components";
+import { Card, Icon, ListRow, RowToggle, SectionLabel, Select } from "../../../components";
 import { DEFAULT_LOG_ROTATE_KB } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
 import {
@@ -88,20 +88,18 @@ export function SystemSection({
           right={<Icon name="chevron_right" style={{ color: "var(--on-surface-faint)" }} />}
         />
         <div style={{ padding: "12px 0 4px" }}>
-          <div className="field-label">{t("settings.logLevel")}</div>
-          <select
-            className="select-box"
+          <Select
+            label={t("settings.logLevel")}
             value={settings.logLevel ?? "warning"}
-            onChange={(e) =>
-              set("logLevel", e.target.value as NonNullable<AdvancedSettings["logLevel"]>)
-            }
-          >
-            <option value="debug">{t("settings.logLevel.debug")}</option>
-            <option value="info">{t("settings.logLevel.info")}</option>
-            <option value="warning">{t("settings.logLevel.warning")}</option>
-            <option value="error">{t("settings.logLevel.error")}</option>
-            <option value="none">{t("settings.logLevel.none")}</option>
-          </select>
+            onChange={(v) => set("logLevel", v as NonNullable<AdvancedSettings["logLevel"]>)}
+            options={[
+              { value: "debug", label: t("settings.logLevel.debug") },
+              { value: "info", label: t("settings.logLevel.info") },
+              { value: "warning", label: t("settings.logLevel.warning") },
+              { value: "error", label: t("settings.logLevel.error") },
+              { value: "none", label: t("settings.logLevel.none") },
+            ]}
+          />
         </div>
         <div style={{ padding: "12px 0 4px" }}>
           <div className="field-label">{t("settings.logRotateMaxKb")}</div>

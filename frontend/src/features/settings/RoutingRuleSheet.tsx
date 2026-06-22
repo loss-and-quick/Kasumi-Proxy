@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Btn, Field, RowToggle, Sheet } from "../../components";
+import { Btn, Field, RowToggle, Select, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { normalizeList, toText, uid } from "../../lib/utils";
@@ -89,24 +89,26 @@ export function RoutingRuleSheet({
         mono={false}
       />
       <div className="field-label">{t("routingSheet.outbound")}</div>
-      <select
-        className="select-box"
+      <Select
         value={draft.outboundTag}
-        onChange={(e) => setDraft((current) => ({ ...current, outboundTag: e.target.value }))}
-      >
-        <option value="proxy">{t("routingSheet.outbound.proxy")}</option>
-        <option value="direct">{t("routingSheet.outbound.direct")}</option>
-        <option value="block">{t("routingSheet.outbound.block")}</option>
-        {profiles.length > 0 && (
-          <optgroup label={t("routingSheet.outbound.profiles")}>
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.remarks}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
+        onChange={(v) => setDraft((current) => ({ ...current, outboundTag: v }))}
+        options={[
+          { value: "proxy", label: t("routingSheet.outbound.proxy") },
+          { value: "direct", label: t("routingSheet.outbound.direct") },
+          { value: "block", label: t("routingSheet.outbound.block") },
+          ...(profiles.length > 0
+            ? [
+                {
+                  group: t("routingSheet.outbound.profiles"),
+                  options: profiles.map((profile) => ({
+                    value: profile.id,
+                    label: profile.remarks,
+                  })),
+                },
+              ]
+            : []),
+        ]}
+      />
       {!BUILTIN_OUTBOUNDS.has(draft.outboundTag) && (
         <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginTop: 6 }}>
           {t("routingSheet.outboundProfileHint")}
@@ -144,18 +146,16 @@ export function RoutingRuleSheet({
         mono={false}
       />
       <div className="field-label">{t("routingSheet.network")}</div>
-      <select
-        className="select-box"
+      <Select
         value={draft.network}
-        onChange={(e) =>
-          setDraft((current) => ({ ...current, network: e.target.value as Draft["network"] }))
-        }
-      >
-        <option value="">{t("routingSheet.network.any")}</option>
-        <option value="tcp">tcp</option>
-        <option value="udp">udp</option>
-        <option value="tcp,udp">tcp,udp</option>
-      </select>
+        onChange={(v) => setDraft((current) => ({ ...current, network: v as Draft["network"] }))}
+        options={[
+          { value: "", label: t("routingSheet.network.any") },
+          { value: "tcp", label: "tcp" },
+          { value: "udp", label: "udp" },
+          { value: "tcp,udp", label: "tcp,udp" },
+        ]}
+      />
       <div style={{ height: 12 }} />
       <Field
         area

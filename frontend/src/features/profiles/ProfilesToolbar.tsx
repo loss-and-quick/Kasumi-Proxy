@@ -1,4 +1,4 @@
-import { AppBar, Btn, Card, Chip, Icon, IconBtn } from "../../components";
+import { AppBar, Btn, Card, Chip, Icon, IconBtn, Select } from "../../components";
 import type { Group } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import type { SortMode } from "./types";
@@ -201,18 +201,12 @@ export function ProfilesToolbar({
               <Btn variant="outline" sm block onClick={onBulkMove} disabled={bulkDisabled}>
                 {t("profiles.bulkMove")}
               </Btn>
-              <select
-                className="select-box"
+              <Select
                 value={moveGroup}
-                onChange={(e) => setMoveGroup(e.target.value)}
-                style={{ width: "100%", height: 34, paddingTop: 6, paddingBottom: 6 }}
-              >
-                {groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setMoveGroup}
+                style={{ height: 34, paddingTop: 6, paddingBottom: 6 }}
+                options={groups.map((group) => ({ value: group.id, label: group.name }))}
+              />
               <Btn variant="error" sm block onClick={onBulkDelete} disabled={bulkDisabled}>
                 {t("profiles.bulkDelete")}
               </Btn>
