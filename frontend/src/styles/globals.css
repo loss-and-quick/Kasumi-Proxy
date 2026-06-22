@@ -99,7 +99,7 @@ body {
   .device.wide .scroll { padding-bottom: 32px; }
   .device.wide .fab { bottom: calc(28px + var(--window-inset-bottom, 0px)); }
   /* The snackbar clears the bottom nav on mobile; there is none on desktop. */
-  .device.wide .snackbar { bottom: calc(24px + var(--window-inset-bottom, 0px)); }
+  .device.wide .snackbar-stack { bottom: calc(24px + var(--window-inset-bottom, 0px)); }
   /* Full-width primary actions look absurd stretched across a desktop card. */
   .device.wide .primary-actions { max-width: 480px; }
 }
@@ -354,14 +354,24 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .dialog-text { font-size: 14px; color: var(--on-surface-variant); line-height: 1.5; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 
+/* Toast queue: newest at the bottom, older ones stacked above it. */
+.snackbar-stack {
+  position: absolute; left: 16px; right: 16px; bottom: calc(92px + var(--window-inset-bottom, 0px));
+  z-index: 50; display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
 .snackbar {
-  position: absolute; left: 16px; right: 16px; bottom: calc(92px + var(--window-inset-bottom, 0px)); background: var(--sc-highest); color: var(--on-surface); border-radius: 12px;
-  padding: 14px 16px; display: flex; align-items: center; gap: 12px; font-size: 13.5px; z-index: 50;
+  pointer-events: auto; width: 100%; text-align: left; border: none; cursor: pointer;
+  background: var(--sc-highest); color: var(--on-surface); border-radius: 12px;
+  padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-ui); font-size: 13.5px;
   box-shadow: 0 10px 30px -8px oklch(0 0 0 / 0.7); animation: slideup 0.26s cubic-bezier(.2,.9,.2,1);
 }
+/* Message takes the remaining width and wraps; it never overlaps the close button. */
+.snackbar-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.snackbar-close { flex: 0 0 auto; display: inline-flex; color: var(--on-surface-variant); }
+.snackbar-close .material-symbols-rounded { font-size: 18px; }
 .snackbar.leaving { pointer-events: none; animation: snackout 0.22s cubic-bezier(.4,0,1,1) forwards; }
 @keyframes snackout { to { transform: translateY(16px); opacity: 0; } }
-.snackbar .sb-action { color: var(--primary); font-weight: 700; cursor: pointer; margin-left: auto; }
 
 .mono { font-family: var(--font-mono); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
