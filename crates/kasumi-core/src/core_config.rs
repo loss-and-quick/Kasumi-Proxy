@@ -84,4 +84,17 @@ mod tests {
         let c = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
         assert!(active_config_changed(&a, &c));
     }
+
+    #[test]
+    fn engine_switch_counts_as_change() {
+        // A switch of resolved engine is a restart trigger on its own, regardless
+        // of how the two cores' config JSON compare.
+        let s = AdvancedSettings::default();
+        let xray = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        let a = build_core_config(&xray, &s, &[], std::slice::from_ref(&xray), "").unwrap();
+        let b = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+        assert_ne!(a.engine, b.engine);
+        assert!(active_config_changed(&a, &b));
+    }
 }

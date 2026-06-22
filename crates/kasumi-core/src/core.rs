@@ -237,6 +237,91 @@ mod tests {
     }
 
     #[test]
+    fn more_url_reachable_forced_branches() {
+        use CoreEngine::{SingBox, Xray};
+        // The udp443 vision flow is an Xray-only variant.
+        assert_eq!(
+            forced_core(&p(
+                "vless://u@e.x:443?type=tcp&security=tls&flow=xtls-rprx-vision-udp443"
+            )),
+            Some(Xray)
+        );
+        // A non-"none" vless encryption is Xray-only.
+        assert_eq!(
+            forced_core(&p(
+                "vless://u@e.x:443?type=tcp&security=tls&encryption=mlkem768"
+            )),
+            Some(Xray)
+        );
+        // mKCP transport → Xray; QUIC transport → sing-box.
+        assert_eq!(forced_core(&p("vless://u@e.x:443?type=kcp")), Some(Xray));
+        assert_eq!(
+            forced_core(&p("vless://u@e.x:443?type=quic&security=tls")),
+            Some(SingBox)
+        );
+        // gRPC service-name with a leading slash (the parser's path fallback) → Xray.
+        assert_eq!(
+            forced_core(&p(
+                "vless://u@e.x:443?type=grpc&serviceName=/svc&security=tls"
+            )),
+            Some(Xray)
+        );
+        // ws accept-proxy-protocol is an Xray-only knob.
+        assert_eq!(
+            forced_core(&p(
+                "vless://u@e.x:443?type=ws&security=tls&acceptProxyProtocol=1"
+            )),
+            Some(Xray)
+        );
+        // A 2022 shadowsocks AEAD method only sing-box implements.
+        assert_eq!(
+            forced_core(&p("ss://2022-blake3-aes-128-gcm:pw@e.x:443#X")),
+            Some(SingBox)
+        );
+    }
+
+    #[test]
+    fn forced_core_struct_only_fields() {
+        use crate::profile::empty_profile;
+        use CoreEngine::{SingBox, Xray};
+
+        // packetEncoding=packetaddr isn't carried on share links; set it directly.
+        let mut v = p("vless://u@e.x:443?type=tcp&security=tls");
+        if let Profile::Vless(x) = &mut v {
+            x.packet_encoding = crate::enums::PacketEncoding::Packetaddr;
+        }
+        assert_eq!(forced_core(&v), Some(SingBox));
+
+        // vmess global padding forces sing-box.
+        let mut vm = empty_profile(Protocol::Vmess, "g-main");
+        if let Profile::Vmess(x) = &mut vm {
+            x.vmess_global_padding = true;
+        }
+        assert_eq!(forced_core(&vm), Some(SingBox));
+
+        // A ws heartbeat is an Xray-only feature.
+        let mut wsf = p("vless://u@e.x:443?type=ws&security=tls");
+        if let Profile::Vless(x) = &mut wsf {
+            if let Transport::Ws(w) = &mut x.transport {
+                w.heartbeat_period = 5;
+            }
+        }
+        assert_eq!(forced_core(&wsf), Some(Xray));
+    }
+
+    #[test]
+    fn forced_engine_overrides_profile_core_type() {
+        // tuic is sing-box-only; an explicit xray override can't move it because a
+        // capability force outranks the per-profile core_type.
+        let mut prof = p("tuic://u:pw@t.ex:443?sni=t.ex");
+        if let Profile::Tuic(t) = &mut prof {
+            t.meta.core_type = Some(CoreEngine::Xray);
+        }
+        let s = AdvancedSettings::default();
+        assert_eq!(resolve_core(&prof, &s), CoreEngine::SingBox);
+    }
+
+    #[test]
     fn selectable_falls_through_to_override_and_table() {
         // plain vless tcp tls: not forced.
         let mut prof = p("vless://u@e.x:443?type=tcp&security=tls");
