@@ -134,7 +134,11 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
               onChange={(e) => setEditingName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitEdit(group.id);
-                if (e.key === "Escape") setEditingId(null);
+                // Cancel the inline rename without bubbling to the sheet's Escape-close.
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditingId(null);
+                }
               }}
               onBlur={() => commitEdit(group.id)}
             />
