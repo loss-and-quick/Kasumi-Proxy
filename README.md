@@ -141,6 +141,21 @@ nix run .#package-release -- build/kasumi-proxy.zip
 Core/daemon binaries and the built `module/webroot/` are intentionally **not** committed — they
 are produced at release time (see `.gitignore`).
 
+### Faster builds: the Cachix binary cache
+
+The dev shell and desktop build pull prebuilt store paths (the Rust toolchain, webkit, the
+flake's closure) from a public [Cachix](https://www.cachix.org/) cache, so `nix develop` /
+`nix build` don't rebuild them from source. CI uses it automatically; to opt in locally:
+
+```sh
+nix profile install nixpkgs#cachix   # once, if you don't already have cachix
+cachix use kasumi-proxy              # trusts the cache in your Nix config
+```
+
+Reads are public — no token needed. After that, `nix develop` substitutes from `kasumi-proxy`
+instead of building locally. (CI additionally caches the workspace's `cargo` build via the GitHub
+Actions cache; that layer is CI-only — a local `cargo` build still compiles normally.)
+
 ### Web UI development
 
 ```sh
