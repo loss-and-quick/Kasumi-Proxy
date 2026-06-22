@@ -308,9 +308,9 @@ const es = {
   "subs.edit.userAgentPh": "predeterminado",
   "subs.edit.filter": "Filtro (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.autoUpdate": "Actualización automática",
-  "subs.edit.autoUpdateSub": "Actualizar según una programación",
-  "subs.edit.interval": "Intervalo (hh:mm)",
+  "subs.autoUpdate": "Actualización automática",
+  "subs.autoUpdateSub": "Actualizar según una programación",
+  "subs.interval": "Intervalo (hh:mm)",
   "subs.edit.urlInsecureHint":
     "HTTP sin cifrar: esta suscripción podría ser manipulada en tránsito.",
   "subs.edit.validationRemarks": "El nombre es obligatorio",

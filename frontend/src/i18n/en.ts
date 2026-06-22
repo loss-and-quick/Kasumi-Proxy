@@ -315,9 +315,9 @@ const en = {
   "subs.edit.userAgentPh": "default",
   "subs.edit.filter": "Filter (regex)",
   "subs.edit.filterPh": "(?i)premium",
-  "subs.edit.autoUpdate": "Auto-update",
-  "subs.edit.autoUpdateSub": "Refresh on a schedule",
-  "subs.edit.interval": "Interval (hh:mm)",
+  "subs.autoUpdate": "Auto-update",
+  "subs.autoUpdateSub": "Refresh on a schedule",
+  "subs.interval": "Interval (hh:mm)",
   "subs.edit.urlInsecureHint":
     "Unencrypted HTTP — this subscription could be tampered with in transit.",
   "subs.edit.validationRemarks": "Remarks required",
