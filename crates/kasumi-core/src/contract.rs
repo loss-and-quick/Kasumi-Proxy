@@ -74,10 +74,11 @@ pub struct ServiceStatus {
 pub struct Capabilities {
     /// UI runtime: `"ksu-js"` | `"web"` | `"mock"` (and, on desktop, `"tauri"`).
     pub bridge: String,
-    /// Xray version.
-    pub core: String,
+    /// Installed Xray version, empty when not installed.
+    pub xray_version: String,
+    /// Installed sing-box version, empty when not installed.
     pub singbox_version: String,
-    pub curl: bool,
+    /// Whether the host can route through a TUN device.
     pub tun: bool,
 }
 

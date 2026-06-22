@@ -153,9 +153,8 @@ export const mockBridge: Bridge = {
   async capabilities() {
     return {
       bridge: "mock",
-      core: "Xray (mock)",
+      xrayVersion: "Xray (mock)",
       singboxVersion: "sing-box (mock)",
-      curl: true,
       tun: false,
     };
   },

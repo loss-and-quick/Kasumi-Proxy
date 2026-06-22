@@ -367,8 +367,6 @@ impl Platform for DesktopPlatform {
         let singbox = self.core_version(CoreEngine::SingBox).await;
         Ok(PlatformCapabilities {
             cores: InstalledCores { xray, singbox },
-            // Desktop fetches over reqwest, never a curl spawn.
-            curl: false,
             tun: self.os.tun_capable().await,
             bridge: "desktop".into(),
         })

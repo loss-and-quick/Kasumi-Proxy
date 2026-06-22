@@ -169,9 +169,8 @@ export function parseCapabilities(value: unknown): Capabilities {
   const s = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
     bridge: typeof s.bridge === "string" ? s.bridge : "",
-    core: typeof s.core === "string" ? s.core : "",
+    xrayVersion: typeof s.xrayVersion === "string" ? s.xrayVersion : "",
     singboxVersion: typeof s.singboxVersion === "string" ? s.singboxVersion : "",
-    curl: s.curl === true || s.curl === 1 || s.curl === "1",
     tun: s.tun === true || s.tun === 1 || s.tun === "1",
   };
 }

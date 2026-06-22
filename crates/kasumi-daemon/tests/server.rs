@@ -70,7 +70,6 @@ impl Platform for StubPlatform {
     async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {
         Ok(PlatformCapabilities {
             cores: InstalledCores::default(),
-            curl: false,
             tun: true,
             bridge: "ksu".into(),
         })

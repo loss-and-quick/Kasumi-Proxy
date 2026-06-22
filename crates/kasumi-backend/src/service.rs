@@ -510,7 +510,6 @@ mod tests {
                     xray: Some("Xray 1.0".into()),
                     singbox: None,
                 },
-                curl: false,
                 tun: true,
                 bridge: "test".into(),
             })
@@ -606,6 +605,6 @@ mod tests {
         let Response::Capabilities(c) = r else {
             panic!()
         };
-        assert_eq!(c.core, "Xray 1.0");
+        assert_eq!(c.xray_version, "Xray 1.0");
     }
 }
