@@ -18,6 +18,7 @@ jobs:
       rust: ${{ steps.detect.outputs.rust }}
       desktop: ${{ steps.detect.outputs.desktop }}
       shell: ${{ steps.detect.outputs.shell }}
+      nix: ${{ steps.detect.outputs.nix }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -40,6 +41,7 @@ jobs:
               echo "rust=true"
               echo "desktop=true"
               echo "shell=true"
+              echo "nix=true"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -50,16 +52,18 @@ jobs:
           # PR diff semantics.
           files=$(git diff --name-only "$base...$head")
           match() { printf '%s\n' "$files" | grep -Eq "$1"; }
-          fe=false; rs=false; dk=false; sh=false
+          fe=false; rs=false; dk=false; sh=false; nx=false
           match '^(frontend/|package\.json|bun\.lock|biome\.json)' && fe=true
           match '^(crates/|src-tauri/|Cargo\.(toml|lock)|flake\.(nix|lock))' && rs=true
           match '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))' && dk=true
           match '^(module/|scripts/)' && sh=true
+          match '^(nix/|flake\.(nix|lock))' && nx=true
           {
             echo "frontend=$fe"
             echo "rust=$rs"
             echo "desktop=$dk"
             echo "shell=$sh"
+            echo "nix=$nx"
           } >> "$GITHUB_OUTPUT"
 
   # ── Frontend: bun workspace (lockfile at the repo root), biome, build, tests ──
@@ -183,9 +187,36 @@ jobs:
             git diff --exit-code -- frontend/src/generated
           '
 
+  # ── Realise the desktop package derivation. The `rust` job only runs cargo in the
+  #    devshell, never `nix build .#kasumi-desktop`, so installPhase / wrapper / icon
+  #    staging were unchecked on PRs. Path-gated on the nix expressions. ──
+  nix-build:
+    needs: changes
+    if: needs.changes.outputs.nix == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
+        with:
+          extra-conf: |
+            accept-flake-config = true
+
+      - name: Cachix
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: kasumi-proxy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build the desktop package
+        run: nix build .#kasumi-desktop --accept-flake-config --print-build-logs
+
   # ── Desktop compile smoke (Linux + Windows) on the plain rustup toolchain — the
-  #    path release/nightly actually bundle with (the nix `rust` job above proves the
-  #    flake build; this proves the non-nix one). Compile-only (no bundle): catches
+  #    path release/nightly actually bundle with (the nix `nix-build` job realises the
+  #    flake package; this proves the non-nix one). Compile-only (no bundle): catches
   #    platform/linker breakage without the slow installer. macOS is still deferred
   #    (no Platform port yet). ──
   desktop-linux:
@@ -280,7 +311,7 @@ jobs:
   #    failure or cancellation fails CI. Point branch protection at THIS context so
   #    path-skipped jobs never block a merge. ──
   ci:
-    needs: [changes, frontend, shellcheck, rust, desktop-linux, desktop-windows]
+    needs: [changes, frontend, shellcheck, rust, nix-build, desktop-linux, desktop-windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
