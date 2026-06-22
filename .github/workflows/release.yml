@@ -61,7 +61,10 @@ jobs:
         run: |
           skip=true
 
-          # 1. New code commits (docs/ci/chore-only changes do not trigger release)
+          # 1. New code commits (docs/ci/chore-only changes do not trigger release).
+          #    These only gate a *manual* run: on the weekly schedule we release
+          #    solely for upstream core bumps (below), never just because code
+          #    landed — cut a code release on demand via workflow_dispatch.
           last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           has_code_commits=false
           if [ -z "$last_tag" ]; then
@@ -83,7 +86,9 @@ jobs:
               2>/dev/null | wc -l)
             [ "$code_commits" -gt 0 ] && has_code_commits=true
           fi
-          [ "$has_code_commits" = "true" ] && skip=false
+          if [ "$has_code_commits" = "true" ] && [ "${{ github.event_name }}" != "schedule" ]; then
+            skip=false
+          fi
 
           # 2. Upstream binary updates
           pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
