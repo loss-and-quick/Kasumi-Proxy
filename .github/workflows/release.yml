@@ -409,10 +409,17 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          # Build + stage the privilege helper as a sidecar so the bundles ship it
+          # next to the app (the Linux GUI spawns it elevated; the Windows build is
+          # an unused stub).
+          t="${{ matrix.target }}"
+          ext=""; case "$t" in *windows*) ext=".exe";; esac
+          cargo build --release --target "$t" --bin kasumi-helper
+          cp "target/$t/release/kasumi-helper$ext" "src-tauri/binaries/kasumi-helper-$t$ext"
           # Inject the real product version (module.prop is the single source of
           # truth) so the bundles aren't the 0.0.0 placeholder.
           ver=$(scripts/app-version.sh)
-          cargo tauri build --target "${{ matrix.target }}" \
+          cargo tauri build --target "$t" \
             --config src-tauri/tauri.bundle.conf.json \
             --config "{\"version\":\"$ver\"}"
 
@@ -438,6 +445,7 @@ jobs:
           out="dist/portable/Kasumi-Proxy"
           mkdir -p "$out"
           cp "target/$t/release/kasumi-desktop.exe" "$out/"
+          cp "target/$t/release/kasumi-helper.exe" "$out/"
           for c in xray sing-box tun2socks; do
             cp "src-tauri/binaries/$c-$t.exe" "$out/$c.exe"
           done
@@ -460,6 +468,7 @@ jobs:
           out="dist/portable/Kasumi-Proxy"
           mkdir -p "$out"
           cp "target/$t/release/kasumi-desktop" "$out/"
+          cp "target/$t/release/kasumi-helper" "$out/"
           for c in xray sing-box tun2socks; do
             cp "src-tauri/binaries/$c-$t" "$out/$c"
           done
