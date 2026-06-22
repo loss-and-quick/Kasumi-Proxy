@@ -1,0 +1,67 @@
+name: Sync bun.nix
+
+# bun.nix is the Nix mirror of bun.lock — the flake's frontend build reconstructs
+# node_modules from it (nix/desktop.nix → bun2nix.fetchBunDeps). It is generated,
+# not hand-written, so a contributor who isn't on Nix (or who simply forgets to run
+# `bunx bun2nix`) lands a bun.lock change with a stale bun.nix and breaks the nix
+# build. This regenerates bun.nix whenever a PR touches bun.lock and — ONLY IF the
+# result actually differs from what's committed — pushes a single chore commit onto
+# the PR branch. No drift (e.g. the author already ran bun2nix) → no commit.
+on:
+  pull_request:
+    paths:
+      - 'bun.lock'
+
+# Needed to push the regenerated bun.nix back onto the PR branch.
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-bun-nix-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # GITHUB_TOKEN is read-only for fork PRs, so the push back would fail — skip
+    # those (the regular nix build still surfaces any drift as a failing check).
+    # Same-repo branches only.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      # Check out the PR branch itself (not the detached merge ref) so the commit
+      # we may add lands on it; persisted GITHUB_TOKEN authenticates the push below.
+      - name: Checkout PR branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      # Restore node_modules / workspace links from the committed lockfile (frozen,
+      # so it never rewrites bun.lock) — bun2nix resolves workspace members through it.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Pin bun2nix to the version the flake locks (flake.nix: bun2nix ref=2.1.0) so
+      # the generated format always matches what fetchBunDeps expects. Bump both together.
+      - name: Regenerate bun.nix
+        run: bunx bun2nix@2.1.0 --output-file bun.nix
+
+      - name: Commit bun.nix if it drifted
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if git diff --quiet -- bun.nix; then
+            echo "bun.nix already in sync with bun.lock — nothing to do."
+            exit 0
+          fi
+          echo "bun.nix drifted from bun.lock — committing the regenerated file."
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bun.nix
+          git commit -m 'chore(nix): sync bun.nix with bun.lock'
+          # Pushes made with GITHUB_TOKEN don't trigger workflows, so this can't loop.
+          git push origin "HEAD:${HEAD_REF}"
