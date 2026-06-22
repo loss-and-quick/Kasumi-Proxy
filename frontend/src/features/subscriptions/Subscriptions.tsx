@@ -14,6 +14,7 @@ import {
   RowToggle,
   Select,
   Sheet,
+  SheetAction,
   Switch,
 } from "../../components";
 import { useFormatters, useT } from "../../i18n";
@@ -39,6 +40,7 @@ export default function Subscriptions() {
   const addGroup = useAppStore((s) => s.addGroup);
   const t = useT();
 
+  const [addOpen, setAddOpen] = useState(false);
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
@@ -46,6 +48,8 @@ export default function Subscriptions() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importGroup, setImportGroup] = useState(groups[0]?.id ?? "g-main");
+  const [importAutoUpdate, setImportAutoUpdate] = useState(false);
+  const [importInterval, setImportInterval] = useState(360); // minutes (06:00)
 
   const enabledCount = subs.filter((s) => s.enabled).length;
   const importedCount = subs.reduce((n, s) => n + s.count, 0);
@@ -102,7 +106,11 @@ export default function Subscriptions() {
     if (!text) return notify(t("subs.importEmpty"));
     let parsed: Subscription[];
     try {
-      parsed = parseSubscriptionsInput(text, importGroup);
+      parsed = parseSubscriptionsInput(text, {
+        groupId: importGroup,
+        autoUpdate: importAutoUpdate,
+        interval: importInterval,
+      });
     } catch {
       return notify(t("subs.importInvalid"));
     }
@@ -122,7 +130,6 @@ export default function Subscriptions() {
         subtitle={t("subs.subtitle", { active: enabledCount, imported: importedCount })}
         actions={
           <>
-            <IconBtn name="content_paste" title={t("subs.import")} onClick={openImport} />
             <IconBtn
               name="ios_share"
               title={t("subs.export")}
@@ -133,7 +140,7 @@ export default function Subscriptions() {
               title={t("subs.updateAll")}
               onClick={() => void updateAllSubs()}
             />
-            <IconBtn name="add" title={t("subs.add")} onClick={() => setEdit("new")} />
+            <IconBtn name="add" title={t("subs.add")} onClick={() => setAddOpen(true)} />
           </>
         }
       />
@@ -155,15 +162,17 @@ export default function Subscriptions() {
           ))}
         </div>
 
-        <Btn
-          variant="tonal"
-          block
-          icon="add"
-          style={{ marginTop: 14 }}
-          onClick={() => setEdit("new")}
-        >
-          {t("subs.addBtn")}
-        </Btn>
+        {subs.length === 0 && (
+          <Btn
+            variant="tonal"
+            block
+            icon="add"
+            style={{ marginTop: 14 }}
+            onClick={() => setAddOpen(true)}
+          >
+            {t("subs.addBtn")}
+          </Btn>
+        )}
         <Card
           className="flat"
           style={{ marginTop: 14, display: "flex", gap: 12, alignItems: "flex-start" }}
@@ -174,6 +183,29 @@ export default function Subscriptions() {
           </div>
         </Card>
       </div>
+
+      <Sheet open={addOpen} title={t("subs.addBtn")} onClose={() => setAddOpen(false)}>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <SheetAction
+            icon="edit_note"
+            label={t("subs.add.manual")}
+            sub={t("subs.add.manualSub")}
+            onClick={() => {
+              setAddOpen(false);
+              setEdit("new");
+            }}
+          />
+          <SheetAction
+            icon="content_paste"
+            label={t("subs.add.paste")}
+            sub={t("subs.add.pasteSub")}
+            onClick={() => {
+              setAddOpen(false);
+              openImport();
+            }}
+          />
+        </div>
+      </Sheet>
 
       <Sheet open={importOpen} title={t("subs.import")} onClose={() => setImportOpen(false)}>
         <Field
@@ -190,6 +222,25 @@ export default function Subscriptions() {
           onChange={setImportGroup}
           options={groups.map((g) => ({ value: g.id, label: g.name }))}
         />
+        <div style={{ marginTop: 14 }}>
+          <RowToggle
+            icon="autorenew"
+            title={t("subs.edit.autoUpdate")}
+            sub={t("subs.edit.autoUpdateSub")}
+            on={importAutoUpdate}
+            onChange={setImportAutoUpdate}
+          />
+          {importAutoUpdate && (
+            <div style={{ paddingLeft: 54 }}>
+              <Field
+                label={t("subs.edit.interval")}
+                value={minutesToClock(importInterval)}
+                type="time"
+                onChange={(v) => setImportInterval(clockToMinutes(v))}
+              />
+            </div>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
           <Btn variant="text" onClick={() => setImportOpen(false)}>
             {t("subs.confirmDel.cancel")}
@@ -266,7 +317,10 @@ export default function Subscriptions() {
 // Parse the import text into subscriptions. JSON (an exported dump, object or
 // array) is read field-by-field; anything else is treated as a whitespace-
 // separated list of URLs. Throws on malformed JSON so the caller can report it.
-function parseSubscriptionsInput(text: string, groupId: string): Subscription[] {
+function parseSubscriptionsInput(
+  text: string,
+  defaults: { groupId: string; autoUpdate: boolean; interval: number },
+): Subscription[] {
   const trimmed = text.trim();
   if (!trimmed) return [];
   const deriveRemarks = (url: string) => {
@@ -281,9 +335,9 @@ function parseSubscriptionsInput(text: string, groupId: string): Subscription[] 
     remarks: p.remarks?.trim() || deriveRemarks(p.url.trim()),
     url: p.url.trim(),
     enabled: p.enabled ?? true,
-    groupId: p.groupId ?? groupId,
-    autoUpdate: p.autoUpdate ?? false,
-    interval: p.interval ?? 360,
+    groupId: p.groupId ?? defaults.groupId,
+    autoUpdate: p.autoUpdate ?? defaults.autoUpdate,
+    interval: p.interval ?? defaults.interval,
     allowInsecure: p.allowInsecure ?? false,
     userAgent: p.userAgent ?? "",
     filter: p.filter ?? "",
