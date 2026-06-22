@@ -109,10 +109,16 @@ body {
   flex: 0 0 248px; display: flex; flex-direction: column; gap: 4px;
   padding: 22px 14px; background: var(--sc); border-right: 1px solid oklch(1 0 0 / 0.06);
   overflow-y: auto;
-  transition: flex-basis 0.28s cubic-bezier(.2,.9,.2,1), transform 0.28s cubic-bezier(.2,.9,.2,1);
+  transition: flex-basis 0.28s cubic-bezier(.2,.9,.2,1), padding 0.28s cubic-bezier(.2,.9,.2,1),
+    border-right-width 0.28s cubic-bezier(.2,.9,.2,1);
 }
-/* Slide the rail out (e.g. while a bottom sheet is up) and reclaim its width. */
-.siderail.hidden { flex-basis: 0; transform: translateX(-100%); pointer-events: none; }
+/* Collapse the rail away (e.g. while a bottom sheet is up) and reclaim its width.
+   min-width:0 lets the flex item shrink past its content; zeroing padding/border
+   removes the leftover border-box strip; overflow:hidden clips content mid-collapse. */
+.siderail.hidden {
+  flex-basis: 0; min-width: 0; padding-left: 0; padding-right: 0; border-right-width: 0;
+  overflow: hidden; pointer-events: none;
+}
 .siderail-brand {
   font-size: 19px; font-weight: 700; letter-spacing: 0.4px; color: var(--on-surface);
   padding: 6px 14px 18px;
