@@ -39,6 +39,18 @@
   --row-pad-y: 13px;
   --gap: 12px;
   --card-radius: 18px;
+
+  /* Motion — one source of truth for timing + easing. Pick a tier by the size
+     of the thing moving: fast = micro state (hover, colour, focus); base =
+     small surfaces (switch, dialog, toast exit); slow = large surfaces (sheets,
+     side rail, screen transitions). enter = decelerate (settle in); exit =
+     accelerate (whisk out). Reversible fades and colour swaps keep the default
+     ease, which needs no token. */
+  --dur-fast: 0.16s;
+  --dur-base: 0.2s;
+  --dur-slow: 0.26s;
+  --ease-enter: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 * { box-sizing: border-box; }
@@ -109,8 +121,8 @@ body {
   flex: 0 0 248px; display: flex; flex-direction: column; gap: 4px;
   padding: 22px 14px; background: var(--sc); border-right: 1px solid oklch(1 0 0 / 0.06);
   overflow-y: auto;
-  transition: flex-basis 0.28s cubic-bezier(.2,.9,.2,1), padding 0.28s cubic-bezier(.2,.9,.2,1),
-    border-right-width 0.28s cubic-bezier(.2,.9,.2,1);
+  transition: flex-basis var(--dur-slow) var(--ease-enter), padding var(--dur-slow) var(--ease-enter),
+    border-right-width var(--dur-slow) var(--ease-enter);
 }
 /* Collapse the rail away (e.g. while a bottom sheet is up) and reclaim its width.
    min-width:0 lets the flex item shrink past its content; zeroing padding/border
@@ -128,7 +140,7 @@ body {
   padding: 12px 14px; border: none; border-radius: 13px; cursor: pointer;
   background: none; color: var(--on-surface-variant);
   font-family: var(--font-ui); font-size: 14.5px; font-weight: 600; text-align: left;
-  transition: background 0.16s, color 0.16s;
+  transition: background var(--dur-fast), color var(--dur-fast);
 }
 .siderail-item:hover { background: oklch(1 0 0 / 0.04); color: var(--on-surface); }
 .siderail-item .material-symbols-rounded { font-size: 22px; }
@@ -170,7 +182,7 @@ body {
 
 .icon-btn {
   width: 40px; height: 40px; border-radius: 50%; border: none; background: transparent; color: var(--on-surface-variant);
-  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.18s, color 0.18s; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast); flex: 0 0 auto;
 }
 .icon-btn:hover { background: oklch(1 0 0 / 0.07); color: var(--on-surface); }
 .icon-btn:active { background: oklch(1 0 0 / 0.12); }
@@ -184,7 +196,7 @@ body {
 .btn {
   font-family: var(--font-ui); font-size: 14px; font-weight: 600; letter-spacing: 0.1px; border-radius: 100px; border: none;
   padding: 0 20px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
-  transition: filter 0.16s, background 0.16s, box-shadow 0.16s; white-space: nowrap;
+  transition: filter var(--dur-fast), background var(--dur-fast), box-shadow var(--dur-fast); white-space: nowrap;
 }
 .btn .material-symbols-rounded { font-size: 18px; }
 .btn-filled { background: var(--primary); color: var(--on-primary); }
@@ -210,7 +222,7 @@ body {
 .chip {
   font-family: var(--font-ui); font-size: 13px; font-weight: 500; height: 32px; padding: 0 13px; border-radius: 9px;
   border: 1px solid var(--outline-variant); background: transparent; color: var(--on-surface-variant);
-  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: background 0.16s, color 0.16s, border-color 0.16s; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast); white-space: nowrap;
 }
 .chip .material-symbols-rounded { font-size: 17px; }
 .chip:hover { background: oklch(1 0 0 / 0.05); }
@@ -220,7 +232,7 @@ body {
 .segmented button {
   flex: 1; font-family: var(--font-ui); font-size: 13.5px; font-weight: 600; height: 38px; background: transparent;
   color: var(--on-surface-variant); border: none; border-right: 1px solid var(--outline-variant); cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.16s, color 0.16s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background var(--dur-fast), color var(--dur-fast);
 }
 .segmented button:last-child { border-right: none; }
 .segmented button.active { background: var(--primary-container); color: var(--on-primary-container); }
@@ -228,11 +240,11 @@ body {
 
 .switch {
   width: 52px; height: 32px; border-radius: 100px; background: var(--sc-highest); border: 2px solid var(--outline);
-  position: relative; cursor: pointer; flex: 0 0 auto; display: inline-block; transition: background 0.2s, border-color 0.2s;
+  position: relative; cursor: pointer; flex: 0 0 auto; display: inline-block; transition: background var(--dur-base), border-color var(--dur-base);
 }
 .switch::after {
   content: ""; position: absolute; top: 50%; left: 7px; width: 16px; height: 16px; border-radius: 50%;
-  background: var(--outline); transform: translateY(-50%); transition: all 0.2s cubic-bezier(.2,.8,.2,1);
+  background: var(--outline); transform: translateY(-50%); transition: all var(--dur-base) var(--ease-enter);
 }
 .switch.on { background: var(--primary); border-color: var(--primary); }
 .switch.on::after { left: 22px; width: 24px; height: 24px; background: var(--on-primary); }
@@ -242,7 +254,7 @@ body {
 .input, .select-box, textarea.input {
   width: 100%; font-family: var(--font-mono); font-size: 14px; color: var(--on-surface); background: var(--sc);
   border: 1px solid transparent; border-bottom: 2px solid var(--outline); border-radius: 10px 10px 4px 4px; padding: 12px 13px;
-  transition: border-color 0.16s, background-color 0.16s; outline: none;
+  transition: border-color var(--dur-fast), background-color var(--dur-fast); outline: none;
 }
 .input::placeholder { color: var(--on-surface-faint); }
 /* background-color (not the `background` shorthand) so the select's arrow
@@ -266,9 +278,9 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 .botnav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; cursor: pointer;
-  color: var(--on-surface-variant); font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; transition: color 0.16s;
+  color: var(--on-surface-variant); font-family: var(--font-ui); font-size: 11.5px; font-weight: 600; transition: color var(--dur-fast);
 }
-.botnav-pill { width: 60px; height: 30px; border-radius: 100px; display: flex; align-items: center; justify-content: center; transition: background 0.18s; }
+.botnav-pill { width: 60px; height: 30px; border-radius: 100px; display: flex; align-items: center; justify-content: center; transition: background var(--dur-fast); }
 .botnav-pill .material-symbols-rounded { font-size: 23px; }
 .botnav-item.active { color: var(--on-surface); }
 .botnav-item.active .botnav-pill { background: var(--primary-container); }
@@ -277,7 +289,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .fab {
   position: absolute; right: calc(18px + var(--window-inset-right, 0px)); bottom: calc(96px + var(--window-inset-bottom, 0px)); z-index: 25; height: 60px; min-width: 60px; padding: 0 20px; border-radius: 19px;
   border: none; background: var(--primary-container); color: var(--on-primary-container); display: inline-flex; align-items: center; gap: 10px;
-  font-family: var(--font-ui); font-size: 15px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 22px -6px oklch(0 0 0 / 0.6); transition: filter 0.16s, transform 0.16s;
+  font-family: var(--font-ui); font-size: 15px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 22px -6px oklch(0 0 0 / 0.6); transition: filter var(--dur-fast), transform var(--dur-fast);
 }
 .fab:hover { filter: brightness(1.1); }
 .fab:active { transform: scale(0.96); }
@@ -310,7 +322,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .ping-na { color: var(--on-surface-faint); }
 /* Ping/speed values mount when a test finishes (replacing the spinner) — pop
    them in so the result lands softly instead of snapping into place. */
-.metric-pop { display: inline-block; animation: metric-in 0.2s ease-out; }
+.metric-pop { display: inline-block; animation: metric-in var(--dur-base) var(--ease-enter); }
 @keyframes metric-in { from { opacity: 0; transform: scale(0.8); } }
 
 .section-label {
@@ -342,14 +354,14 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .list-row .lr-title { font-size: 14.5px; font-weight: 500; overflow-wrap: anywhere; }
 .list-row .lr-sub { font-size: 12.5px; color: var(--on-surface-variant); margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
 
-.scrim { position: absolute; inset: 0; background: oklch(0 0 0 / 0.55); z-index: 40; animation: fade 0.2s ease; }
-.scrim.leaving { opacity: 0; transition: opacity 0.24s ease; }
+.scrim { position: absolute; inset: 0; background: oklch(0 0 0 / 0.55); z-index: 40; animation: fade var(--dur-base) ease; }
+.scrim.leaving { opacity: 0; transition: opacity var(--dur-slow) ease; }
 @keyframes fade { from { opacity: 0; } }
 
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0; background: var(--sc-low); border-radius: 28px 28px 0 0; z-index: 41;
-  max-height: 88%; display: flex; flex-direction: column; animation: slideup 0.28s cubic-bezier(.2,.9,.2,1); border-top: 1px solid oklch(1 0 0 / 0.06);
-  transition: transform 0.26s cubic-bezier(.2,.9,.2,1);
+  max-height: 88%; display: flex; flex-direction: column; animation: slideup var(--dur-slow) var(--ease-enter); border-top: 1px solid oklch(1 0 0 / 0.06);
+  transition: transform var(--dur-slow) var(--ease-enter);
 }
 @keyframes slideup { from { transform: translateY(100%); } }
 .sheet.leaving { pointer-events: none; }
@@ -361,9 +373,9 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .sheet-title { font-size: 19px; font-weight: 600; flex: 1; }
 .sheet-body { padding: 4px 20px calc(24px + var(--window-inset-bottom, 0px)); overflow-y: auto; }
 
-.dialog { position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop 0.2s cubic-bezier(.2,.9,.2,1); }
+.dialog { position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop var(--dur-base) var(--ease-enter); }
 @keyframes pop { from { transform: translateY(-50%) scale(0.9); opacity: 0; } }
-.dialog.leaving { pointer-events: none; animation: pop-out 0.2s cubic-bezier(.4,0,1,1) forwards; }
+.dialog.leaving { pointer-events: none; animation: pop-out var(--dur-base) var(--ease-exit) forwards; }
 @keyframes pop-out { to { transform: translateY(-50%) scale(0.92); opacity: 0; } }
 .dialog-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
 .dialog-title { font-size: 21px; font-weight: 600; margin-bottom: 8px; }
@@ -380,13 +392,13 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
   background: var(--sc-highest); color: var(--on-surface); border-radius: 12px;
   padding: 14px 16px; display: flex; align-items: center; gap: 12px;
   font-family: var(--font-ui); font-size: 13.5px;
-  box-shadow: 0 10px 30px -8px oklch(0 0 0 / 0.7); animation: slideup 0.26s cubic-bezier(.2,.9,.2,1);
+  box-shadow: 0 10px 30px -8px oklch(0 0 0 / 0.7); animation: slideup var(--dur-slow) var(--ease-enter);
 }
 /* Message takes the remaining width and wraps; it never overlaps the close button. */
 .snackbar-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .snackbar-close { flex: 0 0 auto; display: inline-flex; color: var(--on-surface-variant); }
 .snackbar-close .material-symbols-rounded { font-size: 18px; }
-.snackbar.leaving { pointer-events: none; animation: snackout 0.22s cubic-bezier(.4,0,1,1) forwards; }
+.snackbar.leaving { pointer-events: none; animation: snackout var(--dur-base) var(--ease-exit) forwards; }
 @keyframes snackout { to { transform: translateY(16px); opacity: 0; } }
 
 .mono { font-family: var(--font-mono); }
@@ -395,7 +407,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@media (prefers-reduced-motion: no-preference) { .screen-enter { animation: screenin 0.24s ease; } }
+@media (prefers-reduced-motion: no-preference) { .screen-enter { animation: screenin var(--dur-slow) ease; } }
 @keyframes screenin { from { opacity: 0.4; transform: translateY(5px); } }
 
 .progress { height: 4px; border-radius: 2px; background: var(--outline-variant); overflow: hidden; }
