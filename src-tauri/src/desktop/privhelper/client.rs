@@ -163,7 +163,7 @@ mod tests {
         let stub = platform.clone();
         let serve_path = sock_str.clone();
         tokio::spawn(async move {
-            let _ = server::serve(platform, &serve_path).await;
+            let _ = server::serve(platform, &serve_path, None).await;
         });
 
         // Wait for the listener to bind.

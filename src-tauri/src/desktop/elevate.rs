@@ -85,7 +85,7 @@ pub fn ensure_elevated() {
 /// Prefer a graphical pkexec (a polkit dialog suits a GUI), then sudo. On NixOS the
 /// setuid wrappers live under /run/wrappers/bin (the store pkexec is NOT setuid).
 #[cfg(target_os = "linux")]
-fn find_elevator() -> Option<std::path::PathBuf> {
+pub(crate) fn find_elevator() -> Option<std::path::PathBuf> {
     use std::path::Path;
     for c in [
         "/run/wrappers/bin/pkexec",

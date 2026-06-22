@@ -78,10 +78,21 @@ fn to_reply(r: anyhow::Result<()>) -> PrivReply {
 /// Bind `socket_path` and serve requests against `platform` until the process
 /// exits. Removes any stale socket first. Connections are served concurrently;
 /// within a connection requests are answered in order.
-pub async fn serve(platform: Arc<dyn Platform>, socket_path: &str) -> anyhow::Result<()> {
+///
+/// `owner_uid` is the unprivileged user that may drive the helper: the socket is
+/// `chown`ed to it and locked to `0600`, so that user can connect but no other
+/// local account can reach the root data-path. `None` leaves the socket owned by
+/// the running user (tests, or a same-user run).
+pub async fn serve(
+    platform: Arc<dyn Platform>,
+    socket_path: &str,
+    owner_uid: Option<u32>,
+) -> anyhow::Result<()> {
     let _ = tokio::fs::remove_file(socket_path).await;
     let listener = UnixListener::bind(socket_path)
         .with_context(|| format!("bind privilege-helper socket {socket_path}"))?;
+    restrict_socket(socket_path, owner_uid)
+        .with_context(|| format!("restrict privilege-helper socket {socket_path}"))?;
     loop {
         let (stream, _addr) = listener.accept().await?;
         let platform = platform.clone();
@@ -91,6 +102,20 @@ pub async fn serve(platform: Arc<dyn Platform>, socket_path: &str) -> anyhow::Re
             }
         });
     }
+}
+
+/// Lock the freshly-bound socket to the owning user: `0600` so only its owner can
+/// connect, and `chown` to `owner_uid` so that owner is the unprivileged GUI user
+/// rather than root (which bound it).
+fn restrict_socket(socket_path: &str, owner_uid: Option<u32>) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))?;
+    if let Some(uid) = owner_uid {
+        // Leave the gid untouched — 0600 already excludes group/other, so the
+        // user's (unknown here) primary group is immaterial.
+        std::os::unix::fs::chown(socket_path, Some(uid), None)?;
+    }
+    Ok(())
 }
 
 /// Read requests line by line and write one reply per request.

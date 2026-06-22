@@ -6,9 +6,13 @@
 //! model this is migrating away from.
 
 pub mod client;
+pub mod entry;
 pub mod proto;
 pub mod remote;
 pub mod server;
+pub mod spawn;
 
 pub use client::Client;
+pub use entry::run_helper;
 pub use remote::RemotePlatform;
+pub use spawn::spawn_and_connect;
