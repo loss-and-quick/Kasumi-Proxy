@@ -441,6 +441,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn inject_ifaces_without_force_clears_tun2() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("sb.json");
+        let f1 = dir.path().join("tun1");
+        let f2 = dir.path().join("tun2");
+        // A stale tun2 name from a prior force-proxy run must be cleared when the
+        // config no longer has a force-proxy inbound.
+        std::fs::write(&f2, b"stale").unwrap();
+        std::fs::write(
+            &cfg,
+            r#"{ "inbounds": [{ "type": "tun", "tag": "tun-in" }] }"#,
+        )
+        .unwrap();
+        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        assert!(tun2.is_none());
+        assert!(!exists(&f2).await);
+        let text = read_text(&cfg).await.unwrap();
+        assert_eq!(text.matches(r#""interface_name""#).count(), 1);
+        assert!(text.contains(&format!(r#""interface_name": "{tun}""#)));
+    }
+
+    #[tokio::test]
     async fn verify_core_alive_against_self_and_wrong_bin() {
         let me = std::process::id() as i32;
         let exe = std::fs::read_link(format!("/proc/{me}/exe")).unwrap();
