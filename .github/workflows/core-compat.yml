@@ -1,0 +1,98 @@
+name: Core compatibility
+
+# Early-warning sweep: run the config-validation harness against the LATEST
+# upstream xray / sing-box, so a core release whose schema drifted from our config
+# generators is caught BEFORE the Monday release auto-bumps to it. The release
+# itself also gates on this (release.yml), but this surfaces drift a few days
+# earlier as a tracking issue.
+on:
+  schedule:
+    - cron: "0 0 * * 0"  # Sunday — a day before the Monday release cron
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# A single in-flight run; a new commit/schedule supersedes the previous.
+concurrency:
+  group: core-compat
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Resolve latest upstream core versions
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
+          sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
+          echo "xray=$xray" >> "$GITHUB_OUTPUT"
+          echo "singbox=$sb" >> "$GITHUB_OUTPUT"
+          echo "Testing generators against xray $xray, sing-box $sb"
+
+      - name: Validate generated configs against the latest cores
+        id: check
+        env:
+          XRAY_VERSION: ${{ steps.latest.outputs.xray }}
+          SINGBOX_VERSION: ${{ steps.latest.outputs.singbox }}
+        run: scripts/check-core-compat.sh
+
+      # ── Anti-spam issue bookkeeping. One tracking issue at a time, deduped by a
+      #    fixed title: a persistent drift never opens a second issue, and a drift
+      #    that clears auto-closes the open one. Runs whether the check passed or
+      #    failed (but is skipped when the job was cancelled). ──
+      - name: Open or update the drift issue
+        if: failure() && steps.check.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XRAY_VERSION: ${{ steps.latest.outputs.xray }}
+          SINGBOX_VERSION: ${{ steps.latest.outputs.singbox }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Core compatibility: generated configs rejected by a new core"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" \
+            --json number -q '.[0].number // empty')
+          body=$(cat <<EOF
+          The config-validation harness rejected at least one generated config when run
+          against the latest upstream cores:
+
+          - xray \`$XRAY_VERSION\`
+          - sing-box \`$SINGBOX_VERSION\`
+
+          A core release likely changed its config schema in a way our generators
+          (\`xray_config.rs\` / \`singbox_config.rs\` / \`core.rs\`) don't yet match. Fix the
+          generators before the release auto-bumps the pin, or the bump is blocked.
+
+          Failing run: $RUN_URL
+          EOF
+          )
+          if [ -n "$existing" ]; then
+            echo "tracking issue #$existing already open — not opening another"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+
+      - name: Close the drift issue when compatibility is restored
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Core compatibility: generated configs rejected by a new core"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" \
+            --json number -q '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" \
+              --comment "Latest cores accept all generated configs again — closing."
+          fi

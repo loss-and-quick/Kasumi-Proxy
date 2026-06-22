@@ -173,6 +173,23 @@ jobs:
           bun run frontend/scripts/check-i18n.ts
           ( cd frontend && bunx vitest run )
 
+      # ── Block the auto-bump when a new core's config schema drifted from our
+      #    generators. "Sync core pins" above already wrote the new versions into
+      #    core-versions.sh, so this stages those exact cores and runs the
+      #    config-validation harness against them. A rejected config fails the job
+      #    before any version is bumped or tagged — so we never ship a release whose
+      #    pinned core rejects the configs we generate. Only runs when cores moved. ──
+      - name: Setup Rust (core-compat gate)
+        if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Verify the new cores accept our generated configs
+        if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
+        run: scripts/check-core-compat.sh
+
       - name: Bump version
         if: steps.changes.outputs.skip != 'true'
         id: bump
