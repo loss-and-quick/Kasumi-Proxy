@@ -656,7 +656,7 @@ export type AppState = z.infer<typeof AppStateSchema>;
 
 export const CapabilitiesSchema = z.object({
 	bridge: z.string(),
-	core: z.string(),
+	xrayVersion: z.string(),
 	singboxVersion: z.string(),
 	tun: z.boolean(),
 });

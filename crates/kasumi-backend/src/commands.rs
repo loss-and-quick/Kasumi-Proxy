@@ -386,10 +386,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                 .map_err(|e| err(e.to_string()))?;
             Ok(Response::Capabilities(Capabilities {
                 bridge: c.bridge,
-                core: c
-                    .cores
-                    .xray
-                    .unwrap_or_else(|| "Xray (not installed)".into()),
+                xray_version: c.cores.xray.unwrap_or_default(),
                 singbox_version: c.cores.singbox.unwrap_or_default(),
                 tun: c.tun,
             }))
@@ -600,7 +597,7 @@ mod tests {
         let Response::Capabilities(c) = dispatch(&p, Command::Capabilities).await.unwrap() else {
             panic!()
         };
-        assert_eq!(c.core, "Xray 25.5.16");
+        assert_eq!(c.xray_version, "Xray 25.5.16");
         assert_eq!(c.singbox_version, "1.10.0");
         assert_eq!(c.bridge, "test");
         assert!(c.tun);

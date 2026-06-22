@@ -52,6 +52,7 @@ export default function Settings({
   const assetFiles = useAppStore((s) => s.assetFiles);
   const activeId = useAppStore((s) => s.activeId);
   const service = useAppStore((s) => s.service);
+  const caps = useAppStore((s) => s.caps);
   const notify = useAppStore((s) => s.notify);
   const setSetting = useAppStore((s) => s.setSetting);
   const addRoutingRule = useAppStore((s) => s.addRoutingRule);
@@ -179,6 +180,9 @@ export default function Settings({
         <DiagnosticsSection
           bridgeMode={bridgeMode}
           core={service.core}
+          xrayVersion={caps?.xrayVersion ?? ""}
+          singboxVersion={caps?.singboxVersion ?? ""}
+          tun={caps?.tun ?? false}
           profilesCount={profiles.length}
           subscriptionsCount={subscriptions.length}
           activeId={activeId}

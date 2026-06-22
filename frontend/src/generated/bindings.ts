@@ -205,9 +205,11 @@ export type AssetFile = {
 export type Capabilities = {
 	/**  UI runtime: `"ksu-js"` | `"web"` | `"mock"` (and, on desktop, `"tauri"`). */
 	bridge: string,
-	/**  Xray version. */
-	core: string,
+	/**  Installed Xray version, empty when not installed. */
+	xrayVersion: string,
+	/**  Installed sing-box version, empty when not installed. */
 	singboxVersion: string,
+	/**  Whether the host can route through a TUN device. */
 	tun: boolean,
 };
 

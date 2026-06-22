@@ -133,7 +133,7 @@ function createBridgeMock(): BridgeMock {
     speedTestAll: vi.fn(async () => ({})),
     capabilities: vi.fn(async () => ({
       bridge: "mock",
-      core: "",
+      xrayVersion: "",
       singboxVersion: "",
       tun: false,
     })),

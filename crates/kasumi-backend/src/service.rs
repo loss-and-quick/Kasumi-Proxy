@@ -605,6 +605,6 @@ mod tests {
         let Response::Capabilities(c) = r else {
             panic!()
         };
-        assert_eq!(c.core, "Xray 1.0");
+        assert_eq!(c.xray_version, "Xray 1.0");
     }
 }
