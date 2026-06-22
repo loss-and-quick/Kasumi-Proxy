@@ -113,6 +113,26 @@ async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
     service
 }
 
+/// The desktop [`Platform`]. On Linux the GUI is unprivileged and drives the
+/// data-path through a root helper it spawns (`KASUMI_SKIP_ELEVATION` opts out for
+/// CI/dev, running it in-process). Other OSes run it in-process directly (Windows
+/// has already re-exec'd the whole process under UAC).
+#[cfg(target_os = "linux")]
+async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
+    use desktop::privhelper::{spawn_and_connect, RemotePlatform};
+    if std::env::var_os("KASUMI_SKIP_ELEVATION").is_some() {
+        return Ok(Arc::new(DesktopPlatform::new()?));
+    }
+    let paths = desktop::paths::DesktopPaths::resolve()?;
+    let client = spawn_and_connect(&paths).await?;
+    Ok(Arc::new(RemotePlatform::new(client)?))
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
+    Ok(Arc::new(DesktopPlatform::new()?))
+}
+
 /// Assemble the typed command + event surface. Shared by `run` and the bindings
 /// export so the generated TS always matches what's mounted.
 fn specta_builder() -> Builder<tauri::Wry> {
@@ -143,9 +163,10 @@ pub fn export_generated() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // The data-path needs root (tun + ip routing); re-exec elevated before any GTK
-    // init. No-op on mobile and when already root.
-    #[cfg(not(mobile))]
+    // Windows re-execs the whole process under UAC before any init. Linux keeps the
+    // GUI unprivileged and spawns a root helper later (in setup); macOS has no
+    // elevation. Mobile never elevates.
+    #[cfg(all(not(mobile), not(target_os = "linux")))]
     desktop::elevate::ensure_elevated();
 
     let builder = specta_builder();
@@ -200,11 +221,11 @@ pub fn run() {
             #[cfg(desktop)]
             setup_tray(app)?;
 
-            let platform: Arc<dyn Platform> = Arc::new(
-                DesktopPlatform::new()
-                    .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?,
-            );
-            let service = tauri::async_runtime::block_on(build_service(platform));
+            let service = tauri::async_runtime::block_on(async {
+                let platform = build_platform().await?;
+                anyhow::Ok(build_service(platform).await)
+            })
+            .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
 
             // Re-emit the Service's status / subApplied frames as typed events.
             let handle = app.handle().clone();
