@@ -15,7 +15,6 @@ use anyhow::Context;
 use windows_service::service::{ServiceAccess, ServiceState};
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 
-use crate::desktop::elevate::run_elevated;
 use crate::desktop::paths::{dir_of, DesktopPaths};
 
 use super::client::Client;
@@ -136,4 +135,46 @@ fn wait_for(mut cond: impl FnMut() -> bool, timeout: Duration) -> anyhow::Result
         std::thread::sleep(Duration::from_millis(250));
     }
     anyhow::bail!("timed out")
+}
+
+/// Run `exe args` elevated via UAC (`ShellExecuteW` with the `runas` verb), for the
+/// one-time service install. Returns whether the elevated process was launched (the
+/// user accepted the prompt); the caller waits for its effect. Only the tiny helper
+/// elevates — never the GUI.
+fn run_elevated(exe: &std::path::Path, args: &[&OsStr]) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+
+    // One quoted command line (UAC launches a fresh process, not a fork).
+    let params = args
+        .iter()
+        .map(|a| format!("\"{}\"", a.to_string_lossy().replace('"', "\\\"")))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let verb = wide("runas");
+    let file: Vec<u16> = exe.as_os_str().encode_wide().chain([0]).collect();
+    let params = wide(&params);
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            params.as_ptr(),
+            std::ptr::null(),
+            SW_HIDE,
+        )
+    };
+    // ShellExecuteW returns > 32 on success (a declined prompt counts as failure).
+    (result as usize) > 32
+}
+
+/// `s` as a NUL-terminated UTF-16 buffer for the Win32 `*W` APIs.
+fn wide(s: &str) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    OsStr::new(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }

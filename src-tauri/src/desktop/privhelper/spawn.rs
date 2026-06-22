@@ -12,7 +12,6 @@ use std::time::Duration;
 
 use anyhow::Context;
 
-use crate::desktop::elevate::find_elevator;
 use crate::desktop::paths::{dir_of, DesktopPaths};
 
 use super::client::Client;
@@ -28,6 +27,23 @@ fn helper_bin() -> anyhow::Result<PathBuf> {
     let exe = std::env::current_exe().context("locate current exe")?;
     let dir = exe.parent().context("current exe has no parent dir")?;
     Ok(dir.join("kasumi-helper"))
+}
+
+/// Locate the elevator to run the helper through. Prefer a graphical pkexec (a
+/// polkit dialog suits a GUI), then sudo. On NixOS the setuid wrappers live under
+/// /run/wrappers/bin (the store pkexec is NOT setuid).
+fn find_elevator() -> Option<PathBuf> {
+    for c in [
+        "/run/wrappers/bin/pkexec",
+        "/usr/bin/pkexec",
+        "/run/wrappers/bin/sudo",
+        "/usr/bin/sudo",
+    ] {
+        if std::path::Path::new(c).exists() {
+            return Some(PathBuf::from(c));
+        }
+    }
+    None
 }
 
 /// The unix socket the helper binds, inside the GUI-resolved run dir.
