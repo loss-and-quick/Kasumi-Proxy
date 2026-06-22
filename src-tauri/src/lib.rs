@@ -167,12 +167,9 @@ pub fn export_generated() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // The GUI stays unprivileged on Linux and Windows alike: each sets up its
-    // privileged data-path helper later (in setup, via build_platform). Only macOS
-    // would elevate the process itself today — and that path is still a no-op.
-    #[cfg(all(not(mobile), target_os = "macos"))]
-    desktop::elevate::ensure_elevated();
-
+    // The GUI process never elevates itself: on Linux and Windows it sets up its
+    // privileged data-path helper later (in setup, via build_platform); mobile and
+    // the unsupported desktops have no elevation path.
     let builder = specta_builder();
 
     // Regenerate the frontend's generated files on every debug build, so a Rust

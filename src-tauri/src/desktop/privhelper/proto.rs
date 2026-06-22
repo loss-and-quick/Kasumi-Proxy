@@ -36,17 +36,15 @@ pub enum PrivRequest {
     StopDataPath { keep_service_state: bool },
     /// Current data-path status (liveness + byte counters).
     ServiceState,
-    /// Installed core versions + tun capability.
-    Capabilities,
     /// Whether a core is live and the SOCKS port to reach it on.
     ProxyStatus,
     /// Whether every data-path process is still alive (drives the watchdog).
     DataPathHealthy,
 }
 
-/// The helper's reply to one [`PrivRequest`]. `ProxyStatus` / `Capabilities` are
-/// flattened to primitives because their `Platform` structs aren't serializable;
-/// the client rebuilds them.
+/// The helper's reply to one [`PrivRequest`]. `ProxyStatus` is flattened to
+/// primitives because its `Platform` struct isn't serializable; the client rebuilds
+/// it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "reply", rename_all = "snake_case")]
 pub enum PrivReply {
@@ -55,11 +53,6 @@ pub enum PrivReply {
     /// `StopDataPath`).
     Ok,
     State(ServiceState),
-    Capabilities {
-        xray: Option<String>,
-        singbox: Option<String>,
-        tun: bool,
-    },
     Proxy {
         running: bool,
         socks_port: u16,
@@ -110,7 +103,6 @@ mod tests {
                 keep_service_state: true,
             },
             PrivRequest::ServiceState,
-            PrivRequest::Capabilities,
             PrivRequest::ProxyStatus,
             PrivRequest::DataPathHealthy,
         ] {
@@ -131,11 +123,6 @@ mod tests {
                 uptime_sec: 3,
                 engine: Some(CoreEngine::SingBox),
             }),
-            PrivReply::Capabilities {
-                xray: Some("1.2.3".into()),
-                singbox: None,
-                tun: true,
-            },
             PrivReply::Proxy {
                 running: true,
                 socks_port: 10808,
