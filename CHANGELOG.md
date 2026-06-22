@@ -1,3 +1,46 @@
+## v0.4.1 — 2026-06-22
+
+### Changes
+
+- [`faf9069`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/faf9069) fix(profiles): stop group icons resizing on drag-drop
+- [`5329240`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5329240) fix(desktop): fully collapse the side rail when hidden
+- [`aa9cd08`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/aa9cd08) fix(profiles): keep delete dialogs mounted so they animate out
+- [`32ba106`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/32ba106) fix(ui): animate dialog exit instead of unmounting instantly
+- [`97a6ac0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/97a6ac0) fix(ui): animate bottom sheet on close instead of popping out
+- [`038bb5b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/038bb5b) fix(ui): track sheet swipe on window so mouse drag works on desktop
+- [`f164a28`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f164a28) feat(ui): swipe down to dismiss bottom sheets
+- [`64727a9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/64727a9) fix(desktop): hide side rail while a bottom sheet is open
+- [`b81be5c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b81be5c) fix(ci): detect changed areas from merge-base, not base..head
+- [`503ba49`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/503ba49) fix(i18n): pluralize count-bearing strings via plural() helper
+- [`4ff51a4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4ff51a4) feat(profiles): reorder groups via drag-and-drop
+- [`6b15472`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6b15472) feat(subscriptions): per-subscription copy URL
+- [`0af325c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0af325c) feat(subscriptions): import subscriptions from clipboard
+- [`62dc8c3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/62dc8c3) feat(subscriptions): export subscriptions to clipboard
+- [`a5e5c86`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a5e5c86) fix(ci): don't sign updater artifacts in nightly
+- [`b207492`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b207492) test(core): init socks-auth test settings via struct update
+- [`f0f08bb`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f0f08bb) feat(settings): wire up three dropped UI strings
+- [`0f562b9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0f562b9) feat(settings): SOCKS/HTTP inbound authentication
+- [`1fa5c28`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/1fa5c28) docs: refresh the PR template for the Rust/Tauri stack
+- [`883ed7b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/883ed7b) feat(frontend): app version + auto-update controls in Settings
+- [`84ac7e0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/84ac7e0) feat(desktop): wire the updater plugin + bundle signing config
+- [`b997d03`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b997d03) docs: document the Linux portable zip
+- [`9ca0b63`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9ca0b63) feat(desktop): honour a portable.dat marker on Linux
+- [`0cb3c93`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0cb3c93) docs: Windows desktop install instructions
+- [`9f8fa71`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9f8fa71) fix(frontend): use the standard card surface for quick actions
+- [`81c983d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/81c983d) fix(frontend): lower the snackbar on desktop
+- [`20ead8d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/20ead8d) fix(desktop): native backslash paths on Windows
+- [`f9eece6`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f9eece6) fix(desktop): keep the inherited env on Windows so cores can use Winsock
+- [`91a8e2b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/91a8e2b) fix(desktop): bundle the app, not the codegen bin (default-run)
+- [`fc6b4ef`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fc6b4ef) fix(desktop): suppress console windows when spawning on Windows
+- [`489ed79`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/489ed79) docs: add Windows to the platform badge
+- [`40174a8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/40174a8) fix(desktop): only the xray path needs wintun.dll on disk
+- [`af03cbe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/af03cbe) build(desktop): bundle wintun.dll for the Windows target
+- [`7bb5c72`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7bb5c72) feat(desktop): Windows Platform (wintun tun + route/netsh routing)
+- [`a6ec99a`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a6ec99a) feat(backend): make tun2socks fwmark optional
+- [`67c098e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/67c098e) feat(backend): portable process identity (POSIX + Windows)
+- [`e4db159`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e4db159) fix(core): drop uTLS from hysteria2/tuic sing-box outbounds
+- [`104819b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/104819b) docs: publish the AppImage release signing public key
+
 ## v0.4.0 — 2026-06-20
 
 ### Cross-platform: Rust backend + Tauri desktop
