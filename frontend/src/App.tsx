@@ -10,6 +10,7 @@ import { Icon, Toast } from "./components";
 import Overview from "./features/overview/Overview";
 import { useT } from "./i18n";
 import { configureKsuWebUi, hasKsuNativeApi } from "./lib/ksu-webui";
+import { useSheetOpen } from "./lib/sheetPresence";
 import { useIsWide } from "./lib/useIsWide";
 import { useAppStore } from "./store/useAppStore";
 
@@ -54,6 +55,7 @@ export default function App() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [appFilterOpen, setAppFilterOpen] = useState(false);
   const isWide = useIsWide();
+  const sheetOpen = useSheetOpen();
 
   useEffect(() => {
     hydrate();
@@ -124,7 +126,7 @@ export default function App() {
   return (
     <div className={`device${isWide ? " wide" : ""}`}>
       {isWide && navVisible && (
-        <nav className="siderail">
+        <nav className={`siderail${sheetOpen ? " hidden" : ""}`} aria-hidden={sheetOpen}>
           <div className="siderail-brand">kasumi</div>
           {navItems.map((n) => (
             <button
