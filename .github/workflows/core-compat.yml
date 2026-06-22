@@ -1,0 +1,117 @@
+name: Core compatibility
+
+# Runs the config-validation harness against real cores so a core version whose
+# schema drifted from our config generators is caught. Two entry points:
+#   - pull_request touching scripts/core-versions.sh: validates the versions the
+#     PR pins, so a MANUAL bump (not just the release auto-bump) can't merge a pin
+#     our generators don't match.
+#   - schedule / workflow_dispatch: validates the LATEST upstream cores for early
+#     warning (a deduped tracking issue) before the release ever bumps to them.
+# The release auto-bump is additionally gated in release.yml.
+on:
+  pull_request:
+    # Anything that can change whether a real core accepts our generated configs:
+    # the pinned versions (a manual bump), how cores are staged, or the generators.
+    paths:
+      - scripts/core-versions.sh
+      - scripts/fetch-cores-desktop.sh
+      - crates/kasumi-core/**
+  schedule:
+    - cron: "0 0 * * 0"  # Sunday — a day before the Monday release cron
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# One in-flight run per ref; a new push/schedule supersedes the previous.
+concurrency:
+  group: core-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Resolve target core versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Validate exactly what the PR pins (catches a hand-edited bump).
+            # shellcheck source=scripts/core-versions.sh
+            . scripts/core-versions.sh
+            xray="$XRAY_VERSION"; sb="$SINGBOX_VERSION"
+            echo "Validating PR-pinned cores: xray $xray, sing-box $sb"
+          else
+            # Early warning: validate what the next release would bump TO.
+            xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
+            sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
+            echo "Validating latest upstream cores: xray $xray, sing-box $sb"
+          fi
+          echo "xray=$xray" >> "$GITHUB_OUTPUT"
+          echo "singbox=$sb" >> "$GITHUB_OUTPUT"
+
+      - name: Validate generated configs against the cores
+        id: check
+        env:
+          XRAY_VERSION: ${{ steps.versions.outputs.xray }}
+          SINGBOX_VERSION: ${{ steps.versions.outputs.singbox }}
+        run: scripts/check-core-compat.sh
+
+      # ── Early-warning issue bookkeeping (schedule/dispatch only; on a PR the red
+      #    check is the signal). One tracking issue at a time, deduped by a fixed
+      #    title: a persistent drift never opens a second, and a drift that clears
+      #    auto-closes the open one — so at most one open issue, ever. ──
+      - name: Open the drift issue
+        if: failure() && github.event_name != 'pull_request' && steps.check.conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XRAY_VERSION: ${{ steps.versions.outputs.xray }}
+          SINGBOX_VERSION: ${{ steps.versions.outputs.singbox }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Core compatibility: generated configs rejected by a new core"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" \
+            --json number -q '.[0].number // empty')
+          body=$(cat <<EOF
+          The config-validation harness rejected at least one generated config when run
+          against the latest upstream cores:
+
+          - xray \`$XRAY_VERSION\`
+          - sing-box \`$SINGBOX_VERSION\`
+
+          A core release likely changed its config schema in a way our generators
+          (\`xray_config.rs\` / \`singbox_config.rs\` / \`core.rs\`) don't yet match. Fix the
+          generators before the release auto-bumps the pin, or the bump is blocked.
+
+          Failing run: $RUN_URL
+          EOF
+          )
+          if [ -n "$existing" ]; then
+            echo "tracking issue #$existing already open — not opening another"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+
+      - name: Close the drift issue when compatibility is restored
+        if: success() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Core compatibility: generated configs rejected by a new core"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" \
+            --json number -q '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" \
+              --comment "Latest cores accept all generated configs again — closing."
+          fi
