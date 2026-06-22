@@ -19,15 +19,26 @@ backend:
           - "Cargo.toml"
           - "Cargo.lock"
 
+# Platform-specific desktop code. The privilege-separation helper keeps both OSes'
+# launch/lifecycle code in one `privhelper/` dir (the protocol, request loop and
+# RemotePlatform are shared and stay unlabelled), so the per-OS files there are
+# listed explicitly alongside the OS dir and the per-OS Tauri/installer config.
 "platform:linux":
   - changed-files:
       - any-glob-to-any-file:
           - "src-tauri/src/desktop/linux/**"
+          - "src-tauri/src/desktop/privhelper/spawn.rs"
+          - "src-tauri/src/desktop/privhelper/entry.rs"
+          - "src-tauri/tauri.linux.conf.json"
 
 "platform:windows":
   - changed-files:
       - any-glob-to-any-file:
           - "src-tauri/src/desktop/windows/**"
+          - "src-tauri/src/desktop/privhelper/service.rs"
+          - "src-tauri/src/desktop/privhelper/connect.rs"
+          - "src-tauri/tauri.windows.conf.json"
+          - "src-tauri/installer-hooks.nsh"
 
 "platform:android":
   - changed-files:
