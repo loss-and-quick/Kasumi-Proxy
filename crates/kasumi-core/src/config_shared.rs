@@ -152,4 +152,80 @@ mod tests {
         assert_eq!(w.ws_early_data, 0);
         assert_eq!(w.ws_early_data_header, "");
     }
+
+    #[test]
+    fn ed_alone_defaults_the_header() {
+        // `ed` without an explicit `eh` falls back to the standard ws header.
+        let w = parse_ws_early_data("/p?ed=2048");
+        assert_eq!(w.path, "/p");
+        assert_eq!(w.ws_early_data, 2048);
+        assert_eq!(w.ws_early_data_header, "Sec-WebSocket-Protocol");
+    }
+
+    #[test]
+    fn eh_is_percent_decoded() {
+        // The `eh` value carries a percent-encoded header name that must decode.
+        let w = parse_ws_early_data("/p?ed=1&eh=a%2Fb");
+        assert_eq!(w.path, "/p");
+        assert_eq!(w.ws_early_data, 1);
+        assert_eq!(w.ws_early_data_header, "a/b");
+    }
+
+    #[test]
+    fn split_csv_trims_and_drops_empties() {
+        assert_eq!(
+            split_csv(" a , ,b "),
+            Some(vec!["a".to_string(), "b".to_string()])
+        );
+        assert_eq!(split_csv(""), None);
+        // A string of only separators has no non-empty parts.
+        assert_eq!(split_csv(",, ,"), None);
+    }
+
+    #[test]
+    fn split_list_splits_on_comma_and_newline_else_fallback() {
+        assert_eq!(
+            split_list("a,b\nc", &[]),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        // Empty input yields the fallback list verbatim.
+        assert_eq!(
+            split_list("  ", &["x", "y"]),
+            vec!["x".to_string(), "y".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_pem_chain_splits_blocks_and_falls_back() {
+        let two = "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n\
+                   -----BEGIN CERTIFICATE-----\nBBBB\n-----END CERTIFICATE-----";
+        let certs = parse_pem_chain(two).unwrap();
+        assert_eq!(certs.len(), 2);
+        assert!(certs[0].contains("AAAA"));
+        assert!(certs[1].contains("BBBB"));
+
+        // No BEGIN/END markers → the whole (trimmed) string is the single cert.
+        assert_eq!(
+            parse_pem_chain("  raw-blob  "),
+            Some(vec!["raw-blob".to_string()])
+        );
+        // Whitespace-only → nothing to return.
+        assert_eq!(parse_pem_chain("   \n  "), None);
+    }
+
+    #[test]
+    fn build_ws_path_handles_empty_separator_and_round_trips() {
+        // An empty path normalises to "/".
+        assert_eq!(build_ws_path("", 0, ""), "/");
+        // A base that already has a query gets `&`, not a second `?`.
+        let with_q = build_ws_path("/ws?token=abc", 100, "");
+        assert!(with_q.starts_with("/ws?token=abc"));
+        assert!(with_q.contains("&ed=100"));
+        // build → parse restores both early-data fields and the clean path.
+        let built = build_ws_path("/ws", 2048, "Sec-WebSocket-Protocol");
+        let w = parse_ws_early_data(&built);
+        assert_eq!(w.path, "/ws");
+        assert_eq!(w.ws_early_data, 2048);
+        assert_eq!(w.ws_early_data_header, "Sec-WebSocket-Protocol");
+    }
 }

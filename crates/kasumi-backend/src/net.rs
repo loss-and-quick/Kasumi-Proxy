@@ -227,4 +227,49 @@ mod tests {
         let ms = tcp_ping("192.0.2.1", 80, Duration::from_millis(300)).await;
         assert!(ms.is_none());
     }
+
+    #[tokio::test]
+    async fn fetch_url_proxy_mode_requires_a_running_proxy() {
+        // mode=Proxy with no proxy must fail fast, before any network attempt.
+        let opts = FetchUrlOptions {
+            mode: FetchMode::Proxy,
+            ..Default::default()
+        };
+        let err = fetch_url("http://example.invalid/", opts)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("proxy not running"));
+
+        // A proxy that isn't running is treated the same as none.
+        let opts = FetchUrlOptions {
+            mode: FetchMode::Proxy,
+            proxy: Some(ProxyStatus {
+                running: false,
+                socks_port: 1080,
+                http_port: 1081,
+            }),
+            ..Default::default()
+        };
+        let err = fetch_url("http://example.invalid/", opts)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("proxy not running"));
+    }
+
+    #[tokio::test]
+    async fn lease_ports_reserves_disjoint_ranges_and_releases_on_drop() {
+        let l1 = lease_ports(41000, 2).await;
+        let b1 = l1.base();
+        assert!(b1 >= 41000);
+        // A concurrent lease anchored on the same base skips the held pair.
+        let l2 = lease_ports(b1, 2).await;
+        assert!(l2.base() >= b1 + 2, "leases must not overlap");
+        // Dropping l1 frees its ports; a fresh lease reclaims the same base
+        // (l2 still holds its own range, so this isn't just landing anywhere).
+        drop(l1);
+        let l3 = lease_ports(b1, 2).await;
+        assert_eq!(l3.base(), b1);
+        drop(l2);
+        drop(l3);
+    }
 }

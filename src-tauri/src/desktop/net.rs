@@ -164,4 +164,21 @@ mod tests {
         // Loopback is never bypass-routed.
         assert!(!hosts.contains("127.0.0.1"));
     }
+
+    #[tokio::test]
+    async fn resolve_bypass_cidrs_for_literal_servers_and_extra_hosts() {
+        // Literal IPs resolve to themselves (no DNS), so the aggregation is
+        // deterministic: every server host and every extra host becomes a CIDR.
+        let cfg = serde_json::json!({
+            "outbounds": [
+                { "settings": { "vnext": [{ "address": "1.2.3.4" }] } },
+                { "settings": { "peers": [{ "endpoint": "[2001:db8::1]:51820" }] } },
+            ]
+        })
+        .to_string();
+        let cidrs = resolve_bypass_cidrs(&cfg, &["8.8.8.8".to_string()]).await;
+        assert!(cidrs.contains(&"1.2.3.4/32".to_string()));
+        assert!(cidrs.contains(&"2001:db8::1/128".to_string()));
+        assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
+    }
 }

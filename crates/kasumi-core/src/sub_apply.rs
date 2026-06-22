@@ -422,4 +422,100 @@ mod tests {
         assert_eq!(r.subscriptions[0].count, 1);
         assert_eq!(r.subscriptions[0].last_updated, "2026-06-14");
     }
+
+    fn sub(id: &str, group: Option<&str>) -> Subscription {
+        Subscription {
+            id: id.into(),
+            remarks: "Sub".into(),
+            url: "u".into(),
+            enabled: true,
+            group_id: group.map(str::to_string),
+            auto_update: false,
+            interval: 60,
+            allow_insecure: false,
+            user_agent: String::new(),
+            filter: String::new(),
+            update_mode: crate::contract::FetchMode::Auto,
+            last_updated: String::new(),
+            count: 0,
+            last_error: None,
+            prev_profile: None,
+            next_profile: None,
+        }
+    }
+
+    #[test]
+    fn same_profile_identity_keys_on_endpoint_and_name() {
+        let a = p("vless://u1@e.x:443?type=tcp#Name");
+        // Different credential but identical endpoint + name → same identity.
+        let b = p("vless://u2@e.x:443?type=tcp#Name");
+        assert!(same_profile_identity(&a, &b));
+        // A different port or a different name breaks identity.
+        assert!(!same_profile_identity(
+            &a,
+            &p("vless://u1@e.x:8443?type=tcp#Name")
+        ));
+        assert!(!same_profile_identity(
+            &a,
+            &p("vless://u1@e.x:443?type=tcp#Other")
+        ));
+    }
+
+    #[test]
+    fn remove_by_sub_id_preserves_moved_and_other_subs() {
+        let mut in_group = p("trojan://pw@a.com:443#A");
+        in_group.meta_mut().id = "in".into();
+        in_group.meta_mut().sub_id = Some("s1".into());
+        in_group.meta_mut().group_id = "g1".into();
+
+        // User dragged this one out of the subscription's group; it must survive.
+        let mut moved = p("trojan://pw@b.com:443#B");
+        moved.meta_mut().id = "moved".into();
+        moved.meta_mut().sub_id = Some("s1".into());
+        moved.meta_mut().group_id = "g2".into();
+
+        let mut other_sub = p("trojan://pw@c.com:443#C");
+        other_sub.meta_mut().id = "other".into();
+        other_sub.meta_mut().sub_id = Some("s2".into());
+        other_sub.meta_mut().group_id = "g1".into();
+
+        let kept = remove_profiles_by_sub_id(&[in_group, moved, other_sub], "s1", Some("g1"));
+        let ids: Vec<&str> = kept.iter().map(|x| x.meta().id.as_str()).collect();
+        assert_eq!(ids, vec!["moved", "other"]);
+    }
+
+    #[test]
+    fn map_fetched_filters_and_stamps_sub_and_group() {
+        let fresh = vec![
+            p("vless://u@e.x:443?type=tcp#Keep"),
+            p("vless://u@e.x:443?type=tcp#Drop"),
+        ];
+        let s = sub("s1", Some("g-main"));
+        // The haystack is lower-cased, so the filter source must be too.
+        let mapped = map_fetched_subscription_profiles(&fresh, &s, &profile_filter_regex("keep"));
+        assert_eq!(mapped.len(), 1);
+        assert_eq!(mapped[0].meta().remarks, "Keep");
+        assert_eq!(mapped[0].meta().sub_id.as_deref(), Some("s1"));
+        assert_eq!(mapped[0].meta().group_id, "g-main");
+    }
+
+    #[test]
+    fn next_active_id_name_fallback_and_other_sub_passthrough() {
+        // Active belongs to s1; the refresh moved the endpoint but kept the name,
+        // so the selection follows by name.
+        let mut active = p("vless://u@e.x:443?type=tcp#Server");
+        active.meta_mut().id = "active".into();
+        active.meta_mut().sub_id = Some("s1".into());
+        let fresh = vec![p("vless://u@e.x:9443?type=tcp#Server")];
+        let profiles = vec![active.clone()];
+        let next =
+            next_active_id_after_subscription_update(&profiles, Some("active"), "s1", &fresh);
+        assert_eq!(next.as_deref(), Some(fresh[0].meta().id.as_str()));
+
+        // When the active profile belongs to another subscription, it's untouched.
+        let mut other = active.clone();
+        other.meta_mut().sub_id = Some("s2".into());
+        let keep = next_active_id_after_subscription_update(&[other], Some("active"), "s1", &fresh);
+        assert_eq!(keep.as_deref(), Some("active"));
+    }
 }
