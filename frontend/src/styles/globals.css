@@ -236,10 +236,12 @@ body {
 .input, .select-box, textarea.input {
   width: 100%; font-family: var(--font-mono); font-size: 14px; color: var(--on-surface); background: var(--sc);
   border: 1px solid transparent; border-bottom: 2px solid var(--outline); border-radius: 10px 10px 4px 4px; padding: 12px 13px;
-  transition: border-color 0.16s, background 0.16s; outline: none;
+  transition: border-color 0.16s, background-color 0.16s; outline: none;
 }
 .input::placeholder { color: var(--on-surface-faint); }
-.input:focus, textarea.input:focus, .select-box:focus { border-bottom-color: var(--primary); background: var(--sc-high); }
+/* background-color (not the `background` shorthand) so the select's arrow
+   background-image survives focus instead of being reset to none. */
+.input:focus, textarea.input:focus, .select-box:focus { border-bottom-color: var(--primary); background-color: var(--sc-high); }
 textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .input-row { display: flex; gap: 10px; }
 .input-row > .field { flex: 1; margin-bottom: 0; }
