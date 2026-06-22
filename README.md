@@ -71,12 +71,12 @@ State and logs live under `/data/adb/kasumi-proxy/`.
 
 **Linux desktop:** install the `.deb` or run the `.AppImage` from the latest release, or build with
 `nix build .#kasumi-desktop` (see below). For a no-install copy that keeps all state next to the
-binary, download `kasumi-proxy-vX.Y.Z-linux-portable.zip`, unzip it, and run `./kasumi-desktop` — it
+binary, download `kasumi-proxy-linux-portable-vX.Y.Z.zip`, unzip it, and run `./kasumi-desktop` — it
 re-execs itself through `pkexec`/`sudo` for the tun adapter and routes.
 
 **Windows desktop:** run the `-setup.exe` (NSIS) installer or the `.msi` from the latest release.
 For a no-install copy — runs from anywhere, keeps all state next to the executable — download
-`kasumi-proxy-vX.Y.Z-windows-portable.zip`, unzip it, and launch `kasumi-desktop.exe`. The app needs
+`kasumi-proxy-windows-portable-vX.Y.Z.zip`, unzip it, and launch `kasumi-desktop.exe`. The app needs
 administrator rights to bring up the tun adapter and routes, so accept the UAC prompt.
 
 ### Verifying release signatures
