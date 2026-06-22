@@ -136,6 +136,25 @@ jobs:
       - name: Nix store cache
         uses: DeterminateSystems/magic-nix-cache-action@87b14cf437d03d37989d87f0fa5ce4f5dc1a330b # v8
 
+      # ── Cache the cargo registry + workspace build artifacts. The compile of
+      #    clippy --all-targets + test + codegen (hundreds of crates: tauri, specta,
+      #    webkit bindings) is the bulk of this job; an empty target means a full
+      #    rebuild every run. Keyed on the toolchain pin (flake.lock) + the locked
+      #    deps (Cargo.lock); restore-keys give the previous target on a lock bump so
+      #    only the changed crates recompile. The devshell sets no CARGO_HOME /
+      #    CARGO_TARGET_DIR, so cargo uses ~/.cargo and ./target on the host. ──
+      - name: Cache cargo + build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
       - name: Stub the libcronet bundle resource (clippy/codegen build the app)
         run: |
           # clippy/codegen compile kasumi-desktop, whose tauri.linux.conf.json
