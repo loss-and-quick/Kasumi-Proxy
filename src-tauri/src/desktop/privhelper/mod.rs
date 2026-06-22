@@ -1,9 +1,11 @@
-//! Privilege separation for the Linux desktop data-path.
+//! Privilege separation for the desktop data-path.
 //!
-//! Instead of re-execing the whole WebKit GUI as root, the GUI stays unprivileged
-//! and spawns a small root helper that owns the data-path. They speak [`proto`]
-//! over a unix socket. See [`super::elevate`] for the (current) whole-process
-//! model this is migrating away from.
+//! Instead of running the whole WebKit GUI elevated, the GUI stays unprivileged and
+//! drives a small privileged process that owns the data-path. They speak [`proto`]
+//! over an OS transport ([`transport`]): a unix socket to a pkexec'd root helper on
+//! Linux, a named pipe to a LocalSystem service on Windows. The request loop
+//! ([`server`]), the client ([`client`]) and the GUI-side [`RemotePlatform`] are
+//! shared; only the transport and the launch/lifecycle differ per OS.
 
 pub mod client;
 pub mod proto;
@@ -24,3 +26,10 @@ pub mod spawn;
 pub use entry::run_helper;
 #[cfg(target_os = "linux")]
 pub use spawn::spawn_and_connect;
+
+#[cfg(target_os = "windows")]
+pub mod connect;
+#[cfg(target_os = "windows")]
+pub mod service;
+#[cfg(target_os = "windows")]
+pub use connect::connect_service;
