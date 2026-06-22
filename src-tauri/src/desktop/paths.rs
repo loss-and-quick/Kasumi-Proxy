@@ -122,12 +122,17 @@ impl DesktopPaths {
             pidfile: format!("{run_dir}/core.pid"),
             tun2socks_pidfile: format!("{run_dir}/tun2socks.pid"),
             route_state_file: format!("{run_dir}/desktop-route.json"),
-            socks_port_file: format!("{datadir}/local-socks-port"),
+            // Ephemeral data-path runtime state, written only by the data-path owner
+            // (the privileged helper under privilege separation) — keep it in run_dir,
+            // not the user's datadir, so it never lands as root-owned files there and
+            // resets between sessions. `engine_file` and the configs stay in datadir:
+            // the unprivileged GUI builds them, the helper only reads them.
+            socks_port_file: format!("{run_dir}/local-socks-port"),
             engine_file: format!("{datadir}/engine"),
-            tun_iface_file: format!("{datadir}/tun-iface"),
-            tun2_iface_file: format!("{datadir}/tun2-iface"),
-            service_state_file: format!("{datadir}/service-state"),
-            service_started_file: format!("{datadir}/service-started"),
+            tun_iface_file: format!("{run_dir}/tun-iface"),
+            tun2_iface_file: format!("{run_dir}/tun2-iface"),
+            service_state_file: format!("{run_dir}/service-state"),
+            service_started_file: format!("{run_dir}/service-started"),
             xray_bin: format!("{bin}/xray"),
             singbox_bin: format!("{bin}/sing-box"),
             tun2socks_bin: format!("{bin}/tun2socks"),
@@ -193,12 +198,14 @@ impl DesktopPaths {
             pidfile: format!(r"{run_dir}\core.pid"),
             tun2socks_pidfile: format!(r"{run_dir}\tun2socks.pid"),
             route_state_file: format!(r"{run_dir}\desktop-route.json"),
-            socks_port_file: format!(r"{datadir}\local-socks-port"),
+            // Ephemeral data-path runtime state lives in run_dir (see the Linux
+            // resolve for the rationale); engine_file + configs stay in datadir.
+            socks_port_file: format!(r"{run_dir}\local-socks-port"),
             engine_file: format!(r"{datadir}\engine"),
-            tun_iface_file: format!(r"{datadir}\tun-iface"),
-            tun2_iface_file: format!(r"{datadir}\tun2-iface"),
-            service_state_file: format!(r"{datadir}\service-state"),
-            service_started_file: format!(r"{datadir}\service-started"),
+            tun_iface_file: format!(r"{run_dir}\tun-iface"),
+            tun2_iface_file: format!(r"{run_dir}\tun2-iface"),
+            service_state_file: format!(r"{run_dir}\service-state"),
+            service_started_file: format!(r"{run_dir}\service-started"),
             xray_bin: format!(r"{bin}\xray.exe"),
             singbox_bin: format!(r"{bin}\sing-box.exe"),
             tun2socks_bin: format!(r"{bin}\tun2socks.exe"),
@@ -229,6 +236,21 @@ mod tests {
         assert_eq!(p.datadir, "/tmp/kasumi-test-home/kasumi-proxy");
         assert_eq!(p.run_dir, "/tmp/kasumi-test-run/kasumi-proxy/run");
         assert!(p.xray_bin.ends_with("/xray"));
+        // Privilege-domain split: ephemeral data-path state (helper-written) under
+        // run_dir; GUI-written inputs (engine + configs) under datadir.
+        for f in [
+            &p.socks_port_file,
+            &p.service_state_file,
+            &p.service_started_file,
+            &p.tun_iface_file,
+            &p.tun2_iface_file,
+            &p.route_state_file,
+            &p.pidfile,
+        ] {
+            assert!(f.starts_with(&p.run_dir), "{f} should live under run_dir");
+        }
+        assert!(p.engine_file.starts_with(&p.datadir));
+        assert!(p.backend.xray_config.starts_with(&p.datadir));
         std::env::remove_var("KASUMI_DATA_HOME");
         std::env::remove_var("KASUMI_RUNTIME_DIR");
     }
