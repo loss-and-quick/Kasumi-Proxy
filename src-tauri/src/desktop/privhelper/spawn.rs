@@ -51,9 +51,8 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
     let gui_pid = std::process::id();
     let uid = unsafe { libc::geteuid() };
 
-    // The helper recreates the run dir as root; ensure a stale socket is gone so a
-    // fresh bind succeeds.
-    let _ = tokio::fs::remove_file(&socket).await;
+    // The helper owns run_dir (root) and clears any stale socket itself before
+    // binding — the GUI can't unlink in that root-owned dir, so don't try here.
 
     let mut cmd = tokio::process::Command::new(elevator);
     cmd.arg(&helper)

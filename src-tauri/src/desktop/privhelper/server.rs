@@ -89,8 +89,14 @@ pub async fn serve(
     owner_uid: Option<u32>,
 ) -> anyhow::Result<()> {
     let _ = tokio::fs::remove_file(socket_path).await;
+    // Narrow the bind→chmod window: create the socket 0600 from the start (root's
+    // umask is otherwise 022, leaving it briefly group/other-readable) so no other
+    // account can connect even for an instant.
+    let prev_umask = unsafe { libc::umask(0o177) };
     let listener = UnixListener::bind(socket_path)
-        .with_context(|| format!("bind privilege-helper socket {socket_path}"))?;
+        .with_context(|| format!("bind privilege-helper socket {socket_path}"));
+    unsafe { libc::umask(prev_umask) };
+    let listener = listener?;
     restrict_socket(socket_path, owner_uid)
         .with_context(|| format!("restrict privilege-helper socket {socket_path}"))?;
     loop {
