@@ -33,6 +33,9 @@ const PASS_ENV: &[&str] = &[
     "KASUMI_DATA_HOME",
     "KASUMI_RUNTIME_DIR",
     "KASUMI_BIN_DIR",
+    // The Nix wrapper points this at iproute2; pkexec scrubs PATH (no `ip` on
+    // NixOS), so the elevated data-path needs the absolute `ip` dir forwarded.
+    "KASUMI_IP_DIR",
     "KASUMI_WEBROOT",
     "KASUMI_SKIP_ELEVATION",
 ];

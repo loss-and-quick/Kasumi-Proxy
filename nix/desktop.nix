@@ -72,9 +72,14 @@ let
     ];
     buildInputs = tauriLibs;
     # Point the app at the bundled cores by default (the desktop Platform reads
-    # KASUMI_BIN_DIR); --set-default lets a dev still override it.
+    # KASUMI_BIN_DIR); --set-default lets a dev still override it. KASUMI_IP_DIR
+    # hands the elevated data-path an absolute `ip`: after the pkexec re-exec the
+    # root instance inherits pkexec's scrubbed PATH, which on NixOS has no `ip`
+    # (no /usr/sbin/ip), so a bare PATH lookup fails. elevate.rs forwards both vars
+    # across the pkexec boundary.
     preFixup = ''
       gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${cores.desktopCores}/bin")
+      gappsWrapperArgs+=(--set-default KASUMI_IP_DIR "${pkgs.iproute2}/bin")
     '';
     installPhase = ''
       mkdir -p $out/bin
@@ -84,7 +89,14 @@ let
         $out/share/icons/hicolor/32x32/apps/kasumi-proxy.png
       install -Dm644 ${root + "/src-tauri/icons/128x128.png"} \
         $out/share/icons/hicolor/128x128/apps/kasumi-proxy.png
-      install -Dm644 ${root + "/src-tauri/icons/128x128@2x.png"} \
+      install -Dm644 ${
+        # The `@` in the source basename is illegal in a Nix store path name, so
+        # rename it as it's imported (a bare `root + "/…@2x.png"` fails to realise).
+        builtins.path {
+          name = "kasumi-proxy-256.png";
+          path = root + "/src-tauri/icons/128x128@2x.png";
+        }
+      } \
         $out/share/icons/hicolor/256x256/apps/kasumi-proxy.png
     '';
     # A `.desktop` entry so the app shows up in the launcher (copyDesktopItems hook).
