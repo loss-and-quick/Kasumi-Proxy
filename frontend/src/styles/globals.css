@@ -359,6 +359,8 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
   padding: 14px 16px; display: flex; align-items: center; gap: 12px; font-size: 13.5px; z-index: 50;
   box-shadow: 0 10px 30px -8px oklch(0 0 0 / 0.7); animation: slideup 0.26s cubic-bezier(.2,.9,.2,1);
 }
+.snackbar.leaving { pointer-events: none; animation: snackout 0.22s cubic-bezier(.4,0,1,1) forwards; }
+@keyframes snackout { to { transform: translateY(16px); opacity: 0; } }
 .snackbar .sb-action { color: var(--primary); font-weight: 700; cursor: pointer; margin-left: auto; }
 
 .mono { font-family: var(--font-mono); }
