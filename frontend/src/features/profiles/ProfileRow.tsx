@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Card, EngineTag, Icon, Ping, ProtoTag, Speed, Spinner } from "../../components";
 import type { Profile } from "../../generated/bindings";
 import { useT } from "../../i18n";
@@ -31,6 +32,16 @@ export function ProfileRow({
   const settings = useAppStore((s) => s.settings);
   const isPinging = useAppStore((s) => s.pinging.has(profile.meta.id));
   const isSpeedTesting = useAppStore((s) => s.speedTesting.has(profile.meta.id));
+  // Pop the value in only when a test just finished (spinner → value), not on
+  // every list mount — so opening the screen doesn't flash every row's metric.
+  const wasPinging = useRef(isPinging);
+  const wasSpeedTesting = useRef(isSpeedTesting);
+  const pingJustFinished = wasPinging.current && !isPinging;
+  const speedJustFinished = wasSpeedTesting.current && !isSpeedTesting;
+  useEffect(() => {
+    wasPinging.current = isPinging;
+    wasSpeedTesting.current = isSpeedTesting;
+  });
   const engine = resolveCore(profile, settings);
   const t = useT();
 
@@ -134,10 +145,18 @@ export function ProfileRow({
           </div>
         </div>
         <div style={{ textAlign: "right", flex: "0 0 auto", paddingRight: 4 }}>
-          {isPinging ? <Spinner /> : <Ping value={profile.meta.ping ?? null} />}
+          {isPinging ? (
+            <Spinner />
+          ) : (
+            <Ping value={profile.meta.ping ?? null} animate={pingJustFinished} />
+          )}
           {(isSpeedTesting || profile.meta.speed != null) && (
             <div style={{ marginTop: 2 }}>
-              {isSpeedTesting ? <Spinner /> : <Speed value={profile.meta.speed} />}
+              {isSpeedTesting ? (
+                <Spinner />
+              ) : (
+                <Speed value={profile.meta.speed} animate={speedJustFinished} />
+              )}
             </div>
           )}
         </div>
