@@ -100,25 +100,54 @@ export const Dialog = ({
   actions: ReactNode;
   onClose: () => void;
 }) => {
-  if (!open) return null;
+  // Keep the dialog mounted through its exit animation so every close
+  // path (scrim, action buttons, parent state) fades out instead of
+  // popping. Driven by `open` so parent-owned actions need no wiring.
+  const [render, setRender] = useState(open);
+  const [closing, setClosing] = useState(false);
+
+  // Freeze the shown content while closing: parents often clear the source
+  // (e.g. the selected item) on close, which would otherwise blank the body
+  // mid-animation. Keep the last open content until the exit finishes.
+  const shown = useRef({ icon, iconColor, title, children, actions });
+  if (open) shown.current = { icon, iconColor, title, children, actions };
+  const view = shown.current;
+
+  useEffect(() => {
+    if (open) {
+      setRender(true);
+      setClosing(false);
+    } else {
+      setClosing((wasClosing) => wasClosing || render);
+    }
+  }, [open, render]);
+
+  const onAnimationEnd = (e: React.AnimationEvent) => {
+    if (closing && e.target === e.currentTarget) {
+      setRender(false);
+      setClosing(false);
+    }
+  };
+
+  if (!render) return null;
   return (
     <>
-      <Scrim onClose={onClose} />
-      <div className="dialog">
-        {icon && (
+      <Scrim onClose={onClose} leaving={closing} />
+      <div className={`dialog${closing ? " leaving" : ""}`} onAnimationEnd={onAnimationEnd}>
+        {view.icon && (
           <div
             className="dialog-icon"
             style={{
-              background: iconColor?.bg || "var(--primary-container)",
-              color: iconColor?.fg || "var(--on-primary-container)",
+              background: view.iconColor?.bg || "var(--primary-container)",
+              color: view.iconColor?.fg || "var(--on-primary-container)",
             }}
           >
-            <Icon name={icon} />
+            <Icon name={view.icon} />
           </div>
         )}
-        <div className="dialog-title">{title}</div>
-        <div className="dialog-text">{children}</div>
-        <div className="dialog-actions">{actions}</div>
+        <div className="dialog-title">{view.title}</div>
+        <div className="dialog-text">{view.children}</div>
+        <div className="dialog-actions">{view.actions}</div>
       </div>
     </>
   );
