@@ -143,18 +143,21 @@ are produced at release time (see `.gitignore`).
 
 ### Faster builds: the Cachix binary cache
 
-The dev shell and desktop build pull prebuilt store paths (the Rust toolchain, webkit, the
-flake's closure) from a public [Cachix](https://www.cachix.org/) cache, so `nix develop` /
-`nix build` don't rebuild them from source. CI uses it automatically; to opt in locally:
+`flake.nix` declares a public [Cachix](https://www.cachix.org/) cache (`kasumi-proxy`) as a
+substituter, so `nix develop` / `nix build` pull the prebuilt Rust toolchain, webkit and devshell
+closure instead of building them. Nix asks once to trust the flake's cache settings — accept the
+prompt, pass `--accept-flake-config` (e.g. `nix develop --accept-flake-config`), or set
+`accept-flake-config = true` in your `nix.conf`. CI already sets it.
+
+Prompt-free alternative (writes the substituter straight to your own Nix config):
 
 ```sh
 nix profile install nixpkgs#cachix   # once, if you don't already have cachix
-cachix use kasumi-proxy              # trusts the cache in your Nix config
+cachix use kasumi-proxy
 ```
 
-Reads are public — no token needed. After that, `nix develop` substitutes from `kasumi-proxy`
-instead of building locally. (CI additionally caches the workspace's `cargo` build via the GitHub
-Actions cache; that layer is CI-only — a local `cargo` build still compiles normally.)
+Reads are public — no token needed. (CI additionally caches the workspace's `cargo` build via the
+GitHub Actions cache; that layer is CI-only — a local `cargo` build still compiles normally.)
 
 ### Web UI development
 
