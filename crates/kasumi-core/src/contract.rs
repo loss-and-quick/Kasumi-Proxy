@@ -77,7 +77,6 @@ pub struct Capabilities {
     /// Xray version.
     pub core: String,
     pub singbox_version: String,
-    pub curl: bool,
     pub tun: bool,
 }
 

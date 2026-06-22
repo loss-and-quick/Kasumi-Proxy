@@ -77,7 +77,6 @@ impl Platform for TestPlatform {
                 xray: Some("Xray 25.5.16".into()),
                 singbox: Some("1.10.0".into()),
             },
-            curl: true,
             tun: true,
             bridge: "test".into(),
         })

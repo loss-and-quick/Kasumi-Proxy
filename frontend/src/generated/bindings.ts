@@ -208,7 +208,6 @@ export type Capabilities = {
 	/**  Xray version. */
 	core: string,
 	singboxVersion: string,
-	curl: boolean,
 	tun: boolean,
 };
 

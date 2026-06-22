@@ -155,7 +155,6 @@ export const mockBridge: Bridge = {
       bridge: "mock",
       core: "Xray (mock)",
       singboxVersion: "sing-box (mock)",
-      curl: true,
       tun: false,
     };
   },

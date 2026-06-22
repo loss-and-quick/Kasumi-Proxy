@@ -135,7 +135,6 @@ function createBridgeMock(): BridgeMock {
       bridge: "mock",
       core: "",
       singboxVersion: "",
-      curl: false,
       tun: false,
     })),
     listApps: vi.fn(async () => []),

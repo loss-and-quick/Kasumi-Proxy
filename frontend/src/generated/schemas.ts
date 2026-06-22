@@ -658,7 +658,6 @@ export const CapabilitiesSchema = z.object({
 	bridge: z.string(),
 	core: z.string(),
 	singboxVersion: z.string(),
-	curl: z.boolean(),
 	tun: z.boolean(),
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;

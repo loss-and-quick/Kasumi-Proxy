@@ -64,7 +64,6 @@ pub struct InstalledCores {
 #[derive(Debug, Clone)]
 pub struct PlatformCapabilities {
     pub cores: InstalledCores,
-    pub curl: bool,
     pub tun: bool,
     /// UI-runtime tag for this host (e.g. `"ksu"` on Android, `"desktop"` elsewhere).
     pub bridge: String,
@@ -226,7 +225,6 @@ mod tests {
         async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {
             Ok(PlatformCapabilities {
                 cores: InstalledCores::default(),
-                curl: false,
                 tun: false,
                 bridge: "stub".into(),
             })

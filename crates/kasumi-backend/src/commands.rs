@@ -391,7 +391,6 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                     .xray
                     .unwrap_or_else(|| "Xray (not installed)".into()),
                 singbox_version: c.cores.singbox.unwrap_or_default(),
-                curl: c.curl,
                 tun: c.tun,
             }))
         }

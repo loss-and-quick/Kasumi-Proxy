@@ -510,7 +510,6 @@ mod tests {
                     xray: Some("Xray 1.0".into()),
                     singbox: None,
                 },
-                curl: false,
                 tun: true,
                 bridge: "test".into(),
             })

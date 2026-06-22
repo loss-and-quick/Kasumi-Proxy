@@ -490,11 +490,9 @@ impl Platform for AndroidPlatform {
     async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {
         let xray = core_version(CoreEngine::Xray).await;
         let singbox = core_version(CoreEngine::SingBox).await;
-        let curl = run_out(&["curl", "--version"]).await.0 == 0;
         let tun = exists("/dev/net/tun").await;
         Ok(PlatformCapabilities {
             cores: InstalledCores { xray, singbox },
-            curl,
             tun,
             bridge: "ksu".into(),
         })

@@ -171,7 +171,6 @@ export function parseCapabilities(value: unknown): Capabilities {
     bridge: typeof s.bridge === "string" ? s.bridge : "",
     core: typeof s.core === "string" ? s.core : "",
     singboxVersion: typeof s.singboxVersion === "string" ? s.singboxVersion : "",
-    curl: s.curl === true || s.curl === 1 || s.curl === "1",
     tun: s.tun === true || s.tun === 1 || s.tun === "1",
   };
 }
