@@ -57,6 +57,33 @@ let
     inherit frontend;
   };
 
+  # The privileged data-path helper is a second bin in the same crate. crane-tauri
+  # installs only the app, so build the helper separately — reusing the dependency
+  # cache + the tauri build env. Wrap it so iproute2 is on its PATH: the helper
+  # shells out to `ip`, and pkexec scrubs the env + installs a minimal PATH that on
+  # NixOS has no `ip`. The wrapper restores PATH after pkexec, so the code just
+  # calls `ip` with no environment plumbing.
+  helper-unwrapped = craneLib.buildPackage (
+    tauri.commonArgs
+    // {
+      pname = "kasumi-helper";
+      cargoArtifacts = tauri.cargoArtifacts;
+      cargoExtraArgs = "--bin kasumi-helper";
+      TAURI_CONFIG = tauri.tauriConfig;
+      doCheck = false;
+    }
+  );
+  helper =
+    pkgs.runCommand "kasumi-helper"
+      {
+        nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+      }
+      ''
+        mkdir -p $out/bin
+        makeWrapper ${helper-unwrapped}/bin/kasumi-helper $out/bin/kasumi-helper \
+          --prefix PATH : ${lib.makeBinPath [ pkgs.iproute2 ]}
+      '';
+
   # crane-tauri leaves GTK/WebKit wrapping to the consumer (wrapping in the shared
   # inputs would perturb PKG_CONFIG_PATH and bust -sys fingerprints). webkit2gtk-4.1
   # is GTK3-based, so wrap with wrapGAppsHook3.
@@ -71,19 +98,19 @@ let
       pkgs.copyDesktopItems
     ];
     buildInputs = tauriLibs;
-    # Point the app at the bundled cores by default (the desktop Platform reads
-    # KASUMI_BIN_DIR); --set-default lets a dev still override it. KASUMI_IP_DIR
-    # hands the elevated data-path an absolute `ip`: after the pkexec re-exec the
-    # root instance inherits pkexec's scrubbed PATH, which on NixOS has no `ip`
-    # (no /usr/sbin/ip), so a bare PATH lookup fails. elevate.rs forwards both vars
-    # across the pkexec boundary.
+    # Point the unprivileged GUI at the bundled cores (it reads KASUMI_BIN_DIR and
+    # forwards it to the root helper it spawns; --set-default lets a dev override).
+    # Put iproute2 on PATH too: the GUI itself runs `ip monitor route` for the
+    # uplink watch, and on NixOS there is no /usr/sbin/ip.
     preFixup = ''
       gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${cores.desktopCores}/bin")
-      gappsWrapperArgs+=(--set-default KASUMI_IP_DIR "${pkgs.iproute2}/bin")
+      gappsWrapperArgs+=(--prefix PATH : "${lib.makeBinPath [ pkgs.iproute2 ]}")
     '';
     installPhase = ''
       mkdir -p $out/bin
       cp ${tauri.app}/bin/kasumi-desktop $out/bin/kasumi-desktop
+      # The GUI spawns this sibling as root for the data-path (privilege separation).
+      cp ${helper}/bin/kasumi-helper $out/bin/kasumi-helper
       # Launcher icon (the file basenames already encode their pixel size).
       install -Dm644 ${root + "/src-tauri/icons/32x32.png"} \
         $out/share/icons/hicolor/32x32/apps/kasumi-proxy.png

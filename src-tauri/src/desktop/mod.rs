@@ -20,6 +20,11 @@ mod linux;
 #[cfg(target_os = "linux")]
 pub(crate) use linux::{network, routing, LinuxOs as OsSeam};
 
+// Privilege separation (the GUI stays unprivileged, a root helper owns the
+// data-path). Linux-only for now; Windows keeps the whole-process UAC model.
+#[cfg(target_os = "linux")]
+pub mod privhelper;
+
 #[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "windows")]

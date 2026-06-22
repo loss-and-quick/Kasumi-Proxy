@@ -212,9 +212,19 @@ present for its root re-exec (the desktop brings up the tun + routes by re-execi
 }
 ```
 
-`programs.kasumi-proxy.package` overrides the build; it defaults to this flake's `kasumi-desktop`. The
-app still asks for authentication each time it brings up the tunnel — password-free elevation (a polkit
-rule scoped to the app) is not wired yet.
+`programs.kasumi-proxy.package` overrides the build; it defaults to this flake's `kasumi-desktop`.
+
+By default the app authenticates each time it brings up the tunnel. To skip that prompt for trusted
+users, opt in to a polkit rule scoped to the privileged helper:
+
+```nix
+programs.kasumi-proxy.passwordlessElevation.enable = true;   # group defaults to "kasumi-proxy"
+users.users.alice.extraGroups = [ "kasumi-proxy" ];
+```
+
+The rule grants password-free `pkexec` for the `kasumi-helper` binary only — the small root sidecar that
+owns the tun + routes, not the GUI — to members of the group. It is off by default because it is a
+privilege grant.
 
 ### Web UI development
 
