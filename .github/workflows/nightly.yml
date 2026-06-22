@@ -232,8 +232,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          # Portable build: app exe + cores (suffix stripped) + wintun.dll + a
-          # `portable.dat` marker that pins all state next to the exe at runtime.
+          # Portable build: app exe + cores (suffix stripped) + wintun.dll +
+          # libcronet.dll + a `portable.dat` marker that pins all state next to the
+          # exe at runtime.
           t="${{ matrix.target }}"
           out="dist/portable/Kasumi-Proxy"
           mkdir -p "$out"
@@ -242,6 +243,8 @@ jobs:
             cp "src-tauri/binaries/$c-$t.exe" "$out/$c.exe"
           done
           cp src-tauri/binaries/wintun.dll "$out/"
+          # libcronet.dll must sit next to sing-box for its naive outbound to load.
+          cp src-tauri/binaries/libcronet.dll "$out/"
           : > "$out/portable.dat"
           name=$(scripts/artifact-name.sh windows-portable)
           ( cd dist/portable && 7z a -tzip "../$name" Kasumi-Proxy >/dev/null )
@@ -261,6 +264,8 @@ jobs:
           for c in xray sing-box tun2socks; do
             cp "src-tauri/binaries/$c-$t" "$out/$c"
           done
+          # libcronet.so must sit next to sing-box for its naive outbound to load.
+          cp src-tauri/binaries/libcronet.so "$out/"
           chmod +x "$out"/*
           : > "$out/portable.dat"
           name=$(scripts/artifact-name.sh linux-portable)

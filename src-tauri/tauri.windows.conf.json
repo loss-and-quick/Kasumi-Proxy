@@ -3,7 +3,8 @@
   "bundle": {
     "targets": ["nsis", "msi"],
     "resources": {
-      "binaries/wintun.dll": "wintun.dll"
+      "binaries/wintun.dll": "wintun.dll",
+      "binaries/libcronet.dll": "libcronet.dll"
     },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" }
