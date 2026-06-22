@@ -41,7 +41,12 @@ jobs:
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          files=$(git diff --name-only "$base" "$head")
+          # Three-dot: diff from the merge-base, not base..head directly. When the
+          # branch is behind the base (main advanced after it forked — the common
+          # case), a two-dot diff would also list every file main changed since,
+          # falsely flagging areas the PR never touched. This mirrors GitHub's own
+          # PR diff semantics.
+          files=$(git diff --name-only "$base...$head")
           match() { printf '%s\n' "$files" | grep -Eq "$1"; }
           fe=false; rs=false; dk=false
           match '^(frontend/|module/|scripts/|package\.json|bun\.lock|biome\.json)' && fe=true
