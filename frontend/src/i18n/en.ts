@@ -329,7 +329,6 @@ const en = {
   "settings.subtitle": "Routing & core",
   "settings.diagnostics": "Diagnostics",
   "settings.bridge": "Bridge",
-  "settings.core": "Core",
   "settings.xrayVersion": "Xray version",
   "settings.singboxVersion": "sing-box version",
   "settings.tun": "TUN",

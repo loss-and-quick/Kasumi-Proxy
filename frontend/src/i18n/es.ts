@@ -322,7 +322,6 @@ const es = {
   "settings.subtitle": "Enrutamiento y núcleo",
   "settings.diagnostics": "Diagnóstico",
   "settings.bridge": "Bridge",
-  "settings.core": "Core",
   "settings.xrayVersion": "Versión de Xray",
   "settings.singboxVersion": "Versión de sing-box",
   "settings.tun": "TUN",

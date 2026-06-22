@@ -315,7 +315,6 @@ const hi = {
   "settings.subtitle": "रूटिंग और कोर",
   "settings.diagnostics": "डायग्नोस्टिक्स",
   "settings.bridge": "ब्रिज",
-  "settings.core": "कोर",
   "settings.xrayVersion": "Xray संस्करण",
   "settings.singboxVersion": "sing-box संस्करण",
   "settings.tun": "TUN",

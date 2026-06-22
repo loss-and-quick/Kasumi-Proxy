@@ -322,7 +322,6 @@ const pt = {
   "settings.subtitle": "Roteamento e núcleo",
   "settings.diagnostics": "Diagnóstico",
   "settings.bridge": "Bridge",
-  "settings.core": "Núcleo",
   "settings.xrayVersion": "Versão do Xray",
   "settings.singboxVersion": "Versão do sing-box",
   "settings.tun": "TUN",

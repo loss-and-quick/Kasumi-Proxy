@@ -392,7 +392,6 @@ const ar = {
   "settings.subtitle": "التوجيه والمحرك",
   "settings.diagnostics": "التشخيص",
   "settings.bridge": "Bridge",
-  "settings.core": "المحرك",
   "settings.xrayVersion": "إصدار Xray",
   "settings.singboxVersion": "إصدار sing-box",
   "settings.tun": "TUN",

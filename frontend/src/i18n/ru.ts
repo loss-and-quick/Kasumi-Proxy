@@ -341,7 +341,6 @@ const ru = {
   "settings.subtitle": "Маршрутизация и ядро",
   "settings.diagnostics": "Диагностика",
   "settings.bridge": "Bridge",
-  "settings.core": "Ядро",
   "settings.xrayVersion": "Версия Xray",
   "settings.singboxVersion": "Версия sing-box",
   "settings.tun": "TUN",

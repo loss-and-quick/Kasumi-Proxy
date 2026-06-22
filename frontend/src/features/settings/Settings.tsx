@@ -179,7 +179,6 @@ export default function Settings({
       <div className="scroll">
         <DiagnosticsSection
           bridgeMode={bridgeMode}
-          core={service.core}
           xrayVersion={caps?.xrayVersion ?? ""}
           singboxVersion={caps?.singboxVersion ?? ""}
           tun={caps?.tun ?? false}

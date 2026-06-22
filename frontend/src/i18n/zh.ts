@@ -318,7 +318,6 @@ const zh = {
   "settings.subtitle": "路由与核心",
   "settings.diagnostics": "诊断",
   "settings.bridge": "Bridge",
-  "settings.core": "核心",
   "settings.xrayVersion": "Xray 版本",
   "settings.singboxVersion": "sing-box 版本",
   "settings.tun": "TUN",

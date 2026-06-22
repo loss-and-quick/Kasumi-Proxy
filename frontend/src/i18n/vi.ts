@@ -318,7 +318,6 @@ const vi = {
   "settings.subtitle": "Định tuyến và nhân lõi",
   "settings.diagnostics": "Chẩn đoán",
   "settings.bridge": "Bridge",
-  "settings.core": "Nhân lõi",
   "settings.xrayVersion": "Phiên bản Xray",
   "settings.singboxVersion": "Phiên bản sing-box",
   "settings.tun": "TUN",

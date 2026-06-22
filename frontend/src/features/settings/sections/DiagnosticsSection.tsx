@@ -3,7 +3,6 @@ import { useT } from "../../../i18n";
 
 export function DiagnosticsSection({
   bridgeMode,
-  core,
   xrayVersion,
   singboxVersion,
   tun,
@@ -12,7 +11,6 @@ export function DiagnosticsSection({
   activeId,
 }: {
   bridgeMode: string;
-  core: string;
   xrayVersion: string;
   singboxVersion: string;
   tun: boolean;
@@ -28,7 +26,6 @@ export function DiagnosticsSection({
       <SectionLabel>{t("settings.diagnostics")}</SectionLabel>
       <Card style={{ padding: "4px 14px" }}>
         <ListRow icon="link" title={t("settings.bridge")} sub={bridgeMode} />
-        <ListRow icon="memory" title={t("settings.core")} sub={core || t("common.xrayCore")} />
         <ListRow icon="bolt" title={t("settings.xrayVersion")} sub={xrayVersion || notInstalled} />
         <ListRow
           icon="bolt"
