@@ -43,14 +43,19 @@
   /* Motion — one source of truth for timing + easing. Pick a tier by the size
      of the thing moving: fast = micro state (hover, colour, focus); base =
      small surfaces (switch, dialog, toast exit); slow = large surfaces (sheets,
-     side rail, screen transitions). enter = decelerate (settle in); exit =
-     accelerate (whisk out). Reversible fades and colour swaps keep the default
-     ease, which needs no token. */
+     side rail, screen transitions). Easing follows the kind of motion: enter =
+     decelerate for transform/opacity entrances (settle in); exit = accelerate
+     (whisk out); expand = for things that grow their size/layout (height,
+     grid-rows) — a gentler decelerate, since the sharp front of --ease-enter
+     reads as a jolt when it's the box itself, not its position, that changes.
+     Reversible fades and colour swaps keep the default ease, which needs no
+     token. */
   --dur-fast: 0.16s;
   --dur-base: 0.2s;
   --dur-slow: 0.26s;
   --ease-enter: cubic-bezier(0.2, 0.9, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-expand: cubic-bezier(0.2, 0, 0, 1);
 }
 
 * { box-sizing: border-box; }
@@ -171,6 +176,19 @@ body {
 .appbar.lg .appbar-title { font-size: 28px; font-weight: 600; }
 .appbar-sub { font-size: 12.5px; color: var(--on-surface-variant); margin-top: 2px; font-weight: 400; }
 
+/* Search field: kept mounted, sized by its content via grid-rows 0fr→1fr (no
+   measuring, no magic max-height — so it never clips and never under-opens).
+   Growth uses --ease-expand (the size-change curve, not --ease-enter). Opacity
+   is deliberately quick (0.12s, below the fast tier): it only hides the 1px
+   residue webkit leaves on a collapsed 0fr track, so the content turns solid
+   early rather than fading in over the whole reveal. */
+.search-row {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows var(--dur-slow) var(--ease-expand), opacity 0.12s ease;
+}
+.search-row.open { grid-template-rows: 1fr; opacity: 1; }
+.search-row-inner { overflow: hidden; min-height: 0; padding: 0 16px 8px; }
+
 .scroll {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 4px 16px 120px;
   scrollbar-width: thin; scrollbar-color: var(--outline-variant) transparent;
@@ -290,7 +308,9 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
   position: absolute; right: calc(18px + var(--window-inset-right, 0px)); bottom: calc(96px + var(--window-inset-bottom, 0px)); z-index: 25; height: 60px; min-width: 60px; padding: 0 20px; border-radius: 19px;
   border: none; background: var(--primary-container); color: var(--on-primary-container); display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--font-ui); font-size: 15px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 22px -6px oklch(0 0 0 / 0.6); transition: filter var(--dur-fast), transform var(--dur-fast);
+  animation: fab-in var(--dur-slow) var(--ease-enter);
 }
+@keyframes fab-in { from { transform: scale(0.6); opacity: 0; } }
 .fab:hover { filter: brightness(1.1); }
 .fab:active { transform: scale(0.96); }
 .fab .material-symbols-rounded { font-size: 24px; }
