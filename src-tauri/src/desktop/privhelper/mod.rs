@@ -5,4 +5,6 @@
 //! over a unix socket. See [`super::elevate`] for the (current) whole-process
 //! model this is migrating away from.
 
+pub mod client;
 pub mod proto;
+pub mod server;
