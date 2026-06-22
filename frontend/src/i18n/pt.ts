@@ -525,6 +525,7 @@ const pt = {
   "profiles.groups.newPlaceholder": "Nome do novo grupo",
   "profiles.groups.count": plural("count", { one: "# perfil", other: "# perfis" }),
   "profiles.groups.reorder": "Reordenar grupo",
+  "profiles.groups.lockedActive": "Não é possível excluir um grupo que contém o perfil ativo",
   "profiles.confirmDelGroup.title": "Excluir grupo?",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "e o seu # perfil será removido permanentemente.",

@@ -517,6 +517,7 @@ const hi = {
   "profiles.groups.newPlaceholder": "नए समूह का नाम",
   "profiles.groups.count": plural("count", { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }),
   "profiles.groups.reorder": "समूह का क्रम बदलें",
+  "profiles.groups.lockedActive": "सक्रिय प्रोफ़ाइल वाले समूह को हटाया नहीं जा सकता",
   "profiles.confirmDelGroup.title": "समूह हटाएं?",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "और इसकी # प्रोफ़ाइल स्थायी रूप से हटा दी जाएगी।",

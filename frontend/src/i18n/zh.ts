@@ -517,6 +517,7 @@ const zh = {
   "profiles.groups.newPlaceholder": "新分组名称",
   "profiles.groups.count": plural("count", { one: "# 个配置", other: "# 个配置" }),
   "profiles.groups.reorder": "重新排序分组",
+  "profiles.groups.lockedActive": "无法删除包含活动配置的分组",
   "profiles.confirmDelGroup.title": "删除分组？",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "及其 # 个配置将被永久删除。",

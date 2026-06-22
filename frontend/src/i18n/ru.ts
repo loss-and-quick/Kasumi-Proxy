@@ -559,6 +559,7 @@ const ru = {
     other: "# профиля",
   }),
   "profiles.groups.reorder": "Переместить группу",
+  "profiles.groups.lockedActive": "Нельзя удалить группу с активным профилем",
   "profiles.confirmDelGroup.title": "Удалить группу?",
   "profiles.confirmDelGroup.body": plural("count", {
     one: "и её # профиль будет удалён безвозвратно.",

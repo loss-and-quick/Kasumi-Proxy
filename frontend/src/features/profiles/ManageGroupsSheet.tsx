@@ -102,7 +102,6 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
   }
 
   function renderRow(group: Group, bindings?: SortableBindings) {
-    const locked = group.id === "g-main" || group.id === activeGroupId;
     const isEditing = editingId === group.id;
     return (
       <div
@@ -169,14 +168,25 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
             }}
           />
         )}
-        {!locked && !isEditing && (
-          <IconBtn
-            name="delete"
-            sm
-            title={t("profiles.removeGroup")}
-            onClick={() => setConfirmDel(group)}
-          />
-        )}
+        {!isEditing &&
+          group.id !== "g-main" &&
+          (group.id === activeGroupId ? (
+            <span
+              className="lr-lock"
+              role="img"
+              title={t("profiles.groups.lockedActive")}
+              aria-label={t("profiles.groups.lockedActive")}
+            >
+              <Icon name="lock" />
+            </span>
+          ) : (
+            <IconBtn
+              name="delete"
+              sm
+              title={t("profiles.removeGroup")}
+              onClick={() => setConfirmDel(group)}
+            />
+          ))}
       </div>
     );
   }
