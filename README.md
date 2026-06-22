@@ -159,6 +159,37 @@ cachix use kasumi-proxy
 Reads are public — no token needed. (CI additionally caches the workspace's `cargo` build via the
 GitHub Actions cache; that layer is CI-only — a local `cargo` build still compiles normally.)
 
+### Install the desktop app via Nix
+
+The flake exposes `kasumi-desktop` as a package, and **each release builds it and pushes it to the
+`kasumi-proxy` Cachix cache**, so you can install a released tag without compiling. Add the cache to
+**your own** Nix config first — a flake's `nixConfig` is *not* applied to downstream consumers, so
+ours doesn't reach you automatically:
+
+```sh
+cachix use kasumi-proxy   # or add the substituter + key below to your nix.conf
+nix build github:loss-and-quick/Kasumi-Proxy/vX.Y.Z#kasumi-desktop
+```
+
+Or wire it into your own flake:
+
+```nix
+{
+  inputs.kasumi-proxy.url = "github:loss-and-quick/Kasumi-Proxy";
+  # outputs: inputs.kasumi-proxy.packages.${system}.kasumi-desktop
+  nixConfig = {
+    extra-substituters = [ "https://kasumi-proxy.cachix.org" ];
+    extra-trusted-public-keys = [
+      "kasumi-proxy.cachix.org-1:V22nNqK4m1rSZRfuak86S1aY1eLlGhty05m8VtK25gM="
+    ];
+  };
+}
+```
+
+Without our substituter in your config, the build still works — it just compiles from source instead
+of pulling the prebuilt closure. The cache hit is per exact revision (the released tag), so build the
+same tag you reference.
+
 ### Web UI development
 
 ```sh
