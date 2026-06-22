@@ -68,6 +68,7 @@ let
       pkgs.wrapGAppsHook3
       pkgs.gobject-introspection
       pkgs.patchelf
+      pkgs.copyDesktopItems
     ];
     buildInputs = tauriLibs;
     # Point the app at the bundled cores by default (the desktop Platform reads
@@ -78,7 +79,26 @@ let
     installPhase = ''
       mkdir -p $out/bin
       cp ${tauri.app}/bin/kasumi-desktop $out/bin/kasumi-desktop
+      # Launcher icon (the file basenames already encode their pixel size).
+      install -Dm644 ${root + "/src-tauri/icons/32x32.png"} \
+        $out/share/icons/hicolor/32x32/apps/kasumi-proxy.png
+      install -Dm644 ${root + "/src-tauri/icons/128x128.png"} \
+        $out/share/icons/hicolor/128x128/apps/kasumi-proxy.png
+      install -Dm644 ${root + "/src-tauri/icons/128x128@2x.png"} \
+        $out/share/icons/hicolor/256x256/apps/kasumi-proxy.png
     '';
+    # A `.desktop` entry so the app shows up in the launcher (copyDesktopItems hook).
+    desktopItems = [
+      (pkgs.makeDesktopItem {
+        name = "kasumi-proxy";
+        desktopName = "Kasumi Proxy";
+        exec = "kasumi-desktop";
+        icon = "kasumi-proxy";
+        comment = "Transparent proxy (Xray-core / sing-box) with a native TUN and a React UI";
+        categories = [ "Network" ];
+        terminal = false;
+      })
+    ];
     # The tray icon dlopen's libayatana-appindicator at runtime (not linked). Bake
     # it into the binary's RUNPATH so dlopen finds it even after the app re-execs
     # as root via pkexec, which scrubs the environment (LD_LIBRARY_PATH would be
@@ -90,6 +110,14 @@ let
       patchelf --add-rpath ${lib.makeLibraryPath [ pkgs.libayatana-appindicator ]} \
         $out/bin/.kasumi-desktop-wrapped
     '';
+    meta = {
+      description = "Transparent proxy (Xray-core / sing-box) — Tauri 2 desktop app";
+      homepage = "https://github.com/loss-and-quick/Kasumi-Proxy";
+      license = lib.licenses.gpl3Plus;
+      mainProgram = "kasumi-desktop";
+      platforms = [ "x86_64-linux" ];
+      maintainers = [ ];
+    };
   };
 
   # `nix flake check` — clippy over the same source, reusing crane's dep cache.
