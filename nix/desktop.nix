@@ -84,7 +84,14 @@ let
         $out/share/icons/hicolor/32x32/apps/kasumi-proxy.png
       install -Dm644 ${root + "/src-tauri/icons/128x128.png"} \
         $out/share/icons/hicolor/128x128/apps/kasumi-proxy.png
-      install -Dm644 ${root + "/src-tauri/icons/128x128@2x.png"} \
+      install -Dm644 ${
+        # The `@` in the source basename is illegal in a Nix store path name, so
+        # rename it as it's imported (a bare `root + "/…@2x.png"` fails to realise).
+        builtins.path {
+          name = "kasumi-proxy-256.png";
+          path = root + "/src-tauri/icons/128x128@2x.png";
+        }
+      } \
         $out/share/icons/hicolor/256x256/apps/kasumi-proxy.png
     '';
     # A `.desktop` entry so the app shows up in the launcher (copyDesktopItems hook).
