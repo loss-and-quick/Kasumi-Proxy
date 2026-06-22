@@ -17,6 +17,7 @@ jobs:
       frontend: ${{ steps.detect.outputs.frontend }}
       rust: ${{ steps.detect.outputs.rust }}
       desktop: ${{ steps.detect.outputs.desktop }}
+      shell: ${{ steps.detect.outputs.shell }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -38,6 +39,7 @@ jobs:
               echo "frontend=true"
               echo "rust=true"
               echo "desktop=true"
+              echo "shell=true"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -48,14 +50,16 @@ jobs:
           # PR diff semantics.
           files=$(git diff --name-only "$base...$head")
           match() { printf '%s\n' "$files" | grep -Eq "$1"; }
-          fe=false; rs=false; dk=false
-          match '^(frontend/|module/|scripts/|package\.json|bun\.lock|biome\.json)' && fe=true
+          fe=false; rs=false; dk=false; sh=false
+          match '^(frontend/|package\.json|bun\.lock|biome\.json)' && fe=true
           match '^(crates/|src-tauri/|Cargo\.(toml|lock)|flake\.(nix|lock))' && rs=true
           match '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))' && dk=true
+          match '^(module/|scripts/)' && sh=true
           {
             echo "frontend=$fe"
             echo "rust=$rs"
             echo "desktop=$dk"
+            echo "shell=$sh"
           } >> "$GITHUB_OUTPUT"
 
   # ── Frontend: bun workspace (lockfile at the repo root), biome, build, tests ──
@@ -91,6 +95,16 @@ jobs:
 
       - name: i18n dictionaries
         run: bun run frontend/scripts/check-i18n.ts
+
+  # ── ShellCheck the module + build/release scripts. Split out from the frontend
+  #    job so a scripts-only / module-only change runs just this (seconds) instead
+  #    of the whole bun install + build + vitest. shellcheck ships on the runner. ──
+  shellcheck:
+    needs: changes
+    if: needs.changes.outputs.shell == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: ShellCheck
         run: |
@@ -239,7 +253,7 @@ jobs:
   #    failure or cancellation fails CI. Point branch protection at THIS context so
   #    path-skipped jobs never block a merge. ──
   ci:
-    needs: [changes, frontend, rust, desktop-linux, desktop-windows]
+    needs: [changes, frontend, shellcheck, rust, desktop-linux, desktop-windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
