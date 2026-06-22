@@ -14,9 +14,10 @@ use std::path::PathBuf;
 
 use kasumi_backend::BackendPaths;
 
-/// Env-var contract between the GUI and the privilege helper across the pkexec
-/// boundary: the helper is handed these verbatim so both sides resolve identically.
-/// Read in [`DesktopPaths::resolve`], written by the helper entry point.
+/// Env-var contract between the GUI and the privilege helper across the privilege
+/// boundary (pkexec args on Linux, the service launch arguments on Windows): the
+/// helper is handed these verbatim so both sides resolve identically. Read in
+/// [`DesktopPaths::resolve`], set by the helper/service entry point.
 pub(crate) const ENV_DATADIR: &str = "KASUMI_DATADIR";
 pub(crate) const ENV_RUNDIR: &str = "KASUMI_RUNDIR";
 pub(crate) const ENV_BIN_DIR: &str = "KASUMI_BIN_DIR";
@@ -172,9 +173,10 @@ impl DesktopPaths {
 #[cfg(target_os = "windows")]
 impl DesktopPaths {
     pub fn resolve() -> anyhow::Result<Self> {
-        // Cores/tun2socks ship next to the app exe; KASUMI_BIN_DIR overrides for dev.
+        // Cores/tun2socks ship next to the app exe; KASUMI_BIN_DIR overrides for dev
+        // and is how the GUI hands the service its bin dir across the service boundary.
         let exe = std::env::current_exe()?.to_string_lossy().into_owned();
-        let bin = env("KASUMI_BIN_DIR").unwrap_or_else(|| dir_of(&exe));
+        let bin = env(ENV_BIN_DIR).unwrap_or_else(|| dir_of(&exe));
         let webroot = env("KASUMI_WEBROOT");
 
         // Portable build: a marker next to the exe pins all state beside the app
@@ -182,6 +184,13 @@ impl DesktopPaths {
         // no marker and fall back to the roaming/local profile dirs.
         let exe_dir = dir_of(&exe);
         let portable = std::path::Path::new(&exe_dir).join("portable.dat").exists();
+
+        // The service is handed the GUI's already-resolved dirs as launch arguments
+        // (KASUMI_DATADIR / KASUMI_RUNDIR), so SYSTEM lands on the GUI user's dirs
+        // rather than its own profile. When set, they win and are used verbatim.
+        let datadir_override = env(ENV_DATADIR);
+        let rundir_override = env(ENV_RUNDIR);
+
         let data_home = env("KASUMI_DATA_HOME")
             .or_else(|| portable.then(|| exe_dir.clone()))
             .or_else(|| env("APPDATA"))
@@ -199,8 +208,14 @@ impl DesktopPaths {
         let data_home = norm(&data_home);
         let runtime_base = norm(&runtime_base);
 
-        let datadir = format!(r"{data_home}\kasumi-proxy");
-        let run_dir = format!(r"{runtime_base}\kasumi-proxy\run");
+        let datadir = match &datadir_override {
+            Some(d) => norm(d),
+            None => format!(r"{data_home}\kasumi-proxy"),
+        };
+        let run_dir = match &rundir_override {
+            Some(r) => norm(r),
+            None => format!(r"{runtime_base}\kasumi-proxy\run"),
+        };
 
         let backend = BackendPaths {
             data_dir: PathBuf::from(&datadir),

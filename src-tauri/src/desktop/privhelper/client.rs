@@ -8,11 +8,10 @@
 
 use anyhow::Context;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::unix::OwnedWriteHalf;
-use tokio::net::UnixStream;
 use tokio::sync::Mutex;
 
 use super::proto::{PrivReply, PrivRequest};
+use super::transport::{self, BoxRead, BoxWrite};
 
 /// A held-open connection to the privilege helper.
 pub struct Client {
@@ -20,17 +19,15 @@ pub struct Client {
 }
 
 struct Conn {
-    reader: tokio::io::Lines<BufReader<tokio::net::unix::OwnedReadHalf>>,
-    writer: OwnedWriteHalf,
+    reader: tokio::io::Lines<BufReader<BoxRead>>,
+    writer: BoxWrite,
 }
 
 impl Client {
-    /// Connect to the helper listening on `socket_path`.
-    pub async fn connect(socket_path: &str) -> anyhow::Result<Self> {
-        let stream = UnixStream::connect(socket_path)
-            .await
-            .with_context(|| format!("connect privilege-helper socket {socket_path}"))?;
-        let (read, writer) = stream.into_split();
+    /// Connect to the helper listening at `addr` (a unix-socket path on Linux, a
+    /// named-pipe name on Windows).
+    pub async fn connect(addr: &str) -> anyhow::Result<Self> {
+        let (read, writer) = transport::connect(addr).await?;
         Ok(Self {
             inner: Mutex::new(Conn {
                 reader: BufReader::new(read).lines(),
@@ -65,7 +62,9 @@ impl Client {
     }
 }
 
-#[cfg(test)]
+// The end-to-end round-trip binds a real unix socket via `server::serve`; the
+// Windows pipe path is exercised by the desktop-windows CI build, not here.
+#[cfg(all(test, unix))]
 mod tests {
     use std::sync::Arc;
 

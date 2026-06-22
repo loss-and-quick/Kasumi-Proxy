@@ -48,10 +48,15 @@ tauri-plugin-updater = "2"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
-# Windows UAC elevation (ShellExecuteW runas + IsUserAnAdmin) — see desktop/elevate.rs.
+# Windows privilege separation: the LocalSystem data-path service (windows-service)
+# + the named-pipe security descriptor and the one-time install elevation
+# (ShellExecuteW runas) — see desktop/privhelper/{service,connect}.rs, elevate.rs.
 [target.'cfg(windows)'.dependencies]
+windows-service = "0.7"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }

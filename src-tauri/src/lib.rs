@@ -113,22 +113,26 @@ async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
     service
 }
 
-/// The desktop [`Platform`]. On Linux the GUI is unprivileged and drives the
-/// data-path through a root helper it spawns (`KASUMI_SKIP_ELEVATION` opts out for
-/// CI/dev, running it in-process). Other OSes run it in-process directly (Windows
-/// has already re-exec'd the whole process under UAC).
-#[cfg(target_os = "linux")]
+/// The desktop [`Platform`]. The GUI is unprivileged and drives the data-path
+/// through a privileged helper it reaches over a transport: a root helper it spawns
+/// on Linux, a LocalSystem service it installs/starts on Windows.
+/// `KASUMI_SKIP_ELEVATION` opts out for CI/dev, running the data-path in-process.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
-    use desktop::privhelper::{spawn_and_connect, RemotePlatform};
+    use desktop::privhelper::RemotePlatform;
     if std::env::var_os("KASUMI_SKIP_ELEVATION").is_some() {
         return Ok(Arc::new(DesktopPlatform::new()?));
     }
     let paths = desktop::paths::DesktopPaths::resolve()?;
-    let client = spawn_and_connect(&paths).await?;
+    #[cfg(target_os = "linux")]
+    let client = desktop::privhelper::spawn_and_connect(&paths).await?;
+    #[cfg(target_os = "windows")]
+    let client = desktop::privhelper::connect_service(&paths).await?;
     Ok(Arc::new(RemotePlatform::new(client)?))
 }
 
-#[cfg(not(target_os = "linux"))]
+/// macOS has no elevation path yet; run the data-path in-process.
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     Ok(Arc::new(DesktopPlatform::new()?))
 }
@@ -163,10 +167,10 @@ pub fn export_generated() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Windows re-execs the whole process under UAC before any init. Linux keeps the
-    // GUI unprivileged and spawns a root helper later (in setup); macOS has no
-    // elevation. Mobile never elevates.
-    #[cfg(all(not(mobile), not(target_os = "linux")))]
+    // The GUI stays unprivileged on Linux and Windows alike: each sets up its
+    // privileged data-path helper later (in setup, via build_platform). Only macOS
+    // would elevate the process itself today — and that path is still a no-op.
+    #[cfg(all(not(mobile), target_os = "macos"))]
     desktop::elevate::ensure_elevated();
 
     let builder = specta_builder();

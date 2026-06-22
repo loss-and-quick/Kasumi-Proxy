@@ -9,13 +9,12 @@
 
 use std::sync::Arc;
 
-use anyhow::Context;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::{UnixListener, UnixStream};
 
 use kasumi_backend::platform::{Platform, StartDataPath, StopDataPath};
 
 use super::proto::{PrivReply, PrivRequest};
+use super::transport::{BoxRead, BoxWrite};
 
 /// Map one request to its reply by calling into `platform`. Errors are folded into
 /// `PrivReply::Err` so a failing operation never drops the connection.
@@ -83,11 +82,15 @@ fn to_reply(r: anyhow::Result<()>) -> PrivReply {
 /// `chown`ed to it and locked to `0600`, so that user can connect but no other
 /// local account can reach the root data-path. `None` leaves the socket owned by
 /// the running user (tests, or a same-user run).
+#[cfg(unix)]
 pub async fn serve(
     platform: Arc<dyn Platform>,
     socket_path: &str,
     owner_uid: Option<u32>,
 ) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use tokio::net::UnixListener;
+
     let _ = tokio::fs::remove_file(socket_path).await;
     // Narrow the bind→chmod window: create the socket 0600 from the start (root's
     // umask is otherwise 022, leaving it briefly group/other-readable) so no other
@@ -101,9 +104,10 @@ pub async fn serve(
         .with_context(|| format!("restrict privilege-helper socket {socket_path}"))?;
     loop {
         let (stream, _addr) = listener.accept().await?;
+        let (read, write) = tokio::io::split(stream);
         let platform = platform.clone();
         tokio::spawn(async move {
-            if let Err(e) = serve_conn(platform, stream).await {
+            if let Err(e) = serve_conn(platform, Box::new(read), Box::new(write)).await {
                 eprintln!("kasumi-helper: connection ended: {e}");
             }
         });
@@ -113,6 +117,7 @@ pub async fn serve(
 /// Lock the freshly-bound socket to the owning user: `0600` so only its owner can
 /// connect, and `chown` to `owner_uid` so that owner is the unprivileged GUI user
 /// rather than root (which bound it).
+#[cfg(unix)]
 fn restrict_socket(socket_path: &str, owner_uid: Option<u32>) -> anyhow::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))?;
@@ -124,9 +129,14 @@ fn restrict_socket(socket_path: &str, owner_uid: Option<u32>) -> anyhow::Result<
     Ok(())
 }
 
-/// Read requests line by line and write one reply per request.
-async fn serve_conn(platform: Arc<dyn Platform>, stream: UnixStream) -> anyhow::Result<()> {
-    let (read, mut write) = stream.into_split();
+/// Read requests line by line off one connection and write one reply per request.
+/// Transport-neutral: the caller supplies the already-split halves (a unix socket
+/// on Linux, a named pipe on Windows).
+pub(crate) async fn serve_conn(
+    platform: Arc<dyn Platform>,
+    read: BoxRead,
+    mut write: BoxWrite,
+) -> anyhow::Result<()> {
     let mut lines = BufReader::new(read).lines();
     while let Some(line) = lines.next_line().await? {
         if line.trim().is_empty() {
