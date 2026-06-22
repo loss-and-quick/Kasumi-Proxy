@@ -16,7 +16,7 @@ set -euo pipefail
 ROOT="${PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$ROOT"
 
-OUT="${1:-$ROOT/build/kasumi-proxy-$(grep -m1 '^version=' module/module.prop | cut -d= -f2).zip}"
+OUT="${1:-$ROOT/build/$("$ROOT/scripts/artifact-name.sh" module)}"
 
 echo "→ [1/5] Building geodat2srs…"
 if [ ! -f "$ROOT/module/bin/arm64-v8a/geodat2srs" ] || [ "${FORCE_FETCH:-0}" = "1" ]; then

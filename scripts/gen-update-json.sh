@@ -26,13 +26,17 @@ code="$(grep -m1 '^versionCode=' "$PROP" | cut -d= -f2)"
 # JSON forbids leading zeros — emit versionCode as a bare base-10 integer.
 code="$((10#$code))"
 
+# The module zip's name comes from the single source of truth, so this URL
+# always matches the asset package-release.sh actually uploads.
+zip_name="$("$ROOT/scripts/artifact-name.sh" module)"
+
 raw="https://raw.githubusercontent.com/${repo}/main"
 
 cat >"$OUT" <<EOF
 {
   "version": "${ver}",
   "versionCode": ${code},
-  "zipUrl": "${server}/${repo}/releases/download/${ver}/kasumi-proxy-${ver}.zip",
+  "zipUrl": "${server}/${repo}/releases/download/${ver}/${zip_name}",
   "changelog": "${raw}/CHANGELOG.md"
 }
 EOF

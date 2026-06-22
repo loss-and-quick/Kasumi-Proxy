@@ -62,7 +62,7 @@ If you come from v2rayNG, NekoBox, or Matsuri, here is what changes on Android:
 
 **Android (root):**
 
-1. Download the latest `kasumi-proxy-vX.Y.Z.zip` release.
+1. Download the latest `kasumi-proxy-module-vX.Y.Z.zip` release.
 2. Flash it in Magisk / KernelSU / APatch and reboot.
 3. Open the module's **Action** (Magisk) or its WebUI entry — it launches the control center in
    your browser, authenticated with a per-install token.
