@@ -332,8 +332,12 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0; background: var(--sc-low); border-radius: 28px 28px 0 0; z-index: 41;
   max-height: 88%; display: flex; flex-direction: column; animation: slideup 0.28s cubic-bezier(.2,.9,.2,1); border-top: 1px solid oklch(1 0 0 / 0.06);
+  transition: transform 0.26s cubic-bezier(.2,.9,.2,1);
 }
 @keyframes slideup { from { transform: translateY(100%); } }
+/* Grab handle: drag down to dismiss. touch-action keeps the browser from scrolling mid-drag. */
+.sheet-grab { flex: 0 0 auto; touch-action: none; cursor: grab; user-select: none; }
+.sheet-grab:active { cursor: grabbing; }
 .sheet-handle { width: 34px; height: 4px; border-radius: 2px; background: var(--outline); margin: 12px auto 4px; flex: 0 0 auto; }
 .sheet-head { padding: 8px 20px 12px; display: flex; align-items: center; gap: 10px; }
 .sheet-title { font-size: 19px; font-weight: 600; flex: 1; }

@@ -1,5 +1,6 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { acquireSheet } from "../lib/sheetPresence";
+import { useSwipeDownToDismiss } from "../lib/useSwipeDownToDismiss";
 import { Icon, IconBtn } from "./icons";
 
 function Scrim({ onClose }: { onClose: () => void }) {
@@ -27,6 +28,8 @@ export const Sheet = ({
   children: ReactNode;
   headRight?: ReactNode;
 }) => {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const swipe = useSwipeDownToDismiss(sheetRef, onClose);
   useEffect(() => {
     if (!open) return;
     return acquireSheet();
@@ -35,12 +38,25 @@ export const Sheet = ({
   return (
     <>
       <Scrim onClose={onClose} />
-      <div className="sheet">
-        <div className="sheet-handle" />
-        <div className="sheet-head">
-          <div className="sheet-title">{title}</div>
-          {headRight}
-          <IconBtn name="close" sm onClick={onClose} />
+      <div
+        ref={sheetRef}
+        className="sheet"
+        style={
+          swipe.offset
+            ? {
+                transform: `translateY(${swipe.offset}px)`,
+                transition: swipe.dragging ? "none" : undefined,
+              }
+            : undefined
+        }
+      >
+        <div className="sheet-grab" {...swipe.handlers}>
+          <div className="sheet-handle" />
+          <div className="sheet-head">
+            <div className="sheet-title">{title}</div>
+            {headRight}
+            <IconBtn name="close" sm onClick={onClose} />
+          </div>
         </div>
         <div className="sheet-body">{children}</div>
       </div>
