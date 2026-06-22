@@ -359,6 +359,21 @@ mod tests {
         assert!(!pid_matches_bin(-1, &exe).await);
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn pid_matches_any_scans_the_candidate_list() {
+        let me = std::process::id() as i32;
+        let exe = std::fs::read_link(format!("/proc/{me}/exe"))
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        // Matches as long as one candidate is our real exe.
+        assert!(pid_matches_any(me, &["/bin/sh".into(), exe.clone()]).await);
+        // None match → false; an empty list → false.
+        assert!(!pid_matches_any(me, &["/bin/sh".into(), "/no/such/bin".into()]).await);
+        assert!(!pid_matches_any(me, &[]).await);
+    }
+
     #[tokio::test]
     async fn kill_if_running_drops_pidfile() {
         let dir = tempfile::tempdir().unwrap();
