@@ -85,8 +85,9 @@ export function ProfilesToolbar({
         }
       />
 
-      {searchOpen && (
-        <div style={{ padding: "0 16px 8px" }}>
+      {/* Always mounted so it can expand/collapse smoothly (see .search-row). */}
+      <div className={`search-row${searchOpen ? " open" : ""}`} aria-hidden={!searchOpen}>
+        <div className="search-row-inner">
           <div style={{ position: "relative" }}>
             <Icon
               name="search"
@@ -103,6 +104,11 @@ export function ProfilesToolbar({
               placeholder={t("profiles.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter/Escape collapse the field (the query stays applied).
+                if (e.key === "Enter" || e.key === "Escape") onToggleSearch();
+              }}
+              tabIndex={searchOpen ? undefined : -1}
               style={{
                 paddingLeft: 40,
                 fontFamily: "var(--font-ui)",
@@ -112,7 +118,7 @@ export function ProfilesToolbar({
             />
           </div>
         </div>
-      )}
+      </div>
 
       {/* Sort row */}
       <div
