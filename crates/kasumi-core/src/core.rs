@@ -59,10 +59,19 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
             return Some(Xray);
         }
         Profile::Shadowsocks(ss) => {
+            // Ciphers only Xray implements — sing-box has the `-ietf-` chacha variant
+            // only and no `plain`, so these must run on Xray even though the default
+            // TLS would otherwise route shadowsocks to sing-box below.
             if matches!(
                 ss.method,
-                SsMethod::Plain
-                    | SsMethod::Chacha20IetfPoly1305
+                SsMethod::Plain | SsMethod::Chacha20Poly1305 | SsMethod::Xchacha20Poly1305
+            ) {
+                return Some(Xray);
+            }
+            // The 2022 AEAD ciphers and the IETF chacha variant route to sing-box.
+            if matches!(
+                ss.method,
+                SsMethod::Chacha20IetfPoly1305
                     | SsMethod::Blake3Aes128Gcm
                     | SsMethod::Blake3Aes256Gcm
                     | SsMethod::Blake3Chacha20Poly1305
@@ -198,6 +207,33 @@ mod tests {
             forced_core(&p("vless://u@e.x:443?type=h2&security=tls")),
             Some(CoreEngine::SingBox)
         );
+    }
+
+    #[test]
+    fn shadowsocks_method_routing_splits_by_core() {
+        use CoreEngine::{SingBox, Xray};
+        // Ciphers only Xray implements (sing-box has no `plain` and only the IETF
+        // chacha variant) — must route to Xray despite shadowsocks' default TLS.
+        for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
+            assert_eq!(
+                forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
+                Some(Xray),
+                "{m} must route to xray"
+            );
+        }
+        // The 2022 AEAD ciphers and the IETF chacha variant route to sing-box.
+        for m in [
+            "chacha20-ietf-poly1305",
+            "2022-blake3-aes-128-gcm",
+            "2022-blake3-aes-256-gcm",
+            "2022-blake3-chacha20-poly1305",
+        ] {
+            assert_eq!(
+                forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
+                Some(SingBox),
+                "{m} must route to sing-box"
+            );
+        }
     }
 
     #[test]
