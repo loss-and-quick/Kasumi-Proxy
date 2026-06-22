@@ -489,6 +489,50 @@ mod tests {
     }
 
     #[test]
+    fn nested_but_network_keyed_transport_gets_tagged() {
+        // An intermediate build can leave a profile nested (has `meta`) yet with
+        // its transport keyed on `network` instead of tagged on `kind`. The
+        // per-profile worker must re-tag it without touching the rest.
+        let mut v = json!({
+            "protocol": "vless",
+            "meta": { "id": "x", "remarks": "H", "groupId": "g-main" },
+            "endpoint": { "address": "ex.com", "port": 443 },
+            "transport": { "network": "ws", "host": "h", "path": "/w" },
+            "tls": { "security": "tls" },
+            "uuid": "u"
+        });
+        migrate_profile(&mut v);
+        assert_eq!(v["transport"]["kind"], "ws");
+        assert_eq!(v["transport"]["host"], "h");
+        assert!(v["transport"].get("network").is_none(), "network re-tagged");
+        let p: Profile = serde_json::from_value(v).unwrap();
+        assert_eq!(p.transport().unwrap().network(), crate::enums::Network::Ws);
+    }
+
+    #[test]
+    fn future_schema_version_clamps_and_skips_steps() {
+        // A document claiming a version beyond the ladder is clamped: no step runs
+        // (so a flat profile stays flat), but the stamp is normalised back down.
+        let mut doc = json!({
+            "schemaVersion": 99,
+            "profiles": [{
+                "protocol": "vless",
+                "id": "x", "remarks": "H", "groupId": "g-main",
+                "address": "ex.com", "port": 443,
+                "network": "ws", "host": "h", "path": "/w",
+                "security": "tls", "uuid": "u"
+            }]
+        });
+        migrate_app_state(&mut doc);
+        assert_eq!(doc["schemaVersion"], json!(SCHEMA_VERSION));
+        assert!(
+            doc["profiles"][0].get("meta").is_none(),
+            "no migration step should have run"
+        );
+        assert_eq!(doc["profiles"][0]["network"], "ws");
+    }
+
+    #[test]
     fn flat_matches_share_parsed_equivalent() {
         // Trojan over tcp with http obfs header.
         assert_migrates_like(
