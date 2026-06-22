@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
+import { acquireSheet } from "../lib/sheetPresence";
 import { Icon, IconBtn } from "./icons";
 
 function Scrim({ onClose }: { onClose: () => void }) {
@@ -26,6 +27,10 @@ export const Sheet = ({
   children: ReactNode;
   headRight?: ReactNode;
 }) => {
+  useEffect(() => {
+    if (!open) return;
+    return acquireSheet();
+  }, [open]);
   if (!open) return null;
   return (
     <>

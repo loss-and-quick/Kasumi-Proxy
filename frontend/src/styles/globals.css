@@ -109,7 +109,10 @@ body {
   flex: 0 0 248px; display: flex; flex-direction: column; gap: 4px;
   padding: 22px 14px; background: var(--sc); border-right: 1px solid oklch(1 0 0 / 0.06);
   overflow-y: auto;
+  transition: flex-basis 0.28s cubic-bezier(.2,.9,.2,1), transform 0.28s cubic-bezier(.2,.9,.2,1);
 }
+/* Slide the rail out (e.g. while a bottom sheet is up) and reclaim its width. */
+.siderail.hidden { flex-basis: 0; transform: translateX(-100%); pointer-events: none; }
 .siderail-brand {
   font-size: 19px; font-weight: 700; letter-spacing: 0.4px; color: var(--on-surface);
   padding: 6px 14px 18px;
