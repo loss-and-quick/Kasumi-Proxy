@@ -12,6 +12,18 @@
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
+  # Pull prebuilt store paths (Rust toolchain, webkit, the devshell closure) from our
+  # public Cachix cache so `nix develop` / `nix build` don't rebuild them. Honoured for
+  # trusted users / with `--accept-flake-config` (CI sets accept-flake-config = true);
+  # others can opt in prompt-free with `cachix use kasumi-proxy`. Pulls only — pushing
+  # is done by the cachix-action in CI under an auth token.
+  nixConfig = {
+    extra-substituters = [ "https://kasumi-proxy.cachix.org" ];
+    extra-trusted-public-keys = [
+      "kasumi-proxy.cachix.org-1:V22nNqK4m1rSZRfuak86S1aY1eLlGhty05m8VtK25gM="
+    ];
+  };
+
   # The logic lives in nix/ (one file per concern); this flake just wires it up.
   outputs =
     {
