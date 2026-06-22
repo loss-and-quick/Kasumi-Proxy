@@ -42,11 +42,13 @@ case "$TARGET" in
 		XRAY_ASSET="Xray-linux-64.zip"
 		T2S_ASSET="tun2socks-linux-amd64.zip"
 		SB_ASSET="sing-box-%s-linux-amd64.tar.gz"; SB_KIND="tgz"
+		CRONET_LIB="libcronet.so"
 		EXT="" ;;
 	x86_64-pc-windows-msvc)
 		XRAY_ASSET="Xray-windows-64.zip"
 		T2S_ASSET="tun2socks-windows-amd64.zip"
 		SB_ASSET="sing-box-%s-windows-amd64.zip"; SB_KIND="zip"
+		CRONET_LIB="libcronet.dll"
 		EXT=".exe" ;;
 	*)
 		echo "❌ unsupported desktop target: $TARGET" >&2
@@ -91,6 +93,13 @@ else
 fi
 copy_one "$TMP/sb" "sing-box$EXT" "$OUT/sing-box-$TARGET$EXT"
 
+# ---- libcronet (sing-box naive outbound) ----
+# sing-box is a purego build that dlopen()s libcronet from the sing-box binary's
+# own directory at runtime; without it every naive profile fails to initialise
+# (`cronet: library not found`). It ships inside the sing-box release archive, so
+# stage it next to sing-box — no target suffix (it's loaded by name, like wintun).
+copy_one "$TMP/sb" "$CRONET_LIB" "$OUT/$CRONET_LIB"
+
 # ---- wintun (Windows only) ----
 # tun2socks loads wintun.dll from its own directory (the xray data-path needs it).
 # sing-box embeds its own copy, so this is only for the tun2socks path. Staged
@@ -112,4 +121,5 @@ for c in xray sing-box tun2socks; do
 	f="$OUT/$c-$TARGET$EXT"
 	[ -f "$f" ] && printf '   %-12s %s\n' "$c" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $c"
 done
+{ f="$OUT/$CRONET_LIB"; [ -f "$f" ] && printf '   %-12s %s\n' "$CRONET_LIB" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $CRONET_LIB"; }
 [ -z "$EXT" ] || { f="$OUT/wintun.dll"; [ -f "$f" ] && printf '   %-12s %s\n' "wintun.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: wintun.dll"; }

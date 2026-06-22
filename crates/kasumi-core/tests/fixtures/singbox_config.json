@@ -511,11 +511,7 @@
           "tls": {
             "enabled": true,
             "server_name": "n.ex",
-            "insecure": false,
-            "utls": {
-              "enabled": true,
-              "fingerprint": "chrome"
-            }
+            "insecure": false
           }
         },
         {
