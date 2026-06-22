@@ -190,6 +190,32 @@ Without our substituter in your config, the build still works — it just compil
 of pulling the prebuilt closure. The cache hit is per exact revision (the released tag), so build the
 same tag you reference.
 
+#### NixOS module
+
+On NixOS the flake also exposes `nixosModules.default`, which installs the app and ensures polkit is
+present for its root re-exec (the desktop brings up the tun + routes by re-execing itself through
+`pkexec`):
+
+```nix
+{
+  inputs.kasumi-proxy.url = "github:loss-and-quick/Kasumi-Proxy";
+
+  outputs = { nixpkgs, kasumi-proxy, ... }: {
+    nixosConfigurations.your-host = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        kasumi-proxy.nixosModules.default
+        { programs.kasumi-proxy.enable = true; }
+      ];
+    };
+  };
+}
+```
+
+`programs.kasumi-proxy.package` overrides the build; it defaults to this flake's `kasumi-desktop`. The
+app still asks for authentication each time it brings up the tunnel — password-free elevation (a polkit
+rule scoped to the app) is not wired yet.
+
 ### Web UI development
 
 ```sh
