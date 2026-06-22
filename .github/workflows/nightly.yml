@@ -137,10 +137,9 @@ jobs:
       - name: Build debug zip
         env:
           NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: |
-          version=$(grep -m1 '^version=' module/module.prop | cut -d= -f2)
-          sha=$(git rev-parse --short HEAD)
-          BUILD_NAME="kasumi-proxy-${version}-debug-${sha}" scripts/package-release.sh
+        # package-release.sh names the zip itself (artifact-name.sh); the run's
+        # commit is carried by the upload artifact name below.
+        run: scripts/package-release.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -241,8 +240,28 @@ jobs:
           done
           cp src-tauri/binaries/wintun.dll "$out/"
           : > "$out/portable.dat"
-          ver=$(scripts/app-version.sh)
-          ( cd dist/portable && 7z a -tzip "../kasumi-proxy-${ver}-portable.zip" Kasumi-Proxy >/dev/null )
+          name=$(scripts/artifact-name.sh windows-portable)
+          ( cd dist/portable && 7z a -tzip "../$name" Kasumi-Proxy >/dev/null )
+          rm -rf dist/portable
+          ls -la dist
+
+      - name: Assemble Linux portable zip
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Portable build: app binary + cores (suffix stripped) + a `portable.dat`
+          # marker that pins all state next to the binary at runtime (USB-stick run).
+          t="${{ matrix.target }}"
+          out="dist/portable/Kasumi-Proxy"
+          mkdir -p "$out"
+          cp "target/$t/release/kasumi-desktop" "$out/"
+          for c in xray sing-box tun2socks; do
+            cp "src-tauri/binaries/$c-$t" "$out/$c"
+          done
+          chmod +x "$out"/*
+          : > "$out/portable.dat"
+          name=$(scripts/artifact-name.sh linux-portable)
+          ( cd dist/portable && zip -qr "../$name" Kasumi-Proxy )
           rm -rf dist/portable
           ls -la dist
 

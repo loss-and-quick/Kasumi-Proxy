@@ -299,7 +299,10 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
-          files: build/kasumi-proxy-${{ needs.prepare.outputs.version }}.zip
+          # Glob, not a hardcoded name: package-release.sh owns the zip's
+          # filename format (the module job's checkout produces exactly one zip
+          # here), so the name lives in one place — same as nightly.yml.
+          files: build/*.zip
 
   # ── Desktop installers (Linux deb/AppImage, Windows NSIS/MSI + portable zip) →
   #    uploaded to the same release. Cores are fetched per-target into
@@ -417,8 +420,8 @@ jobs:
           done
           cp src-tauri/binaries/wintun.dll "$out/"
           : > "$out/portable.dat"
-          ver=$(scripts/app-version.sh)
-          ( cd dist/portable && 7z a -tzip "../kasumi-proxy-${ver}-windows-portable.zip" Kasumi-Proxy >/dev/null )
+          name=$(scripts/artifact-name.sh windows-portable)
+          ( cd dist/portable && 7z a -tzip "../$name" Kasumi-Proxy >/dev/null )
           rm -rf dist/portable
           ls -la dist
 
@@ -437,8 +440,8 @@ jobs:
           done
           chmod +x "$out"/*
           : > "$out/portable.dat"
-          ver=$(scripts/app-version.sh)
-          ( cd dist/portable && zip -qr "../kasumi-proxy-${ver}-linux-portable.zip" Kasumi-Proxy )
+          name=$(scripts/artifact-name.sh linux-portable)
+          ( cd dist/portable && zip -qr "../$name" Kasumi-Proxy )
           rm -rf dist/portable
           ls -la dist
 
