@@ -82,7 +82,9 @@ async fn watch_gui(gui_pid: u32, platform: Arc<dyn Platform>) -> ! {
 /// `kasumi-helper` main. Never returns on success (serves until the GUI exits).
 pub fn run_helper() -> ! {
     if let Err(e) = run() {
+        // The logger may not be up yet (arg parse failed before init), so use stderr.
         eprintln!("kasumi-helper: {e}");
+        log::error!("helper exited with error: {e}");
         std::process::exit(1);
     }
     std::process::exit(0);
@@ -90,8 +92,16 @@ pub fn run_helper() -> ! {
 
 fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
+    super::hlog::init(Path::new(&args.rundir));
+    log::info!(
+        "helper starting: datadir={} rundir={} bin_dir={} gui_pid={}",
+        args.datadir,
+        args.rundir,
+        args.bin_dir,
+        args.gui_pid
+    );
     if unsafe { libc::geteuid() } != 0 {
-        eprintln!("kasumi-helper: not running as root — tun/routing will fail");
+        log::warn!("not running as root — tun/routing will fail");
     }
 
     // Resolve paths to exactly what the GUI passed (pkexec scrubbed the env).

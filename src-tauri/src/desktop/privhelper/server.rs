@@ -98,7 +98,7 @@ pub async fn serve(
         let platform = platform.clone();
         tokio::spawn(async move {
             if let Err(e) = serve_conn(platform, Box::new(read), Box::new(write)).await {
-                eprintln!("kasumi-helper: connection ended: {e}");
+                log::warn!("connection ended: {e}");
             }
         });
     }
@@ -133,11 +133,20 @@ pub(crate) async fn serve_conn(
             continue;
         }
         let reply = match serde_json::from_str::<PrivRequest>(&line) {
-            Ok(req) => dispatch(&platform, req).await,
-            Err(e) => PrivReply::Err {
-                message: format!("malformed request: {e}"),
-            },
+            Ok(req) => {
+                log::debug!("request: {req:?}");
+                dispatch(&platform, req).await
+            }
+            Err(e) => {
+                log::warn!("malformed request: {e}");
+                PrivReply::Err {
+                    message: format!("malformed request: {e}"),
+                }
+            }
         };
+        if let PrivReply::Err { message } = &reply {
+            log::warn!("reply error: {message}");
+        }
         let mut buf = serde_json::to_vec(&reply)?;
         buf.push(b'\n');
         write.write_all(&buf).await?;

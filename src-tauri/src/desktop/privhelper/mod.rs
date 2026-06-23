@@ -16,6 +16,9 @@ pub mod transport;
 pub use client::Client;
 pub use remote::RemotePlatform;
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub mod hlog;
+
 // Linux: the GUI spawns the root helper through pkexec/sudo and it exits with the
 // GUI. Windows hosts the same data-path in a LocalSystem service under the SCM.
 #[cfg(target_os = "linux")]

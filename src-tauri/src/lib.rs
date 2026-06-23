@@ -211,13 +211,24 @@ pub fn run() {
         .setup(move |app| {
             builder.mount_events(app);
 
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
+            #[allow(unused_mut)]
+            let mut log_builder = tauri_plugin_log::Builder::default()
+                .level(log::LevelFilter::Info)
+                .level_for("kasumi_desktop_lib", log::LevelFilter::Debug);
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            if let Ok(paths) = desktop::paths::DesktopPaths::resolve() {
+                if paths.portable {
+                    use tauri_plugin_log::{Target, TargetKind};
+                    log_builder = log_builder.targets([
+                        Target::new(TargetKind::Stdout),
+                        Target::new(TargetKind::Folder {
+                            path: std::path::PathBuf::from(&paths.datadir).join("logs"),
+                            file_name: None,
+                        }),
+                    ]);
+                }
             }
+            app.handle().plugin(log_builder.build())?;
 
             #[cfg(desktop)]
             setup_tray(app)?;
