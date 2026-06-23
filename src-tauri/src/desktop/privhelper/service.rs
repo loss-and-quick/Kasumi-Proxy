@@ -69,7 +69,7 @@ pub fn run_dispatcher() -> ! {
 
 fn service_main(arguments: Vec<OsString>) {
     if let Err(e) = run_service(arguments) {
-        eprintln!("kasumi-helper: service error: {e}");
+        log::error!("service error: {e}");
     }
 }
 
@@ -79,6 +79,7 @@ fn service_main(arguments: Vec<OsString>) {
 pub fn run_transient() -> ! {
     if let Err(e) = run_transient_inner() {
         eprintln!("kasumi-helper: {e}");
+        log::error!("transient helper exited with error: {e}");
         std::process::exit(1);
     }
     std::process::exit(0);
@@ -95,6 +96,8 @@ fn run_transient_inner() -> anyhow::Result<()> {
 
     tokio::runtime::Runtime::new()?.block_on(async {
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
+        super::hlog::init(&platform.paths().run_dir);
+        log::info!("transient helper starting: pipe={pipe}");
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
         serve_transient(platform, &pipe).await
     })
@@ -158,6 +161,8 @@ fn run_service(arguments: Vec<OsString>) -> anyhow::Result<()> {
     report(ServiceState::Running, ServiceControlAccept::STOP)?;
     let result = tokio::runtime::Runtime::new()?.block_on(async {
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
+        super::hlog::init(&platform.paths().run_dir);
+        log::info!("service starting");
         // The run dir holds the helper-owned data-path state; create it as SYSTEM.
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
         serve_pipe(platform, shutdown).await
@@ -201,7 +206,7 @@ async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyho
         tokio::select! {
             r = serve_conn(platform.clone(), Box::new(read), Box::new(write)) => {
                 if let Err(e) = r {
-                    eprintln!("kasumi-helper: connection ended: {e}");
+                    log::warn!("connection ended: {e}");
                 }
             }
             _ = shutdown.notified() => {
@@ -234,12 +239,16 @@ async fn serve_transient(platform: Arc<dyn Platform>, pipe_name: &str) -> anyhow
 
     tokio::select! {
         res = server.connect() => res.context("await pipe client")?,
-        _ = tokio::time::sleep(Duration::from_secs(60)) => return Ok(()),
+        _ = tokio::time::sleep(Duration::from_secs(60)) => {
+            log::warn!("no GUI connected within 60s; exiting");
+            return Ok(());
+        }
     }
+    log::info!("GUI connected; serving data-path");
 
     let (read, write) = tokio::io::split(server);
     if let Err(e) = serve_conn(platform.clone(), Box::new(read), Box::new(write)).await {
-        eprintln!("kasumi-helper: connection ended: {e}");
+        log::warn!("connection ended: {e}");
     }
     teardown(&platform).await;
     Ok(())

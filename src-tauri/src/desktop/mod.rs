@@ -36,7 +36,11 @@ use kasumi_backend::proc::{run, RunOpts};
 /// so a `&str`-slice wrapper over the process layer keeps the call sites readable.
 pub(crate) async fn silent(args: &[&str]) -> i32 {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    kasumi_backend::proc::silent(&argv).await
+    let code = kasumi_backend::proc::silent(&argv).await;
+    if code != 0 {
+        log::debug!("command exited {code}: {}", argv.join(" "));
+    }
+    code
 }
 
 /// Run a command, returning `(exit_code, stdout)`.
@@ -44,6 +48,9 @@ pub(crate) async fn run_out(args: &[&str]) -> (i32, String) {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     match run(&argv, RunOpts::default()).await {
         Ok(r) => (r.code, r.stdout),
-        Err(_) => (-1, String::new()),
+        Err(e) => {
+            log::debug!("command failed to run ({e}): {}", argv.join(" "));
+            (-1, String::new())
+        }
     }
 }

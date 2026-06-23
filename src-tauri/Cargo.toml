@@ -23,6 +23,10 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
+# The privileged helper is a separate process, so it can't use tauri-plugin-log
+# (that needs an AppHandle). It installs its own `fern` sink — the same backend the
+# plugin wraps — so both processes log through one `log` facade. See privhelper::hlog.
+fern = "0.7"
 anyhow = "1"
 async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "net", "io-util", "time", "sync"] }

@@ -90,6 +90,7 @@ impl DesktopPlatform {
     }
 
     async fn fail(&self, reason: &str) -> anyhow::Result<()> {
+        log::error!("data-path start failed: {reason}");
         self.set_service_state(&format!("failed:{reason}")).await;
         anyhow::bail!("{reason}")
     }
@@ -263,6 +264,7 @@ impl Platform for DesktopPlatform {
 
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
         let StartDataPath { engine, socks_port } = opts;
+        log::info!("starting data-path: engine={engine:?} socks_port={socks_port}");
         self.set_service_state("connecting").await;
         let _ = write_text(&self.p.socks_port_file, &socks_port.to_string()).await;
         let result = if engine == CoreEngine::SingBox {
@@ -274,6 +276,7 @@ impl Platform for DesktopPlatform {
             Ok(()) => {
                 let _ = write_text(&self.p.service_started_file, &now_secs().to_string()).await;
                 self.set_service_state("running").await;
+                log::info!("data-path running ({engine:?})");
                 Ok(())
             }
             Err(e) => {
@@ -296,6 +299,10 @@ impl Platform for DesktopPlatform {
     }
 
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {
+        log::info!(
+            "stopping data-path (keep_state={})",
+            opts.keep_service_state
+        );
         // Stop the core first, gracefully: a sing-box auto_route core removes its
         // own routes + tun on terminate. Then tear down the xray manual routing
         // (no-op for sing-box — no route-state file) and the tun2socks helper.
