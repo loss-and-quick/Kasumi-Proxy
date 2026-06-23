@@ -9,6 +9,7 @@
 import { useEffect } from "react";
 import { commands, events } from "../generated/bindings";
 import { useT } from "../i18n";
+import { isServiceUp } from "../lib/bridge";
 import { useAppStore } from "../store/useAppStore";
 
 function isTauri(): boolean {
@@ -20,11 +21,16 @@ export function useTraySync(): void {
   const profiles = useAppStore((s) => s.profiles);
   const activeId = useAppStore((s) => s.activeId);
   const recentIds = useAppStore((s) => s.recentProfileIds);
+  const service = useAppStore((s) => s.service);
   const setActive = useAppStore((s) => s.setActive);
+  const toggleService = useAppStore((s) => s.toggleService);
   const restart = useAppStore((s) => s.restart);
 
-  // Rebuild the menu whenever the quick-switch list, active profile, or language
-  // changes.
+  const running = isServiceUp(service.state);
+  const connected = service.state === "connected";
+
+  // Rebuild the menu whenever the quick-switch list, active profile, service
+  // state, or language changes.
   useEffect(() => {
     if (!isTauri()) return;
     const items = recentIds
@@ -35,22 +41,30 @@ export function useTraySync(): void {
         name: p.meta.remarks || p.meta.id,
         active: p.meta.id === activeId,
       }));
-    void commands.updateTray(items, {
-      show: t("tray.show"),
-      quit: t("tray.quit"),
-      restart: t("overview.restart"),
-      recent: t("tray.recent"),
-    });
-  }, [profiles, activeId, recentIds, t]);
+    void commands.updateTray(
+      items,
+      {
+        show: t("tray.show"),
+        quit: t("tray.quit"),
+        start: t("overview.start"),
+        stop: t("overview.stop"),
+        restart: t("overview.restart"),
+        recent: t("tray.recent"),
+      },
+      running,
+      connected,
+    );
+  }, [profiles, activeId, recentIds, running, connected, t]);
 
   // Route native menu clicks back to the store.
   useEffect(() => {
     if (!isTauri()) return;
     const pending = events.trayAction.listen((e) => {
       const action = e.payload;
-      if (action === "restart") void restart();
+      if (action === "start" || action === "stop") void toggleService();
+      else if (action === "restart") void restart();
       else if (action.startsWith("activate:")) void setActive(action.slice("activate:".length));
     });
     return () => void pending.then((un) => un()).catch(() => {});
-  }, [restart, setActive]);
+  }, [toggleService, restart, setActive]);
 }

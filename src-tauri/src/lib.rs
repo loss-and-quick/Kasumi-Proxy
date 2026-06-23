@@ -35,8 +35,8 @@ pub struct StatusChanged(pub ServiceStatus);
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct SubscriptionApplied(pub SubAppliedEvent);
 
-/// A tray menu action for the webview to handle: `"restart"` or `"activate:<id>"`.
-/// `show`/`quit` never reach here — they're handled in Rust directly.
+/// A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"` or
+/// `"activate:<id>"`. `show`/`quit` never reach here — they're handled in Rust directly.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct TrayAction(pub String);
 
@@ -55,6 +55,8 @@ pub struct TrayProfile {
 pub struct TrayLabels {
     pub show: String,
     pub quit: String,
+    pub start: String,
+    pub stop: String,
     pub restart: String,
     pub recent: String,
 }
@@ -68,13 +70,16 @@ fn update_tray(
     app: tauri::AppHandle,
     profiles: Vec<TrayProfile>,
     labels: TrayLabels,
+    running: bool,
+    connected: bool,
 ) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        rebuild_tray_menu(&app, &profiles, &labels).map_err(|e| e.to_string())?;
+        rebuild_tray_menu(&app, &profiles, &labels, running, connected)
+            .map_err(|e| e.to_string())?;
     }
     #[cfg(not(desktop))]
-    let _ = (app, profiles, labels);
+    let _ = (app, profiles, labels, running, connected);
     Ok(())
 }
 
@@ -188,6 +193,8 @@ fn rebuild_tray_menu(
     app: &tauri::AppHandle,
     profiles: &[TrayProfile],
     labels: &TrayLabels,
+    running: bool,
+    connected: bool,
 ) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 
@@ -195,13 +202,24 @@ fn rebuild_tray_menu(
         return Ok(());
     };
 
-    let restart = MenuItem::with_id(app, "restart", &labels.restart, true, None::<&str>)?;
     let show = MenuItem::with_id(app, "show", &labels.show, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let menu = Menu::new(app)?;
-    menu.append(&restart)?;
+
+    // State-dependent actions: Start | Stop / Stop + Restart
+    if running {
+        let stop = MenuItem::with_id(app, "stop", &labels.stop, true, None::<&str>)?;
+        menu.append(&stop)?;
+        if connected {
+            let restart = MenuItem::with_id(app, "restart", &labels.restart, true, None::<&str>)?;
+            menu.append(&restart)?;
+        }
+    } else {
+        let start = MenuItem::with_id(app, "start", &labels.start, true, None::<&str>)?;
+        menu.append(&start)?;
+    }
 
     if !profiles.is_empty() {
         menu.append(&sep1)?;

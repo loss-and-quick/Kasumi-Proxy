@@ -25,7 +25,7 @@ export const commands = {
 	 *  calls this on hydrate and whenever the active/recent profiles or language
 	 *  change; clicks come back as [`TrayAction`] events (or `show`/`quit`).
 	 */
-	updateTray: (profiles: TrayProfile[], labels: TrayLabels) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels })),
+	updateTray: (profiles: TrayProfile[], labels: TrayLabels, running: boolean, connected: boolean) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels, running, connected })),
 };
 
 /** Events */
@@ -698,8 +698,8 @@ export type Transport = {
 } & QuicTransport;
 
 /**
- *  A tray menu action for the webview to handle: `"restart"` or `"activate:<id>"`.
- *  `show`/`quit` never reach here — they're handled in Rust directly.
+ *  A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"` or
+ *  `"activate:<id>"`. `show`/`quit` never reach here — they're handled in Rust directly.
  */
 export type TrayAction = string;
 
@@ -707,6 +707,8 @@ export type TrayAction = string;
 export type TrayLabels = {
 	show: string,
 	quit: string,
+	start: string,
+	stop: string,
 	restart: string,
 	recent: string,
 };
