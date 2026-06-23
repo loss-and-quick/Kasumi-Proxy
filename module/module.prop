@@ -5,3 +5,5 @@ versionCode=009
 updateJson=https://raw.githubusercontent.com/loss-and-quick/Kasumi-Proxy/main/update.json
 author=minicx
 description=A system-level transparent proxy routing engine using Xray-core / Sing-Box
+actionIcon=logo.png
+webuiIcon=logo.png
