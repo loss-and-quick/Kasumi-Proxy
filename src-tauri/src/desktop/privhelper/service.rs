@@ -1,13 +1,18 @@
 //! Windows side of privilege separation: a LocalSystem service that owns the
 //! data-path, the analogue of the Linux root helper.
 //!
-//! The unprivileged GUI talks to it over a named pipe ([`PIPE_NAME`]) secured to the
-//! logged-on user, reusing the OS-neutral [`super::server::serve_conn`] /
-//! [`super::proto`] from the Linux path. The service is registered once at install
-//! (elevated), demand-started by the GUI with the GUI's resolved paths as launch
-//! arguments — exactly how the Linux helper receives them across pkexec — and stops
-//! the data-path when the GUI disconnects, so a crashed GUI never leaves the tunnel
-//! up. State travels back in replies, never through SYSTEM-owned files.
+//! The unprivileged GUI talks to it over a named pipe secured to the logged-on user,
+//! reusing the OS-neutral [`super::server::serve_conn`] / [`super::proto`] from the
+//! Linux path. The service is registered once at install (elevated), demand-started
+//! by the GUI with the GUI's resolved paths as launch arguments — exactly how the
+//! Linux helper receives them across pkexec — and stops the data-path when the GUI
+//! disconnects, so a crashed GUI never leaves the tunnel up. State travels back in
+//! replies, never through SYSTEM-owned files.
+//!
+//! Portable builds skip the service entirely: the GUI runs the helper transiently
+//! under UAC ([`run_transient`]) on each launch, serving one session over a
+//! per-GUI pipe and exiting with the GUI — the exact mirror of the Linux pkexec
+//! helper, leaving nothing installed.
 
 use std::ffi::{c_void, OsStr, OsString};
 use std::os::windows::ffi::OsStrExt;
@@ -63,6 +68,40 @@ fn service_main(arguments: Vec<OsString>) {
     if let Err(e) = run_service(arguments) {
         eprintln!("kasumi-helper: service error: {e}");
     }
+}
+
+/// Portable mode: serve one GUI session over the per-GUI pipe given by `--pipe`,
+/// then exit. Spawned elevated by the GUI (no SCM), so it parses the same path args
+/// off its own command line. Never returns on success.
+pub fn run_transient() -> ! {
+    if let Err(e) = run_transient_inner() {
+        eprintln!("kasumi-helper: {e}");
+        std::process::exit(1);
+    }
+    std::process::exit(0);
+}
+
+fn run_transient_inner() -> anyhow::Result<()> {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    apply_path_args(&args);
+    let pipe = arg_value(&args, "--pipe").context("--serve needs --pipe")?;
+    let pipe = pipe
+        .to_str()
+        .context("pipe name is not valid UTF-16")?
+        .to_owned();
+
+    tokio::runtime::Runtime::new()?.block_on(async {
+        let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
+        tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
+        serve_transient(platform, &pipe).await
+    })
+}
+
+/// The value following `key` in `args`, if present.
+fn arg_value(args: &[OsString], key: &str) -> Option<OsString> {
+    args.windows(2)
+        .find(|w| w[0].to_str() == Some(key))
+        .map(|w| w[1].clone())
 }
 
 /// Pull `--datadir/--rundir/--bin-dir` out of the SCM start arguments and export
@@ -171,6 +210,34 @@ async fn teardown(platform: &Arc<dyn Platform>) {
             keep_service_state: false,
         })
         .await;
+}
+
+/// Portable lifetime: bind `pipe_name`, serve the GUI's single connection, then tear
+/// the data-path down and return so the process exits. No loop, no SCM — the helper
+/// lives exactly as long as the GUI, like the Linux pkexec helper. The initial accept
+/// is bounded so a GUI that crashes before dialing can't leave us elevated forever.
+async fn serve_transient(platform: Arc<dyn Platform>, pipe_name: &str) -> anyhow::Result<()> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+
+    let security = PipeSecurity::new()?;
+    let server = unsafe {
+        ServerOptions::new()
+            .first_pipe_instance(true)
+            .create_with_security_attributes_raw(pipe_name, security.attrs_ptr())
+    }
+    .context("create named pipe instance")?;
+
+    tokio::select! {
+        res = server.connect() => res.context("await pipe client")?,
+        _ = tokio::time::sleep(Duration::from_secs(60)) => return Ok(()),
+    }
+
+    let (read, write) = tokio::io::split(server);
+    if let Err(e) = serve_conn(platform.clone(), Box::new(read), Box::new(write)).await {
+        eprintln!("kasumi-helper: connection ended: {e}");
+    }
+    teardown(&platform).await;
+    Ok(())
 }
 
 /// A security descriptor admitting only SYSTEM, Administrators (full) and the

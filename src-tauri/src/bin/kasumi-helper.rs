@@ -14,8 +14,9 @@ fn main() {
             Some("--install") => service::install(),
             Some("--uninstall") => service::uninstall(),
             Some("--service") => service::run_dispatcher(),
+            Some("--serve") => service::run_transient(),
             _ => {
-                eprintln!("usage: kasumi-helper --install | --uninstall | --service");
+                eprintln!("usage: kasumi-helper --install | --uninstall | --service | --serve");
                 std::process::exit(2);
             }
         };

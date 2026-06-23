@@ -1,10 +1,13 @@
-//! GUI side on Windows: reach the data-path service, installing it once (elevated)
-//! and demand-starting it with the GUI's resolved paths, then connect to its pipe.
+//! GUI side on Windows: reach the privileged data-path over a named pipe.
 //!
-//! The GUI stays unprivileged. The only elevation is a one-time `--install` (the
-//! Windows analogue of the Linux pkexec prompt) that registers the service and
-//! grants the user permission to start it; every later launch starts it without a
-//! prompt. Mirrors [`super::spawn::spawn_and_connect`] on Linux.
+//! Installed builds use the LocalSystem service: the GUI installs it once (a single
+//! elevated `--install`, the Windows analogue of the Linux pkexec prompt) granting
+//! the user start rights, then demand-starts and connects with no further prompt.
+//!
+//! Portable builds keep nothing installed: the GUI runs the helper transiently under
+//! UAC on each launch (`--serve`), serving one session over a per-GUI pipe and exiting
+//! with the GUI — the exact mirror of [`super::spawn::spawn_and_connect`] on Linux.
+//! The GUI itself never elevates in either case.
 
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
@@ -35,8 +38,14 @@ fn helper_bin() -> anyhow::Result<PathBuf> {
 /// Connect to the data-path service, setting it up on first run. Resolves once the
 /// service answers a `Ping` over its pipe.
 pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
+    // Portable: no installed service — run the helper transiently under UAC (the
+    // mirror of the Linux pkexec helper), leaving nothing behind.
+    if paths.portable {
+        return connect_transient(paths).await;
+    }
+
     // Fast path: a previous session left the service up — just connect.
-    if let Ok(client) = connect_and_ping().await {
+    if let Ok(client) = connect_and_ping(PIPE_NAME).await {
         return Ok(client);
     }
 
@@ -51,7 +60,31 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
     }
 
     start_with_paths(paths).context("start the data-path service")?;
-    connect_with_retry().await
+    connect_with_retry(PIPE_NAME).await
+}
+
+/// Portable path: spawn the helper elevated (one UAC) to serve a single session over
+/// a per-GUI pipe, then connect. The unique pipe name keeps a portable run from
+/// colliding with an installed service's fixed pipe; the helper exits with this GUI.
+async fn connect_transient(paths: &DesktopPaths) -> anyhow::Result<Client> {
+    let pipe = format!(r"\\.\pipe\kasumi-proxy-helper-{}", std::process::id());
+    let helper = helper_bin()?;
+    let bin_dir = dir_of(&paths.xray_bin);
+    let args: [&OsStr; 9] = [
+        OsStr::new("--serve"),
+        OsStr::new("--pipe"),
+        OsStr::new(&pipe),
+        OsStr::new("--datadir"),
+        OsStr::new(&paths.datadir),
+        OsStr::new("--rundir"),
+        OsStr::new(&paths.run_dir),
+        OsStr::new("--bin-dir"),
+        OsStr::new(&bin_dir),
+    ];
+    if !run_elevated(&helper, &args) {
+        anyhow::bail!("elevation declined — the data-path needs admin");
+    }
+    connect_with_retry(&pipe).await
 }
 
 /// Whether the service is registered. A bare SCM connect is granted to all users.
@@ -102,20 +135,20 @@ fn start_with_paths(paths: &DesktopPaths) -> anyhow::Result<()> {
     .context("service did not reach running")
 }
 
-/// Open the pipe and confirm the service with a `Ping`.
-async fn connect_and_ping() -> anyhow::Result<Client> {
-    let client = Client::connect(PIPE_NAME).await?;
+/// Open `pipe` and confirm the helper with a `Ping`.
+async fn connect_and_ping(pipe: &str) -> anyhow::Result<Client> {
+    let client = Client::connect(pipe).await?;
     if matches!(client.call(PrivRequest::Ping).await, Ok(PrivReply::Pong)) {
         return Ok(client);
     }
-    anyhow::bail!("service did not answer Ping")
+    anyhow::bail!("helper did not answer Ping")
 }
 
-/// Retry the pipe connect briefly while the freshly-started service binds it.
-async fn connect_with_retry() -> anyhow::Result<Client> {
+/// Retry the pipe connect briefly while the freshly-started helper binds `pipe`.
+async fn connect_with_retry(pipe: &str) -> anyhow::Result<Client> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if let Ok(client) = connect_and_ping().await {
+        if let Ok(client) = connect_and_ping(pipe).await {
             return Ok(client);
         }
         if Instant::now() >= deadline {
