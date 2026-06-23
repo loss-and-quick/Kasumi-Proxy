@@ -35,11 +35,15 @@ pub struct StatusChanged(pub ServiceStatus);
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct SubscriptionApplied(pub SubAppliedEvent);
 
-/// Returns the app version, for an "About" panel / update check.
+/// Returns the app version, for an "About" panel / update check. Reads it from the
+/// runtime package info (sourced from the Tauri config) rather than the compile-time
+/// `CARGO_PKG_VERSION`: the real product version lives in `module/module.prop` and is
+/// injected at build time via `tauri build --config "{version: …}"`, which overrides
+/// the config but not the binary's baked-in `CARGO_PKG_VERSION` (a 0.0.0 placeholder).
 #[tauri::command]
 #[specta::specta]
-fn app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+fn app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
 }
 
 /// The single entry every UI action funnels through: run one typed [`Command`] and

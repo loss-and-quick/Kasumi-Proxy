@@ -5,7 +5,13 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 
 /** Commands */
 export const commands = {
-	/**  Returns the app version, for an "About" panel / update check. */
+	/**
+	 *  Returns the app version, for an "About" panel / update check. Reads it from the
+	 *  runtime package info (sourced from the Tauri config) rather than the compile-time
+	 *  `CARGO_PKG_VERSION`: the real product version lives in `module/module.prop` and is
+	 *  injected at build time via `tauri build --config "{version: …}"`, which overrides
+	 *  the config but not the binary's baked-in `CARGO_PKG_VERSION` (a 0.0.0 placeholder).
+	 */
 	appVersion: () => __TAURI_INVOKE<string>("app_version"),
 	/**
 	 *  The single entry every UI action funnels through: run one typed [`Command`] and
