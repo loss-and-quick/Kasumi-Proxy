@@ -31,6 +31,9 @@ let
   # libayatana-appindicator is dlopen'd at runtime by the tray icon (the
   # tray-icon feature) — it must be reachable or the app aborts on start with
   # "Failed to load ayatana-appindicator3".
+  # The GStreamer plugins back WebKit's media pipeline: their setup hooks add
+  # GST_PLUGIN_SYSTEM_PATH_1_0 (captured by wrapGAppsHook3), without which WebKit
+  # logs "GStreamer element appsink not found" on start and can't play media.
   tauriLibs = with pkgs; [
     glib
     gtk3
@@ -45,6 +48,10 @@ let
     webkitgtk_4_1
     libayatana-appindicator
     openssl
+    gst_all_1.gstreamer
+    gst_all_1.gst-plugins-base
+    gst_all_1.gst-plugins-good
+    gst_all_1.gst-plugins-bad
   ];
 
   rustTools = with pkgs; [
