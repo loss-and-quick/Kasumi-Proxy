@@ -8,15 +8,7 @@ import { useT } from "../../i18n";
 import type { LogTarget } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { useAppStore } from "../../store/useAppStore";
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { copyText } from "../profiles/clipboard";
 
 export default function Logs({ onClose }: { onClose: () => void }) {
   const notify = useAppStore((s) => s.notify);
