@@ -28,6 +28,10 @@ pub struct DesktopPaths {
     pub backend: BackendPaths,
     pub datadir: String,
     pub run_dir: String,
+    /// A portable build (a `portable.dat` marker beside the exe): state lives beside
+    /// the app and the privileged helper runs transiently rather than as an installed
+    /// service (Windows), so nothing is left behind.
+    pub portable: bool,
     pub pidfile: String,
     pub tun2socks_pidfile: String,
     /// Records the routes we installed (server bypass + split-default) so teardown
@@ -147,6 +151,7 @@ impl DesktopPaths {
         Ok(Self {
             datadir: datadir.clone(),
             run_dir: run_dir.clone(),
+            portable,
             pidfile: format!("{run_dir}/core.pid"),
             tun2socks_pidfile: format!("{run_dir}/tun2socks.pid"),
             route_state_file: format!("{run_dir}/desktop-route.json"),
@@ -237,6 +242,7 @@ impl DesktopPaths {
         Ok(Self {
             datadir: datadir.clone(),
             run_dir: run_dir.clone(),
+            portable,
             pidfile: format!(r"{run_dir}\core.pid"),
             tun2socks_pidfile: format!(r"{run_dir}\tun2socks.pid"),
             route_state_file: format!(r"{run_dir}\desktop-route.json"),
