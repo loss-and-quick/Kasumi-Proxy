@@ -64,7 +64,7 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
     // The helper owns run_dir (root) and clears any stale socket itself before
     // binding — the GUI can't unlink in that root-owned dir, so don't try here.
 
-    let mut cmd = tokio::process::Command::new(elevator);
+    let mut cmd = tokio::process::Command::new(&elevator);
     cmd.arg(&helper).arg("--socket").arg(&socket);
     for (flag, value) in path_args(paths) {
         cmd.arg(flag).arg(value);
@@ -75,6 +75,11 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
         .arg(gui_pid.to_string());
     // Detach from the GUI's stdio; the helper logs to stderr inherited by the GUI.
     cmd.stdin(std::process::Stdio::null());
+    log::info!(
+        "elevating helper {} via {} (socket {socket})",
+        helper.display(),
+        elevator.display()
+    );
     cmd.spawn()
         .context("spawn the privilege helper via the elevator")?;
 
@@ -82,13 +87,17 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
     // the socket, then confirm it with a Ping.
     let deadline = std::time::Instant::now() + Duration::from_secs(120);
     loop {
-        if let Ok(client) = Client::connect(&socket).await {
-            if matches!(client.call(PrivRequest::Ping).await, Ok(PrivReply::Pong)) {
-                return Ok(client);
+        let err = match Client::connect(&socket).await {
+            Ok(client) => {
+                if matches!(client.call(PrivRequest::Ping).await, Ok(PrivReply::Pong)) {
+                    return Ok(client);
+                }
+                "helper did not answer Ping".to_string()
             }
-        }
+            Err(e) => format!("{e:#}"),
+        };
         if std::time::Instant::now() >= deadline {
-            anyhow::bail!("privilege helper did not become ready (elevation declined?)");
+            anyhow::bail!("privilege helper did not become ready (elevation declined?): {err}");
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
