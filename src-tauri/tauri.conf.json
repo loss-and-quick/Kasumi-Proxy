@@ -20,11 +20,6 @@
     ],
     "security": {
       "csp": null
-    },
-    "trayIcon": {
-      "id": "main",
-      "iconPath": "icons/128x128.png",
-      "tooltip": "Kasumi Proxy"
     }
   },
   "bundle": {
