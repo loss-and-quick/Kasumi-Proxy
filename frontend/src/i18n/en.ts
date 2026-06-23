@@ -483,6 +483,7 @@ const en = {
   "common.mode.proxy": "Proxy only",
   "common.mode.direct": "Direct only",
   "common.proxyNotRunning": "Start the proxy before using Proxy only mode.",
+  "common.openFile": "Open file…",
   // qr
   "qr.scan.title": "Scan QR code",
   "qr.scan.starting": "Starting camera…",

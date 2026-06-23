@@ -469,6 +469,7 @@ const hi = {
   "common.mode.proxy": "केवल proxy",
   "common.mode.direct": "केवल direct",
   "common.proxyNotRunning": "Proxy only mode उपयोग करने से पहले प्रॉक्सी शुरू करें।",
+  "common.openFile": "फ़ाइल खोलें…",
   // qr
   "qr.scan.title": "QR कोड स्कैन करें",
   "qr.scan.starting": "कैमरा शुरू हो रहा है…",

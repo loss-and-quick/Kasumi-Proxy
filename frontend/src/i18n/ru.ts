@@ -498,6 +498,7 @@ const ru = {
   "common.mode.proxy": "Только через прокси",
   "common.mode.direct": "Только напрямую",
   "common.proxyNotRunning": "Перед режимом «Только через прокси» сначала запустите прокси.",
+  "common.openFile": "Открыть файл…",
   // qr
   "qr.scan.title": "Сканировать QR-код",
   "qr.scan.starting": "Запуск камеры…",

@@ -235,8 +235,13 @@ pub fn run() {
                 None,
             ))
             .plugin(tauri_plugin_updater::Builder::new().build())
-            // A native error modal for a fatal startup failure (see the setup hook).
+            // A native error modal for a fatal startup failure (see the setup hook),
+            // plus the open/save file pickers the UI uses for backup & routing
+            // import-export.
             .plugin(tauri_plugin_dialog::init())
+            // Read/write the user-picked backup & routing-rules files (the dialog
+            // only returns a path; fs does the IO, scoped to $HOME in capabilities).
+            .plugin(tauri_plugin_fs::init())
             // Native clipboard for the UI's copy / paste helpers (with a
             // navigator.clipboard fallback in the non-Tauri shells).
             .plugin(tauri_plugin_clipboard_manager::init());

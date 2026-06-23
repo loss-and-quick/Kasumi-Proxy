@@ -478,6 +478,7 @@ const es = {
   "common.mode.proxy": "Solo proxy",
   "common.mode.direct": "Solo directo",
   "common.proxyNotRunning": "Inicia el proxy antes de usar el modo Solo proxy.",
+  "common.openFile": "Abrir archivo…",
   // qr
   "qr.scan.title": "Escanear código QR",
   "qr.scan.starting": "Iniciando cámara…",
