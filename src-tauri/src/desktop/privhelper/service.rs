@@ -163,21 +163,30 @@ fn run_service(arguments: Vec<OsString>) -> anyhow::Result<()> {
     result
 }
 
+/// Create one instance of the secured named pipe `name`. `first` asserts no other
+/// process already owns the name; set it on the first instance the helper binds.
+fn bind_pipe(
+    name: &str,
+    security: &PipeSecurity,
+    first: bool,
+) -> anyhow::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+    unsafe {
+        ServerOptions::new()
+            .first_pipe_instance(first)
+            .create_with_security_attributes_raw(name, security.attrs_ptr())
+    }
+    .context("create named pipe instance")
+}
+
 /// Serve the GUI over the named pipe until the service is stopped. One client (the
 /// GUI's single held-open connection) at a time; when it disconnects the data-path
 /// is torn down, mirroring the Linux helper exiting with the GUI.
 async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyhow::Result<()> {
-    use tokio::net::windows::named_pipe::ServerOptions;
-
     let security = PipeSecurity::new()?;
     let mut first = true;
     loop {
-        let server = unsafe {
-            ServerOptions::new()
-                .first_pipe_instance(first)
-                .create_with_security_attributes_raw(PIPE_NAME, security.attrs_ptr())
-        }
-        .context("create named pipe instance")?;
+        let server = bind_pipe(PIPE_NAME, &security, first)?;
         first = false;
 
         tokio::select! {
@@ -217,15 +226,8 @@ async fn teardown(platform: &Arc<dyn Platform>) {
 /// lives exactly as long as the GUI, like the Linux pkexec helper. The initial accept
 /// is bounded so a GUI that crashes before dialing can't leave us elevated forever.
 async fn serve_transient(platform: Arc<dyn Platform>, pipe_name: &str) -> anyhow::Result<()> {
-    use tokio::net::windows::named_pipe::ServerOptions;
-
     let security = PipeSecurity::new()?;
-    let server = unsafe {
-        ServerOptions::new()
-            .first_pipe_instance(true)
-            .create_with_security_attributes_raw(pipe_name, security.attrs_ptr())
-    }
-    .context("create named pipe instance")?;
+    let server = bind_pipe(pipe_name, &security, true)?;
 
     tokio::select! {
         res = server.connect() => res.context("await pipe client")?,
