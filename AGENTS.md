@@ -39,6 +39,12 @@ before trusting.
 - **Renaming the project** touches the id everywhere: data path `/data/adb/kasumi-proxy`, the
   iptables chain, the `kasumi-proxy` binary name, `module.prop`, and string literals. Grep all case
   forms (`kasumi-proxy`, `Kasumi Proxy`, camelCase) before claiming done.
+- **Debug vs release.** `debug_assertions` gates *dev-only* behavior and nothing else: regenerating
+  the frontend bindings (`export_generated`, `src-tauri/src/lib.rs`) and keeping the Windows console
+  attached (`windows_subsystem`, `src-tauri/src/main.rs`). Nightly and release are plain
+  `cargo tauri build` (release profile, assertions off) and must not rely on `debug_assertions` for
+  any shipped behavior. The product version is injected at build time via `tauri build --config`
+  (`scripts/app-version.sh`), not selected by build profile.
 
 ## Verify before declaring done
 

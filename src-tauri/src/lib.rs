@@ -210,7 +210,8 @@ pub fn run() {
     let builder = specta_builder();
 
     // Regenerate the frontend's generated files on every debug build, so a Rust
-    // type/default change fails `tsc` until the frontend is updated.
+    // type/default change fails `tsc` until the frontend is updated. Dev-only:
+    // release/nightly (assertions off) skip codegen — see AGENTS.md "Debug vs release".
     #[cfg(debug_assertions)]
     export_generated();
 
