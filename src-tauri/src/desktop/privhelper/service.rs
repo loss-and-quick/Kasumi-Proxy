@@ -33,7 +33,9 @@ use windows_service::{define_windows_service, service_dispatcher};
 use kasumi_backend::platform::{Platform, StopDataPath};
 
 use super::server::serve_conn;
-use crate::desktop::paths::{ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR};
+use crate::desktop::paths::{
+    ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
+};
 use crate::desktop::DesktopPlatform;
 
 /// SCM identifier; shared with the GUI client ([`super::connect`]).
@@ -43,8 +45,9 @@ const SERVICE_DISPLAY: &str = "Kasumi Proxy Helper";
 /// interactive user; multi-session (RDP) co-use is out of scope.
 pub(crate) const PIPE_NAME: &str = r"\\.\pipe\kasumi-proxy-helper";
 
-/// `s` as a NUL-terminated UTF-16 buffer for the Win32 `*W` APIs.
-fn wide(s: &str) -> Vec<u16> {
+/// `s` as a NUL-terminated UTF-16 buffer for the Win32 `*W` APIs. Shared with the
+/// GUI-side [`super::connect`].
+pub(crate) fn wide(s: &str) -> Vec<u16> {
     OsStr::new(s)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -111,9 +114,9 @@ fn apply_path_args(arguments: &[OsString]) {
     let mut it = arguments.iter().skip(1);
     while let Some(key) = it.next() {
         let env = match key.to_str() {
-            Some("--datadir") => ENV_DATADIR,
-            Some("--rundir") => ENV_RUNDIR,
-            Some("--bin-dir") => ENV_BIN_DIR,
+            Some(ARG_DATADIR) => ENV_DATADIR,
+            Some(ARG_RUNDIR) => ENV_RUNDIR,
+            Some(ARG_BIN_DIR) => ENV_BIN_DIR,
             _ => continue,
         };
         if let Some(val) = it.next() {

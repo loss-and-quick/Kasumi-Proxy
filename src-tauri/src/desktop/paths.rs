@@ -22,6 +22,25 @@ pub(crate) const ENV_DATADIR: &str = "KASUMI_DATADIR";
 pub(crate) const ENV_RUNDIR: &str = "KASUMI_RUNDIR";
 pub(crate) const ENV_BIN_DIR: &str = "KASUMI_BIN_DIR";
 
+/// CLI flags carrying the same three dirs across the privilege boundary (the value
+/// the helper re-exports into [`ENV_DATADIR`] etc). One source so the producers (the
+/// Linux pkexec spawn, the Windows service/transient launch) and the helper parsers
+/// can't drift apart on a flag name.
+pub(crate) const ARG_DATADIR: &str = "--datadir";
+pub(crate) const ARG_RUNDIR: &str = "--rundir";
+pub(crate) const ARG_BIN_DIR: &str = "--bin-dir";
+
+/// The `(flag, value)` triple every privilege-boundary launch passes so the helper
+/// resolves the GUI's exact dirs. Producer-side single source (the bin dir is the
+/// parent of the resolved xray path); the helper parses the same flags back.
+pub(crate) fn path_args(paths: &DesktopPaths) -> [(&'static str, String); 3] {
+    [
+        (ARG_DATADIR, paths.datadir.clone()),
+        (ARG_RUNDIR, paths.run_dir.clone()),
+        (ARG_BIN_DIR, dir_of(&paths.xray_bin)),
+    ]
+}
+
 /// Resolved desktop paths. Built once at platform construction (the env/exe lookups
 /// are stable for the process lifetime).
 pub struct DesktopPaths {

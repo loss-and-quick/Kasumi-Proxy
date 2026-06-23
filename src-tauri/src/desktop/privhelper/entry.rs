@@ -13,7 +13,9 @@ use std::time::Duration;
 use kasumi_backend::platform::{Platform, StopDataPath};
 
 use super::server;
-use crate::desktop::paths::{ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR};
+use crate::desktop::paths::{
+    ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
+};
 use crate::desktop::DesktopPlatform;
 
 struct Args {
@@ -42,9 +44,9 @@ fn parse_args() -> anyhow::Result<Args> {
         };
         match key.as_str() {
             "--socket" => socket = Some(val()?),
-            "--datadir" => datadir = Some(val()?),
-            "--rundir" => rundir = Some(val()?),
-            "--bin-dir" => bin_dir = Some(val()?),
+            ARG_DATADIR => datadir = Some(val()?),
+            ARG_RUNDIR => rundir = Some(val()?),
+            ARG_BIN_DIR => bin_dir = Some(val()?),
             "--owner-uid" => owner_uid = Some(val()?.parse()?),
             "--gui-pid" => gui_pid = Some(val()?.parse()?),
             other => anyhow::bail!("unknown argument {other}"),
