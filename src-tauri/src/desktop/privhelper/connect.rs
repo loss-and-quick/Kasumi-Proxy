@@ -18,11 +18,11 @@ use anyhow::Context;
 use windows_service::service::{ServiceAccess, ServiceState};
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 
-use crate::desktop::paths::{dir_of, DesktopPaths};
+use crate::desktop::paths::{path_args, DesktopPaths};
 
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};
-use super::service::{PIPE_NAME, SERVICE_NAME};
+use super::service::{wide, PIPE_NAME, SERVICE_NAME};
 
 /// Path of the helper exe shipped beside the GUI (`KASUMI_HELPER_BIN` overrides for
 /// dev). It is both the service binary and the install/uninstall entry point.
@@ -69,18 +69,16 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
 async fn connect_transient(paths: &DesktopPaths) -> anyhow::Result<Client> {
     let pipe = format!(r"\\.\pipe\kasumi-proxy-helper-{}", std::process::id());
     let helper = helper_bin()?;
-    let bin_dir = dir_of(&paths.xray_bin);
-    let args: [&OsStr; 9] = [
+    let pairs = path_args(paths);
+    let mut args: Vec<&OsStr> = vec![
         OsStr::new("--serve"),
         OsStr::new("--pipe"),
         OsStr::new(&pipe),
-        OsStr::new("--datadir"),
-        OsStr::new(&paths.datadir),
-        OsStr::new("--rundir"),
-        OsStr::new(&paths.run_dir),
-        OsStr::new("--bin-dir"),
-        OsStr::new(&bin_dir),
     ];
+    for (flag, value) in &pairs {
+        args.push(OsStr::new(flag));
+        args.push(OsStr::new(value));
+    }
     if !run_elevated(&helper, &args) {
         anyhow::bail!("elevation declined — the data-path needs admin");
     }
@@ -111,15 +109,10 @@ fn start_with_paths(paths: &DesktopPaths) -> anyhow::Result<()> {
         .context("query service")?
         .current_state;
     if matches!(state, ServiceState::Stopped | ServiceState::StopPending) {
-        let bin_dir = dir_of(&paths.xray_bin);
-        let args: [OsString; 6] = [
-            OsString::from("--datadir"),
-            OsString::from(&paths.datadir),
-            OsString::from("--rundir"),
-            OsString::from(&paths.run_dir),
-            OsString::from("--bin-dir"),
-            OsString::from(bin_dir),
-        ];
+        let args: Vec<OsString> = path_args(paths)
+            .into_iter()
+            .flat_map(|(flag, value)| [OsString::from(flag), OsString::from(value)])
+            .collect();
         service.start(&args).context("start service")?;
     }
 
@@ -239,16 +232,6 @@ fn quote_arg(arg: &OsStr) -> String {
     out.push('"');
     out
 }
-
-/// `s` as a NUL-terminated UTF-16 buffer for the Win32 `*W` APIs.
-fn wide(s: &str) -> Vec<u16> {
-    use std::os::windows::ffi::OsStrExt;
-    OsStr::new(s)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::quote_arg;

@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 
-use crate::desktop::paths::{dir_of, DesktopPaths};
+use crate::desktop::paths::{path_args, DesktopPaths};
 
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};
@@ -51,12 +51,6 @@ fn socket_path(paths: &DesktopPaths) -> String {
     format!("{}/helper.sock", paths.run_dir)
 }
 
-/// The cores directory the helper should use — exactly the one the GUI resolved
-/// (the parent of the xray binary path).
-fn bin_dir(paths: &DesktopPaths) -> String {
-    dir_of(&paths.xray_bin)
-}
-
 /// Spawn the helper elevated and return a connected [`Client`]. Resolves once the
 /// helper answers a `Ping`. The helper keeps running after this returns (it owns
 /// the data-path); it exits on its own when the GUI (pid `gui_pid`) goes away.
@@ -71,16 +65,11 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
     // binding — the GUI can't unlink in that root-owned dir, so don't try here.
 
     let mut cmd = tokio::process::Command::new(elevator);
-    cmd.arg(&helper)
-        .arg("--socket")
-        .arg(&socket)
-        .arg("--datadir")
-        .arg(&paths.datadir)
-        .arg("--rundir")
-        .arg(&paths.run_dir)
-        .arg("--bin-dir")
-        .arg(bin_dir(paths))
-        .arg("--owner-uid")
+    cmd.arg(&helper).arg("--socket").arg(&socket);
+    for (flag, value) in path_args(paths) {
+        cmd.arg(flag).arg(value);
+    }
+    cmd.arg("--owner-uid")
         .arg(uid.to_string())
         .arg("--gui-pid")
         .arg(gui_pid.to_string());
