@@ -11,6 +11,9 @@ pub const DATADIR: &str = "/data/adb/kasumi-proxy";
 pub const BIN: &str = "/data/adb/modules/kasumi-proxy/bin";
 pub const RUN_DIR: &str = "/data/adb/kasumi-proxy/run";
 
+/// The daemon's own pid, written on startup so `kasumi-proxy stop` (run by
+/// `uninstall.sh`) can terminate it and trigger its graceful data-path teardown.
+pub const DAEMON_PIDFILE: &str = "/data/adb/kasumi-proxy/run/daemon.pid";
 pub const PIDFILE: &str = "/data/adb/kasumi-proxy/run/core.pid";
 pub const TUN2SOCKS_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks.pid";
 pub const TUN2SOCKS2_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks2.pid";

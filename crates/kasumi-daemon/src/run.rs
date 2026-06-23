@@ -4,19 +4,25 @@
 
 use std::sync::Arc;
 
+use kasumi_backend::fs::write_text;
 use kasumi_backend::platform::{Platform, StopDataPath};
+use kasumi_backend::proc::{kill_if_running, read_pidfile};
 use kasumi_backend::{dispatch, Command, Response, Service};
 
+use crate::android::paths::DAEMON_PIDFILE;
 use crate::android::AndroidPlatform;
 use crate::server;
 
 pub async fn run_entry() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let platform: Arc<dyn Platform> = Arc::new(AndroidPlatform::new());
-    if args.first().map(String::as_str) == Some("daemon") {
-        run_daemon(platform).await;
-    } else {
-        run_cli(platform, &args).await;
+    match args.first().map(String::as_str) {
+        Some("daemon") => run_daemon(platform).await,
+        // Process-level stop used by uninstall.sh: kill the running daemon (so its
+        // watchdog can't restart the proxy) and tear the data-path down. Not a
+        // `Command` — lifecycle verbs are rejected on the CLI path on purpose.
+        Some("stop") => run_stop(platform).await,
+        _ => run_cli(platform, &args).await,
     }
 }
 
@@ -30,9 +36,17 @@ async fn run_daemon(platform: Arc<dyn Platform>) {
     log::info!("kasumi-proxy daemon starting");
 
     // One-time boot setup (route tables, sysctl locks, seed lifecycle state).
+    // boot_init creates RUN_DIR, so the pidfile write below has somewhere to land.
     if let Err(e) = platform.boot_init().await {
         eprintln!("kasumi-proxy: boot init failed: {e}");
     }
+
+    // Record our own pid so `kasumi-proxy stop` (uninstall.sh) can find and
+    // terminate this process, which runs the graceful teardown below.
+    if let Err(e) = write_text(DAEMON_PIDFILE, &std::process::id().to_string()).await {
+        eprintln!("kasumi-proxy: could not write {DAEMON_PIDFILE}: {e}");
+    }
+
     let service = Service::new(platform.clone()).await;
     service.spawn_background();
 
@@ -49,6 +63,18 @@ async fn run_daemon(platform: Arc<dyn Platform>) {
         eprintln!("kasumi-proxy: server error: {e}");
         std::process::exit(1);
     }
+}
+
+/// Stop a running daemon and leave a clean system. Used by `uninstall.sh` before
+/// it drops `/data/adb/kasumi-proxy`. First terminate the daemon process (graceful
+/// SIGTERM → SIGKILL, dropping its pidfile) so its watchdog can't bring the proxy
+/// back up; then run the idempotent data-path teardown to sweep any TUN/iptables/
+/// routes left behind even if the daemon was already gone.
+async fn run_stop(platform: Arc<dyn Platform>) {
+    let pid = read_pidfile(DAEMON_PIDFILE).await;
+    kill_if_running(pid, None, DAEMON_PIDFILE, true).await;
+    let _ = platform.stop_data_path(StopDataPath::default()).await;
+    print_response(Response::Ok);
 }
 
 async fn wait_for_signal() {
