@@ -112,11 +112,10 @@ jobs:
 
       - name: ShellCheck
         run: |
-          # The module is now a thin launcher over the Rust daemon: service.sh /
-          # action.sh / uninstall.sh run under Android sh; customize.sh runs under
-          # the installer's bash.
-          shellcheck -s sh module/service.sh module/action.sh module/uninstall.sh
-          shellcheck -s bash module/customize.sh
+          # The module is a thin launcher over the Rust daemon. All module scripts
+          # run under Android sh (mksh) — the installer sources customize.sh in
+          # busybox sh too, not bash — so lint every one as sh, matching AGENTS.md.
+          shellcheck -s sh module/service.sh module/action.sh module/uninstall.sh module/customize.sh
           # Build/release helpers are #!/usr/bin/env bash — lint as bash.
           shellcheck -s bash scripts/*.sh
 
