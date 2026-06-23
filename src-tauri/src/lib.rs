@@ -35,6 +35,49 @@ pub struct StatusChanged(pub ServiceStatus);
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct SubscriptionApplied(pub SubAppliedEvent);
 
+/// A tray menu action for the webview to handle: `"restart"` or `"activate:<id>"`.
+/// `show`/`quit` never reach here — they're handled in Rust directly.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
+pub struct TrayAction(pub String);
+
+/// One profile entry the UI wants in the tray's quick-switch list.
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayProfile {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+}
+
+/// Localized tray strings (the menu is native, so the UI owns the wording).
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayLabels {
+    pub show: String,
+    pub quit: String,
+    pub restart: String,
+    pub recent: String,
+}
+
+/// Rebuild the tray menu from the UI's current profiles + active selection. The UI
+/// calls this on hydrate and whenever the active/recent profiles or language
+/// change; clicks come back as [`TrayAction`] events (or `show`/`quit`).
+#[tauri::command]
+#[specta::specta]
+fn update_tray(
+    app: tauri::AppHandle,
+    profiles: Vec<TrayProfile>,
+    labels: TrayLabels,
+) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        rebuild_tray_menu(&app, &profiles, &labels).map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(desktop))]
+    let _ = (app, profiles, labels);
+    Ok(())
+}
+
 /// Returns the app version, for an "About" panel / update check. Reads it from the
 /// runtime package info (sourced from the Tauri config) rather than the compile-time
 /// `CARGO_PKG_VERSION`: the real product version lives in `module/module.prop` and is
@@ -116,7 +159,10 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main(app),
             "quit" => app.exit(0),
-            _ => {}
+            // Dynamic items (restart / activate:<id>) are handled by the webview.
+            other => {
+                let _ = TrayAction(other.to_string()).emit(app);
+            }
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {
@@ -132,6 +178,53 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
+    Ok(())
+}
+
+/// Replace the tray menu: Restart, the recent-profile quick-switch list (active one
+/// checked), then Show / Quit. Item ids drive [`setup_tray`]'s `on_menu_event`.
+#[cfg(desktop)]
+fn rebuild_tray_menu(
+    app: &tauri::AppHandle,
+    profiles: &[TrayProfile],
+    labels: &TrayLabels,
+) -> tauri::Result<()> {
+    use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    let Some(tray) = app.tray_by_id("main") else {
+        return Ok(());
+    };
+
+    let restart = MenuItem::with_id(app, "restart", &labels.restart, true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", &labels.show, true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", &labels.quit, true, None::<&str>)?;
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::new(app)?;
+    menu.append(&restart)?;
+
+    if !profiles.is_empty() {
+        menu.append(&sep1)?;
+        // A submenu keeps the root tidy when there are many profiles.
+        let recent = Submenu::with_id(app, "recent", &labels.recent, true)?;
+        for p in profiles {
+            let item = CheckMenuItem::with_id(
+                app,
+                format!("activate:{}", p.id),
+                &p.name,
+                true,
+                p.active,
+                None::<&str>,
+            )?;
+            recent.append(&item)?;
+        }
+        menu.append(&recent)?;
+    }
+
+    menu.append(&sep2)?;
+    menu.append(&show)?;
+    menu.append(&quit)?;
+    tray.set_menu(Some(menu))?;
     Ok(())
 }
 
@@ -182,8 +275,12 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
 /// export so the generated TS always matches what's mounted.
 fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
-        .commands(collect_commands![app_version, dispatch])
-        .events(collect_events![StatusChanged, SubscriptionApplied])
+        .commands(collect_commands![app_version, dispatch, update_tray])
+        .events(collect_events![
+            StatusChanged,
+            SubscriptionApplied,
+            TrayAction
+        ])
         // Wire numbers are JSON numbers; the UI wants `number`, not `bigint`.
         .dangerously_cast_bigints_to_number()
 }

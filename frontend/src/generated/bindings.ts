@@ -20,12 +20,19 @@ export const commands = {
 	 *  the desktop and Android frontends share one command list.
 	 */
 	dispatch: (cmd: Command_Deserialize) => typedError<Response_Serialize, string>(__TAURI_INVOKE("dispatch", { cmd })),
+	/**
+	 *  Rebuild the tray menu from the UI's current profiles + active selection. The UI
+	 *  calls this on hydrate and whenever the active/recent profiles or language
+	 *  change; clicks come back as [`TrayAction`] events (or `show`/`quit`).
+	 */
+	updateTray: (profiles: TrayProfile[], labels: TrayLabels) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels })),
 };
 
 /** Events */
 export const events = {
 	statusChanged: makeEvent<StatusChanged_Deserialize>("status-changed"),
 	subscriptionApplied: makeEvent<SubscriptionApplied>("subscription-applied"),
+	trayAction: makeEvent<TrayAction>("tray-action"),
 };
 
 /* Types */
@@ -689,6 +696,27 @@ export type Transport = {
 } & KcpTransport | {
 	kind: "quic",
 } & QuicTransport;
+
+/**
+ *  A tray menu action for the webview to handle: `"restart"` or `"activate:<id>"`.
+ *  `show`/`quit` never reach here — they're handled in Rust directly.
+ */
+export type TrayAction = string;
+
+/**  Localized tray strings (the menu is native, so the UI owns the wording). */
+export type TrayLabels = {
+	show: string,
+	quit: string,
+	restart: string,
+	recent: string,
+};
+
+/**  One profile entry the UI wants in the tray's quick-switch list. */
+export type TrayProfile = {
+	id: string,
+	name: string,
+	active: boolean,
+};
 
 export type Trojan = {
 	meta: Meta,

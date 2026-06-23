@@ -12,6 +12,7 @@ import { useT } from "./i18n";
 import { configureKsuWebUi, hasKsuNativeApi } from "./lib/ksu-webui";
 import { useSheetOpen } from "./lib/sheetPresence";
 import { useIsWide } from "./lib/useIsWide";
+import { useTraySync } from "./lib/useTraySync";
 import { useAppStore } from "./store/useAppStore";
 
 const Backup = lazy(() => import("./features/backup/Backup"));
@@ -57,6 +58,7 @@ export default function App() {
   const [appFilterOpen, setAppFilterOpen] = useState(false);
   const isWide = useIsWide();
   const sheetOpen = useSheetOpen();
+  useTraySync();
 
   useEffect(() => {
     hydrate();
