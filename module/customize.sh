@@ -7,14 +7,16 @@ mkdir -p "$MODPATH/webroot"
 
 ui_print "- Detected Architecture: $ARCH"
 
-# 2. Extract only the matching binary directly into the module's private directory
+# 2. Extract only the matching arch binaries directly into the module's private
+#    directory. The payload bundles the whole core set (xray, sing-box, tun2socks,
+#    geodat2srs) plus the kasumi-proxy daemon — not just Xray.
 case "$ARCH" in
 arm64)
-	ui_print "- Extracting Xray-core for arm64-v8a..."
+	ui_print "- Unpacking proxy cores (xray, sing-box, tun2socks, geodat2srs) for arm64-v8a..."
 	unzip -j -o "$ZIPFILE" "bin/arm64-v8a/*" -d "$MODPATH/bin"
 	;;
 x64)
-	ui_print "- Extracting Xray-core for Android-x86_64..."
+	ui_print "- Unpacking proxy cores (xray, sing-box, tun2socks, geodat2srs) for Android-x86_64..."
 	unzip -j -o "$ZIPFILE" "bin/x86_64/*" -d "$MODPATH/bin"
 	;;
 *)
