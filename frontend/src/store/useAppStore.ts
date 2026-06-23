@@ -66,6 +66,7 @@ interface Store extends AppState {
   speedTesting: Set<string>; // profile ids currently being speed-tested
   toasts: ToastItem[];
   recentActivity: ActivityEvent[];
+  recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
 
   hydrate: () => Promise<void>;
   flush: () => Promise<void>;
@@ -238,6 +239,7 @@ export const useAppStore = create<Store>((set, get) => {
     speedTesting: new Set<string>(),
     toasts: [],
     recentActivity: [],
+    recentProfileIds: [],
     caps: null,
     uploadRate: 0,
     downloadRate: 0,
@@ -266,6 +268,7 @@ export const useAppStore = create<Store>((set, get) => {
         settings,
         version: __MODULE_VERSION__,
         hydrated: true,
+        recentProfileIds: state.activeId ? [state.activeId] : [],
       });
       // Status/caps first — fast and needed for UI responsiveness.
       bridge.onStatus((service) => syncService(service));
@@ -347,7 +350,10 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     async setActive(id) {
-      set({ activeId: id });
+      set((s) => ({
+        activeId: id,
+        recentProfileIds: [id, ...s.recentProfileIds.filter((x) => x !== id)].slice(0, 5),
+      }));
       await get().flush();
       if (isServiceUp(get().service.state)) {
         try {
