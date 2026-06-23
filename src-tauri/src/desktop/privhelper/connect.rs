@@ -41,16 +41,19 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
     // Portable: no installed service — run the helper transiently under UAC (the
     // mirror of the Linux pkexec helper), leaving nothing behind.
     if paths.portable {
+        log::info!("portable build: starting transient elevated helper");
         return connect_transient(paths).await;
     }
 
     // Fast path: a previous session left the service up — just connect.
     if let Ok(client) = connect_and_ping(PIPE_NAME).await {
+        log::info!("reusing already-running data-path service");
         return Ok(client);
     }
 
     if !is_installed() {
         // One-time elevated install (UAC). Registers + grants the user start rights.
+        log::info!("data-path service not installed; requesting elevated install");
         let helper = helper_bin()?;
         if !run_elevated(&helper, &[OsStr::new("--install")]) {
             anyhow::bail!("service install was declined — the data-path needs it to run");
@@ -59,6 +62,7 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
             .context("service did not register (install declined?)")?;
     }
 
+    log::info!("demand-starting the data-path service");
     start_with_paths(paths).context("start the data-path service")?;
     connect_with_retry(PIPE_NAME).await
 }
@@ -69,6 +73,7 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
 async fn connect_transient(paths: &DesktopPaths) -> anyhow::Result<Client> {
     let pipe = format!(r"\\.\pipe\kasumi-proxy-helper-{}", std::process::id());
     let helper = helper_bin()?;
+    log::info!("transient helper {} over pipe {pipe}", helper.display());
     let pairs = path_args(paths);
     let mut args: Vec<&OsStr> = vec![
         OsStr::new("--serve"),
@@ -80,8 +85,13 @@ async fn connect_transient(paths: &DesktopPaths) -> anyhow::Result<Client> {
         args.push(OsStr::new(value));
     }
     if !run_elevated(&helper, &args) {
+        log::warn!(
+            "ShellExecuteW runas failed or was declined for {}",
+            helper.display()
+        );
         anyhow::bail!("elevation declined — the data-path needs admin");
     }
+    log::info!("elevated helper launched; connecting to its pipe");
     connect_with_retry(&pipe).await
 }
 
@@ -140,12 +150,20 @@ async fn connect_and_ping(pipe: &str) -> anyhow::Result<Client> {
 /// Retry the pipe connect briefly while the freshly-started helper binds `pipe`.
 async fn connect_with_retry(pipe: &str) -> anyhow::Result<Client> {
     let deadline = Instant::now() + Duration::from_secs(30);
+    let mut last_err = String::from("no attempt completed");
     loop {
-        if let Ok(client) = connect_and_ping(pipe).await {
-            return Ok(client);
+        match connect_and_ping(pipe).await {
+            Ok(client) => return Ok(client),
+            Err(e) => {
+                let s = format!("{e:#}");
+                if s != last_err {
+                    log::debug!("pipe {pipe} not ready: {s}");
+                }
+                last_err = s;
+            }
         }
         if Instant::now() >= deadline {
-            anyhow::bail!("service started but its pipe never became ready");
+            anyhow::bail!("helper bound {pipe} but the GUI could not reach it: {last_err}");
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
     }

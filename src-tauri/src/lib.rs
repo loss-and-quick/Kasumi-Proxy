@@ -50,9 +50,38 @@ fn app_version() -> String {
 #[specta::specta]
 async fn dispatch(
     cmd: Command,
-    service: tauri::State<'_, Arc<Service>>,
+    service: tauri::State<'_, ServiceHandle>,
 ) -> Result<Response, String> {
-    service.dispatch(cmd).await.map_err(|e| e.0)
+    service.get().await.dispatch(cmd).await.map_err(|e| e.0)
+}
+
+/// Managed handle to the [`Service`], which is built **off** the `setup` thread.
+///
+/// The privileged data-path bring-up (UAC prompt + helper handshake) takes seconds,
+/// but the window — and its webview — is created from the config before `setup`
+/// runs, so the first `dispatch` from the loading UI would otherwise race ahead of
+/// `app.manage` and fail, wedging the UI on its loading screen forever. Instead the
+/// Service is published through a watch channel once it's ready and `dispatch` awaits
+/// it, so the UI just shows its normal loading state until the data-path is up.
+#[derive(Clone)]
+struct ServiceHandle(tokio::sync::watch::Receiver<Option<Arc<Service>>>);
+
+impl ServiceHandle {
+    /// Resolve the Service, waiting if the background bring-up is still in flight.
+    /// The watch retains its last value, so a call after bring-up returns at once.
+    async fn get(&self) -> Arc<Service> {
+        let mut rx = self.0.clone();
+        loop {
+            if let Some(service) = rx.borrow_and_update().clone() {
+                return service;
+            }
+            if rx.changed().await.is_err() {
+                // Sender dropped with no Service — bring-up failed and the app is
+                // exiting via the error dialog; park until that takes effect.
+                std::future::pending::<()>().await;
+            }
+        }
+    }
 }
 
 /// Show + focus the main window (from the tray, or a second-launch attempt).
@@ -121,13 +150,21 @@ async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
 async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     use desktop::privhelper::RemotePlatform;
     if std::env::var_os("KASUMI_SKIP_ELEVATION").is_some() {
+        log::info!("KASUMI_SKIP_ELEVATION set; running the data-path in-process");
         return Ok(Arc::new(DesktopPlatform::new()?));
     }
     let paths = desktop::paths::DesktopPaths::resolve()?;
+    log::info!(
+        "bringing up privileged data-path: portable={} datadir={} run_dir={}",
+        paths.portable,
+        paths.datadir,
+        paths.run_dir
+    );
     #[cfg(target_os = "linux")]
     let client = desktop::privhelper::spawn_and_connect(&paths).await?;
     #[cfg(target_os = "windows")]
     let client = desktop::privhelper::connect_service(&paths).await?;
+    log::info!("privileged helper connected");
     Ok(Arc::new(RemotePlatform::new(client)?))
 }
 
@@ -193,7 +230,9 @@ pub fn run() {
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent,
                 None,
             ))
-            .plugin(tauri_plugin_updater::Builder::new().build());
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            // A native error modal for a fatal startup failure (see the setup hook).
+            .plugin(tauri_plugin_dialog::init());
     }
 
     tb.invoke_handler(builder.invoke_handler())
@@ -233,25 +272,67 @@ pub fn run() {
             #[cfg(desktop)]
             setup_tray(app)?;
 
-            let service = tauri::async_runtime::block_on(async {
-                let platform = build_platform().await?;
-                anyhow::Ok(build_service(platform).await)
-            })
-            .map_err(|e| Box::<dyn std::error::Error>::from(e.to_string()))?;
+            // Publish the Service through a watch channel and bring it up off-thread:
+            // `setup` must not block on the privileged data-path (UAC + helper), or the
+            // already-loading webview's first `dispatch` would race `manage` and wedge
+            // the UI. `dispatch` awaits the channel; the UI shows its loading state
+            // until the data-path is ready. See [`ServiceHandle`].
+            let (tx, rx) = tokio::sync::watch::channel::<Option<Arc<Service>>>(None);
+            app.manage(ServiceHandle(rx));
 
-            // Re-emit the Service's status / subApplied frames as typed events.
             let handle = app.handle().clone();
-            let mut rx = service.subscribe();
             tauri::async_runtime::spawn(async move {
-                while let Ok(frame) = rx.recv().await {
-                    let _ = match frame {
-                        PushFrame::Status { value } => StatusChanged(value).emit(&handle),
-                        PushFrame::SubApplied { value } => SubscriptionApplied(value).emit(&handle),
+                let build = async {
+                    let platform = build_platform().await?;
+                    anyhow::Ok(build_service(platform).await)
+                };
+                let built =
+                    match tokio::time::timeout(std::time::Duration::from_secs(90), build).await {
+                        Ok(result) => result,
+                        Err(_) => Err(anyhow::anyhow!(
+                            "the privileged data-path helper did not become ready within 90s"
+                        )),
                     };
-                }
+                let service = match built {
+                    Ok(service) => service,
+                    Err(e) => {
+                        let msg = e.to_string();
+                        log::error!("startup failed: {msg}");
+                        // Surface the reason in a native modal, then quit on dismissal.
+                        #[cfg(desktop)]
+                        {
+                            use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+                            let h = handle.clone();
+                            handle
+                                .dialog()
+                                .message(msg)
+                                .title("Kasumi Proxy — startup failed")
+                                .kind(MessageDialogKind::Error)
+                                .show(move |_| h.exit(1));
+                        }
+                        return;
+                    }
+                };
+
+                // Re-emit the Service's status / subApplied frames as typed events.
+                let emit_handle = handle.clone();
+                let mut frames = service.subscribe();
+                tauri::async_runtime::spawn(async move {
+                    while let Ok(frame) = frames.recv().await {
+                        let _ = match frame {
+                            PushFrame::Status { value } => StatusChanged(value).emit(&emit_handle),
+                            PushFrame::SubApplied { value } => {
+                                SubscriptionApplied(value).emit(&emit_handle)
+                            }
+                        };
+                    }
+                });
+
+                // Publish; the watch retains it, so even after `tx` drops here every
+                // `ServiceHandle::get` returns it.
+                let _ = tx.send(Some(service));
             });
 
-            app.manage(service);
             Ok(())
         })
         .run(tauri::generate_context!())
