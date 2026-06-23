@@ -68,13 +68,15 @@ rm -f "$OUT"
 # Magisk expects module.prop, customize.sh, META-INF/…). The webroot React
 # build and bin/* binaries are produced by the steps above.
 #
-# Pack by directory/glob, not a per-file allowlist: whole bin/ (cores +
-# kasumi-proxy + licenses), whole webroot/, every top-level *.sh, module.prop
-# and META-INF. Adding a payload file ships it automatically; only AGENTS.md
-# (dev doc) is intentionally left out by not matching the globs.
+# Pack by directory/glob plus an explicit allowlist of named top-level files:
+# whole bin/ (cores + kasumi-proxy + licenses), whole webroot/, every top-level
+# *.sh, module.prop, logo.png (the action/webui icon referenced by module.prop)
+# and META-INF. A new *.sh ships automatically; any other new top-level file
+# (like logo.png) must be added here. AGENTS.md (dev doc) is intentionally left
+# out by not matching.
 (cd "$ROOT/module" && zip -r -q "$OUT" \
 	META-INF bin webroot \
-	module.prop ./*.sh \
+	module.prop logo.png ./*.sh \
 	-x '*.DS_Store')
 
 echo "✅ Release zip: $OUT"
