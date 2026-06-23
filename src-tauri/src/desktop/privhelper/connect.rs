@@ -182,7 +182,7 @@ fn run_elevated(exe: &std::path::Path, args: &[&OsStr]) -> bool {
     // One quoted command line (UAC launches a fresh process, not a fork).
     let params = args
         .iter()
-        .map(|a| format!("\"{}\"", a.to_string_lossy().replace('"', "\\\"")))
+        .map(|&a| quote_arg(a))
         .collect::<Vec<_>>()
         .join(" ");
 
@@ -201,6 +201,43 @@ fn run_elevated(exe: &std::path::Path, args: &[&OsStr]) -> bool {
     };
     // ShellExecuteW returns > 32 on success (a declined prompt counts as failure).
     (result as usize) > 32
+}
+
+/// Quote one argument for a Win32 command line per the `CommandLineToArgvW` rules:
+/// backslashes are literal except before a `"`, where each must be doubled. Windows
+/// paths can't contain `"`, but a value ending in `\` (e.g. a drive-root dir) would
+/// otherwise escape the closing quote and swallow the next argument.
+fn quote_arg(arg: &OsStr) -> String {
+    let s = arg.to_string_lossy();
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    let mut backslashes = 0usize;
+    for c in s.chars() {
+        match c {
+            '\\' => {
+                backslashes += 1;
+                out.push('\\');
+            }
+            '"' => {
+                // Double the run of backslashes preceding the quote, then escape it.
+                for _ in 0..=backslashes {
+                    out.push('\\');
+                }
+                out.push('"');
+                backslashes = 0;
+            }
+            _ => {
+                backslashes = 0;
+                out.push(c);
+            }
+        }
+    }
+    // Double a trailing backslash run so it can't escape the closing quote.
+    for _ in 0..backslashes {
+        out.push('\\');
+    }
+    out.push('"');
+    out
 }
 
 /// `s` as a NUL-terminated UTF-16 buffer for the Win32 `*W` APIs.
