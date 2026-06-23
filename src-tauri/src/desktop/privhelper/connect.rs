@@ -248,3 +248,32 @@ fn wide(s: &str) -> Vec<u16> {
         .chain(std::iter::once(0))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::quote_arg;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn quotes_plain_args() {
+        assert_eq!(quote_arg(OsStr::new("plain")), r#""plain""#);
+        assert_eq!(
+            quote_arg(OsStr::new(r"C:\Program Files\x")),
+            r#""C:\Program Files\x""#
+        );
+    }
+
+    #[test]
+    fn doubles_trailing_backslashes() {
+        // A value ending in `\` must not escape the closing quote (the bug this guards).
+        assert_eq!(quote_arg(OsStr::new(r"C:\")), r#""C:\\""#);
+        assert_eq!(quote_arg(OsStr::new(r"a\\")), r#""a\\\\""#);
+    }
+
+    #[test]
+    fn escapes_embedded_quotes() {
+        assert_eq!(quote_arg(OsStr::new(r#"a"b"#)), r#""a\"b""#);
+        // Backslashes before a quote are doubled, then the quote itself escaped.
+        assert_eq!(quote_arg(OsStr::new(r#"a\"b"#)), r#""a\\\"b""#);
+    }
+}
