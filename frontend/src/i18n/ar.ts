@@ -573,6 +573,7 @@ const ar = {
   "common.mode.proxy": "عبر الوكيل فقط",
   "common.mode.direct": "مباشر فقط",
   "common.proxyNotRunning": "شغّل الوكيل أولًا قبل استخدام وضع " + '"عبر الوكيل فقط".',
+  "common.openFile": "فتح ملف…",
   // qr
   "qr.scan.title": "مسح رمز QR",
   "qr.scan.starting": "جارٍ تشغيل الكاميرا…",

@@ -472,6 +472,7 @@ const zh = {
   "common.mode.proxy": "仅代理",
   "common.mode.direct": "仅直连",
   "common.proxyNotRunning": "使用“仅代理”模式前，请先启动代理。",
+  "common.openFile": "打开文件…",
   // qr
   "qr.scan.title": "扫描二维码",
   "qr.scan.starting": "正在启动摄像头…",

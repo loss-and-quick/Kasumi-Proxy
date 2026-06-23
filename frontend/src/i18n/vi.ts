@@ -476,6 +476,7 @@ const vi = {
   "common.mode.proxy": "Chỉ qua proxy",
   "common.mode.direct": "Chỉ trực tiếp",
   "common.proxyNotRunning": "Hãy khởi động proxy trước khi dùng chế độ Chỉ qua proxy.",
+  "common.openFile": "Mở tệp…",
   // qr
   "qr.scan.title": "Quét mã QR",
   "qr.scan.starting": "Đang khởi động camera…",

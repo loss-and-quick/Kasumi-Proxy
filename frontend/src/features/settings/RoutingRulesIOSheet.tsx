@@ -8,9 +8,12 @@ import { lazy, Suspense, useMemo, useState } from "react";
 import { Btn, Field, SectionLabel, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "../profiles/clipboard";
 import { parseRoutingRulesJson } from "./helpers";
+
+const JSON_FILTER = [{ name: "JSON", extensions: ["json"] }];
 
 const QrCodeSheet = lazy(() =>
   import("../../components/QrCodeSheet").then((module) => ({ default: module.QrCodeSheet })),
@@ -80,12 +83,25 @@ export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose:
           variant="outline"
           icon="download"
           disabled={!hasRules}
-          onClick={() => {
+          onClick={async () => {
+            const name = `kasumi-proxy-routing-${new Date().toISOString().slice(0, 10)}.json`;
+            if (nativeDialogsAvailable()) {
+              try {
+                await saveTextFile({
+                  contents: exportJson,
+                  defaultName: name,
+                  filters: JSON_FILTER,
+                });
+              } catch (e) {
+                notify(e instanceof Error ? e.message : String(e));
+              }
+              return;
+            }
             const blob = new Blob([exportJson], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `kasumi-proxy-routing-${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = name;
             a.click();
             URL.revokeObjectURL(url);
           }}
@@ -104,6 +120,22 @@ export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose:
         hint={parsed.hint}
       />
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {nativeDialogsAvailable() && (
+          <Btn
+            variant="outline"
+            icon="folder_open"
+            onClick={async () => {
+              try {
+                const text = await openTextFile({ filters: JSON_FILTER });
+                if (text !== null) setImportText(text);
+              } catch (e) {
+                notify(e instanceof Error ? e.message : String(e));
+              }
+            }}
+          >
+            {t("common.openFile")}
+          </Btn>
+        )}
         <Btn variant="outline" icon="qr_code_scanner" onClick={() => setScannerOpen(true)}>
           {t("backup.scanQr")}
         </Btn>
