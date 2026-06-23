@@ -126,8 +126,11 @@ export default function App() {
 
   return (
     <div className={`device${isWide ? " wide" : ""}`}>
-      {isWide && navVisible && (
-        <nav className={`siderail${sheetOpen ? " hidden" : ""}`} aria-hidden={sheetOpen}>
+      {isWide && (
+        <nav
+          className={`siderail${!navVisible || sheetOpen ? " hidden" : ""}`}
+          aria-hidden={!navVisible || sheetOpen}
+        >
           <div className="siderail-brand">kasumi</div>
           {navItems.map((n) => (
             <button
