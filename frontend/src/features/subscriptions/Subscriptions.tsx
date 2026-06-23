@@ -27,7 +27,7 @@ import {
   uid,
 } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
-import { copyText } from "../profiles/clipboard";
+import { copyText, readText } from "../profiles/clipboard";
 
 export default function Subscriptions() {
   const subs = useAppStore((s) => s.subscriptions);
@@ -90,15 +90,12 @@ export default function Subscriptions() {
 
   const openImport = () => {
     setImportOpen(true);
-    // The UI runs in a secure context (http://127.0.0.1), so prefill from the
-    // clipboard; leave the field untouched if it's empty or unreadable.
-    navigator.clipboard
-      .readText()
-      .then((txt) => {
-        const v = txt.trim();
-        if (v) setImportText(v);
-      })
-      .catch(() => {});
+    // Prefill from the clipboard (native under Tauri, web Clipboard API otherwise);
+    // leave the field untouched if it's empty or unreadable.
+    readText().then((txt) => {
+      const v = txt?.trim();
+      if (v) setImportText(v);
+    });
   };
 
   const importSubs = async () => {

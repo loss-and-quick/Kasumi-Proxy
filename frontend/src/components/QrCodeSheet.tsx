@@ -1,5 +1,6 @@
 import { toDataURL } from "qrcode";
 import { useEffect, useState } from "react";
+import { copyText } from "../features/profiles/clipboard";
 import { useT } from "../i18n";
 import { Btn } from "./buttons";
 import { Sheet } from "./overlays";
@@ -10,15 +11,6 @@ type Props = {
   text: string;
   onClose: () => void;
 };
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export function QrCodeSheet({ open, title, text, onClose }: Props) {
   const t = useT();

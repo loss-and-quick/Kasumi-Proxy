@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Btn, Field, Select, Sheet } from "../../components";
 import type { Group } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import { readText } from "./clipboard";
 
 export function ImportProfilesSheet({
   open,
@@ -27,20 +28,15 @@ export function ImportProfilesSheet({
   const t = useT();
   const prevOpen = useRef(open);
 
-  // Auto-read clipboard every time the sheet opens.
-  // The UI is served over http://127.0.0.1 (a secure context), so the Clipboard
-  // API is available in both the browser and the WebKitGTK/Neutralino window.
+  // Auto-read clipboard every time the sheet opens. Uses the native clipboard
+  // under Tauri, the web Clipboard API otherwise; leaves the field as-is when it's
+  // empty or unreadable (permission denied / no clipboard access).
   useEffect(() => {
     if (!prevOpen.current && open) {
-      navigator.clipboard
-        .readText()
-        .then((text) => {
-          const trimmed = text.trim();
-          if (trimmed) setImportText(trimmed);
-        })
-        .catch(() => {
-          // clipboard unavailable / permission denied — leave the field as is
-        });
+      readText().then((text) => {
+        const trimmed = text?.trim();
+        if (trimmed) setImportText(trimmed);
+      });
     }
     prevOpen.current = open;
   }, [open, setImportText]);

@@ -8,6 +8,7 @@ import { Btn, Field, SectionLabel, Sheet } from "../../components";
 import { AppStateSchema } from "../../generated/schemas";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
+import { copyText } from "../profiles/clipboard";
 
 const QrCodeSheet = lazy(() =>
   import("../../components/QrCodeSheet").then((module) => ({ default: module.QrCodeSheet })),
@@ -15,15 +16,6 @@ const QrCodeSheet = lazy(() =>
 const QrScannerSheet = lazy(() =>
   import("../../components/QrScannerSheet").then((module) => ({ default: module.QrScannerSheet })),
 );
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export default function Backup({ onClose }: { onClose: () => void }) {
   const groups = useAppStore((s) => s.groups);

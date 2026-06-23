@@ -232,7 +232,10 @@ pub fn run() {
             ))
             .plugin(tauri_plugin_updater::Builder::new().build())
             // A native error modal for a fatal startup failure (see the setup hook).
-            .plugin(tauri_plugin_dialog::init());
+            .plugin(tauri_plugin_dialog::init())
+            // Native clipboard for the UI's copy / paste helpers (with a
+            // navigator.clipboard fallback in the non-Tauri shells).
+            .plugin(tauri_plugin_clipboard_manager::init());
     }
 
     tb.invoke_handler(builder.invoke_handler())
