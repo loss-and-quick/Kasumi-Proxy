@@ -389,6 +389,9 @@ const zh = {
   "settings.fragmentLength": "分片长度",
   "settings.fragmentDelay": "分片延迟",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunEngine": "TUN 引擎",
+  "settings.tunEngineHint":
+    "为每个内核桥接 TUN 设备的引擎。sing-box 可使用自带的原生 TUN；xray 需要外部引擎。",
   "settings.security": "安全",
   "settings.pinnedCert": "固定证书（SHA-256）",
   "settings.pinnedCertPh": "留空以禁用",

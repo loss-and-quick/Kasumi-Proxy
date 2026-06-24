@@ -400,6 +400,9 @@ const en = {
   "settings.fragmentLength": "Fragment length",
   "settings.fragmentDelay": "Fragment delay",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunEngine": "TUN engine",
+  "settings.tunEngineHint":
+    "Which engine bridges the TUN device to each core. sing-box can use its own native TUN; xray needs an external one.",
   "settings.security": "Security",
   "settings.pinnedCert": "Pinned certificate (SHA-256)",
   "settings.pinnedCertPh": "leave empty to disable",

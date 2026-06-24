@@ -390,6 +390,9 @@ const vi = {
   "settings.fragmentLength": "Độ dài phân mảnh",
   "settings.fragmentDelay": "Độ trễ phân mảnh",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunEngine": "Công cụ TUN",
+  "settings.tunEngineHint":
+    "Công cụ kết nối thiết bị TUN với mỗi lõi. sing-box có thể dùng TUN gốc của nó; xray cần công cụ ngoài.",
   "settings.security": "Bảo mật",
   "settings.pinnedCert": "Chứng chỉ ghim (SHA-256)",
   "settings.pinnedCertPh": "để trống để tắt",

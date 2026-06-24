@@ -177,6 +177,39 @@ pub fn resolve_tun(core: CoreEngine, s: &AdvancedSettings) -> TunEngine {
     chosen
 }
 
+/// Per-core TUN-engine options for the settings UI: for each core its default
+/// engine and the engines valid to pick. Derived from the very same
+/// [`default_tun_for`]/[`resolve_tun`] rules the data-path uses (a variant is valid
+/// for a core iff it survives `resolve_tun`'s clamp), so the UI never re-encodes the
+/// SingboxTun-is-sing-box-only rule or the per-core default — they are emitted to
+/// the frontend from here (see `defaults.rs` → `TUN_BY_CORE`).
+pub fn tun_by_core_options() -> Vec<TunCoreOptions> {
+    use strum::IntoEnumIterator;
+    CoreEngine::iter()
+        .map(|core| {
+            let valid = TunEngine::iter()
+                .filter(|&tun| {
+                    let mut s = AdvancedSettings::default();
+                    s.tun_by_core.insert(core, tun);
+                    resolve_tun(core, &s) == tun
+                })
+                .collect();
+            TunCoreOptions {
+                core,
+                default: default_tun_for(core),
+                valid,
+            }
+        })
+        .collect()
+}
+
+/// One core's TUN-engine options (see [`tun_by_core_options`]).
+pub struct TunCoreOptions {
+    pub core: CoreEngine,
+    pub default: TunEngine,
+    pub valid: Vec<TunEngine>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

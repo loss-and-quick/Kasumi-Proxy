@@ -465,6 +465,9 @@ const ar = {
   "settings.fragmentLength": "طول التجزئة",
   "settings.fragmentDelay": "تأخير التجزئة",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunEngine": "محرك TUN",
+  "settings.tunEngineHint":
+    "المحرك الذي يربط جهاز TUN بكل نواة. يمكن لـ sing-box استخدام TUN الأصلي الخاص به؛ بينما يحتاج xray إلى محرك خارجي.",
   "settings.security": "الأمان",
   "settings.pinnedCert": "الشهادة المثبتة (SHA-256)",
   "settings.pinnedCertPh": "اتركه فارغًا للتعطيل",

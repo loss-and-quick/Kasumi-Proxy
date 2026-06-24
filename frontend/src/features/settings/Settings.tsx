@@ -25,6 +25,7 @@ import { LanguageSection } from "./sections/LanguageSection";
 import { LocalPortsSection } from "./sections/LocalPortsSection";
 import { RoutingSection } from "./sections/RoutingSection";
 import { SystemSection } from "./sections/SystemSection";
+import { TunEngineSection } from "./sections/TunEngineSection";
 
 const AssetFileSheet = lazy(() =>
   import("./AssetFileSheet").then((module) => ({ default: module.AssetFileSheet })),
@@ -231,6 +232,7 @@ export default function Settings({
             removeAssetFile={removeAssetFile}
           />
           <CoresSection coreFor={coreFor} setCoreFor={setCoreFor} />
+          <TunEngineSection settings={settings} set={set} />
           <DnsSection settings={settings} set={set} />
           <ConnectionSection settings={settings} set={set} />
           <LocalPortsSection settings={settings} set={set} />
