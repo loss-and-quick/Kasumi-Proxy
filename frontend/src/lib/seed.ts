@@ -208,7 +208,7 @@ export const ASSET_FILES_SEED: AssetFile[] = [];
 export const SETTINGS_SEED: AdvancedSettings = {
   ...EMPTY_SETTINGS,
   fragment: true,
-  mtu: 1500,
+  tunMtu: 1500,
 };
 
 export function seedAppState(): AppState {

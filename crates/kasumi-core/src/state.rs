@@ -234,7 +234,6 @@ pub struct AdvancedSettings {
     pub mux_xudp443: Option<MuxXudp443>,
     pub fragment: bool,
     pub fragment_packets: String,
-    pub mtu: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fragment_length: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -299,7 +298,6 @@ impl Default for AdvancedSettings {
             mux_xudp443: None,
             fragment: false,
             fragment_packets: "tlshello".into(),
-            mtu: 1350,
             fragment_length: None,
             fragment_delay: None,
             log_level: None,
@@ -444,7 +442,6 @@ mod tests {
         assert_eq!(v["domainStrategy4Singbox"], "prefer_ipv4");
         assert_eq!(v["singboxStack"], "gvisor");
         assert_eq!(v["muxConcurrency"], 8);
-        assert_eq!(v["mtu"], 1350);
         assert_eq!(v["fragmentPackets"], "tlshello");
         assert_eq!(v["logRotateMaxKb"], 512);
         assert_eq!(v["appCaptureMode"], "all");
