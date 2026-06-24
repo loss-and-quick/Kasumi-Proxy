@@ -186,6 +186,7 @@ mod tests {
             client
                 .call(PrivRequest::StartDataPath {
                     engine: CoreEngine::SingBox,
+                    tun: kasumi_core::enums::TunEngine::SingboxTun,
                     socks_port: 1080,
                 })
                 .await

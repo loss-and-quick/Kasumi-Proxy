@@ -17,24 +17,24 @@ use tokio::sync::mpsc;
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::read_json;
 use kasumi_backend::lifecycle::{
-    core_argv, core_env, random_tun_iface, tun2socks_argv, verify_core_alive,
+    missing_rule_sets, random_tun_iface, referenced_srs, spawn_core, sync_geo_asset,
+    verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
     StopDataPath, TestCore, spawn_local_test_core,
 };
-use kasumi_backend::proc::spawn_logged;
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
-use kasumi_core::contract::{RunState, ServiceState};
-use kasumi_core::enums::CoreEngine;
+use kasumi_core::contract::{LogTarget, RunState, ServiceState};
+use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::state::{
     AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
-use crate::desktop::{OsSeam, network, resume, routing};
+use crate::desktop::{OsSeam, network, resume, routing, tun_engine};
 
 /// The per-OS seam: only the parts of the data-path that genuinely differ between
 /// Linux and Windows. Everything else lives in the shared [`DesktopPlatform`].
@@ -44,9 +44,9 @@ pub(crate) trait DesktopOs: Send + Sync {
     where
         Self: Sized;
 
-    /// Extra precheck before the xray/tun2socks path (Windows: the bundled
+    /// Extra precheck before the external-tun path (Windows: the bundled
     /// `wintun.dll` must be on disk). Linux has nothing to check.
-    async fn precheck_xray(&self, p: &DesktopPaths) -> anyhow::Result<()>;
+    async fn precheck_external_tun(&self, p: &DesktopPaths) -> anyhow::Result<()>;
 
     /// Wait for the freshly-created tun `name` to come up before addressing/routing.
     /// Linux is best-effort (proceeds even on timeout, matching its `ip` flow);
@@ -58,7 +58,8 @@ pub(crate) trait DesktopOs: Send + Sync {
     async fn iface_traffic(&self, iface: Option<&str>) -> (u64, u64);
 
     /// Whether a tun is creatable right now (Linux checks `/dev/net/tun`; Windows
-    /// always can — sing-box embeds wintun, the xray path checks the DLL at start).
+    /// always can — sing-box embeds wintun, the external-tun path checks the DLL at
+    /// start).
     async fn tun_capable(&self) -> bool;
 
     /// The sing-box tun stack to pin: `"gvisor"` for the Linux root-binary path,
@@ -133,55 +134,53 @@ impl DesktopPlatform {
         None
     }
 
-    /// sing-box bring-up: it owns its own tun (auto_route) — no tun2socks/manual
-    /// routing. The proxy-server bypass is baked into the config as
-    /// `route_exclude_address` by `prepare_singbox_config`. On Windows the tun comes
-    /// up from sing-box's embedded wintun (no DLL on disk needed, unlike xray).
-    async fn start_singbox(&self) -> anyhow::Result<()> {
-        let cfg = self.p.backend.singbox_config.to_string_lossy().into_owned();
-        let log = self
-            .p
-            .backend
-            .log(kasumi_core::contract::LogTarget::Singbox);
-        if !exists(&self.p.singbox_bin).await {
-            return self.fail("sing-box binary missing").await;
+    /// The external tun helper binary the *running* data-path expects, or `None` when
+    /// the core owns its tun natively. The recorded tun-engine marker is authoritative
+    /// when present (resolved through [`tun_engine`], so adding an engine needs no
+    /// change here); on an absent/legacy marker (e.g. a data-path started by a
+    /// pre-upgrade version) it falls back to the running core — xray always fronts an
+    /// external tun, sing-box owns its own. Used by the watchdog to decide whether a
+    /// live helper is required.
+    async fn expected_helper_bin(&self) -> Option<String> {
+        if let Some(marker) = read_text(&self.p.tun_engine_file)
+            .await
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        {
+            return tun_engine::from_marker(&marker)
+                .and_then(|tun| tun_engine::helper_bin(tun, &self.p))
+                .map(str::to_owned);
         }
-        if !exists(&cfg).await {
-            return self.fail("config missing").await;
+        match self.running_engine().await {
+            Some(CoreEngine::Xray) => Some(self.p.tun2socks_bin.clone()),
+            _ => None,
         }
+    }
 
-        let cfg_text = read_text(&cfg).await.unwrap_or_default();
-        let needed = kasumi_backend::lifecycle::referenced_srs(&cfg_text);
+    /// Keep sing-box's geo `.srs` rule-sets in step with their `.dat` sources and
+    /// fail fast if any referenced rule-set is still missing. Shared by the native
+    /// and the socks-only (external-tun) sing-box paths.
+    async fn singbox_geo_prep(&self, cfg_text: &str) -> anyhow::Result<()> {
+        let needed = referenced_srs(cfg_text);
         let geo = Path::new(&self.p.geodat2srs_bin);
         let dat = self.p.backend.dat_dir.as_path();
         let srs = self.p.backend.srs_dir.as_path();
-        kasumi_backend::lifecycle::sync_geo_asset("geoip", dat, srs, geo, &needed).await;
-        kasumi_backend::lifecycle::sync_geo_asset("geosite", dat, srs, geo, &needed).await;
-        if !kasumi_backend::lifecycle::missing_rule_sets(&cfg_text)
-            .await
-            .is_empty()
-        {
+        sync_geo_asset("geoip", dat, srs, geo, &needed).await;
+        sync_geo_asset("geosite", dat, srs, geo, &needed).await;
+        if !missing_rule_sets(cfg_text).await.is_empty() {
             return self.fail("missing rule_set assets").await;
         }
+        Ok(())
+    }
 
-        prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file).await?;
-
-        // Defensive sweep before bring-up: if a previous core crashed (so stop_data_path
-        // never ran its teardown), its orphaned auto_route rules would otherwise survive
-        // and black-hole the fresh tun. Idempotent — clears nothing on a clean start.
-        routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
-
+    /// Spawn the proxy core (`<bin> run -c <cfg>`), persist its pid and confirm it
+    /// stayed up. Shared by the native and external-tun bring-ups.
+    async fn spawn_core_verify(&self, bin: &str, cfg: &str, log: &Path) -> anyhow::Result<()> {
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
-        let child = spawn_logged(
-            &core_argv(&self.p.singbox_bin, &cfg),
-            &core_env(&dat_dir),
-            &log,
-            false,
-        )
-        .await?;
+        let child = spawn_core(bin, cfg, log, &dat_dir, false).await?;
         let pid = child.id().unwrap_or(0) as i32;
         let _ = write_text(&self.p.pidfile, &pid.to_string()).await;
-        if !verify_core_alive(pid, &self.p.singbox_bin, 6, Duration::from_millis(250)).await {
+        if !verify_core_alive(pid, bin, 6, Duration::from_millis(250)).await {
             return self
                 .fail(&format!("core exited on startup — see {}", log.display()))
                 .await;
@@ -189,76 +188,93 @@ impl DesktopPlatform {
         Ok(())
     }
 
-    /// xray bring-up: spawn xray (its own SOCKS), bridge a userspace tun to it via
-    /// tun2socks, then install the OS routing (server bypass + split-default).
-    async fn start_xray(&self, socks_port: u16) -> anyhow::Result<()> {
-        let cfg = self.p.backend.xray_config.to_string_lossy().into_owned();
-        let log = self.p.backend.log(kasumi_core::contract::LogTarget::Xray);
-        if !exists(&self.p.xray_bin).await {
-            return self.fail("xray binary missing").await;
+    /// Bring up the data-path for a `(core, tun engine)` pair. The shared steps
+    /// (binary/config checks, geo prep, core spawn) live here; the two genuinely
+    /// different shapes are the native sing-box tun (the core owns it) and an
+    /// external userspace tun (a helper fronts a socks-only core). Engine-specific
+    /// spawn details live solely in [`super::tun_engine`].
+    async fn start_proxy(
+        &self,
+        engine: CoreEngine,
+        tun: TunEngine,
+        socks_port: u16,
+    ) -> anyhow::Result<()> {
+        let is_singbox = engine == CoreEngine::SingBox;
+        let core_bin = self.core_bin(engine).to_owned();
+        let cfg = if is_singbox {
+            self.p.backend.singbox_config.to_string_lossy().into_owned()
+        } else {
+            self.p.backend.xray_config.to_string_lossy().into_owned()
+        };
+        let log = self.p.backend.log(if is_singbox {
+            LogTarget::Singbox
+        } else {
+            LogTarget::Xray
+        });
+        if !exists(&core_bin).await {
+            return self.fail("core binary missing").await;
         }
-        self.os.precheck_xray(&self.p).await?;
         if !exists(&cfg).await {
             return self.fail("config missing").await;
         }
+        // Record which TUN engine this data-path runs (teardown/watchdog read it).
+        let _ = write_text(&self.p.tun_engine_file, &tun_engine::marker(tun)).await;
 
-        // Resolve the server-bypass set before any tun route is up (needs DNS).
         let cfg_text = read_text(&cfg).await.unwrap_or_default();
+        if is_singbox {
+            self.singbox_geo_prep(&cfg_text).await?;
+        }
+
+        if !tun_engine::is_external(tun) {
+            // Native sing-box tun: the core owns the tun; the server bypass is baked
+            // into the config (route_exclude_address) by prepare_singbox_config.
+            prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file).await?;
+
+            // Defensive sweep before bring-up: if a previous core crashed (so
+            // stop_data_path never ran its teardown), its orphaned auto_route rules
+            // would otherwise survive and black-hole the fresh tun. Idempotent —
+            // clears nothing on a clean start.
+            routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
+
+            self.spawn_core_verify(&core_bin, &cfg, &log).await?;
+            return Ok(());
+        }
+
+        // External userspace tun in front of a socks-only core.
+        self.os.precheck_external_tun(&self.p).await?;
+        // Resolve the server-bypass set before any tun route is up (needs DNS).
         let bypass = routing::resolve_bypass_cidrs(&cfg_text).await;
 
-        // bind the core's own
-        // egress outbounds (proxy + direct) to the physical uplink so they escape the
-        // tun at the socket layer instead of looping back through tun2socks. Without
-        // this, the `direct` outbound carrying geo-`direct` (e.g. RU) traffic is
-        // captured by the split-default and loops. Gated on CAP_NET_RAW (the
-        // privileged data-path owner); a harmless no-op in unprivileged in-process
-        // dev, where there's no managed tun to escape. (sing-box's `auto_route` path
-        // escapes via its own `auto_detect_interface` and is bound elsewhere.)
+        // Bind the core's own egress outbounds (proxy + direct) to the physical
+        // uplink so they escape the tun at the socket layer instead of looping back
+        // through the external tun helper. Without this, the `direct` outbound
+        // carrying geo-`direct` (e.g. RU) traffic is captured by the split-default
+        // and loops. Gated on CAP_NET_RAW (the privileged data-path owner); a
+        // harmless no-op in unprivileged in-process dev, where there's no managed
+        // tun to escape. (sing-box's native `auto_route` path escapes via its own
+        // `auto_detect_interface` and is bound elsewhere.)
         if can_bind_uplink() {
-            inject_uplink_bind(CoreEngine::Xray, Path::new(&cfg)).await;
+            inject_uplink_bind(engine, Path::new(&cfg)).await;
         }
 
-        let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
-        let child = spawn_logged(
-            &core_argv(&self.p.xray_bin, &cfg),
-            &core_env(&dat_dir),
-            &log,
-            false,
-        )
-        .await?;
-        let pid = child.id().unwrap_or(0) as i32;
-        let _ = write_text(&self.p.pidfile, &pid.to_string()).await;
-        if !verify_core_alive(pid, &self.p.xray_bin, 6, Duration::from_millis(250)).await {
-            return self
-                .fail(&format!("core exited on startup — see {}", log.display()))
-                .await;
-        }
+        self.spawn_core_verify(&core_bin, &cfg, &log).await?;
 
-        let tun = random_tun_iface();
-        let _ = write_text(&self.p.tun_iface_file, &tun).await;
-        let t2s_log = self
-            .p
-            .backend
-            .log(kasumi_core::contract::LogTarget::Tun2socks);
+        let iface = random_tun_iface();
+        let _ = write_text(&self.p.tun_iface_file, &iface).await;
+        let helper_log = self.p.backend.log(LogTarget::Tun2socks);
         // Desktop binds the core's own outbounds to the uplink (see above) to escape
-        // the tun, so tun2socks needs no fwmark — its upstream is loopback (the core's
-        // SOCKS) and never hits routing anyway. (Android still marks it; that param is
-        // load-bearing there, not here.)
-        let t2s = spawn_logged(
-            &tun2socks_argv(&self.p.tun2socks_bin, &tun, socks_port, None),
-            &std::collections::HashMap::new(),
-            &t2s_log,
-            false,
-        )
-        .await?;
+        // the tun, so the helper needs no fwmark — its upstream is loopback (the
+        // core's SOCKS) and never hits routing anyway. (Android still marks it; that
+        // param is load-bearing there, not here.)
+        let helper = tun_engine::spawn(tun, &self.p, &iface, socks_port, &helper_log, None).await?;
         let _ = write_text(
             &self.p.tun2socks_pidfile,
-            &t2s.id().unwrap_or(0).to_string(),
+            &helper.id().unwrap_or(0).to_string(),
         )
         .await;
-        // tun2socks creates the tun device; wait for it before addressing/routing.
-        self.os.await_tun_up(&tun).await?;
-        routing::apply_xray_routing(&tun, &bypass, &self.p.route_state_file).await?;
+        // The helper creates the tun device; wait for it before addressing/routing.
+        self.os.await_tun_up(&iface).await?;
+        routing::apply_external_tun_routing(&iface, &bypass, &self.p.route_state_file).await?;
         Ok(())
     }
 }
@@ -322,15 +338,15 @@ impl Platform for DesktopPlatform {
     }
 
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-        let StartDataPath { engine, socks_port } = opts;
-        log::info!("starting data-path: engine={engine:?} socks_port={socks_port}");
+        let StartDataPath {
+            engine,
+            tun,
+            socks_port,
+        } = opts;
+        log::info!("starting data-path: engine={engine:?} tun={tun:?} socks_port={socks_port}");
         self.set_service_state("connecting").await;
         let _ = write_text(&self.p.socks_port_file, &socks_port.to_string()).await;
-        let result = if engine == CoreEngine::SingBox {
-            self.start_singbox().await
-        } else {
-            self.start_xray(socks_port).await
-        };
+        let result = self.start_proxy(engine, tun, socks_port).await;
         match result {
             Ok(()) => {
                 let _ = write_text(&self.p.service_started_file, &now_secs().to_string()).await;
@@ -362,9 +378,11 @@ impl Platform for DesktopPlatform {
             "stopping data-path (keep_state={})",
             opts.keep_service_state
         );
+        // The external tun helper this data-path used (None for a native sing-box
+        // tun).
         // Stop the core first, gracefully: a sing-box auto_route core removes its
-        // own routes + tun on terminate. Then tear down the xray manual routing
-        // (no-op for sing-box — no route-state file) and the tun2socks helper.
+        // own routes + tun on terminate. Then tear down the manual routing (no-op
+        // for a native sing-box — no route-state file) and the external tun helper.
         kill_if_running(
             read_pidfile(&self.p.pidfile).await,
             None,
@@ -372,18 +390,25 @@ impl Platform for DesktopPlatform {
             true,
         )
         .await;
-        routing::clear_xray_routing(&self.p.route_state_file).await;
+        routing::clear_external_tun_routing(&self.p.route_state_file).await;
         // Fallback: a native sing-box core that didn't exit cleanly (crash / SIGKILL)
-        // leaves its auto_route ip-rules/tables behind; sweep them so they don't wedge
-        // the next bring-up. No-op for xray (no rules at those priorities).
+        // leaves its auto_route ip-rules/tables behind; sweep them so they don't
+        // wedge the next bring-up. No-op for external-tun cores (no rules at those
+        // priorities).
         routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
-        kill_if_running(
-            read_pidfile(&self.p.tun2socks_pidfile).await,
-            Some(&self.p.tun2socks_bin),
-            &self.p.tun2socks_pidfile,
-            false,
-        )
-        .await;
+        // Kill the tun helper only if the pidfile's pid still belongs to a known
+        // helper binary. A stale pidfile from an unclean external-tun exit whose pid
+        // was recycled by an unrelated process must never be signalled — the
+        // data-path runs privileged, so an unguarded kill could take down an
+        // arbitrary process as root. (The old always-`Some(tun2socks_bin)` guard was
+        // lost when the marker-based helper resolution went in.)
+        let helper_pid = read_pidfile(&self.p.tun2socks_pidfile).await;
+        if helper_pid > 0 && pid_matches_any(helper_pid, &self.p.helper_bins()).await {
+            kill_if_running(helper_pid, None, &self.p.tun2socks_pidfile, false).await;
+        } else {
+            remove_file(&self.p.tun2socks_pidfile).await;
+        }
+        remove_file(&self.p.tun_engine_file).await;
         remove_file(&self.p.tun_iface_file).await;
         remove_file(&self.p.tun2_iface_file).await;
         if !opts.keep_service_state {
@@ -498,13 +523,14 @@ impl Platform for DesktopPlatform {
         if !(core_pid > 0 && pid_matches_any(core_pid, &self.p.core_bins()).await) {
             return Some(false);
         }
-        // xray relies on a tun2socks helper; sing-box runs the tun itself.
-        let engine = read_text(&self.p.engine_file)
-            .await
-            .map(|s| s.trim().to_string());
-        if engine.as_deref() != Some("sing-box") {
+        // An external-tun data-path also relies on its helper process; a native
+        // sing-box runs the tun itself, so there's nothing extra to check. When a
+        // helper is expected (marker, or an xray core with no marker after an
+        // upgrade) its pid must be present AND alive — a missing pidfile means the
+        // helper never came up, which is unhealthy, so the watchdog rebuilds it.
+        if let Some(helper_bin) = self.expected_helper_bin().await {
             let t = read_pidfile(&self.p.tun2socks_pidfile).await;
-            if !(t > 0 && pid_matches_bin(t, &self.p.tun2socks_bin).await) {
+            if !(t > 0 && pid_matches_bin(t, &helper_bin).await) {
                 return Some(false);
             }
         }

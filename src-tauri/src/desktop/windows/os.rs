@@ -1,5 +1,5 @@
 //! The Windows [`DesktopOs`] seam: the parts of the desktop data-path that differ
-//! from Linux — a wintun tun (needing the bundled `wintun.dll` for the xray path),
+//! from Linux — a wintun tun (needing the bundled `wintun.dll` for the external-tun path),
 //! no per-interface byte counters, and the system sing-box stack.
 
 use std::time::Duration;
@@ -21,9 +21,9 @@ impl DesktopOs for WindowsOs {
         Ok(Self)
     }
 
-    async fn precheck_xray(&self, p: &DesktopPaths) -> anyhow::Result<()> {
+    async fn precheck_external_tun(&self, p: &DesktopPaths) -> anyhow::Result<()> {
         // tun2socks loads wintun.dll from its own directory (unlike sing-box, which
-        // embeds it), so the xray path genuinely needs the bundled DLL on disk.
+        // embeds it), so the external-tun path genuinely needs the bundled DLL on disk.
         if !exists(&p.wintun_dll).await {
             anyhow::bail!("wintun.dll missing — cannot create a tun");
         }
@@ -50,7 +50,7 @@ impl DesktopOs for WindowsOs {
     }
 
     async fn tun_capable(&self) -> bool {
-        // sing-box embeds wintun, so a tun is always possible; the xray path
+        // sing-box embeds wintun, so a tun is always possible; the external-tun path
         // additionally needs the bundled wintun.dll (checked at start).
         true
     }

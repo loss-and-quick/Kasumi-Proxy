@@ -19,7 +19,7 @@
 use serde::{Deserialize, Serialize};
 
 use kasumi_core::contract::ServiceState;
-use kasumi_core::enums::CoreEngine;
+use kasumi_core::enums::{CoreEngine, TunEngine};
 
 /// A privileged operation the GUI asks the helper to perform. Mirrors the
 /// privilege-needing methods of `Platform`.
@@ -30,8 +30,13 @@ pub enum PrivRequest {
     Ping,
     /// One-time boot setup (run dirs, seed lifecycle state).
     BootInit,
-    /// Bring the data-path up for `engine`, routing through the local SOCKS.
-    StartDataPath { engine: CoreEngine, socks_port: u16 },
+    /// Bring the data-path up for `engine` with TUN engine `tun`, routing through
+    /// the local SOCKS.
+    StartDataPath {
+        engine: CoreEngine,
+        tun: TunEngine,
+        socks_port: u16,
+    },
     /// Tear the data-path down. Idempotent.
     StopDataPath { keep_service_state: bool },
     /// Current data-path status (liveness + byte counters).
@@ -108,10 +113,12 @@ mod tests {
             PrivRequest::BootInit,
             PrivRequest::StartDataPath {
                 engine: CoreEngine::Xray,
+                tun: TunEngine::Tun2socks,
                 socks_port: 10808,
             },
             PrivRequest::StartDataPath {
                 engine: CoreEngine::SingBox,
+                tun: TunEngine::SingboxTun,
                 socks_port: 1080,
             },
             PrivRequest::StopDataPath {

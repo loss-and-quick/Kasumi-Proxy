@@ -52,7 +52,7 @@ impl DesktopOs for LinuxOs {
         Ok(Self)
     }
 
-    async fn precheck_xray(&self, _p: &DesktopPaths) -> anyhow::Result<()> {
+    async fn precheck_external_tun(&self, _p: &DesktopPaths) -> anyhow::Result<()> {
         Ok(())
     }
 

@@ -58,6 +58,9 @@ pub struct DesktopPaths {
     pub route_state_file: String,
     pub socks_port_file: String,
     pub engine_file: String,
+    /// Records the resolved TUN engine of the running data-path (its wire label),
+    /// so teardown + the watchdog know which helper (if any) to expect.
+    pub tun_engine_file: String,
     pub tun_iface_file: String,
     /// No force-proxy tun on desktop, but `inject_singbox_ifaces` still wants a path.
     pub tun2_iface_file: String,
@@ -77,6 +80,14 @@ impl DesktopPaths {
     /// Core binaries a running pid may match.
     pub fn core_bins(&self) -> Vec<String> {
         vec![self.xray_bin.clone(), self.singbox_bin.clone()]
+    }
+
+    /// External TUN helper binaries a running pid may match. Used to guard teardown:
+    /// a stale helper pidfile whose pid was recycled by an unrelated process must not
+    /// be signalled (the data-path runs privileged). New engines add their binary
+    /// here alongside their [`tun_engine::helper_bin`] arm.
+    pub fn helper_bins(&self) -> Vec<String> {
+        vec![self.tun2socks_bin.clone()]
     }
 }
 
@@ -181,6 +192,7 @@ impl DesktopPaths {
             // the unprivileged GUI builds them, the helper only reads them.
             socks_port_file: format!("{run_dir}/local-socks-port"),
             engine_file: format!("{datadir}/engine"),
+            tun_engine_file: format!("{run_dir}/tun-engine"),
             tun_iface_file: format!("{run_dir}/tun-iface"),
             tun2_iface_file: format!("{run_dir}/tun2-iface"),
             service_state_file: format!("{run_dir}/service-state"),
@@ -269,6 +281,7 @@ impl DesktopPaths {
             // resolve for the rationale); engine_file + configs stay in datadir.
             socks_port_file: format!(r"{run_dir}\local-socks-port"),
             engine_file: format!(r"{datadir}\engine"),
+            tun_engine_file: format!(r"{run_dir}\tun-engine"),
             tun_iface_file: format!(r"{run_dir}\tun-iface"),
             tun2_iface_file: format!(r"{run_dir}\tun2-iface"),
             service_state_file: format!(r"{run_dir}\service-state"),

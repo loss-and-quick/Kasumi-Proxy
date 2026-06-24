@@ -446,7 +446,7 @@ pub async fn clear_routing_rules(st: &RoutingState) {
 }
 
 /// Bring up tun device addresses/routes/rules and the xray marking chain.
-pub async fn apply_xray_routing(st: &RoutingState) {
+pub async fn apply_external_tun_routing(st: &RoutingState) {
     let Some(tun) = st.tun_iface.as_deref() else {
         return;
     };

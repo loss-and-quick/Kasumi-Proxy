@@ -4,17 +4,21 @@
 
 use serde_json::Value;
 
-use crate::core::resolve_core;
-use crate::enums::CoreEngine;
+use crate::core::{resolve_core, resolve_tun};
+use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::Profile;
 use crate::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use crate::state::{AdvancedSettings, RoutingRule};
 use crate::xray_config::build_xray_config;
 
-/// Engine + config JSON for a profile, mirroring what the core is launched with.
+/// Engine + TUN engine + config JSON for a profile, mirroring what the core is
+/// launched with.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreConfig {
     pub engine: CoreEngine,
+    /// The resolved TUN engine for this core. When it isn't `SingboxTun`, the
+    /// core is built socks-only (an external tun→socks engine fronts it).
+    pub tun: TunEngine,
     /// The built config as a JSON value (serialize to a string when writing it
     /// to disk; comparing values is order-independent for restart diffing).
     pub config: Value,
@@ -30,6 +34,7 @@ pub fn build_core_config(
     srs_dir: &str,
 ) -> Result<CoreConfig, String> {
     let engine = resolve_core(profile, settings);
+    let tun = resolve_tun(engine, settings);
     let config = match engine {
         CoreEngine::SingBox => build_singbox_config(
             profile,
@@ -37,18 +42,26 @@ pub fn build_core_config(
             routing_rules,
             profiles,
             SingboxBuildOpts {
-                no_tun: false,
+                // An external tun engine fronts sing-box → build it socks-only
+                // (no native tun inbound). SingboxTun keeps the native tun.
+                no_tun: tun != TunEngine::SingboxTun,
                 srs_dir,
             },
         )?,
         CoreEngine::Xray => build_xray_config(profile, settings, routing_rules, profiles)?,
     };
-    Ok(CoreConfig { engine, config })
+    Ok(CoreConfig {
+        engine,
+        tun,
+        config,
+    })
 }
 
 /// True when two resolved core configs differ — i.e. the core must be restarted.
+/// A TUN-engine switch counts too: it changes how the data-path is brought up even
+/// when the xray config JSON is identical.
 pub fn active_config_changed(prev: &CoreConfig, next: &CoreConfig) -> bool {
-    prev.engine != next.engine || prev.config != next.config
+    prev.engine != next.engine || prev.tun != next.tun || prev.config != next.config
 }
 
 #[cfg(test)]
@@ -69,6 +82,40 @@ mod tests {
         let cs = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
         assert_eq!(cs.engine, CoreEngine::SingBox);
         assert!(cs.config["route"].is_object());
+    }
+
+    #[test]
+    fn singbox_external_tun_is_socks_only() {
+        let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        let tun_inbounds = |c: &CoreConfig| {
+            c.config["inbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|i| i["type"] == "tun")
+                .count()
+        };
+
+        // Default: sing-box keeps its native tun inbound.
+        let s = AdvancedSettings::default();
+        let native = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+        assert_eq!(native.tun, TunEngine::SingboxTun);
+        assert_eq!(tun_inbounds(&native), 1);
+
+        // tun2socks for sing-box → socks-only config, no tun inbound, mixed kept.
+        let mut s2 = AdvancedSettings::default();
+        s2.tun_by_core
+            .insert(CoreEngine::SingBox, TunEngine::Tun2socks);
+        let ext = build_core_config(&sb, &s2, &[], std::slice::from_ref(&sb), "").unwrap();
+        assert_eq!(ext.tun, TunEngine::Tun2socks);
+        assert_eq!(tun_inbounds(&ext), 0);
+        assert!(
+            ext.config["inbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|i| i["type"] == "mixed")
+        );
     }
 
     #[test]
