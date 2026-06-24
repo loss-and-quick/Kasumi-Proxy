@@ -1,4 +1,4 @@
-import { Card, SectionLabel, Select } from "../../../components";
+import { Card, Field, SectionLabel, Select } from "../../../components";
 import type { CoreEngine, TunEngine } from "../../../generated/bindings";
 import { CORE_ENGINE_OPTS, TUN_BY_CORE } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -11,6 +11,7 @@ import type { AdvancedSettings } from "../../../lib/bridge";
 const ENGINE_LABEL: Record<TunEngine, string> = {
   "singbox-tun": "sing-box TUN",
   tun2socks: "tun2socks",
+  hev: "hev",
 };
 
 export function TunEngineSection({
@@ -26,6 +27,10 @@ export function TunEngineSection({
     settings.tunByCore?.[core] ?? TUN_BY_CORE[core].default;
   const setTunFor = (core: CoreEngine, value: TunEngine) =>
     set("tunByCore", { ...(settings.tunByCore ?? {}), [core]: value });
+
+  // hev is the only engine that reads the tuning knobs below, so only surface them
+  // when at least one core uses it.
+  const usesHev = CORE_ENGINE_OPTS.some((core) => tunFor(core) === "hev");
 
   return (
     <>
@@ -58,6 +63,48 @@ export function TunEngineSection({
             </div>
           );
         })}
+
+        {usesHev && (
+          <div
+            style={{ marginTop: 12, borderTop: "1px solid var(--outline-faint)", paddingTop: 12 }}
+          >
+            <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginBottom: 10 }}>
+              {t("settings.tunHevTuning")}
+            </div>
+            <div style={{ padding: "0 4px" }}>
+              <Field
+                label={t("settings.tunConnectTimeout")}
+                value={settings.tunConnectTimeoutMs}
+                type="number"
+                onChange={(value) => set("tunConnectTimeoutMs", Number(value))}
+              />
+              <Field
+                label={t("settings.tunTcpRwTimeout")}
+                value={settings.tunTcpRwTimeoutMs}
+                type="number"
+                onChange={(value) => set("tunTcpRwTimeoutMs", Number(value))}
+              />
+              <Field
+                label={t("settings.tunUdpRwTimeout")}
+                value={settings.tunUdpRwTimeoutMs}
+                type="number"
+                onChange={(value) => set("tunUdpRwTimeoutMs", Number(value))}
+              />
+              <Field
+                label={t("settings.tunTcpBuffer")}
+                value={settings.tunTcpBufferSize}
+                type="number"
+                onChange={(value) => set("tunTcpBufferSize", Number(value))}
+              />
+              <Field
+                label={t("settings.tunUdpRecvBuffer")}
+                value={settings.tunUdpRecvBufferSize}
+                type="number"
+                onChange={(value) => set("tunUdpRecvBufferSize", Number(value))}
+              />
+            </div>
+          </div>
+        )}
       </Card>
     </>
   );

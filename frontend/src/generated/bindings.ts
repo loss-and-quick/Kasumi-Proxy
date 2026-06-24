@@ -93,6 +93,16 @@ export type AdvancedSettings_Deserialize = {
 	tunByCore?: Partial<{ [key in CoreEngine]: TunEngine }>,
 	/**  MTU of the TUN interface (sing-box native tun; external engines too). */
 	tunMtu?: number,
+	/**  Connect timeout (ms) for external TUN engines (hev `misc.connect-timeout`). */
+	tunConnectTimeoutMs?: number,
+	/**  TCP read/write timeout (ms) (hev `misc.tcp-read-write-timeout`). */
+	tunTcpRwTimeoutMs?: number,
+	/**  UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`). */
+	tunUdpRwTimeoutMs?: number,
+	/**  Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`). */
+	tunTcpBufferSize?: number,
+	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
+	tunUdpRecvBufferSize?: number,
 };
 
 /**
@@ -146,6 +156,16 @@ export type AdvancedSettings_Serialize = {
 	tunByCore: Partial<{ [key in CoreEngine]: TunEngine }>,
 	/**  MTU of the TUN interface (sing-box native tun; external engines too). */
 	tunMtu: number,
+	/**  Connect timeout (ms) for external TUN engines (hev `misc.connect-timeout`). */
+	tunConnectTimeoutMs: number,
+	/**  TCP read/write timeout (ms) (hev `misc.tcp-read-write-timeout`). */
+	tunTcpRwTimeoutMs: number,
+	/**  UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`). */
+	tunUdpRwTimeoutMs: number,
+	/**  Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`). */
+	tunTcpBufferSize: number,
+	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
+	tunUdpRecvBufferSize: number,
 };
 
 export type Anytls = {
@@ -874,11 +894,12 @@ export type Tuic = {
 
 /**
  *  Which engine bridges the TUN device to the proxy core. `SingboxTun` means
- *  "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` is an
- *  external userspace tun→socks process in front of a socks-only core. Further
- *  engines plug in as new variants. Wire values: `"singbox-tun"`, `"tun2socks"`.
+ *  "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` and
+ *  `Hev` are external userspace tun→socks processes in front of a socks-only core.
+ *  Further engines plug in as new variants. Wire values: `"singbox-tun"`,
+ *  `"tun2socks"`, `"hev"`.
  */
-export type TunEngine = "singbox-tun" | "tun2socks";
+export type TunEngine = "singbox-tun" | "tun2socks" | "hev";
 
 export type Vless = {
 	meta: Meta,

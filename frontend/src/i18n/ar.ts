@@ -465,6 +465,12 @@ const ar = {
   "settings.fragmentLength": "طول التجزئة",
   "settings.fragmentDelay": "تأخير التجزئة",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunHevTuning": "ضبط hev",
+  "settings.tunConnectTimeout": "مهلة الاتصال (مللي ثانية)",
+  "settings.tunTcpRwTimeout": "مهلة قراءة/كتابة TCP (مللي ثانية)",
+  "settings.tunUdpRwTimeout": "مهلة قراءة/كتابة UDP (مللي ثانية)",
+  "settings.tunTcpBuffer": "حجم مخزن TCP (بايت)",
+  "settings.tunUdpRecvBuffer": "مخزن استقبال UDP (بايت)",
   "settings.tunEngine": "محرك TUN",
   "settings.tunEngineHint":
     "المحرك الذي يربط جهاز TUN بكل نواة. يمكن لـ sing-box استخدام TUN الأصلي الخاص به؛ بينما يحتاج xray إلى محرك خارجي.",

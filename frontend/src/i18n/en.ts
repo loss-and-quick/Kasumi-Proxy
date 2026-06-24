@@ -400,6 +400,12 @@ const en = {
   "settings.fragmentLength": "Fragment length",
   "settings.fragmentDelay": "Fragment delay",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunHevTuning": "hev tuning",
+  "settings.tunConnectTimeout": "Connect timeout (ms)",
+  "settings.tunTcpRwTimeout": "TCP read/write timeout (ms)",
+  "settings.tunUdpRwTimeout": "UDP read/write timeout (ms)",
+  "settings.tunTcpBuffer": "TCP buffer size (bytes)",
+  "settings.tunUdpRecvBuffer": "UDP receive buffer (bytes)",
   "settings.tunEngine": "TUN engine",
   "settings.tunEngineHint":
     "Which engine bridges the TUN device to each core. sing-box can use its own native TUN; xray needs an external one.",

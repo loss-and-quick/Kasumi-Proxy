@@ -415,6 +415,12 @@ const ru = {
   "settings.fragmentLength": "Длина фрагмента",
   "settings.fragmentDelay": "Задержка фрагментации",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunHevTuning": "Настройки hev",
+  "settings.tunConnectTimeout": "Таймаут подключения (мс)",
+  "settings.tunTcpRwTimeout": "Таймаут чтения/записи TCP (мс)",
+  "settings.tunUdpRwTimeout": "Таймаут чтения/записи UDP (мс)",
+  "settings.tunTcpBuffer": "Размер буфера TCP (байты)",
+  "settings.tunUdpRecvBuffer": "Буфер приёма UDP (байты)",
   "settings.tunEngine": "Движок TUN",
   "settings.tunEngineHint":
     "Какой движок связывает TUN-устройство с каждым ядром. sing-box умеет собственный нативный TUN; xray требует внешний.",

@@ -389,6 +389,12 @@ const zh = {
   "settings.fragmentLength": "分片长度",
   "settings.fragmentDelay": "分片延迟",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunHevTuning": "hev 调优",
+  "settings.tunConnectTimeout": "连接超时（毫秒）",
+  "settings.tunTcpRwTimeout": "TCP 读写超时（毫秒）",
+  "settings.tunUdpRwTimeout": "UDP 读写超时（毫秒）",
+  "settings.tunTcpBuffer": "TCP 缓冲区大小（字节）",
+  "settings.tunUdpRecvBuffer": "UDP 接收缓冲区（字节）",
   "settings.tunEngine": "TUN 引擎",
   "settings.tunEngineHint":
     "为每个内核桥接 TUN 设备的引擎。sing-box 可使用自带的原生 TUN；xray 需要外部引擎。",
