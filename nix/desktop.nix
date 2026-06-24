@@ -55,6 +55,9 @@ let
     cargoRoot = root;
     binaryName = "kasumi-desktop";
     inherit frontend;
+    extraTauriConfig = {
+      version = version.appVersion;
+    };
   };
 
   # The privileged data-path helper is a second bin in the same crate. crane-tauri
