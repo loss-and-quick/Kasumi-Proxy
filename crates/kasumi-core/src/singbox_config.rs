@@ -969,7 +969,7 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
 
     let main_tun = json!({
         "type": "tun", "tag": "tun-in",
-        "address": main_addr, "mtu": 9000, "auto_route": true,
+        "address": main_addr, "mtu": s.tun_mtu, "auto_route": true,
         "stack": stack, "strict_route": s.strict_route,
         "exclude_uid": exclude_uid,
     });
@@ -982,7 +982,7 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
         };
         inbounds.push(json!({
             "type": "tun", "tag": "tun-force",
-            "address": force_addr, "mtu": 9000, "auto_route": true,
+            "address": force_addr, "mtu": s.tun_mtu, "auto_route": true,
             // Both tuns auto_route, so the force tun MUST own a separate iproute2
             // table + rule range — otherwise it tries to add the default route to
             // tun-in's table (2022) and sing-box FATALs with "add route 0: file

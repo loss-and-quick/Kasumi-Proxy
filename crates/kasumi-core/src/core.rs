@@ -1,7 +1,9 @@
 //! Core-engine resolution — profile override + per-protocol defaults, with
 //! capability guards for transports/protocols only one core can build.
 
-use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, SsMethod};
+use crate::enums::{
+    CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, SsMethod, TunEngine,
+};
 use crate::mixins::Transport;
 use crate::profile::{Profile, Protocol};
 use crate::state::AdvancedSettings;
@@ -151,6 +153,30 @@ pub fn resolve_core(p: &Profile, s: &AdvancedSettings) -> CoreEngine {
         .unwrap_or_else(|| default_core_for(p.protocol()))
 }
 
+/// TUN engine a core uses when nothing overrides it: sing-box owns a native TUN,
+/// xray has no TUN of its own so it defaults to the `tun2socks` helper.
+pub fn default_tun_for(core: CoreEngine) -> TunEngine {
+    match core {
+        CoreEngine::SingBox => TunEngine::SingboxTun,
+        CoreEngine::Xray => TunEngine::Tun2socks,
+    }
+}
+
+/// Resolve the TUN engine for a resolved core: the per-core override, else the
+/// default. `SingboxTun` (sing-box's native tun) is only valid for the sing-box
+/// core; for any other core it resolves to that core's external default.
+pub fn resolve_tun(core: CoreEngine, s: &AdvancedSettings) -> TunEngine {
+    let chosen = s
+        .tun_by_core
+        .get(&core)
+        .copied()
+        .unwrap_or_else(|| default_tun_for(core));
+    if chosen == TunEngine::SingboxTun && core != CoreEngine::SingBox {
+        return default_tun_for(core);
+    }
+    chosen
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +184,23 @@ mod tests {
 
     fn p(uri: &str) -> Profile {
         parse_share_link(uri, None).unwrap()
+    }
+
+    #[test]
+    fn tun_defaults_and_override() {
+        use CoreEngine::{SingBox, Xray};
+        // Defaults: sing-box→native TUN, xray→tun2socks helper.
+        assert_eq!(default_tun_for(SingBox), TunEngine::SingboxTun);
+        assert_eq!(default_tun_for(Xray), TunEngine::Tun2socks);
+        let mut s = AdvancedSettings::default();
+        assert_eq!(resolve_tun(SingBox, &s), TunEngine::SingboxTun);
+        assert_eq!(resolve_tun(Xray, &s), TunEngine::Tun2socks);
+        // Per-core override wins where valid.
+        s.tun_by_core.insert(SingBox, TunEngine::Tun2socks);
+        assert_eq!(resolve_tun(SingBox, &s), TunEngine::Tun2socks);
+        // SingboxTun is sing-box-only: requesting it for xray resolves to tun2socks.
+        s.tun_by_core.insert(Xray, TunEngine::SingboxTun);
+        assert_eq!(resolve_tun(Xray, &s), TunEngine::Tun2socks);
     }
 
     #[test]
