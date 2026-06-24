@@ -24,9 +24,10 @@ pub enum CoreEngine {
 }
 
 /// Which engine bridges the TUN device to the proxy core. `SingboxTun` means
-/// "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` is an
-/// external userspace tun→socks process in front of a socks-only core. Further
-/// engines plug in as new variants. Wire values: `"singbox-tun"`, `"tun2socks"`.
+/// "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` and
+/// `Hev` are external userspace tun→socks processes in front of a socks-only core.
+/// Further engines plug in as new variants. Wire values: `"singbox-tun"`,
+/// `"tun2socks"`, `"hev"`.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumIter, specta::Type,
 )]
@@ -35,6 +36,8 @@ pub enum TunEngine {
     SingboxTun,
     #[serde(rename = "tun2socks")]
     Tun2socks,
+    #[serde(rename = "hev")]
+    Hev,
 }
 
 /// The wire label of a TUN engine — its serde value, the single source. Used as
@@ -347,6 +350,7 @@ mod tests {
     fn tun_engine_values() {
         assert_eq!(wire(&TunEngine::SingboxTun), "\"singbox-tun\"");
         assert_eq!(wire(&TunEngine::Tun2socks), "\"tun2socks\"");
+        assert_eq!(wire(&TunEngine::Hev), "\"hev\"");
     }
 
     #[test]
