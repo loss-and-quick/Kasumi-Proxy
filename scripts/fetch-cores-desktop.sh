@@ -42,12 +42,15 @@ case "$TARGET" in
 		XRAY_ASSET="Xray-linux-64.zip"
 		T2S_ASSET="tun2socks-linux-amd64.zip"
 		SB_ASSET="sing-box-%s-linux-amd64.tar.gz"; SB_KIND="tgz"
+		# hev ships a raw binary on Linux (no archive).
+		HEV_ASSET="hev-socks5-tunnel-linux-x86_64"; HEV_KIND="raw"
 		CRONET_LIB="libcronet.so"
 		EXT="" ;;
 	x86_64-pc-windows-msvc)
 		XRAY_ASSET="Xray-windows-64.zip"
 		T2S_ASSET="tun2socks-windows-amd64.zip"
 		SB_ASSET="sing-box-%s-windows-amd64.zip"; SB_KIND="zip"
+		HEV_ASSET="hev-socks5-tunnel-win64.zip"; HEV_KIND="zip"
 		CRONET_LIB="libcronet.dll"
 		EXT=".exe" ;;
 	*)
@@ -93,6 +96,24 @@ else
 fi
 copy_one "$TMP/sb" "sing-box$EXT" "$OUT/sing-box-$TARGET$EXT"
 
+# ---- hev-socks5-tunnel (alternative TUN engine) ----
+# Linux ships a raw binary; Windows ships a win64 zip. Stage with the same
+# target-triple suffix as the other externalBin sidecars.
+HEV_URL="https://github.com/heiher/hev-socks5-tunnel/releases/download/$HEV_VERSION/$HEV_ASSET"
+if [ "$HEV_KIND" = "raw" ]; then
+	dl "$HEV_URL" "$OUT/hev-socks5-tunnel-$TARGET$EXT"
+else
+	dl "$HEV_URL" "$TMP/hev.zip"
+	mkdir -p "$TMP/hev"
+	unzip -o "$TMP/hev.zip" -d "$TMP/hev" >/dev/null
+	copy_one "$TMP/hev" "hev-socks5-tunnel.exe" "$OUT/hev-socks5-tunnel-$TARGET$EXT"
+	# The win64 build is an msys2 binary: it dlopen()s msys-2.0.dll from its own
+	# directory. Stage it next to the app exe as a bundle resource (no target
+	# suffix), like wintun.dll. hev also ships its own wintun.dll, but we already
+	# stage the official one above.
+	copy_one "$TMP/hev" "msys-2.0.dll" "$OUT/msys-2.0.dll"
+fi
+
 # ---- libcronet (sing-box naive outbound) ----
 # sing-box is a purego build that dlopen()s libcronet from the sing-box binary's
 # own directory at runtime; without it every naive profile fails to initialise
@@ -114,12 +135,13 @@ if [ -n "$EXT" ]; then
 	copy_one "$TMP/wintun/wintun/bin/amd64" "wintun.dll" "$OUT/wintun.dll"
 fi
 
-[ -n "$EXT" ] || chmod 755 "$OUT/xray-$TARGET" "$OUT/tun2socks-$TARGET" "$OUT/sing-box-$TARGET"
+[ -n "$EXT" ] || chmod 755 "$OUT/xray-$TARGET" "$OUT/tun2socks-$TARGET" "$OUT/sing-box-$TARGET" "$OUT/hev-socks5-tunnel-$TARGET"
 
 echo "✅ staged → src-tauri/binaries/ (suffix $TARGET$EXT):"
-for c in xray sing-box tun2socks; do
+for c in xray sing-box tun2socks hev-socks5-tunnel; do
 	f="$OUT/$c-$TARGET$EXT"
 	[ -f "$f" ] && printf '   %-12s %s\n' "$c" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $c"
 done
 { f="$OUT/$CRONET_LIB"; [ -f "$f" ] && printf '   %-12s %s\n' "$CRONET_LIB" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $CRONET_LIB"; }
 [ -z "$EXT" ] || { f="$OUT/wintun.dll"; [ -f "$f" ] && printf '   %-12s %s\n' "wintun.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: wintun.dll"; }
+[ -z "$EXT" ] || { f="$OUT/msys-2.0.dll"; [ -f "$f" ] && printf '   %-12s %s\n' "msys-2.0.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: msys-2.0.dll"; }

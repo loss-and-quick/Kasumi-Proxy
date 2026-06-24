@@ -6,6 +6,9 @@
 # upstream updates — keep the `NAME="${NAME:-vX}"` shape.
 XRAY_VERSION="${XRAY_VERSION:-v26.3.27}"
 TUN2SOCKS_VERSION="${TUN2SOCKS_VERSION:-v2.6.0}"
+# Alternative TUN engine (heiher/hev-socks5-tunnel). Selectable per core in
+# Settings; pairs with a socks-only core. Tags have no leading 'v'.
+HEV_VERSION="${HEV_VERSION:-2.15.0}"
 # sing-box runs Hysteria2/TUIC profiles (second core). Pin a 1.13.x line whose
 # config schema matches singbox_config.rs (mixed inbound, tls/utls, hysteria2/tuic).
 SINGBOX_VERSION="${SINGBOX_VERSION:-v1.13.13}"

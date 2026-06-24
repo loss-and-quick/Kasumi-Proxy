@@ -4,7 +4,8 @@
     "targets": ["nsis", "msi"],
     "resources": {
       "binaries/wintun.dll": "wintun.dll",
-      "binaries/libcronet.dll": "libcronet.dll"
+      "binaries/libcronet.dll": "libcronet.dll",
+      "binaries/msys-2.0.dll": "msys-2.0.dll"
     },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" }

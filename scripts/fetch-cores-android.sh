@@ -92,11 +92,22 @@ mkdir -p "$TMP/sb-amd64"
 tar -xzf "$TMP/sb-amd64.tgz" -C "$TMP/sb-amd64"
 copy_one "$TMP/sb-amd64" 'sing-box' "$BIN/x86_64/sing-box"
 
-chmod 755 "$BIN/arm64-v8a/xray" "$BIN/arm64-v8a/tun2socks" "$BIN/arm64-v8a/sing-box" \
-	"$BIN/x86_64/xray" "$BIN/x86_64/tun2socks" "$BIN/x86_64/sing-box"
+# ---- hev-socks5-tunnel (alternative TUN engine) ----
+# No android build: hev ships static linux-<arch> raw binaries, mirroring the
+# tun2socks approach (linux-arm64 on devices, linux-x86_64 on the emulator).
+HEV_BASE="https://github.com/heiher/hev-socks5-tunnel/releases/download/$HEV_VERSION"
+
+echo "→ hev-socks5-tunnel $HEV_VERSION (linux-arm64 → arm64-v8a)"
+dl "$HEV_BASE/hev-socks5-tunnel-linux-arm64" "$BIN/arm64-v8a/hev-socks5-tunnel"
+
+echo "→ hev-socks5-tunnel $HEV_VERSION (linux-x86_64 → x86_64)"
+dl "$HEV_BASE/hev-socks5-tunnel-linux-x86_64" "$BIN/x86_64/hev-socks5-tunnel"
+
+chmod 755 "$BIN/arm64-v8a/xray" "$BIN/arm64-v8a/tun2socks" "$BIN/arm64-v8a/sing-box" "$BIN/arm64-v8a/hev-socks5-tunnel" \
+	"$BIN/x86_64/xray" "$BIN/x86_64/tun2socks" "$BIN/x86_64/sing-box" "$BIN/x86_64/hev-socks5-tunnel"
 
 echo "✅ Done. bin/ populated:"
-for f in arm64-v8a/xray arm64-v8a/tun2socks arm64-v8a/sing-box x86_64/xray x86_64/tun2socks x86_64/sing-box; do
+for f in arm64-v8a/xray arm64-v8a/tun2socks arm64-v8a/sing-box arm64-v8a/hev-socks5-tunnel x86_64/xray x86_64/tun2socks x86_64/sing-box x86_64/hev-socks5-tunnel; do
 	if [ -f "$BIN/$f" ]; then
 		printf '   %-24s %s\n' "$f" "$(du -h "$BIN/$f" | cut -f1)"
 	else
