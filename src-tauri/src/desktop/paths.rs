@@ -69,6 +69,10 @@ pub struct DesktopPaths {
     pub xray_bin: String,
     pub singbox_bin: String,
     pub tun2socks_bin: String,
+    /// hev-socks5-tunnel helper binary (the alternative external TUN engine).
+    pub hev_bin: String,
+    /// Where hev's generated YAML config is written at bring-up (run_dir).
+    pub hev_config: String,
     pub geodat2srs_bin: String,
     /// The wintun driver DLL bundled next to the cores. tun2socks loads it from disk
     /// (the xray path needs it); sing-box embeds its own copy.
@@ -200,6 +204,8 @@ impl DesktopPaths {
             xray_bin: format!("{bin}/xray"),
             singbox_bin: format!("{bin}/sing-box"),
             tun2socks_bin: format!("{bin}/tun2socks"),
+            hev_bin: format!("{bin}/hev-socks5-tunnel"),
+            hev_config: format!("{run_dir}/hev.yml"),
             geodat2srs_bin: format!("{bin}/geodat2srs"),
             backend,
         })
@@ -289,6 +295,8 @@ impl DesktopPaths {
             xray_bin: format!(r"{bin}\xray.exe"),
             singbox_bin: format!(r"{bin}\sing-box.exe"),
             tun2socks_bin: format!(r"{bin}\tun2socks.exe"),
+            hev_bin: format!(r"{bin}\hev-socks5-tunnel.exe"),
+            hev_config: format!(r"{run_dir}\hev.yml"),
             geodat2srs_bin: format!(r"{bin}\geodat2srs.exe"),
             wintun_dll: format!(r"{bin}\wintun.dll"),
             backend,

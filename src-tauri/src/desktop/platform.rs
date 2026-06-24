@@ -31,6 +31,7 @@ use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::state::{
     AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
+use kasumi_core::tun::TunOptions;
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
@@ -197,6 +198,7 @@ impl DesktopPlatform {
         &self,
         engine: CoreEngine,
         tun: TunEngine,
+        tun_opts: &TunOptions,
         socks_port: u16,
     ) -> anyhow::Result<()> {
         let is_singbox = engine == CoreEngine::SingBox;
@@ -266,7 +268,16 @@ impl DesktopPlatform {
         // the tun, so the helper needs no fwmark — its upstream is loopback (the
         // core's SOCKS) and never hits routing anyway. (Android still marks it; that
         // param is load-bearing there, not here.)
-        let helper = tun_engine::spawn(tun, &self.p, &iface, socks_port, &helper_log, None).await?;
+        let helper = tun_engine::spawn(
+            tun,
+            &self.p,
+            &iface,
+            socks_port,
+            &helper_log,
+            None,
+            tun_opts,
+        )
+        .await?;
         let _ = write_text(
             &self.p.tun2socks_pidfile,
             &helper.id().unwrap_or(0).to_string(),
@@ -341,12 +352,13 @@ impl Platform for DesktopPlatform {
         let StartDataPath {
             engine,
             tun,
+            tun_opts,
             socks_port,
         } = opts;
         log::info!("starting data-path: engine={engine:?} tun={tun:?} socks_port={socks_port}");
         self.set_service_state("connecting").await;
         let _ = write_text(&self.p.socks_port_file, &socks_port.to_string()).await;
-        let result = self.start_proxy(engine, tun, socks_port).await;
+        let result = self.start_proxy(engine, tun, &tun_opts, socks_port).await;
         match result {
             Ok(()) => {
                 let _ = write_text(&self.p.service_started_file, &now_secs().to_string()).await;

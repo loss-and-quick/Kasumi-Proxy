@@ -149,7 +149,7 @@ impl Service {
                     })
                     .await
                     .map_err(|e| e.to_string())?;
-                let (engine, tun, socks_port) =
+                let (engine, tun, tun_opts, socks_port) =
                     resolve_and_write_config(&*self.platform, id.as_deref())
                         .await
                         .map_err(|e| e.0)?;
@@ -157,6 +157,7 @@ impl Service {
                     .start_data_path(StartDataPath {
                         engine,
                         tun,
+                        tun_opts,
                         socks_port,
                     })
                     .await
@@ -181,13 +182,15 @@ impl Service {
                         })
                         .await
                         .map_err(|e| e.to_string())?;
-                    let (engine, tun, socks_port) = resolve_and_write_config(&*self.platform, None)
-                        .await
-                        .map_err(|e| e.0)?;
+                    let (engine, tun, tun_opts, socks_port) =
+                        resolve_and_write_config(&*self.platform, None)
+                            .await
+                            .map_err(|e| e.0)?;
                     self.platform
                         .start_data_path(StartDataPath {
                             engine,
                             tun,
+                            tun_opts,
                             socks_port,
                         })
                         .await

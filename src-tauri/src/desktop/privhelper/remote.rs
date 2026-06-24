@@ -68,6 +68,7 @@ impl Platform for RemotePlatform {
         self.call(PrivRequest::StartDataPath {
             engine: opts.engine,
             tun: opts.tun,
+            tun_opts: opts.tun_opts,
             socks_port: opts.socks_port,
         })
         .await?;

@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::tun::TunOptions;
 
 use crate::lifecycle::spawn_core;
 use crate::net::ProxyStatus;
@@ -125,8 +126,12 @@ pub struct AppInfo {
 pub struct StartDataPath {
     pub engine: Engine,
     /// The resolved TUN engine. `SingboxTun` uses the core's own tun (native for
-    /// sing-box); `Tun2socks` fronts a socks-only core with an external tun.
+    /// sing-box); `Tun2socks`/`Hev` front a socks-only core with an external tun.
     pub tun: TunEngine,
+    /// External-engine tuning (mtu, buffers, timeouts, …), resolved once from the
+    /// settings so the data-path owner (incl. the desktop root helper, across the
+    /// privilege boundary) needn't re-read the settings schema.
+    pub tun_opts: TunOptions,
     pub socks_port: u16,
 }
 

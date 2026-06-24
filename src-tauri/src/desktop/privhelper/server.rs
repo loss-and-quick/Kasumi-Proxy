@@ -59,12 +59,14 @@ impl Server {
             PrivRequest::StartDataPath {
                 engine,
                 tun,
+                tun_opts,
                 socks_port,
             } => to_reply(
                 self.platform
                     .start_data_path(StartDataPath {
                         engine,
                         tun,
+                        tun_opts,
                         socks_port,
                     })
                     .await,
