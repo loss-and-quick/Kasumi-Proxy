@@ -22,7 +22,7 @@ use kasumi_core::state::{default_app_state, AppState, DEFAULT_LOG_ROTATE_KB};
 use kasumi_core::sub_apply::{deduplicate_profiles_scoped, remove_profiles_by_sub_id};
 
 use crate::fs::{read_text, write_text};
-use crate::fsjson::{read_json, write_bytes_atomic, write_json_atomic};
+use crate::fsjson::{read_json, write_json_atomic};
 use crate::net::{fetch_url, used_ports, FetchUrlOptions};
 use crate::platform::{AppInfo, Platform};
 
@@ -192,7 +192,7 @@ pub enum Response {
 }
 
 /// Reject path traversal / quoting tricks in asset filenames.
-fn safe_filename(name: &str) -> bool {
+pub(crate) fn safe_filename(name: &str) -> bool {
     !name.is_empty()
         && !name.contains('/')
         && !name.contains("..")
@@ -325,37 +325,9 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             url,
             mode,
         } => {
-            if !safe_filename(&filename) {
-                return Err(err("invalid filename"));
-            }
-            let url = url.trim();
-            if url.is_empty() {
-                return Err(err("empty asset URL"));
-            }
-            let proxy = platform
-                .proxy_status()
+            crate::asset_update::download_asset(platform, &filename, &url, mode)
                 .await
-                .map_err(|e| err(e.to_string()))?;
-            let body = fetch_url(
-                url,
-                FetchUrlOptions {
-                    mode,
-                    proxy: Some(proxy),
-                    ..Default::default()
-                },
-            )
-            .await
-            .map_err(|e| err(e.to_string()))?;
-            if body.is_empty() {
-                return Err(err("download failed"));
-            }
-            write_bytes_atomic(paths.dat_dir.join(&filename), &body)
-                .await
-                .map_err(|e| err(e.to_string()))?;
-            platform
-                .convert_asset(&filename)
-                .await
-                .map_err(|e| err(e.to_string()))?;
+                .map_err(err)?;
             Ok(Response::Ok)
         }
 

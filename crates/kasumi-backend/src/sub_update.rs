@@ -23,26 +23,9 @@ use kasumi_core::sub_apply::{
 use crate::net::{fetch_url, FetchUrlOptions};
 use crate::platform::Platform;
 use crate::state::{read_app_state, write_app_state};
+use crate::updater::{self, now_ms, LifecycleControl};
 
-/// How often to re-evaluate which subscriptions are due.
-pub const TICK: Duration = Duration::from_secs(60);
-/// A failed fetch retries sooner than a long subscription interval.
-const RETRY_MS: i64 = 10 * 60_000;
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// The daemon's lifecycle commands, dispatched directly (the caller already holds
-/// the serializer). Implemented by the `Service`.
-#[async_trait::async_trait]
-pub trait LifecycleControl: Send + Sync {
-    async fn start(&self, profile_id: Option<String>) -> Result<(), String>;
-    async fn stop(&self) -> Result<(), String>;
-    async fn restart(&self, profile_id: Option<String>) -> Result<(), String>;
-    async fn reload_app_filter(&self) -> Result<(), String>;
-}
-
-fn now_ms() -> i64 {
-    Utc::now().timestamp_millis()
-}
 
 fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
@@ -55,10 +38,13 @@ fn parse_iso_ms(s: &str) -> i64 {
 }
 
 fn is_due(sub: &Subscription, last_attempt: Option<i64>, now: i64) -> bool {
-    let updated = parse_iso_ms(&sub.last_updated);
-    let attempted = last_attempt.unwrap_or(0);
     let interval_ms = sub.interval.saturating_mul(60_000);
-    now - updated >= interval_ms && now - attempted >= interval_ms.min(RETRY_MS)
+    updater::is_due(
+        parse_iso_ms(&sub.last_updated),
+        last_attempt,
+        now,
+        interval_ms,
+    )
 }
 
 /// One pass: fetch and apply every due subscription. `last_attempt` is the caller's

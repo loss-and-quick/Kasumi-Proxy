@@ -615,6 +615,13 @@ const en = {
     "These are Xray geo databases. The same Xray-style rules are converted automatically for sing-box internally.",
   "settings.assetUpdateAll": "Update all",
   "settings.assetAdd": "Add file",
+  "settings.assetAutoUpdate": "Auto-update",
+  "settings.assetAutoUpdateSub": "Refresh geosite/geoip on a schedule",
+  "settings.assetUpdateInterval": "Update interval",
+  "settings.assetAutoUpdateWarning":
+    "When the geo data changes, the active connection restarts briefly to apply it.",
+  "settings.assetIntervalHours": plural("count", { one: "Every # hour", other: "Every # hours" }),
+  "settings.assetIntervalDays": plural("count", { one: "Every # day", other: "Every # days" }),
   "settings.assetDownload": "Download",
   "settings.assetDelete": "Delete",
   "settings.assetLinks": "Ready links for geoip.dat / geosite.dat",

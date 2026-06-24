@@ -23,7 +23,8 @@ use crate::fsjson::read_json;
 use crate::lifecycle::resolve_and_write_config;
 use crate::net::{fetch_url, FetchUrlOptions};
 use crate::platform::{Platform, StartDataPath, StopDataPath};
-use crate::sub_update::{self, LifecycleControl};
+use crate::updater::{self, LifecycleControl};
+use crate::{asset_update, sub_update};
 
 /// Result of the latest end-to-end connectivity probe (a fetch through the active
 /// core's SOCKS). `Unknown` until the first probe lands after the core comes up.
@@ -57,6 +58,8 @@ pub struct Service {
     cores: crate::platform::InstalledCores,
     /// Per-subscription last fetch attempt (ms), for the updater's backoff.
     sub_attempts: Mutex<HashMap<String, i64>>,
+    /// Per-asset last fetch attempt (ms), for the asset updater's backoff.
+    asset_attempts: Mutex<HashMap<String, i64>>,
     auto_started: AtomicBool,
     /// Latest connectivity-probe result; the watchdog refreshes it, `current_status`
     /// overlays it onto a process-up state to tell Connected from NoInternet.
@@ -78,6 +81,7 @@ impl Service {
             events,
             cores,
             sub_attempts: Mutex::new(HashMap::new()),
+            asset_attempts: Mutex::new(HashMap::new()),
             auto_started: AtomicBool::new(false),
             connectivity: StdMutex::new(Connectivity::Unknown),
         })
@@ -298,6 +302,7 @@ impl Service {
         self.spawn_network_watch();
         self.spawn_watchdog();
         self.spawn_sub_updater();
+        self.spawn_asset_updater();
         self.spawn_status_push();
     }
 
@@ -368,7 +373,7 @@ impl Service {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(sub_update::TICK).await;
+                tokio::time::sleep(updater::TICK).await;
                 let events = this.events.clone();
                 let on_applied = move |info: SubAppliedEvent| {
                     let _ = events.send(PushFrame::SubApplied { value: info });
@@ -380,6 +385,23 @@ impl Service {
                     &this.serialize,
                     &mut attempts,
                     &on_applied,
+                )
+                .await;
+            }
+        });
+    }
+
+    fn spawn_asset_updater(self: &Arc<Self>) {
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(updater::TICK).await;
+                let mut attempts = this.asset_attempts.lock().await;
+                asset_update::tick(
+                    &*this.platform,
+                    this.as_ref(),
+                    &this.serialize,
+                    &mut attempts,
                 )
                 .await;
             }
