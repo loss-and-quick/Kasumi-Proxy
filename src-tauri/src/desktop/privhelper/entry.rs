@@ -118,6 +118,15 @@ fn run() -> anyhow::Result<()> {
             ),
             Err(e) => log::warn!("could not drop the bounding set ({e}); running with full caps"),
         }
+        // Phase 3: seed CAP_NET_RAW into the inheritable set so the ambient raise
+        // the test cores get in their pre_exec (see platform.rs spawn_test_core)
+        // succeeds — PR_CAP_AMBIENT_RAISE needs the cap in both permitted and
+        // inheritable, and pkexec-root starts with an empty inheritable set. A
+        // failure is non-fatal: the test-core ambient raise then fails closed and
+        // the test core simply runs without the bind (the pre-root-bind state).
+        if let Err(e) = crate::desktop::capabilities::seed_test_core_inheritable() {
+            log::warn!("could not seed CAP_NET_RAW into the inheritable set ({e})");
+        }
     }
 
     // Resolve paths to exactly what the GUI passed (pkexec scrubbed the env).

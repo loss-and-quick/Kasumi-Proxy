@@ -66,6 +66,53 @@ pub fn drop_unneeded_bounding() -> anyhow::Result<CapsHashSet> {
     Ok(dropped)
 }
 
+/// Seed `CAP_NET_RAW` into the inheritable set of the current process.
+///
+/// `PR_CAP_AMBIENT_RAISE` (the test-core uplink grant) requires the capability to
+/// be present in *both* the permitted and the inheritable sets. A pkexec-launched
+/// root process starts with an empty inheritable set, so without this the ambient
+/// raise would fail with `EPERM`. Under a future Phase-4 file-cap launcher
+/// (`security.wrappers` with `+i`) the inheritable set is already populated, so
+/// this is a harmless idempotent no-op. Idempotent in general: if `CAP_NET_RAW` is
+/// already inheritable nothing changes.
+///
+/// A process may add to its inheritable set any capability already in its
+/// permitted set (root: permitted = bounding ⊇ `NET_RAW`), so this needs no
+/// `CAP_SETPCAP`. Process-wide and once-at-startup, so concurrent test-core
+/// spawns always see the seeded set — there is no per-spawn race to close.
+pub fn seed_test_core_inheritable() -> anyhow::Result<()> {
+    let mut set = caps::read(None, CapSet::Inheritable)
+        .map_err(|e| anyhow::anyhow!("read inheritable set: {e}"))?;
+    if set.insert(Capability::CAP_NET_RAW) {
+        caps::set(None, CapSet::Inheritable, &set)
+            .map_err(|e| anyhow::anyhow!("seed CAP_NET_RAW into inheritable set: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Whether the current process holds an effective `CAP_NET_RAW` — the real
+/// precondition for a test core's uplink bind, replacing the old `geteuid() == 0`
+/// proxy. Under a root (or caps-only) helper whose bounding set keeps `NET_RAW`
+/// this reads true; under unprivileged in-process dev it reads false.
+///
+/// Fails *closed*: if the capability can't be queried (a `capget` failure, which
+/// shouldn't happen in practice) it returns false rather than silently falling
+/// back to `euid == 0`. A silent fall-back would mask a misconfiguration as a
+/// working bind and route test traffic through the active tun — exactly the bug
+/// the bind exists to prevent.
+pub fn has_effective_net_raw() -> bool {
+    match caps::has_cap(None, CapSet::Effective, Capability::CAP_NET_RAW) {
+        Ok(true) => true,
+        Ok(false) => false,
+        Err(e) => {
+            log::warn!(
+                "could not query effective CAP_NET_RAW ({e}); test cores won't bind the uplink"
+            );
+            false
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,6 +141,29 @@ mod tests {
             Capability::CAP_NET_BIND_SERVICE,
         ] {
             assert!(!keep.contains(&cap), "{cap} should not be in the keep-set");
+        }
+    }
+
+    // The honest gate: under a root test runner the effective set carries NET_RAW
+    // (it's in the default root bounding set), so the predicate reads true; under an
+    // unprivileged runner it reads false. Either way it returns a bool without
+    // panicking — the load-bearing property, since a query error is fail-closed.
+    #[test]
+    fn has_effective_net_raw_does_not_panic() {
+        let _ = has_effective_net_raw();
+    }
+
+    // Seeding is idempotent: running it twice (and under any starting inheritable
+    // set) leaves NET_RAW inheritable and never errors on a root test runner; under
+    // an unprivileged runner the insert/set is a no-op error that we only assert
+    // doesn't panic. The ambient raise itself is verified at runtime on a box with
+    // an active tun (see the handoff's verification section).
+    #[test]
+    fn seed_test_core_inheritable_is_idempotent() {
+        let first = seed_test_core_inheritable();
+        if first.is_ok() {
+            // A successful seed must be stable on repeat.
+            assert!(seed_test_core_inheritable().is_ok());
         }
     }
 }

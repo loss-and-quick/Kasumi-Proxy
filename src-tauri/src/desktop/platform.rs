@@ -242,17 +242,18 @@ impl Default for DesktopPlatform {
 /// helper on Linux, the LocalSystem service on Windows. In-process dev on unix is
 /// unprivileged and skips the bind.
 ///
-/// This is the real precondition the test-core bind needs, stated as a name. The
-/// body is still `geteuid()==0` today — a faithful proxy under the current full-root
-/// helper — but Phase 3 of the least-privilege work swaps it for a direct effective
-/// `CAP_NET_RAW` check (which reads the same under a caps-only helper), so the call
-/// site never has to change again.
+/// This is the real precondition the test-core bind needs. It checks the effective
+/// `CAP_NET_RAW` directly (which reads true under a root *or* caps-only helper
+/// whose bounding set keeps `NET_RAW`, and false for unprivileged dev) instead of
+/// the old `geteuid() == 0` proxy — so the gate stays honest once Phase 4 makes the
+/// helper caps-only rather than root. Fails closed on a query error (see
+/// [`capabilities::has_effective_net_raw`]).
 fn test_core_can_bind() -> bool {
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
-        unsafe { libc::geteuid() == 0 }
+        crate::desktop::capabilities::has_effective_net_raw()
     }
-    #[cfg(not(unix))]
+    #[cfg(not(target_os = "linux"))]
     {
         // The Windows data-path runs in the LocalSystem service; there's no
         // unprivileged in-process tun path to distinguish.
