@@ -113,6 +113,49 @@ pub fn has_effective_net_raw() -> bool {
     }
 }
 
+/// `prctl` option + sub-op for the ambient set. libc 0.2 exports these only for
+/// the android target, not plain linux, so the ABI-fixed values are pinned here
+/// (stable kernel constants from `linux/uapi/prctl.h`).
+const PR_CAP_AMBIENT: libc::c_int = 47;
+const PR_CAP_AMBIENT_RAISE: libc::c_int = 2;
+/// Numeric capability number for `CAP_NET_RAW`, read off the `caps` enum so it
+/// stays in lock-step with the crate (no hand-typed magic number); libc doesn't
+/// export `CAP_*`.
+const CAP_NET_RAW_NR: libc::c_uint = Capability::CAP_NET_RAW as libc::c_uint;
+
+/// A `pre_exec` hook that raises `CAP_NET_RAW` into the ambient set of the forked
+/// child, so the exec'd test core receives it in its effective + permitted sets and
+/// its uplink bind (`SO_BINDTODEVICE` / `bind_interface`) survives exec. The test
+/// core binary has no file caps of its own, so an ambient raise is the only
+/// mechanism that grants a capability across exec into it.
+///
+/// Intended to run ONLY in a test core's `pre_exec`: ambient caps are per-forked
+/// child, so this keeps `CAP_NET_RAW` out of the helper's own threads and out of
+/// the active core / tun2socks / `ip` (least privilege; no per-spawn race under
+/// concurrent test cores). Fails closed: on a raise failure it returns `Err`, which
+/// aborts the exec — a test core never silently runs without the bind and routes
+/// its traffic through the active tun.
+///
+/// Needs `CAP_NET_RAW` in both permitted and inheritable (see
+/// [`seed_test_core_inheritable`]). Under root the raise is technically inert
+/// (the exec'd child already inherits all bounding caps) but is load-bearing once
+/// Phase 4 makes the helper caps-only.
+///
+/// # Async-signal-safety
+///
+/// A single raw `prctl(2)` syscall — no allocation, no locks, no stdio — so this
+/// satisfies the `pre_exec` contract.
+pub fn raise_net_raw_ambient() -> std::io::Result<()> {
+    // SAFETY: one prctl syscall; async-signal-safe per the contract above.
+    let rc =
+        unsafe { libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, CAP_NET_RAW_NR, 0, 0) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,5 +208,15 @@ mod tests {
             // A successful seed must be stable on repeat.
             assert!(seed_test_core_inheritable().is_ok());
         }
+    }
+
+    // Lock the ABI values the raw prctl relies on: CAP_NET_RAW is capability 13 in
+    // the kernel ABI, and the const is read off the caps enum (not hand-typed), so
+    // this asserts they agree — a caps-crate remap would surface here, not at a
+    // runtime where the ambient raise silently does nothing.
+    #[test]
+    fn cap_net_raw_nr_matches_the_kernel_abi() {
+        assert_eq!(CAP_NET_RAW_NR, 13);
+        assert_eq!(Capability::CAP_NET_RAW as libc::c_uint, 13);
     }
 }

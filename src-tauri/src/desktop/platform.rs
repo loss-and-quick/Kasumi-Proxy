@@ -22,6 +22,9 @@ use kasumi_backend::platform::{
     spawn_local_test_core, BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities,
     StartDataPath, StopDataPath, TestCore,
 };
+// Unix-only: the pre_exec variant that raises an ambient CAP_NET_RAW for a test core.
+#[cfg(unix)]
+use kasumi_backend::platform::spawn_local_test_core_pre_exec;
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
@@ -471,27 +474,64 @@ impl Platform for DesktopPlatform {
         cfg_path: &Path,
         log_path: &Path,
     ) -> anyhow::Result<Box<dyn TestCore>> {
-        // Running as root (the helper), bind the test core's outbound to the physical
-        // uplink so it escapes an active tun at the socket layer (SO_BINDTODEVICE) —
-        // no per-test OS routing, no collision with the active server's routes. When
-        // no tun is up the uplink *is* the default route, so the bind is a harmless
-        // no-op. (In-process dev runs unprivileged: skip the bind — it'd need
-        // CAP_NET_RAW and there's no managed tun to escape anyway.)
-        if test_core_can_bind() {
-            if let Some(dev) = routing::uplink_device().await {
-                if let Some(text) = read_text(cfg_path).await {
-                    if let Ok(mut cfg) = serde_json::from_str::<Value>(&text) {
-                        crate::desktop::net::bind_proxy_outbound(engine, &mut cfg, &dev);
-                        if let Ok(s) = serde_json::to_string(&cfg) {
-                            let _ = write_text(cfg_path, &s).await;
-                        }
-                    }
-                }
-            }
-        }
+        // Running privileged (the helper), bind the test core's outbound to the
+        // physical uplink so it escapes an active tun at the socket layer
+        // (SO_BINDTODEVICE / bind_interface) — no per-test OS routing, no collision
+        // with the active server's routes. When no tun is up the uplink *is* the
+        // default route, so the bind is a harmless no-op. (In-process dev runs
+        // unprivileged: skip the bind — it'd need CAP_NET_RAW and there's no managed
+        // tun to escape anyway.)
+        let bound = test_core_can_bind() && inject_uplink_bind(engine, cfg_path).await;
         let bin = self.core_bin(engine).to_owned();
         let dat = self.p.backend.dat_dir.to_string_lossy().into_owned();
+
+        // Linux: if we injected the uplink bind the test core needs CAP_NET_RAW to
+        // honor it, so raise it into the forked child's ambient set before exec
+        // (no-op under root where the child already inherits all bounding caps, but
+        // load-bearing once Phase 4 makes the helper caps-only). Fails closed if the
+        // raise errors, so a test core never silently runs without the bind. Windows
+        // is LocalSystem (all caps) and the pre_exec seam is unix-only, so it spawns
+        // plainly there.
+        #[cfg(target_os = "linux")]
+        if bound {
+            // SAFETY: `raise_net_raw_ambient` is a single raw prctl — async-signal-safe,
+            // the only requirement the pre_exec contract imposes.
+            return unsafe {
+                spawn_local_test_core_pre_exec(
+                    &bin,
+                    cfg_path,
+                    log_path,
+                    &dat,
+                    crate::desktop::capabilities::raise_net_raw_ambient,
+                )
+                .await
+            };
+        }
+        let _ = bound;
+
         spawn_local_test_core(&bin, cfg_path, log_path, &dat).await
+    }
+}
+
+/// Rewrite the test core's config to bind its proxy outbound to the physical uplink
+/// (`SO_BINDTODEVICE` / `bind_interface`) so its traffic escapes an active tun.
+/// Returns whether a bind was actually written (needs a resolved uplink device and a
+/// writable JSON config); the caller grants the matching `CAP_NET_RAW` only when this
+/// is true, so the test core never carries the cap without using it.
+async fn inject_uplink_bind(engine: Engine, cfg_path: &Path) -> bool {
+    let Some(dev) = routing::uplink_device().await else {
+        return false;
+    };
+    let Some(text) = read_text(cfg_path).await else {
+        return false;
+    };
+    let Ok(mut cfg) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
+    crate::desktop::net::bind_proxy_outbound(engine, &mut cfg, &dev);
+    match serde_json::to_string(&cfg) {
+        Ok(s) => write_text(cfg_path, &s).await.is_ok(),
+        Err(_) => false,
     }
 }
 
