@@ -1,38 +1,19 @@
-//! Linux capability handling for the least-privilege desktop data-path helper.
-//!
-//! The helper is launched with root or with the data-path capabilities (root via
-//! pkexec, or caps via a NixOS `security.wrappers` setcap wrapper). Either way it
-//! stops *holding* more privilege than the data-path needs: on startup it drops
-//! every capability from its bounding set except the few the data-path provably
-//! needs. The bounding set is the hard ceiling a child process can ever acquire,
-//! so this also constrains the exec'd cores / tun2socks / `ip` — the
-//! blast-radius win, packaging-free for the root path.
-//!
-//! An ambient `CAP_NET_RAW` raise is granted to the test cores so their uplink
-//! bind survives exec into a binary with no file caps of its own. All of this is a
-//! no-op for a non-privileged run (in-process dev): a process with no privileges
-//! has nothing to drop.
+//! Linux capabilities for the desktop data-path helper. Launched as root (pkexec)
+//! or with file caps (NixOS `security.wrappers`), the helper drops its bounding set
+//! to [`keep_set`] on startup — which also caps every core / tun2socks / `ip` it
+//! execs — and raises an ambient `CAP_NET_RAW` for the test cores so their uplink
+//! bind survives exec. All no-ops for an unprivileged in-process dev run.
 
 use caps::{CapSet, Capability, CapsHashSet};
 
-/// The capabilities the desktop data-path provably needs — the bounding-set the
-/// helper keeps, with every other cap dropped.
+/// The caps the data-path needs; the helper keeps these and drops the rest.
 ///
-/// - `NET_ADMIN` — create the tun, `ip addr/link/route`, tun2socks' fwmark
-///   (`SO_MARK`, keeps its upstream out of the tunnel).
-/// - `NET_RAW` — a test core's `SO_BINDTODEVICE` / `bind_interface` uplink bind so
-///   it escapes an active tun. The *active* core needs none (it bypasses via
-///   host-routes); only the throwaway test cores do.
-/// - `CHOWN` — hand the privilege-helper unix socket to the unprivileged GUI uid.
-/// - `DAC_OVERRIDE` — the helper writes logs/state into the *user-owned* datadir
-///   (`~/.local/share/kasumi-proxy/*.log`) and creates run_dir under the user's
-///   `0700` `XDG_RUNTIME_DIR`. Root is subject to ordinary DAC checks without it,
-///   so the data-path would break the moment a log file is created. This retires
-///   only once datadir/log + run_dir ownership is restructured so the helper owns
-///   its own writable dirs (then `CHOWN` goes too).
-///
-/// Kept minimal and auditable: every entry is justified above, and the set is a
-/// strict subset of root's ~40 caps.
+/// - `NET_ADMIN` — tun creation, `ip` routing, tun2socks' fwmark.
+/// - `NET_RAW` — a test core's uplink bind (`SO_BINDTODEVICE` / `bind_interface`);
+///   the active core bypasses via host-routes and needs none.
+/// - `CHOWN` — hand the helper socket to the GUI uid.
+/// - `DAC_OVERRIDE` — write logs/state into the user-owned datadir + run_dir as
+///   root. Retires with the socket/dir-ownership restructure (then `CHOWN` too).
 pub fn keep_set() -> CapsHashSet {
     [
         Capability::CAP_NET_ADMIN,
@@ -44,16 +25,21 @@ pub fn keep_set() -> CapsHashSet {
     .collect()
 }
 
-/// Drop every capability from the current process's bounding set that is not in
-/// [`keep_set`], returning the dropped capabilities (for the caller to log).
-///
-/// Idempotent (caps already absent are simply not in the read set) and a one-way
-/// ratchet: once dropped a cap can never return to the bounding set, so this both
-/// shrinks the helper *and* every child it execs. Only meaningful as root (a
-/// non-root process has nothing to drop); callers gate on `geteuid() == 0`.
-///
-/// Reads the live bounding set first rather than dropping blindly, so a cap the
-/// kernel already withheld (or a prior run already dropped) isn't re-attempted.
+/// The `setcap` argument that grants exactly [`keep_set`] as file caps (`+ep`),
+/// built from the keep-set so the two can't drift. Used by the GUI's one-time
+/// self-`setcap` (`privhelper::spawn`) and mirrored by the NixOS `security.wrappers`
+/// capability string. `setcap` ignores ordering, so the unordered set is fine.
+pub fn file_caps_setcap_arg() -> String {
+    let names: Vec<String> = keep_set()
+        .iter()
+        .map(|c| c.to_string().to_lowercase())
+        .collect();
+    format!("{}+ep", names.join(","))
+}
+
+/// Drop every bounding-set capability not in [`keep_set`], returning what was
+/// dropped (for logging). A one-way ratchet that also caps every child the helper
+/// execs. Idempotent: reads the live set first, so already-absent caps are skipped.
 pub fn drop_unneeded_bounding() -> anyhow::Result<CapsHashSet> {
     let keep = keep_set();
     let current = caps::read(None, CapSet::Bounding)
@@ -67,20 +53,10 @@ pub fn drop_unneeded_bounding() -> anyhow::Result<CapsHashSet> {
     Ok(dropped)
 }
 
-/// Seed `CAP_NET_RAW` into the inheritable set of the current process.
-///
-/// `PR_CAP_AMBIENT_RAISE` (the test-core uplink grant) requires the capability to
-/// be present in *both* the permitted and the inheritable sets. A pkexec-launched
-/// root process starts with an empty inheritable set, so without this the ambient
-/// raise would fail with `EPERM`. Under a file-cap launcher (`security.wrappers`
-/// with `+i`) the inheritable set is already populated, so this is a harmless
-/// idempotent no-op. Idempotent in general: if `CAP_NET_RAW` is already
-/// inheritable nothing changes.
-///
-/// A process may add to its inheritable set any capability already in its
-/// permitted set (root: permitted = bounding ⊇ `NET_RAW`), so this needs no
-/// `CAP_SETPCAP`. Process-wide and once-at-startup, so concurrent test-core
-/// spawns always see the seeded set — there is no per-spawn race to close.
+/// Seed `CAP_NET_RAW` into the process's inheritable set, the precondition for the
+/// test cores' ambient raise (`PR_CAP_AMBIENT_RAISE` needs the cap in both permitted
+/// and inheritable, and both launchers start with an empty inheritable set). Needs
+/// no `CAP_SETPCAP` (the cap is already permitted). Idempotent; run once at startup.
 pub fn seed_test_core_inheritable() -> anyhow::Result<()> {
     let mut set = caps::read(None, CapSet::Inheritable)
         .map_err(|e| anyhow::anyhow!("read inheritable set: {e}"))?;
@@ -91,18 +67,10 @@ pub fn seed_test_core_inheritable() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Whether the current process holds an effective `CAP_NET_ADMIN` — the
-/// capability tun creation + `ip` routing + tun2socks' fwmark all need, so it is
-/// the reliable "this process owns the privileged data-path" signal. Replaces the
-/// old `geteuid() == 0` check so the helper's self-reduction (bounding drop,
-/// inheritable seed) runs correctly under a **non-root file-cap launcher**
-/// (NixOS `security.wrappers` setcap wrapper runs the helper as the GUI uid with
-/// caps, where `geteuid() != 0` yet the data-path caps are present).
-///
-/// Under root-via-pkexec this reads true (root has all caps), so behaviour is
-/// unchanged; under an unprivileged in-process dev run it reads false. Fails closed
-/// on a query error (the helper then skips self-reduction rather than running a
-/// half-privileged data-path).
+/// Whether this process owns the privileged data-path — checks effective
+/// `CAP_NET_ADMIN` (tun + `ip` + fwmark) instead of `geteuid() == 0`, so it reads
+/// true under both the root and the non-root file-cap launcher and false for
+/// unprivileged dev. Fails closed on a query error.
 pub fn is_privileged_data_path() -> bool {
     match caps::has_cap(None, CapSet::Effective, Capability::CAP_NET_ADMIN) {
         Ok(true) => true,
@@ -116,16 +84,10 @@ pub fn is_privileged_data_path() -> bool {
     }
 }
 
-/// Whether the current process holds an effective `CAP_NET_RAW` — the real
-/// precondition for a test core's uplink bind, replacing the old `geteuid() == 0`
-/// proxy. Under a root (or caps-only) helper whose bounding set keeps `NET_RAW`
-/// this reads true; under unprivileged in-process dev it reads false.
-///
-/// Fails *closed*: if the capability can't be queried (a `capget` failure, which
-/// shouldn't happen in practice) it returns false rather than silently falling
-/// back to `euid == 0`. A silent fall-back would mask a misconfiguration as a
-/// working bind and route test traffic through the active tun — exactly the bug
-/// the bind exists to prevent.
+/// Whether this process holds an effective `CAP_NET_RAW` — the real precondition
+/// for a test core's uplink bind. Fails *closed* on a query error rather than
+/// falling back to `euid == 0`: a false positive would route test traffic through
+/// the active tun, the exact bug the bind prevents.
 pub fn has_effective_net_raw() -> bool {
     match caps::has_cap(None, CapSet::Effective, Capability::CAP_NET_RAW) {
         Ok(true) => true,
@@ -149,28 +111,17 @@ const PR_CAP_AMBIENT_RAISE: libc::c_int = 2;
 /// export `CAP_*`.
 const CAP_NET_RAW_NR: libc::c_uint = Capability::CAP_NET_RAW as libc::c_uint;
 
-/// A `pre_exec` hook that raises `CAP_NET_RAW` into the ambient set of the forked
-/// child, so the exec'd test core receives it in its effective + permitted sets and
-/// its uplink bind (`SO_BINDTODEVICE` / `bind_interface`) survives exec. The test
-/// core binary has no file caps of its own, so an ambient raise is the only
-/// mechanism that grants a capability across exec into it.
-///
-/// Intended to run ONLY in a test core's `pre_exec`: ambient caps are per-forked
-/// child, so this keeps `CAP_NET_RAW` out of the helper's own threads and out of
-/// the active core / tun2socks / `ip` (least privilege; no per-spawn race under
-/// concurrent test cores). Fails closed: on a raise failure it returns `Err`, which
-/// aborts the exec — a test core never silently runs without the bind and routes
-/// its traffic through the active tun.
-///
-/// Needs `CAP_NET_RAW` in both permitted and inheritable (see
-/// [`seed_test_core_inheritable`]). Under root the raise is technically inert
-/// (the exec'd child already inherits all bounding caps) but is load-bearing once
-/// the helper runs caps-only rather than as root.
+/// A `pre_exec` hook raising `CAP_NET_RAW` into the forked child's ambient set, the
+/// only way to grant a cap across exec into the test core (it has no file caps).
+/// Run ONLY here, never process-wide, so the cap stays off the helper's own threads
+/// and the active core. Needs the cap in permitted + inheritable (see
+/// [`seed_test_core_inheritable`]); inert under root, load-bearing when caps-only.
+/// Fails closed: an `Err` aborts the exec rather than running a test core unbound.
 ///
 /// # Async-signal-safety
 ///
-/// A single raw `prctl(2)` syscall — no allocation, no locks, no stdio — so this
-/// satisfies the `pre_exec` contract.
+/// A single raw `prctl(2)` — no allocation, locks, or stdio — per the `pre_exec`
+/// contract.
 pub fn raise_net_raw_ambient() -> std::io::Result<()> {
     // SAFETY: one prctl syscall; async-signal-safe per the contract above.
     let rc =
@@ -195,6 +146,22 @@ mod tests {
         assert!(keep.contains(&Capability::CAP_NET_RAW));
         assert!(keep.contains(&Capability::CAP_CHOWN));
         assert!(keep.contains(&Capability::CAP_DAC_OVERRIDE));
+    }
+
+    #[test]
+    fn setcap_arg_matches_the_keep_set() {
+        let arg = file_caps_setcap_arg();
+        let (caps, flags) = arg.rsplit_once('+').expect("setcap arg has a +flags suffix");
+        assert_eq!(flags, "ep");
+        let listed: std::collections::HashSet<&str> = caps.split(',').collect();
+        // One token per kept cap, each the lowercased name `setcap` expects.
+        assert_eq!(listed.len(), keep_set().len());
+        for cap in keep_set() {
+            assert!(
+                listed.contains(cap.to_string().to_lowercase().as_str()),
+                "{cap} missing from the setcap arg"
+            );
+        }
     }
 
     #[test]
