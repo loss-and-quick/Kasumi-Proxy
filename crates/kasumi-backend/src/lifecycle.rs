@@ -19,6 +19,10 @@ use crate::fs::{exists, read_text, remove_file, write_text};
 use crate::fsjson::{read_json, write_text_atomic};
 use crate::platform::{Engine, Platform};
 use crate::proc::{pid_matches_bin, run, spawn_logged, RunOpts};
+// `spawn_logged_pre_exec` (and the `spawn_core_pre_exec` built on it) are unix-only:
+// the pre_exec/fork seam has no Windows counterpart.
+#[cfg(unix)]
+use crate::proc::spawn_logged_pre_exec;
 
 /// Map a hex digit to a consonant so the interface name starts with a letter
 /// (kernel rejects names beginning with a digit).
@@ -308,6 +312,37 @@ pub async fn spawn_core(
         &env,
         log_path,
         kill_on_drop,
+    )
+    .await
+}
+
+/// Like [`spawn_core`], but runs `pre_exec` in the forked child before `exec`. Unix
+/// only — see [`spawn_logged_pre_exec`]. The desktop least-privilege helper uses it
+/// to grant a test core an ambient `CAP_NET_RAW`.
+///
+/// # Safety
+///
+/// `pre_exec` must be async-signal-safe (see [`spawn_logged_pre_exec`]).
+#[cfg(unix)]
+pub async unsafe fn spawn_core_pre_exec<F>(
+    bin: &str,
+    cfg: &str,
+    log_path: &Path,
+    dat_dir: &str,
+    kill_on_drop: bool,
+    pre_exec: F,
+) -> std::io::Result<Child>
+where
+    F: FnMut() -> std::io::Result<()> + Send + Sync + 'static,
+{
+    let env =
+        std::collections::HashMap::from([("XRAY_LOCATION_ASSET".to_owned(), dat_dir.to_owned())]);
+    spawn_logged_pre_exec(
+        &[bin.to_owned(), "run".into(), "-c".into(), cfg.to_owned()],
+        &env,
+        log_path,
+        kill_on_drop,
+        pre_exec,
     )
     .await
 }

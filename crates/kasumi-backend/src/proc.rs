@@ -149,6 +149,30 @@ pub async fn kill_if_running(
     remove_file(pidfile).await;
 }
 
+/// Build the `tokio::process::Command` for a long-running core/tun2socks child:
+/// argv + env, stdin null, stdout+stderr redirected (truncating) to `log_path`, and
+/// the `kill_on_drop` flag. Everything except the final [`Command::spawn`], so the
+/// pre_exec variant ([`spawn_logged_pre_exec`]) can stamp a hook into the forked
+/// child before exec without duplicating the setup.
+fn build_logged_command(
+    argv: &[String],
+    env: &HashMap<String, String>,
+    log_path: impl AsRef<Path>,
+    kill_on_drop: bool,
+) -> std::io::Result<Command> {
+    let log = std::fs::File::create(log_path)?;
+    let err = log.try_clone()?;
+    let mut cmd = Command::new(&argv[0]);
+    cmd.args(&argv[1..]);
+    set_env(&mut cmd, env);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::from(log));
+    cmd.stderr(Stdio::from(err));
+    cmd.kill_on_drop(kill_on_drop);
+    hide_console(&mut cmd);
+    Ok(cmd)
+}
+
 /// Spawn a long-running process (core/tun2socks) with `env`, its stdout+stderr
 /// redirected (truncating) to `log_path`. Returns the live [`Child`] so the caller
 /// can record its pid and supervise it.
@@ -164,16 +188,32 @@ pub async fn spawn_logged(
     log_path: impl AsRef<Path>,
     kill_on_drop: bool,
 ) -> std::io::Result<Child> {
-    let log = std::fs::File::create(log_path)?;
-    let err = log.try_clone()?;
-    let mut cmd = Command::new(&argv[0]);
-    cmd.args(&argv[1..]);
-    set_env(&mut cmd, env);
-    cmd.stdin(Stdio::null());
-    cmd.stdout(Stdio::from(log));
-    cmd.stderr(Stdio::from(err));
-    cmd.kill_on_drop(kill_on_drop);
-    hide_console(&mut cmd);
+    build_logged_command(argv, env, log_path, kill_on_drop)?.spawn()
+}
+
+/// Like [`spawn_logged`], but runs `pre_exec` in the forked child before `exec`.
+///
+/// # Safety
+///
+/// `pre_exec` runs after `fork` and before `exec`, so it MUST be async-signal-safe
+/// (no allocation, no locks, no stdio) — it is the caller's contract to pass a
+/// closure that obeys that (e.g. a single raw syscall). Used by the desktop
+/// least-privilege helper to raise an ambient `CAP_NET_RAW` in a test core so its
+/// uplink bind survives exec. Unix-only: the Windows data-path has no fork/exec.
+#[cfg(unix)]
+pub async unsafe fn spawn_logged_pre_exec<F>(
+    argv: &[String],
+    env: &HashMap<String, String>,
+    log_path: impl AsRef<Path>,
+    kill_on_drop: bool,
+    pre_exec: F,
+) -> std::io::Result<Child>
+where
+    F: FnMut() -> std::io::Result<()> + Send + Sync + 'static,
+{
+    let mut cmd = build_logged_command(argv, env, log_path, kill_on_drop)?;
+    // SAFETY: `pre_exec` is async-signal-safe per the caller's contract above.
+    unsafe { cmd.pre_exec(pre_exec) };
     cmd.spawn()
 }
 
@@ -406,5 +446,30 @@ mod tests {
         let body = crate::fs::read_text(&log).await.unwrap();
         assert!(body.contains("hello"));
         assert!(body.contains("oops"));
+    }
+
+    // The pre_exec seam must preserve the stdio redirection + spawn, and actually
+    // invoke the closure in the forked child. A trivial Ok(()) closure is the
+    // async-signal-safe no-op that exercises the plumbing end to end (the real
+    // cap raise is verified at runtime on a Linux box with an active tun).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn spawn_logged_pre_exec_invokes_the_closure() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("c.log");
+        let mut child = unsafe {
+            spawn_logged_pre_exec(
+                &["sh".into(), "-c".into(), "printf ran".into()],
+                &HashMap::new(),
+                &log,
+                false,
+                || Ok(()),
+            )
+            .await
+            .unwrap()
+        };
+        child.wait().await.unwrap();
+        let body = crate::fs::read_text(&log).await.unwrap();
+        assert!(body.contains("ran"));
     }
 }

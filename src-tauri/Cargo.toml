@@ -29,7 +29,16 @@ log = "0.4"
 fern = "0.7"
 anyhow = "1"
 async-trait = "0.1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "fs", "net", "io-util", "time", "sync"] }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "process",
+  "fs",
+  "net",
+  "io-util",
+  "time",
+  "sync",
+] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-log = "2"
 specta = { version = "2.0.0-rc.25", features = ["derive"] }
@@ -51,9 +60,13 @@ tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-fs = "2"
 
-# Linux pkexec elevation reads geteuid (desktop/elevate.rs).
+# Linux pkexec elevation reads geteuid (desktop/elevate.rs). `caps` drives the
+# least-privilege data-path: the helper drops its bounding set to the caps it
+# actually needs and grants the test cores an ambient CAP_NET_RAW so their
+# uplink bind survives exec (see desktop/privhelper/entry.rs, platform.rs).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+caps = "0.5"
 
 # Windows privilege separation: the LocalSystem data-path service (windows-service)
 # + the named-pipe security descriptor and the one-time install elevation
@@ -61,11 +74,11 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.7"
 windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_Security_Authorization",
-    "Win32_UI_Shell",
-    "Win32_UI_WindowsAndMessaging",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]

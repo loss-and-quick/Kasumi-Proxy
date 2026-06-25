@@ -100,8 +100,36 @@ fn run() -> anyhow::Result<()> {
         args.bin_dir,
         args.gui_pid
     );
-    if unsafe { libc::geteuid() } != 0 {
-        log::warn!("not running as root — tun/routing will fail");
+    if !crate::desktop::capabilities::is_privileged_data_path() {
+        log::warn!("not holding the data-path caps (CAP_NET_ADMIN) — tun/routing will fail");
+    }
+
+    // Least privilege: stop *holding* more privilege than the data-path needs.
+    // Drop every capability from the bounding set except the handful the data-path
+    // provably needs (NET_ADMIN, NET_RAW, CHOWN, DAC_OVERRIDE); the bounding set is
+    // also the ceiling for every exec'd core / tun2socks / `ip`, so this shrinks the
+    // helper and its children at once. Gated on holding NET_ADMIN rather than
+    // `geteuid()==0` so it also self-reduces under a non-root file-cap launcher
+    // (NixOS `security.wrappers` setcap wrapper runs the helper as the GUI uid).
+    // A failure is non-fatal — the worst case is running with full caps.
+    if crate::desktop::capabilities::is_privileged_data_path() {
+        match crate::desktop::capabilities::drop_unneeded_bounding() {
+            Ok(dropped) => log::info!(
+                "dropped {} caps from the bounding set (kept the data-path set)",
+                dropped.len()
+            ),
+            Err(e) => log::warn!("could not drop the bounding set ({e}); running with full caps"),
+        }
+        // Seed CAP_NET_RAW into the inheritable set so the ambient raise the test
+        // cores get in their pre_exec (see platform.rs spawn_test_core) succeeds —
+        // PR_CAP_AMBIENT_RAISE needs the cap in both permitted and inheritable, and
+        // both a pkexec-root start and a file-cap start begin with an empty
+        // inheritable set. A failure is non-fatal: the test-core ambient raise then
+        // fails closed and the test core simply runs without the bind (the
+        // pre-root-bind state).
+        if let Err(e) = crate::desktop::capabilities::seed_test_core_inheritable() {
+            log::warn!("could not seed CAP_NET_RAW into the inheritable set ({e})");
+        }
     }
 
     // Resolve paths to exactly what the GUI passed (pkexec scrubbed the env).
@@ -111,7 +139,9 @@ fn run() -> anyhow::Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
-        // The run dir holds the socket + the helper-owned state; create it as root.
+        // The run dir holds the socket + the helper-owned state. Create it whether
+        // the helper runs as root (pkexec) or as the GUI uid with caps (the wrapper /
+        // self-setcap path); CAP_DAC_OVERRIDE covers a dir a prior root run left.
         tokio::fs::create_dir_all(&args.rundir).await?;
 
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);

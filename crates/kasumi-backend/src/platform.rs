@@ -12,6 +12,9 @@ use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::CoreEngine;
 
 use crate::lifecycle::spawn_core;
+// Unix-only: the pre_exec spawn seam (test-core ambient cap raise) has no Windows path.
+#[cfg(unix)]
+use crate::lifecycle::spawn_core_pre_exec;
 use crate::net::ProxyStatus;
 
 pub type Engine = CoreEngine;
@@ -50,6 +53,37 @@ pub async fn spawn_local_test_core(
     dat_dir: &str,
 ) -> anyhow::Result<Box<dyn TestCore>> {
     let child = spawn_core(bin, &cfg_path.to_string_lossy(), log_path, dat_dir, true).await?;
+    Ok(Box::new(LocalTestCore { child }))
+}
+
+/// Like [`spawn_local_test_core`], but runs `pre_exec` in the forked child before
+/// `exec`. Unix only — the desktop least-privilege helper uses it to raise an
+/// ambient `CAP_NET_RAW` so the test core's uplink bind survives exec once the
+/// helper runs caps-only rather than as root.
+///
+/// # Safety
+///
+/// `pre_exec` must be async-signal-safe (see [`crate::proc::spawn_logged_pre_exec`]).
+#[cfg(unix)]
+pub async unsafe fn spawn_local_test_core_pre_exec<F>(
+    bin: &str,
+    cfg_path: &Path,
+    log_path: &Path,
+    dat_dir: &str,
+    pre_exec: F,
+) -> anyhow::Result<Box<dyn TestCore>>
+where
+    F: FnMut() -> std::io::Result<()> + Send + Sync + 'static,
+{
+    let child = spawn_core_pre_exec(
+        bin,
+        &cfg_path.to_string_lossy(),
+        log_path,
+        dat_dir,
+        true,
+        pre_exec,
+    )
+    .await?;
     Ok(Box::new(LocalTestCore { child }))
 }
 

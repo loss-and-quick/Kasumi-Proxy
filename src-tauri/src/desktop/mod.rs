@@ -7,6 +7,12 @@
 pub mod net;
 pub mod singbox;
 
+// Linux capability handling for the least-privilege data-path helper (drop the
+// bounding set to the caps the data-path needs; grant test cores an ambient
+// CAP_NET_RAW). cfg(linux) — `caps` is Linux-only and the helper is Linux-only.
+#[cfg(target_os = "linux")]
+pub mod capabilities;
+
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod paths;
 #[cfg(any(target_os = "linux", target_os = "windows"))]

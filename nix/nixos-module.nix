@@ -1,9 +1,11 @@
-# NixOS integration: `programs.kasumi-proxy.enable = true;` installs the desktop
-# app and ensures polkit is present for the data-path's root helper. An opt-in
-# rule grants that helper password-free to a group.
+# NixOS integration: `programs.kasumi-proxy.enable = true` installs the desktop app
+# and grants its data-path helper the Linux capabilities it needs via a
+# `security.wrappers` setcap wrapper. The read-only Nix store can't be setcap'd, so
+# the wrapper is the native grant (modelled on nixpkgs' throne): the GUI execs the
+# helper with no password prompt and it runs least-privilege, not full root.
 #
-# `self` is threaded in from the flake so `package` can default to this repo's
-# own build without the module having to know a system.
+# `self` is threaded in from the flake so `package` can default to this repo's own
+# build without the module having to know a system.
 { self }:
 {
   config,
@@ -13,7 +15,6 @@
 }:
 let
   cfg = config.programs.kasumi-proxy;
-  helper = "${cfg.package}/bin/kasumi-helper";
 in
 {
   options.programs.kasumi-proxy = {
@@ -26,51 +27,31 @@ in
       description = "The kasumi-desktop package to install.";
     };
 
-    passwordlessElevation = {
-      enable = lib.mkEnableOption ''
-        a polkit rule letting members of the configured group start the data-path
-        without a password prompt. It is scoped to the kasumi-helper binary only —
-        the small privileged sidecar, not the GUI — so it grants nothing else'';
-
-      group = lib.mkOption {
-        type = lib.types.str;
-        default = "kasumi-proxy";
-        description = ''
-          Group whose members may run the helper without authenticating. Members
-          gain unprompted root for the tunnel; add only trusted users. The group is
-          created automatically.
-        '';
-      };
-    };
+    helperSetuid = lib.mkEnableOption ''
+      a setuid-root helper wrapper instead of the default setcap one. Less secure —
+      the whole helper runs as root, not just its network ops — but a fallback for
+      setups where setcap doesn't take. Mirrors throne's `tunMode.setuid`
+    '';
   };
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
-    # The desktop has no separate privileged core: the unprivileged GUI spawns the
-    # kasumi-helper sidecar as root via pkexec for the tun + routes (the elevation
-    # seam prefers /run/wrappers/bin/pkexec). polkit is on by default, but the
-    # data-path can't elevate without it, so make the dependency explicit.
-    security.polkit.enable = true;
-
-    users.groups = lib.mkIf cfg.passwordlessElevation.enable {
-      ${cfg.passwordlessElevation.group} = { };
+    # The data-path helper needs CAP_NET_ADMIN (tun + `ip` routing + tun2socks
+    # fwmark), CAP_NET_RAW (the test-core uplink bind), and CHOWN + DAC_OVERRIDE
+    # (helper socket + run_dir). The read-only store can't carry file caps, so grant
+    # them through a wrapper in /run/wrappers/bin the GUI execs directly — no prompt,
+    # and the helper runs as the calling user rather than root. The cap set mirrors
+    # the helper's in-code keep-set (see capabilities.rs); `+ep` = effective+permitted.
+    # setuid is the fallback for setups where setcap doesn't take.
+    security.wrappers.kasumi-helper = {
+      source = "${cfg.package}/bin/kasumi-helper";
+      owner = "root";
+      group = "root";
+      setuid = lib.mkIf cfg.helperSetuid true;
+      capabilities = lib.mkIf (
+        !cfg.helperSetuid
+      ) "cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep";
     };
-
-    # Allow the helper — and only the helper, by absolute store path — to be run
-    # via pkexec without a prompt for the group. pkexec maps to the
-    # org.freedesktop.policykit.exec action and exposes the target in
-    # action.lookup("program"); matching the exact path means this grants no other
-    # program. Caller-supplied env can't widen it: the GUI runs the fixed binary,
-    # not `env …`, and forwards no LD_* across the boundary.
-    security.polkit.extraConfig = lib.mkIf cfg.passwordlessElevation.enable ''
-      polkit.addRule(function(action, subject) {
-        if (action.id == "org.freedesktop.policykit.exec" &&
-            action.lookup("program") == "${helper}" &&
-            subject.isInGroup("${cfg.passwordlessElevation.group}")) {
-          return polkit.Result.YES;
-        }
-      });
-    '';
   };
 }

@@ -214,17 +214,14 @@ present for its root re-exec (the desktop brings up the tun + routes by re-execi
 
 `programs.kasumi-proxy.package` overrides the build; it defaults to this flake's `kasumi-desktop`.
 
-By default the app authenticates each time it brings up the tunnel. To skip that prompt for trusted
-users, opt in to a polkit rule scoped to the privileged helper:
+The data-path helper is granted the Linux capabilities it needs (`CAP_NET_ADMIN`, `CAP_NET_RAW`,
+`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) through a `security.wrappers` setcap wrapper, so the app brings the
+tunnel up with no password prompt and the helper runs as your user with only those caps — not full
+root. If setcap doesn't take in your setup, fall back to a setuid-root wrapper:
 
 ```nix
-programs.kasumi-proxy.passwordlessElevation.enable = true;   # group defaults to "kasumi-proxy"
-users.users.alice.extraGroups = [ "kasumi-proxy" ];
+programs.kasumi-proxy.helperSetuid = true;
 ```
-
-The rule grants password-free `pkexec` for the `kasumi-helper` binary only — the small root sidecar that
-owns the tun + routes, not the GUI — to members of the group. It is off by default because it is a
-privilege grant.
 
 ### Web UI development
 
