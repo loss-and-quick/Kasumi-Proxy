@@ -236,11 +236,18 @@ impl Default for DesktopPlatform {
     }
 }
 
-/// Whether this process owns the privileged data-path (the root helper on Linux,
-/// the LocalSystem service on Windows) — only then can a test core bind the uplink,
-/// and only then is there a managed tun to escape. In-process dev on unix runs
+/// Whether a test core spawned from *this* process will hold an effective
+/// `CAP_NET_RAW`, so its uplink bind (`SO_BINDTODEVICE` / `bind_interface`) can
+/// escape an active tun. Only the privileged data-path owner qualifies: the root
+/// helper on Linux, the LocalSystem service on Windows. In-process dev on unix is
 /// unprivileged and skips the bind.
-fn running_privileged() -> bool {
+///
+/// This is the real precondition the test-core bind needs, stated as a name. The
+/// body is still `geteuid()==0` today — a faithful proxy under the current full-root
+/// helper — but Phase 3 of the least-privilege work swaps it for a direct effective
+/// `CAP_NET_RAW` check (which reads the same under a caps-only helper), so the call
+/// site never has to change again.
+fn test_core_can_bind() -> bool {
     #[cfg(unix)]
     {
         unsafe { libc::geteuid() == 0 }
@@ -469,7 +476,7 @@ impl Platform for DesktopPlatform {
         // no tun is up the uplink *is* the default route, so the bind is a harmless
         // no-op. (In-process dev runs unprivileged: skip the bind — it'd need
         // CAP_NET_RAW and there's no managed tun to escape anyway.)
-        if running_privileged() {
+        if test_core_can_bind() {
             if let Some(dev) = routing::uplink_device().await {
                 if let Some(text) = read_text(cfg_path).await {
                     if let Ok(mut cfg) = serde_json::from_str::<Value>(&text) {
