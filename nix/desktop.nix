@@ -112,7 +112,9 @@ let
     installPhase = ''
       mkdir -p $out/bin
       cp ${tauri.app}/bin/kasumi-desktop $out/bin/kasumi-desktop
-      # The GUI spawns this sibling as root for the data-path (privilege separation).
+      # The GUI spawns this sibling for the data-path (privilege separation): via
+      # pkexec/sudo by default, or — when `programs.kasumi-proxy.helperCaps` adds a
+      # `security.wrappers.kasumi-helper` entry — through that cap-set wrapper.
       cp ${helper}/bin/kasumi-helper $out/bin/kasumi-helper
       # Launcher icon (the file basenames already encode their pixel size).
       install -Dm644 ${root + "/src-tauri/icons/32x32.png"} \

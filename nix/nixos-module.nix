@@ -42,35 +42,65 @@ in
         '';
       };
     };
+
+    helperCaps = {
+      enable = lib.mkEnableOption ''
+        running the data-path helper via a `security.wrappers.kasumi-helper` setcap
+        wrapper instead of elevating it as root through pkexec. The GUI execs the
+        wrapper directly — no password prompt — and the helper runs as the calling
+        user with only the data-path caps (NET_ADMIN, NET_RAW, CHOWN, DAC_OVERRIDE),
+        not full root. Supersedes `passwordlessElevation` (which grants unprompted
+        root); prefer this for the smaller blast radius
+      '';
+
+      setuid = lib.mkEnableOption ''
+        the setuid (root) wrapper instead of the setcap default — closer to the old
+        pkexec behaviour, less secure (the whole helper runs as root). Enable only
+        if setcap doesn't work in your setup
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
-    # The desktop has no separate privileged core: the unprivileged GUI spawns the
-    # kasumi-helper sidecar as root via pkexec for the tun + routes (the elevation
-    # seam prefers /run/wrappers/bin/pkexec). polkit is on by default, but the
-    # data-path can't elevate without it, so make the dependency explicit.
+    # polkit drives the default pkexec elevation; explicit even when the caps
+    # wrapper below makes it unused.
     security.polkit.enable = true;
 
     users.groups = lib.mkIf cfg.passwordlessElevation.enable {
       ${cfg.passwordlessElevation.group} = { };
     };
 
-    # Allow the helper — and only the helper, by absolute store path — to be run
-    # via pkexec without a prompt for the group. pkexec maps to the
-    # org.freedesktop.policykit.exec action and exposes the target in
-    # action.lookup("program"); matching the exact path means this grants no other
-    # program. Caller-supplied env can't widen it: the GUI runs the fixed binary,
-    # not `env …`, and forwards no LD_* across the boundary.
-    security.polkit.extraConfig = lib.mkIf cfg.passwordlessElevation.enable ''
-      polkit.addRule(function(action, subject) {
-        if (action.id == "org.freedesktop.policykit.exec" &&
-            action.lookup("program") == "${helper}" &&
-            subject.isInGroup("${cfg.passwordlessElevation.group}")) {
-          return polkit.Result.YES;
-        }
-      });
-    '';
+    # The passwordless caps wrapper: a setcap kasumi-helper in /run/wrappers/bin
+    # the GUI execs directly. The cap set mirrors the helper's in-code keep-set
+    # (see capabilities.rs); `+ep` = effective+permitted. setuid (root) is the
+    # fallback when setcap misbehaves. Mutually exclusive, as in nixpkgs' throne.
+    security.wrappers.kasumi-helper = lib.mkIf cfg.helperCaps.enable {
+      source = "${cfg.package}/bin/kasumi-helper";
+      owner = "root";
+      group = "root";
+      setuid = lib.mkIf cfg.helperCaps.setuid true;
+      capabilities = lib.mkIf (
+        !cfg.helperCaps.setuid
+      ) "cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep";
+    };
+
+    # Run the helper — and only the helper, matched by absolute store path in the
+    # org.freedesktop.policykit.exec action — via pkexec without a prompt for the
+    # group. The GUI execs the fixed binary (no `env …`, no LD_* forwarded), so the
+    # caller can't widen it. Unused when helperCaps is on (the wrapper is already
+    # passwordless).
+    security.polkit.extraConfig =
+      lib.mkIf (cfg.passwordlessElevation.enable && !cfg.helperCaps.enable)
+        ''
+          polkit.addRule(function(action, subject) {
+            if (action.id == "org.freedesktop.policykit.exec" &&
+                action.lookup("program") == "${helper}" &&
+                subject.isInGroup("${cfg.passwordlessElevation.group}")) {
+              return polkit.Result.YES;
+            }
+          });
+        '';
   };
 }
