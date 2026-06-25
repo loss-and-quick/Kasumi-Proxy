@@ -40,6 +40,17 @@ pub enum PrivRequest {
     ProxyStatus,
     /// Whether every data-path process is still alive (drives the watchdog).
     DataPathHealthy,
+    /// Spawn a throwaway test core (as root, so it can bind the uplink and escape an
+    /// active tun) from a GUI-written config, logging to `log_path`. Returns a handle
+    /// to kill it with.
+    SpawnTestCore {
+        engine: CoreEngine,
+        cfg_path: String,
+        log_path: String,
+    },
+    /// Kill a test core spawned by `SpawnTestCore`. Idempotent (a handle the helper's
+    /// orphan-sweep already reaped is silently ignored).
+    KillTestCore { handle: u64 },
 }
 
 /// The helper's reply to one [`PrivRequest`]. `ProxyStatus` is flattened to
@@ -61,7 +72,11 @@ pub enum PrivReply {
     Healthy {
         healthy: Option<bool>,
     },
-    /// The operation failed; carries the reason (a stringified `anyhow::Error`).
+    /// The handle of a freshly spawned test core (to pass back to `KillTestCore`).
+    TestCoreSpawned {
+        handle: u64,
+    },
+    /// An operation failed; carries the reason (a stringified `anyhow::Error`).
     Err {
         message: String,
     },
@@ -105,6 +120,12 @@ mod tests {
             PrivRequest::ServiceState,
             PrivRequest::ProxyStatus,
             PrivRequest::DataPathHealthy,
+            PrivRequest::SpawnTestCore {
+                engine: CoreEngine::Xray,
+                cfg_path: "/run/test-43210.json".into(),
+                log_path: "/run/test-43210.log".into(),
+            },
+            PrivRequest::KillTestCore { handle: 7 },
         ] {
             req_roundtrip(&r);
         }
@@ -131,6 +152,7 @@ mod tests {
             PrivReply::Healthy {
                 healthy: Some(false),
             },
+            PrivReply::TestCoreSpawned { handle: 7 },
             PrivReply::Err {
                 message: "boom".into(),
             },

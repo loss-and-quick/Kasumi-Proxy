@@ -119,6 +119,13 @@ pub async fn clear_xray_routing(route_state_file: &str) {
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
+/// The physical uplink device of the current default route — what a helper-spawned
+/// test core binds its outbound to (`SO_BINDTODEVICE`) so it escapes an active tun.
+/// `None` when there's no default route (offline: nothing to test against anyway).
+pub async fn uplink_device() -> Option<String> {
+    read_default_route().await.map(|(_, dev)| dev)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

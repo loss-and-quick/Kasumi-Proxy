@@ -20,7 +20,6 @@ use kasumi_core::xray_config::build_xray_config;
 
 use crate::fs::{exists, read_text, remove_file};
 use crate::fsjson::{read_json, write_text_atomic};
-use crate::lifecycle::spawn_core;
 use crate::net::{fetch_url, lease_ports, tcp_ping, FetchUrlOptions, ProxyStatus};
 use crate::platform::{Engine, Platform};
 
@@ -76,6 +75,10 @@ pub async fn run_ping(platform: &dyn Platform, profile_id: &str) -> Option<i64> 
     if addr.is_empty() {
         return None;
     }
+    // A plain TCP-connect from the daemon (unprivileged), so when a tun is up this
+    // measures the path to the server *through* the active tunnel. That's a known
+    // tcp-ping limitation while connected; real-ping/speed-test run their probe
+    // through a helper-spawned core that binds the uplink and escapes the tun.
     tcp_ping(addr, port, Duration::from_secs(3))
         .await
         .map(|ms| ms as i64)
@@ -144,14 +147,12 @@ where
         return Err("failed to write test config".into());
     }
 
-    let bin_str = bin.to_string_lossy().into_owned();
-    let cfg_str = cfg_path.to_string_lossy().into_owned();
-    let dat = data_dir.to_string_lossy().into_owned();
+    // On desktop the core runs behind the privileged helper (so it can bind the
+    // uplink and escape an active tun); it reads this config and writes this log as
+    // root. Both live in the shared data_dir, which the GUI owns, so it can still
+    // clean them up afterwards.
     log::debug!("test core {engine:?} starting on port {port}");
-    // Ephemeral diagnostic core: kill-on-drop so a cancelled probe future (e.g. the
-    // client's WS frame dropped mid-test) tears the core down instead of leaking it.
-    let spawned = spawn_core(&bin_str, &cfg_str, &log_path, &dat, true).await;
-    let mut child = match spawned {
+    let mut core = match platform.spawn_test_core(engine, &cfg_path, &log_path).await {
         Ok(c) => c,
         Err(e) => {
             log::warn!("test core spawn failed on port {port}: {e}");
@@ -161,20 +162,17 @@ where
         }
     };
 
-    // Watch the core, don't just poll a port at it: race "SOCKS port accepts" against
-    // "the process exited". A core that dies on a bad config (xray/sing-box exit within
-    // ~1s) is caught the moment it exits, instead of stalling for the whole deadline.
-    let listening = tokio::select! {
-        up = wait_port_up(port, CORE_START_TIMEOUT) => up,
-        _ = child.wait() => false,
-    };
+    // Poll the SOCKS port for readiness. We no longer hold the core's `Child` to race
+    // its exit (it may live behind the privileged helper), so a core that dies on a
+    // bad config simply never binds the port and the wait times out — caught below.
+    let listening = wait_port_up(port, CORE_START_TIMEOUT).await;
     let result = if listening {
-        // Probe through the core, but keep watching it: if it dies mid-request we stop
-        // immediately rather than waiting out the cap.
-        let measured = tokio::select! {
-            m = tokio::time::timeout(cap, measure()) => m.unwrap_or_default(),
-            _ = child.wait() => None,
-        };
+        // The core's outbound already escapes the active tun (bound to the uplink at
+        // build time), so just probe — bounded by `cap` so a hung request can't
+        // wedge the test; killing the core is what unblocks it.
+        let measured = tokio::time::timeout(cap, measure())
+            .await
+            .unwrap_or_default();
         // The core bound its SOCKS port but the probe got no answer: log the core's
         // own tail so a transport that connects-but-won't-pass-data (gRPC/XHTTP cold
         // start, TLS error, dead upstream) is diagnosable, not a silent None.
@@ -197,8 +195,7 @@ where
         })
     };
 
-    let _ = child.start_kill();
-    let _ = child.wait().await;
+    core.kill().await;
     remove_file(&cfg_path).await;
     remove_file(&log_path).await;
     result

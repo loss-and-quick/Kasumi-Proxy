@@ -210,6 +210,20 @@ pub async fn clear_xray_routing(route_state_file: &str) {
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
+/// The physical uplink adapter name of the current default route — what a
+/// helper-spawned test core binds its outbound to (`bind_interface` /
+/// `sockopt.interface`) so it escapes an active tun. `None` when offline.
+pub async fn uplink_device() -> Option<String> {
+    let alias = powershell(
+        "Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue \
+         | Sort-Object RouteMetric \
+         | Select-Object -First 1 -ExpandProperty InterfaceAlias",
+    )
+    .await;
+    let alias = alias.trim();
+    (!alias.is_empty()).then(|| alias.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

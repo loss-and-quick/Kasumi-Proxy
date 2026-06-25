@@ -19,8 +19,8 @@ use kasumi_backend::fsjson::read_json;
 use kasumi_backend::lifecycle::{random_tun_iface, spawn_core, spawn_tun2socks, verify_core_alive};
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
-    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
-    StopDataPath,
+    spawn_local_test_core, BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities,
+    StartDataPath, StopDataPath, TestCore,
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
@@ -236,6 +236,23 @@ impl Default for DesktopPlatform {
     }
 }
 
+/// Whether this process owns the privileged data-path (the root helper on Linux,
+/// the LocalSystem service on Windows) — only then can a test core bind the uplink,
+/// and only then is there a managed tun to escape. In-process dev on unix runs
+/// unprivileged and skips the bind.
+fn running_privileged() -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::geteuid() == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        // The Windows data-path runs in the LocalSystem service; there's no
+        // unprivileged in-process tun path to distinguish.
+        true
+    }
+}
+
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -438,6 +455,35 @@ impl Platform for DesktopPlatform {
             }
         }
         Some(true)
+    }
+
+    async fn spawn_test_core(
+        &self,
+        engine: Engine,
+        cfg_path: &Path,
+        log_path: &Path,
+    ) -> anyhow::Result<Box<dyn TestCore>> {
+        // Running as root (the helper), bind the test core's outbound to the physical
+        // uplink so it escapes an active tun at the socket layer (SO_BINDTODEVICE) —
+        // no per-test OS routing, no collision with the active server's routes. When
+        // no tun is up the uplink *is* the default route, so the bind is a harmless
+        // no-op. (In-process dev runs unprivileged: skip the bind — it'd need
+        // CAP_NET_RAW and there's no managed tun to escape anyway.)
+        if running_privileged() {
+            if let Some(dev) = routing::uplink_device().await {
+                if let Some(text) = read_text(cfg_path).await {
+                    if let Ok(mut cfg) = serde_json::from_str::<Value>(&text) {
+                        crate::desktop::net::bind_proxy_outbound(engine, &mut cfg, &dev);
+                        if let Ok(s) = serde_json::to_string(&cfg) {
+                            let _ = write_text(cfg_path, &s).await;
+                        }
+                    }
+                }
+            }
+        }
+        let bin = self.core_bin(engine).to_owned();
+        let dat = self.p.backend.dat_dir.to_string_lossy().into_owned();
+        spawn_local_test_core(&bin, cfg_path, log_path, &dat).await
     }
 }
 
