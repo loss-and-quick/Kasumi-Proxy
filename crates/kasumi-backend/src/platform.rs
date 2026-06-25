@@ -2,7 +2,7 @@
 //! needs. This crate is platform-neutral; each shell (Android via the root module,
 //! desktop via the native network stack) provides a [`Platform`] implementation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -11,9 +11,47 @@ use tokio::sync::mpsc;
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::CoreEngine;
 
+use crate::lifecycle::spawn_core;
 use crate::net::ProxyStatus;
 
 pub type Engine = CoreEngine;
+
+/// A spawned on-demand test core, owned by whoever started it. `kill` (or dropping
+/// the handle) tears the throwaway core down — the platform decides whether that
+/// process lives in-process or behind a privileged helper.
+#[async_trait]
+pub trait TestCore: Send + Sync {
+    /// Kill the core and reap it. Idempotent.
+    async fn kill(&mut self);
+}
+
+/// A test core running in this very process — the Android root daemon, the desktop
+/// privileged helper, or an in-process dev run. Kill-on-drop (set at spawn) means a
+/// cancelled probe future tears it down without an explicit `kill`.
+pub struct LocalTestCore {
+    child: tokio::process::Child,
+}
+
+#[async_trait]
+impl TestCore for LocalTestCore {
+    async fn kill(&mut self) {
+        let _ = self.child.start_kill();
+        let _ = self.child.wait().await;
+    }
+}
+
+/// Spawn a test core in this process (kill-on-drop) and box it as a [`TestCore`].
+/// The building block for [`Platform::spawn_test_core`] and any privileged override
+/// that first rewrites the config (e.g. the desktop helper injecting an uplink bind).
+pub async fn spawn_local_test_core(
+    bin: &str,
+    cfg_path: &Path,
+    log_path: &Path,
+    dat_dir: &str,
+) -> anyhow::Result<Box<dyn TestCore>> {
+    let child = spawn_core(bin, &cfg_path.to_string_lossy(), log_path, dat_dir, true).await?;
+    Ok(Box::new(LocalTestCore { child }))
+}
 
 /// Absolute on-disk locations the backend reads and writes.
 #[derive(Debug, Clone)]
@@ -158,6 +196,23 @@ pub trait Platform: Send + Sync {
     /// `None` where the platform can't report it.
     async fn data_path_healthy(&self) -> Option<bool> {
         None
+    }
+
+    /// Spawn a throwaway test core for `cfg_path`, logging to `log_path`. A platform
+    /// that splits privilege overrides this to run the core in its root helper — so
+    /// the core can bind its outbound to the physical uplink (`SO_BINDTODEVICE`,
+    /// which needs `CAP_NET_RAW`) and escape an active tun. The default is the plain
+    /// in-process spawn (kill-on-drop): right for the Android root daemon (its
+    /// iptables mark chain already spares root test traffic) and in-process dev.
+    async fn spawn_test_core(
+        &self,
+        engine: Engine,
+        cfg_path: &Path,
+        log_path: &Path,
+    ) -> anyhow::Result<Box<dyn TestCore>> {
+        let bin = self.core_path(engine);
+        let dat = self.paths().dat_dir.to_string_lossy().into_owned();
+        spawn_local_test_core(&bin.to_string_lossy(), cfg_path, log_path, &dat).await
     }
 }
 

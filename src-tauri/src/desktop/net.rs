@@ -5,7 +5,45 @@
 
 use std::collections::HashSet;
 
-use serde_json::Value;
+use serde_json::{json, Value};
+
+use kasumi_core::enums::CoreEngine;
+
+/// Bind every `proxy`-tagged outbound's upstream socket to `iface` (`SO_BINDTODEVICE`)
+/// so a helper-spawned test core's traffic to the server egresses the physical uplink
+/// and escapes an active tun — no per-test OS routing involved. xray exposes this as
+/// `streamSettings.sockopt.interface`; sing-box as a top-level `bind_interface` (its
+/// wireguard outbound lives under `endpoints`, so both arrays are scanned).
+pub fn bind_proxy_outbound(engine: CoreEngine, cfg: &mut Value, iface: &str) {
+    for key in ["outbounds", "endpoints"] {
+        let Some(arr) = cfg.get_mut(key).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for ob in arr {
+            if ob.get("tag").and_then(Value::as_str) != Some("proxy") {
+                continue;
+            }
+            let Some(map) = ob.as_object_mut() else {
+                continue;
+            };
+            match engine {
+                CoreEngine::Xray => {
+                    let stream = map.entry("streamSettings").or_insert_with(|| json!({}));
+                    if let Some(sock) = stream
+                        .as_object_mut()
+                        .map(|s| s.entry("sockopt").or_insert_with(|| json!({})))
+                        .and_then(Value::as_object_mut)
+                    {
+                        sock.insert("interface".into(), iface.into());
+                    }
+                }
+                CoreEngine::SingBox => {
+                    map.insert("bind_interface".into(), iface.into());
+                }
+            }
+        }
+    }
+}
 
 /// Resolve a host (domain or literal IP) to its IPs, or `[]` on failure.
 pub async fn resolve_ips(host: &str) -> Vec<String> {
@@ -122,6 +160,36 @@ mod tests {
     fn cidr_picks_family() {
         assert_eq!(cidr("1.2.3.4"), "1.2.3.4/32");
         assert_eq!(cidr("2001:db8::1"), "2001:db8::1/128");
+    }
+
+    #[test]
+    fn binds_only_the_proxy_outbound() {
+        // xray: sets streamSettings.sockopt.interface on the proxy outbound only,
+        // creating the streamSettings/sockopt objects when absent.
+        let mut x = json!({ "outbounds": [
+            { "tag": "proxy", "protocol": "socks" },
+            { "tag": "direct", "protocol": "freedom" },
+        ] });
+        bind_proxy_outbound(CoreEngine::Xray, &mut x, "eno1");
+        assert_eq!(
+            x["outbounds"][0]["streamSettings"]["sockopt"]["interface"],
+            "eno1"
+        );
+        assert!(x["outbounds"][1].get("streamSettings").is_none());
+
+        // sing-box: top-level bind_interface on the proxy outbound and the
+        // wireguard proxy endpoint, leaving siblings untouched.
+        let mut s = json!({
+            "outbounds": [
+                { "tag": "proxy", "type": "vless" },
+                { "tag": "direct", "type": "direct" },
+            ],
+            "endpoints": [{ "tag": "proxy", "type": "wireguard" }],
+        });
+        bind_proxy_outbound(CoreEngine::SingBox, &mut s, "wlan0");
+        assert_eq!(s["outbounds"][0]["bind_interface"], "wlan0");
+        assert!(s["outbounds"][1].get("bind_interface").is_none());
+        assert_eq!(s["endpoints"][0]["bind_interface"], "wlan0");
     }
 
     #[test]

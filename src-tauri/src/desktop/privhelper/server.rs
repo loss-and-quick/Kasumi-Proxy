@@ -3,54 +3,122 @@
 //!
 //! The helper runs as root and owns the data-path; the unprivileged GUI is the
 //! only client. Each connection is a sequence of newline-delimited
-//! [`PrivRequest`]s, each answered with exactly one [`PrivReply`]. Dispatch is
-//! kept in [`dispatch`] — a pure async map from request to reply — so it can be
+//! [`PrivRequest`]s, each answered with exactly one [`PrivReply`]. Request handling
+//! lives in [`Server::dispatch`] — a method on the owned serving state, so it can be
 //! exercised without a socket.
 
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::sync::Mutex as AsyncMutex;
 
-use kasumi_backend::platform::{Platform, StartDataPath, StopDataPath};
+use kasumi_backend::platform::{Platform, StartDataPath, StopDataPath, TestCore};
 
 use super::proto::{PrivReply, PrivRequest};
 use super::transport::{BoxRead, BoxWrite};
 
-/// Map one request to its reply by calling into `platform`. Errors are folded into
-/// `PrivReply::Err` so a failing operation never drops the connection.
-pub async fn dispatch(platform: &Arc<dyn Platform>, req: PrivRequest) -> PrivReply {
-    match req {
-        PrivRequest::Ping => PrivReply::Pong,
-        PrivRequest::BootInit => to_reply(platform.boot_init().await),
-        PrivRequest::StartDataPath { engine, socks_port } => to_reply(
-            platform
-                .start_data_path(StartDataPath { engine, socks_port })
-                .await,
-        ),
-        PrivRequest::StopDataPath { keep_service_state } => to_reply(
-            platform
-                .stop_data_path(StopDataPath { keep_service_state })
-                .await,
-        ),
-        PrivRequest::ServiceState => match platform.service_state().await {
-            Ok(s) => PrivReply::State(s),
-            Err(e) => PrivReply::Err {
-                message: e.to_string(),
+/// Generous vs the longest single test (~18 s): a core still registered this long
+/// after spawn is an orphan, so the sweep can safely reap it.
+const TEST_CORE_MAX_LIFETIME: Duration = Duration::from_secs(60);
+
+/// The helper's serving state: the privileged [`Platform`] plus the test cores it
+/// has spawned. One instance is shared across every connection, so a `KillTestCore`
+/// reaches a core spawned on any connection and the orphan sweep shares the same
+/// map. Owning this rather than a process global keeps [`Server::dispatch`] a
+/// function of its inputs — each test builds its own `Server`.
+pub struct Server {
+    platform: Arc<dyn Platform>,
+    /// Test cores spawned via `SpawnTestCore`, keyed by handle. The GUI releases each
+    /// with `KillTestCore`; the orphan sweep backstops a GUI that vanishes mid-test.
+    test_cores: AsyncMutex<HashMap<u64, Box<dyn TestCore>>>,
+    /// Monotonic source of test-core handles.
+    next_handle: AtomicU64,
+}
+
+impl Server {
+    /// Wrap a platform for serving. `Arc` so connections and orphan-sweep tasks share
+    /// the one registry.
+    pub fn new(platform: Arc<dyn Platform>) -> Arc<Self> {
+        Arc::new(Self {
+            platform,
+            test_cores: AsyncMutex::new(HashMap::new()),
+            next_handle: AtomicU64::new(1),
+        })
+    }
+
+    /// Map one request to its reply by calling into the platform. Errors are folded
+    /// into `PrivReply::Err` so a failing operation never drops the connection.
+    pub async fn dispatch(self: &Arc<Self>, req: PrivRequest) -> PrivReply {
+        match req {
+            PrivRequest::Ping => PrivReply::Pong,
+            PrivRequest::BootInit => to_reply(self.platform.boot_init().await),
+            PrivRequest::StartDataPath { engine, socks_port } => to_reply(
+                self.platform
+                    .start_data_path(StartDataPath { engine, socks_port })
+                    .await,
+            ),
+            PrivRequest::StopDataPath { keep_service_state } => to_reply(
+                self.platform
+                    .stop_data_path(StopDataPath { keep_service_state })
+                    .await,
+            ),
+            PrivRequest::ServiceState => match self.platform.service_state().await {
+                Ok(s) => PrivReply::State(s),
+                Err(e) => PrivReply::Err {
+                    message: e.to_string(),
+                },
             },
-        },
-        PrivRequest::ProxyStatus => match platform.proxy_status().await {
-            Ok(p) => PrivReply::Proxy {
-                running: p.running,
-                socks_port: p.socks_port,
-                http_port: p.http_port,
+            PrivRequest::ProxyStatus => match self.platform.proxy_status().await {
+                Ok(p) => PrivReply::Proxy {
+                    running: p.running,
+                    socks_port: p.socks_port,
+                    http_port: p.http_port,
+                },
+                Err(e) => PrivReply::Err {
+                    message: e.to_string(),
+                },
             },
-            Err(e) => PrivReply::Err {
-                message: e.to_string(),
+            PrivRequest::DataPathHealthy => PrivReply::Healthy {
+                healthy: self.platform.data_path_healthy().await,
             },
-        },
-        PrivRequest::DataPathHealthy => PrivReply::Healthy {
-            healthy: platform.data_path_healthy().await,
-        },
+            PrivRequest::SpawnTestCore {
+                engine,
+                cfg_path,
+                log_path,
+            } => match self
+                .platform
+                .spawn_test_core(engine, Path::new(&cfg_path), Path::new(&log_path))
+                .await
+            {
+                Ok(core) => {
+                    let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
+                    self.test_cores.lock().await.insert(handle, core);
+                    // Backstop: reap the core if the GUI never sends KillTestCore.
+                    let server = self.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(TEST_CORE_MAX_LIFETIME).await;
+                        if let Some(mut c) = server.test_cores.lock().await.remove(&handle) {
+                            log::warn!("orphan test core {handle} swept after timeout");
+                            c.kill().await;
+                        }
+                    });
+                    PrivReply::TestCoreSpawned { handle }
+                }
+                Err(e) => PrivReply::Err {
+                    message: e.to_string(),
+                },
+            },
+            PrivRequest::KillTestCore { handle } => {
+                if let Some(mut c) = self.test_cores.lock().await.remove(&handle) {
+                    c.kill().await;
+                }
+                PrivReply::Ok
+            }
+        }
     }
 }
 
@@ -92,12 +160,13 @@ pub async fn serve(
     let listener = listener?;
     restrict_socket(socket_path, owner_uid)
         .with_context(|| format!("restrict privilege-helper socket {socket_path}"))?;
+    let server = Server::new(platform);
     loop {
         let (stream, _addr) = listener.accept().await?;
         let (read, write) = tokio::io::split(stream);
-        let platform = platform.clone();
+        let server = server.clone();
         tokio::spawn(async move {
-            if let Err(e) = serve_conn(platform, Box::new(read), Box::new(write)).await {
+            if let Err(e) = serve_conn(server, Box::new(read), Box::new(write)).await {
                 log::warn!("connection ended: {e}");
             }
         });
@@ -123,7 +192,7 @@ fn restrict_socket(socket_path: &str, owner_uid: Option<u32>) -> anyhow::Result<
 /// Transport-neutral: the caller supplies the already-split halves (a unix socket
 /// on Linux, a named pipe on Windows).
 pub(crate) async fn serve_conn(
-    platform: Arc<dyn Platform>,
+    server: Arc<Server>,
     read: BoxRead,
     mut write: BoxWrite,
 ) -> anyhow::Result<()> {
@@ -135,7 +204,7 @@ pub(crate) async fn serve_conn(
         let reply = match serde_json::from_str::<PrivRequest>(&line) {
             Ok(req) => {
                 log::debug!("request: {req:?}");
-                dispatch(&platform, req).await
+                server.dispatch(req).await
             }
             Err(e) => {
                 log::warn!("malformed request: {e}");

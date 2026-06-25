@@ -32,7 +32,7 @@ use windows_service::{define_windows_service, service_dispatcher};
 
 use kasumi_backend::platform::{Platform, StopDataPath};
 
-use super::server::serve_conn;
+use super::server::{serve_conn, Server};
 use crate::desktop::paths::{
     ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
 };
@@ -192,6 +192,7 @@ fn bind_pipe(
 /// is torn down, mirroring the Linux helper exiting with the GUI.
 async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyhow::Result<()> {
     let security = PipeSecurity::new()?;
+    let srv = Server::new(platform.clone());
     let mut first = true;
     loop {
         let server = bind_pipe(PIPE_NAME, &security, first)?;
@@ -204,7 +205,7 @@ async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyho
 
         let (read, write) = tokio::io::split(server);
         tokio::select! {
-            r = serve_conn(platform.clone(), Box::new(read), Box::new(write)) => {
+            r = serve_conn(srv.clone(), Box::new(read), Box::new(write)) => {
                 if let Err(e) = r {
                     log::warn!("connection ended: {e}");
                 }
@@ -246,8 +247,9 @@ async fn serve_transient(platform: Arc<dyn Platform>, pipe_name: &str) -> anyhow
     }
     log::info!("GUI connected; serving data-path");
 
+    let srv = Server::new(platform.clone());
     let (read, write) = tokio::io::split(server);
-    if let Err(e) = serve_conn(platform.clone(), Box::new(read), Box::new(write)).await {
+    if let Err(e) = serve_conn(srv, Box::new(read), Box::new(write)).await {
         log::warn!("connection ended: {e}");
     }
     teardown(&platform).await;

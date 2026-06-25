@@ -7,7 +7,8 @@
 //! `paths`: the GUI owns `datadir`, the helper owns `run_dir`, and data-path state
 //! comes back in RPC replies rather than through root-owned files.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -16,7 +17,7 @@ use tokio::sync::mpsc;
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     AppFilterCapability, BackendPaths, Engine, Platform, PlatformCapabilities, StartDataPath,
-    StopDataPath,
+    StopDataPath, TestCore,
 };
 use kasumi_core::contract::ServiceState;
 
@@ -25,10 +26,11 @@ use super::proto::{PrivReply, PrivRequest};
 use crate::desktop::DesktopPlatform;
 
 pub struct RemotePlatform {
-    /// Unprivileged half: paths, config tuning, core probes, test cores, watcher.
+    /// Unprivileged half: paths, config tuning, core probes, watcher.
     local: DesktopPlatform,
-    /// Privileged half: the connection to the root helper.
-    client: Client,
+    /// Privileged half: the connection to the root helper. `Arc` so a spawned test
+    /// core can hold its own reference to release itself.
+    client: Arc<Client>,
 }
 
 impl RemotePlatform {
@@ -38,7 +40,7 @@ impl RemotePlatform {
     pub fn new(client: Client) -> anyhow::Result<Self> {
         Ok(Self {
             local: DesktopPlatform::new()?,
-            client,
+            client: Arc::new(client),
         })
     }
 
@@ -135,6 +137,74 @@ impl Platform for RemotePlatform {
             Ok(PrivReply::Healthy { healthy }) => healthy,
             // A dropped/broken helper means the data-path can't be healthy.
             _ => Some(false),
+        }
+    }
+
+    async fn spawn_test_core(
+        &self,
+        engine: Engine,
+        cfg_path: &Path,
+        log_path: &Path,
+    ) -> anyhow::Result<Box<dyn TestCore>> {
+        // Always run test cores in the root helper: it binds their outbound to the
+        // physical uplink so they escape an active tun (needs CAP_NET_RAW), the same
+        // way the active core already runs as root. No tun up ⇒ binding the uplink is
+        // a no-op (it *is* the default route), so this one path covers both states.
+        let handle = match self
+            .call(PrivRequest::SpawnTestCore {
+                engine,
+                cfg_path: cfg_path.to_string_lossy().into_owned(),
+                log_path: log_path.to_string_lossy().into_owned(),
+            })
+            .await?
+        {
+            PrivReply::TestCoreSpawned { handle } => handle,
+            other => anyhow::bail!("unexpected reply to SpawnTestCore: {other:?}"),
+        };
+        Ok(Box::new(RemoteTestCore {
+            client: self.client.clone(),
+            handle,
+            killed: false,
+        }))
+    }
+}
+
+/// A test core living in the root helper, addressed by handle. `kill` releases it
+/// over the wire; `Drop` is the cancel-safety backstop (a probe future dropped
+/// before `kill` still frees the core), with the helper's orphan sweep behind that.
+struct RemoteTestCore {
+    client: Arc<Client>,
+    handle: u64,
+    killed: bool,
+}
+
+#[async_trait]
+impl TestCore for RemoteTestCore {
+    async fn kill(&mut self) {
+        if self.killed {
+            return;
+        }
+        self.killed = true;
+        let _ = self
+            .client
+            .call(PrivRequest::KillTestCore {
+                handle: self.handle,
+            })
+            .await;
+    }
+}
+
+impl Drop for RemoteTestCore {
+    fn drop(&mut self) {
+        if self.killed {
+            return;
+        }
+        let client = self.client.clone();
+        let handle = self.handle;
+        if let Ok(rt) = tokio::runtime::Handle::try_current() {
+            rt.spawn(async move {
+                let _ = client.call(PrivRequest::KillTestCore { handle }).await;
+            });
         }
     }
 }
