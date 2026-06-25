@@ -104,6 +104,22 @@ fn run() -> anyhow::Result<()> {
         log::warn!("not running as root — tun/routing will fail");
     }
 
+    // Least privilege (Phase 2): still launched as root via pkexec, but stop
+    // *holding* full root at runtime. Drop every capability from the bounding set
+    // except the handful the data-path provably needs (NET_ADMIN, NET_RAW, CHOWN,
+    // DAC_OVERRIDE); the bounding set is also the ceiling for every exec'd core /
+    // tun2socks / `ip`, so this shrinks the helper and its children at once. A
+    // failure is non-fatal — the worst case is running with full caps as before.
+    if unsafe { libc::geteuid() } == 0 {
+        match crate::desktop::capabilities::drop_unneeded_bounding() {
+            Ok(dropped) => log::info!(
+                "dropped {} caps from the bounding set (kept the data-path set)",
+                dropped.len()
+            ),
+            Err(e) => log::warn!("could not drop the bounding set ({e}); running with full caps"),
+        }
+    }
+
     // Resolve paths to exactly what the GUI passed (pkexec scrubbed the env).
     std::env::set_var(ENV_DATADIR, &args.datadir);
     std::env::set_var(ENV_RUNDIR, &args.rundir);
