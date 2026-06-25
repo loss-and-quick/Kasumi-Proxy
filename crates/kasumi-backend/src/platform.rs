@@ -11,7 +11,10 @@ use tokio::sync::mpsc;
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::CoreEngine;
 
-use crate::lifecycle::{spawn_core, spawn_core_pre_exec};
+use crate::lifecycle::spawn_core;
+// Unix-only: the pre_exec spawn seam (test-core ambient cap raise) has no Windows path.
+#[cfg(unix)]
+use crate::lifecycle::spawn_core_pre_exec;
 use crate::net::ProxyStatus;
 
 pub type Engine = CoreEngine;

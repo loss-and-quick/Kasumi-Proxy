@@ -18,7 +18,11 @@ use crate::commands::{build_profile_config, CommandError};
 use crate::fs::{exists, read_text, remove_file, write_text};
 use crate::fsjson::{read_json, write_text_atomic};
 use crate::platform::{Engine, Platform};
-use crate::proc::{pid_matches_bin, run, spawn_logged, spawn_logged_pre_exec, RunOpts};
+use crate::proc::{pid_matches_bin, run, spawn_logged, RunOpts};
+// `spawn_logged_pre_exec` (and the `spawn_core_pre_exec` built on it) are unix-only:
+// the pre_exec/fork seam has no Windows counterpart.
+#[cfg(unix)]
+use crate::proc::spawn_logged_pre_exec;
 
 /// Map a hex digit to a consonant so the interface name starts with a letter
 /// (kernel rejects names beginning with a digit).
