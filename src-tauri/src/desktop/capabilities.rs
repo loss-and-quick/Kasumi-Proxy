@@ -76,9 +76,7 @@ pub fn is_privileged_data_path() -> bool {
         Ok(true) => true,
         Ok(false) => false,
         Err(e) => {
-            log::warn!(
-                "could not query effective CAP_NET_ADMIN ({e}); data-path caps not applied"
-            );
+            log::warn!("could not query effective CAP_NET_ADMIN ({e}); data-path caps not applied");
             false
         }
     }
@@ -124,8 +122,7 @@ const CAP_NET_RAW_NR: libc::c_uint = Capability::CAP_NET_RAW as libc::c_uint;
 /// contract.
 pub fn raise_net_raw_ambient() -> std::io::Result<()> {
     // SAFETY: one prctl syscall; async-signal-safe per the contract above.
-    let rc =
-        unsafe { libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, CAP_NET_RAW_NR, 0, 0) };
+    let rc = unsafe { libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, CAP_NET_RAW_NR, 0, 0) };
     if rc == 0 {
         Ok(())
     } else {
@@ -151,7 +148,9 @@ mod tests {
     #[test]
     fn setcap_arg_matches_the_keep_set() {
         let arg = file_caps_setcap_arg();
-        let (caps, flags) = arg.rsplit_once('+').expect("setcap arg has a +flags suffix");
+        let (caps, flags) = arg
+            .rsplit_once('+')
+            .expect("setcap arg has a +flags suffix");
         assert_eq!(flags, "ep");
         let listed: std::collections::HashSet<&str> = caps.split(',').collect();
         // One token per kept cap, each the lowercased name `setcap` expects.

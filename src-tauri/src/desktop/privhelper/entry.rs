@@ -101,9 +101,7 @@ fn run() -> anyhow::Result<()> {
         args.gui_pid
     );
     if !crate::desktop::capabilities::is_privileged_data_path() {
-        log::warn!(
-            "not holding the data-path caps (CAP_NET_ADMIN) — tun/routing will fail"
-        );
+        log::warn!("not holding the data-path caps (CAP_NET_ADMIN) — tun/routing will fail");
     }
 
     // Least privilege: stop *holding* more privilege than the data-path needs.
@@ -141,7 +139,9 @@ fn run() -> anyhow::Result<()> {
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
-        // The run dir holds the socket + the helper-owned state; create it as root.
+        // The run dir holds the socket + the helper-owned state. Create it whether
+        // the helper runs as root (pkexec) or as the GUI uid with caps (the wrapper /
+        // self-setcap path); CAP_DAC_OVERRIDE covers a dir a prior root run left.
         tokio::fs::create_dir_all(&args.rundir).await?;
 
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);

@@ -72,9 +72,15 @@ pub async unsafe fn spawn_local_test_core_pre_exec<F>(
 where
     F: FnMut() -> std::io::Result<()> + Send + Sync + 'static,
 {
-    let child =
-        spawn_core_pre_exec(bin, &cfg_path.to_string_lossy(), log_path, dat_dir, true, pre_exec)
-            .await?;
+    let child = spawn_core_pre_exec(
+        bin,
+        &cfg_path.to_string_lossy(),
+        log_path,
+        dat_dir,
+        true,
+        pre_exec,
+    )
+    .await?;
     Ok(Box::new(LocalTestCore { child }))
 }
 

@@ -144,7 +144,10 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
     let uid = unsafe { libc::geteuid() };
 
     let mut cmd = if let Some(bin) = capped_helper() {
-        log::info!("launching capped helper directly (no elevation): {}", bin.display());
+        log::info!(
+            "launching capped helper directly (no elevation): {}",
+            bin.display()
+        );
         let mut c = tokio::process::Command::new(bin);
         c.arg("--socket").arg(&socket);
         c
@@ -189,8 +192,7 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
         .arg(gui_pid.to_string());
     // Detach from the GUI's stdio; the helper logs to stderr inherited by the GUI.
     cmd.stdin(std::process::Stdio::null());
-    cmd.spawn()
-        .context("spawn the privilege helper")?;
+    cmd.spawn().context("spawn the privilege helper")?;
 
     // The elevator may show a prompt; wait (bounded) for the helper to bind + chown
     // the socket, then confirm it with a Ping.
