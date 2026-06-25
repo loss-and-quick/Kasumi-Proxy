@@ -1,16 +1,17 @@
 //! Linux capability handling for the least-privilege desktop data-path helper.
 //!
-//! The helper is still *launched* as root via pkexec, but Phase 2 of the
-//! least-privilege handoff makes it stop *holding* full root at runtime: on startup
-//! it drops every capability from its bounding set except the few the data-path
-//! provably needs. The bounding set is the hard ceiling a child process can ever
-//! acquire, so this also constrains the exec'd cores / tun2socks / `ip` — the
-//! immediate, packaging-free blast-radius win.
+//! The helper is launched with root or with the data-path capabilities (root via
+//! pkexec, or caps via a NixOS `security.wrappers` setcap wrapper). Either way it
+//! stops *holding* more privilege than the data-path needs: on startup it drops
+//! every capability from its bounding set except the few the data-path provably
+//! needs. The bounding set is the hard ceiling a child process can ever acquire,
+//! so this also constrains the exec'd cores / tun2socks / `ip` — the
+//! blast-radius win, packaging-free for the root path.
 //!
-//! Phase 3 (added later) layers an ambient `CAP_NET_RAW` raise for the test cores
-//! so their uplink bind survives exec once the helper is caps-only rather than
-//! root. All of this is a no-op for a non-root run (in-process dev): a process with
-//! no privileges has nothing to drop.
+//! An ambient `CAP_NET_RAW` raise is granted to the test cores so their uplink
+//! bind survives exec into a binary with no file caps of its own. All of this is a
+//! no-op for a non-privileged run (in-process dev): a process with no privileges
+//! has nothing to drop.
 
 use caps::{CapSet, Capability, CapsHashSet};
 
@@ -27,8 +28,8 @@ use caps::{CapSet, Capability, CapsHashSet};
 ///   (`~/.local/share/kasumi-proxy/*.log`) and creates run_dir under the user's
 ///   `0700` `XDG_RUNTIME_DIR`. Root is subject to ordinary DAC checks without it,
 ///   so the data-path would break the moment a log file is created. This retires
-///   only once Phase 4b restructures datadir/log + run_dir ownership (then `CHOWN`
-///   goes too).
+///   only once datadir/log + run_dir ownership is restructured so the helper owns
+///   its own writable dirs (then `CHOWN` goes too).
 ///
 /// Kept minimal and auditable: every entry is justified above, and the set is a
 /// strict subset of root's ~40 caps.
@@ -71,10 +72,10 @@ pub fn drop_unneeded_bounding() -> anyhow::Result<CapsHashSet> {
 /// `PR_CAP_AMBIENT_RAISE` (the test-core uplink grant) requires the capability to
 /// be present in *both* the permitted and the inheritable sets. A pkexec-launched
 /// root process starts with an empty inheritable set, so without this the ambient
-/// raise would fail with `EPERM`. Under a future Phase-4 file-cap launcher
-/// (`security.wrappers` with `+i`) the inheritable set is already populated, so
-/// this is a harmless idempotent no-op. Idempotent in general: if `CAP_NET_RAW` is
-/// already inheritable nothing changes.
+/// raise would fail with `EPERM`. Under a file-cap launcher (`security.wrappers`
+/// with `+i`) the inheritable set is already populated, so this is a harmless
+/// idempotent no-op. Idempotent in general: if `CAP_NET_RAW` is already
+/// inheritable nothing changes.
 ///
 /// A process may add to its inheritable set any capability already in its
 /// permitted set (root: permitted = bounding ⊇ `NET_RAW`), so this needs no
@@ -88,6 +89,31 @@ pub fn seed_test_core_inheritable() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("seed CAP_NET_RAW into inheritable set: {e}"))?;
     }
     Ok(())
+}
+
+/// Whether the current process holds an effective `CAP_NET_ADMIN` — the
+/// capability tun creation + `ip` routing + tun2socks' fwmark all need, so it is
+/// the reliable "this process owns the privileged data-path" signal. Replaces the
+/// old `geteuid() == 0` check so the helper's self-reduction (bounding drop,
+/// inheritable seed) runs correctly under a **non-root file-cap launcher**
+/// (NixOS `security.wrappers` setcap wrapper runs the helper as the GUI uid with
+/// caps, where `geteuid() != 0` yet the data-path caps are present).
+///
+/// Under root-via-pkexec this reads true (root has all caps), so behaviour is
+/// unchanged; under an unprivileged in-process dev run it reads false. Fails closed
+/// on a query error (the helper then skips self-reduction rather than running a
+/// half-privileged data-path).
+pub fn is_privileged_data_path() -> bool {
+    match caps::has_cap(None, CapSet::Effective, Capability::CAP_NET_ADMIN) {
+        Ok(true) => true,
+        Ok(false) => false,
+        Err(e) => {
+            log::warn!(
+                "could not query effective CAP_NET_ADMIN ({e}); data-path caps not applied"
+            );
+            false
+        }
+    }
 }
 
 /// Whether the current process holds an effective `CAP_NET_RAW` — the real
@@ -139,7 +165,7 @@ const CAP_NET_RAW_NR: libc::c_uint = Capability::CAP_NET_RAW as libc::c_uint;
 /// Needs `CAP_NET_RAW` in both permitted and inheritable (see
 /// [`seed_test_core_inheritable`]). Under root the raise is technically inert
 /// (the exec'd child already inherits all bounding caps) but is load-bearing once
-/// Phase 4 makes the helper caps-only.
+/// the helper runs caps-only rather than as root.
 ///
 /// # Async-signal-safety
 ///
@@ -194,6 +220,13 @@ mod tests {
     #[test]
     fn has_effective_net_raw_does_not_panic() {
         let _ = has_effective_net_raw();
+    }
+
+    // Same property for the data-path-owner gate: must not panic regardless of how
+    // the test is launched (root, caps, or unprivileged dev).
+    #[test]
+    fn is_privileged_data_path_does_not_panic() {
+        let _ = is_privileged_data_path();
     }
 
     // Seeding is idempotent: running it twice (and under any starting inheritable

@@ -248,8 +248,9 @@ impl Default for DesktopPlatform {
 /// This is the real precondition the test-core bind needs. It checks the effective
 /// `CAP_NET_RAW` directly (which reads true under a root *or* caps-only helper
 /// whose bounding set keeps `NET_RAW`, and false for unprivileged dev) instead of
-/// the old `geteuid() == 0` proxy — so the gate stays honest once Phase 4 makes the
-/// helper caps-only rather than root. Fails closed on a query error (see
+/// the old `geteuid() == 0` proxy — so the gate stays honest whether the helper is
+/// launched as root (pkexec) or as the GUI uid with file caps (NixOS wrappers).
+/// Fails closed on a query error (see
 /// [`capabilities::has_effective_net_raw`]).
 fn test_core_can_bind() -> bool {
     #[cfg(target_os = "linux")]
@@ -487,10 +488,10 @@ impl Platform for DesktopPlatform {
 
         // Linux: if we injected the uplink bind the test core needs CAP_NET_RAW to
         // honor it, so raise it into the forked child's ambient set before exec
-        // (no-op under root where the child already inherits all bounding caps, but
-        // load-bearing once Phase 4 makes the helper caps-only). Fails closed if the
-        // raise errors, so a test core never silently runs without the bind. Windows
-        // is LocalSystem (all caps) and the pre_exec seam is unix-only, so it spawns
+        // (inert under root where the child already inherits all bounding caps, but
+        // load-bearing when the helper runs caps-only). Fails closed if the raise
+        // errors, so a test core never silently runs without the bind. Windows is
+        // LocalSystem (all caps) and the pre_exec seam is unix-only, so it spawns
         // plainly there.
         #[cfg(target_os = "linux")]
         if bound {
