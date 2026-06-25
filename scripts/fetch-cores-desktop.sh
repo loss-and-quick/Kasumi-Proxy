@@ -27,44 +27,66 @@ OUT="$ROOT/src-tauri/binaries"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-need() { command -v "$1" >/dev/null 2>&1 || { echo "❌ missing dependency: $1" >&2; exit 1; }; }
+need() { command -v "$1" >/dev/null 2>&1 || {
+	echo "❌ missing dependency: $1" >&2
+	exit 1
+}; }
 need curl
 need unzip
 need tar
+need go
 
 # Resolve the target triple (default to the host's, as rustc reports it).
 TARGET="${1:-$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')}"
-[ -n "$TARGET" ] || { echo "❌ no target triple given and rustc not on PATH" >&2; exit 1; }
+[ -n "$TARGET" ] || {
+	echo "❌ no target triple given and rustc not on PATH" >&2
+	exit 1
+}
 
 # Map the triple → the per-core release asset slugs + the bundle file extension.
 case "$TARGET" in
-	x86_64-unknown-linux-gnu)
-		XRAY_ASSET="Xray-linux-64.zip"
-		T2S_ASSET="tun2socks-linux-amd64.zip"
-		SB_ASSET="sing-box-%s-linux-amd64.tar.gz"; SB_KIND="tgz"
-		CRONET_LIB="libcronet.so"
-		EXT="" ;;
-	x86_64-pc-windows-msvc)
-		XRAY_ASSET="Xray-windows-64.zip"
-		T2S_ASSET="tun2socks-windows-amd64.zip"
-		SB_ASSET="sing-box-%s-windows-amd64.zip"; SB_KIND="zip"
-		CRONET_LIB="libcronet.dll"
-		EXT=".exe" ;;
-	*)
-		echo "❌ unsupported desktop target: $TARGET" >&2
-		echo "   supported: x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc" >&2
-		exit 1 ;;
+x86_64-unknown-linux-gnu)
+	XRAY_ASSET="Xray-linux-64.zip"
+	T2S_ASSET="tun2socks-linux-amd64.zip"
+	SB_ASSET="sing-box-%s-linux-amd64.tar.gz"
+	SB_KIND="tgz"
+	CRONET_LIB="libcronet.so"
+	G2S_GOOS="linux"
+	G2S_GOARCH="amd64"
+	EXT=""
+	;;
+x86_64-pc-windows-msvc)
+	XRAY_ASSET="Xray-windows-64.zip"
+	T2S_ASSET="tun2socks-windows-amd64.zip"
+	SB_ASSET="sing-box-%s-windows-amd64.zip"
+	SB_KIND="zip"
+	CRONET_LIB="libcronet.dll"
+	G2S_GOOS="windows"
+	G2S_GOARCH="amd64"
+	EXT=".exe"
+	;;
+*)
+	echo "❌ unsupported desktop target: $TARGET" >&2
+	echo "   supported: x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc" >&2
+	exit 1
+	;;
 esac
 
 mkdir -p "$OUT"
 
-dl() { echo "  ↓ $1"; curl -fL --retry 3 -o "$2" "$1"; }
+dl() {
+	echo "  ↓ $1"
+	curl -fL --retry 3 -o "$2" "$1"
+}
 
 # Take the first match only — `find -exec cp` would silently clobber on multiple hits.
 copy_one() { # <search-dir> <name-glob> <dest>
 	local src
 	src=$(find "$1" -type f -name "$2" | head -n1)
-	[ -n "$src" ] || { echo "❌ no match for '$2' under $1" >&2; exit 1; }
+	[ -n "$src" ] || {
+		echo "❌ no match for '$2' under $1" >&2
+		exit 1
+	}
 	cp "$src" "$3"
 }
 
@@ -100,6 +122,24 @@ copy_one "$TMP/sb" "sing-box$EXT" "$OUT/sing-box-$TARGET$EXT"
 # stage it next to sing-box — no target suffix (it's loaded by name, like wintun).
 copy_one "$TMP/sb" "$CRONET_LIB" "$OUT/$CRONET_LIB"
 
+# ---- geodat2srs (no release artifacts — build from source) ----
+# The official geodat2srs repo has no tags; the pinned commit is our single
+# source of truth. Pull the tarball at that rev (fast, no git needed).
+echo "• building geodat2srs from source (rev ${GEODAT2SRS_REV:-unknown})"
+GEODAT2SRS_URL="https://github.com/loss-and-quick/geodat2srs/archive/${GEODAT2SRS_REV}.tar.gz"
+dl "$GEODAT2SRS_URL" "$TMP/g2s.tar.gz"
+mkdir -p "$TMP/g2s"
+tar -xzf "$TMP/g2s.tar.gz" -C "$TMP/g2s"
+# GitHub archive expands to <repo>-<rev>/; find the single top-level dir.
+G2S_SRC=$(find "$TMP/g2s" -mindepth 1 -maxdepth 1 -type d | head -1)
+[ -n "$G2S_SRC" ] || {
+	echo "❌ geodat2srs source not found" >&2
+	exit 1
+}
+# CGO_ENABLED=0 → fully static binary (pure Go, portable across distros).
+cd "$G2S_SRC" && CGO_ENABLED=0 GOOS="$G2S_GOOS" GOARCH="$G2S_GOARCH" go build -o "$OUT/geodat2srs-$TARGET$EXT" .
+echo "  geodat2srs ($(du -h "$OUT/geodat2srs-$TARGET$EXT" | cut -f1))"
+
 # ---- wintun (Windows only) ----
 # tun2socks loads wintun.dll from its own directory (the xray data-path needs it).
 # sing-box embeds its own copy, so this is only for the tun2socks path. Staged
@@ -114,12 +154,18 @@ if [ -n "$EXT" ]; then
 	copy_one "$TMP/wintun/wintun/bin/amd64" "wintun.dll" "$OUT/wintun.dll"
 fi
 
-[ -n "$EXT" ] || chmod 755 "$OUT/xray-$TARGET" "$OUT/tun2socks-$TARGET" "$OUT/sing-box-$TARGET"
+[ -n "$EXT" ] || chmod 755 "$OUT/xray-$TARGET" "$OUT/tun2socks-$TARGET" "$OUT/sing-box-$TARGET" "$OUT/geodat2srs-$TARGET"
 
 echo "✅ staged → src-tauri/binaries/ (suffix $TARGET$EXT):"
-for c in xray sing-box tun2socks; do
+for c in xray sing-box tun2socks geodat2srs; do
 	f="$OUT/$c-$TARGET$EXT"
 	[ -f "$f" ] && printf '   %-12s %s\n' "$c" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $c"
 done
-{ f="$OUT/$CRONET_LIB"; [ -f "$f" ] && printf '   %-12s %s\n' "$CRONET_LIB" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $CRONET_LIB"; }
-[ -z "$EXT" ] || { f="$OUT/wintun.dll"; [ -f "$f" ] && printf '   %-12s %s\n' "wintun.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: wintun.dll"; }
+{
+	f="$OUT/$CRONET_LIB"
+	[ -f "$f" ] && printf '   %-12s %s\n' "$CRONET_LIB" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $CRONET_LIB"
+}
+[ -z "$EXT" ] || {
+	f="$OUT/wintun.dll"
+	[ -f "$f" ] && printf '   %-12s %s\n' "wintun.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: wintun.dll"
+}

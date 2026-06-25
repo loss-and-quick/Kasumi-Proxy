@@ -28,9 +28,11 @@ let
     if m == null then throw "core version ${name} not found in core-versions.sh" else builtins.head m;
 
   singboxVer = coreVersion "SINGBOX_VERSION";
+  # pin a commit on main (core-versions.sh).
+  geodat2srsRev = coreVersion "GEODAT2SRS_REV";
 in
 {
-  inherit appVersion singboxVer;
+  inherit appVersion singboxVer geodat2srsRev;
   xrayVer = coreVersion "XRAY_VERSION";
   tun2socksVer = coreVersion "TUN2SOCKS_VERSION";
   singboxVerBare = lib.removePrefix "v" singboxVer;
