@@ -55,6 +55,8 @@ let
     cargoRoot = root;
     binaryName = "kasumi-desktop";
     inherit frontend;
+    # src-tauri/tauri.conf.json pins version to a "0.0.0" placeholder; override
+    # it with the real appVersion so the built app reports the right version.
     extraTauriConfig = {
       version = version.appVersion;
     };
