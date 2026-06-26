@@ -542,11 +542,16 @@ impl Platform for DesktopPlatform {
         // Running privileged (the helper), bind the test core's outbound to the
         // physical uplink so it escapes an active tun at the socket layer
         // (SO_BINDTODEVICE / bind_interface) — no per-test OS routing, no collision
-        // with the active server's routes. When no tun is up the uplink *is* the
-        // default route, so the bind is a harmless no-op. (In-process dev runs
-        // unprivileged: skip the bind — it'd need CAP_NET_RAW and there's no managed
-        // tun to escape anyway.)
-        let bound = can_bind_uplink() && inject_uplink_bind(engine, cfg_path).await;
+        // with the active server's routes. Only do this while a data-path tun is
+        // actually up: the bind is NOT a free no-op on a multi-homed host. With two
+        // NICs on one subnet, SO_BINDTODEVICE to one of them breaks the return path
+        // (the reply arrives on the other and is dropped), so an unconditional bind
+        // makes every test time out even with the VPN off. Bind only when there's a
+        // tun to escape; otherwise let the default route do its job. (In-process dev
+        // runs unprivileged and skips the bind regardless.)
+        let bound = can_bind_uplink()
+            && self.running_engine().await.is_some()
+            && inject_uplink_bind(engine, cfg_path).await;
         let bin = self.core_bin(engine).to_owned();
         let dat = self.p.backend.dat_dir.to_string_lossy().into_owned();
 
