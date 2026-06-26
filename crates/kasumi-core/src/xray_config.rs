@@ -1,7 +1,7 @@
 //! Build a complete Xray `config.json` from a Profile + AdvancedSettings.
 //! Builds a `serde_json::Value` directly. The emitted config is validated against
 //! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
-//! invariants are covered by the unit tests below.
+//! invariants (e.g. inbound/routing shape) are covered by the unit tests below.
 
 use serde_json::{json, Map, Value};
 
@@ -10,8 +10,8 @@ use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
-    AdvancedSettings, RoutingRule, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
-    DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+    force_socks_port, AdvancedSettings, RoutingRule, DEFAULT_LOCAL_HTTP_PORT,
+    DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
 };
 
 fn parse_json_safe(s: &str) -> Option<Value> {
@@ -654,20 +654,14 @@ fn build_routing(
     resolve: &dyn Fn(&str) -> String,
 ) -> Value {
     let domain_strategy = wire(&s.domain_strategy);
+    // Bypass-geo rule for the always-on `force-in` inbound — pushed first so traffic
+    // arriving there reaches `proxy` ahead of the geo/user rules.
     let force_rule = json!({ "type": "field", "inboundTag": ["force-in"], "network": "tcp,udp", "outboundTag": "proxy" });
-    let has_force = s
-        .app_filter
-        .values()
-        .any(|m| *m == crate::state::AppFilterMode::ForceProxy);
     let dns_rule = json!({ "type": "field", "inboundTag": ["socks-in", "http-in"], "port": 53, "outboundTag": dns_outbound_tag });
     let final_rule = json!({ "type": "field", "inboundTag": ["socks-in", "http-in"], "network": "tcp,udp", "outboundTag": "proxy" });
 
     if s.routing_mode == crate::state::RoutingMode::Rules && !routing_rules.is_empty() {
-        let mut rules: Vec<Value> = Vec::new();
-        if has_force {
-            rules.push(force_rule);
-        }
-        rules.push(dns_rule);
+        let mut rules: Vec<Value> = vec![force_rule, dns_rule];
         for r in routing_rules.iter().filter(|r| r.enabled) {
             rules.push(build_rule_object(r, resolve));
         }
@@ -678,11 +672,7 @@ fn build_routing(
     if s.routing_mode == crate::state::RoutingMode::Custom {
         if let Some(cr) = s.custom_routing.as_deref().filter(|x| !x.trim().is_empty()) {
             if let Some(Value::Array(parsed)) = parse_json_safe(cr) {
-                let mut rules: Vec<Value> = Vec::new();
-                if has_force {
-                    rules.push(force_rule);
-                }
-                rules.push(dns_rule);
+                let mut rules: Vec<Value> = vec![force_rule, dns_rule];
                 rules.extend(parsed);
                 rules.push(final_rule);
                 return json!({ "domainStrategy": domain_strategy, "rules": rules });
@@ -690,11 +680,7 @@ fn build_routing(
         }
     }
 
-    let mut rules: Vec<Value> = Vec::new();
-    if has_force {
-        rules.push(force_rule);
-    }
-    rules.push(dns_rule);
+    let mut rules: Vec<Value> = vec![force_rule, dns_rule];
     if s.fake_dns {
         rules.push(json!({ "type": "field", "ip": [FAKEIP_INET4_RANGE], "outboundTag": "proxy" }));
     }
@@ -732,11 +718,7 @@ pub fn build_xray_config(
 
     let socks_port = s.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
     let http_port = s.local_http_port.unwrap_or(DEFAULT_LOCAL_HTTP_PORT);
-    let force_port = socks_port + 2;
-    let has_force = s
-        .app_filter
-        .values()
-        .any(|m| *m == crate::state::AppFilterMode::ForceProxy);
+    let force_port = force_socks_port(socks_port);
     let dns_outbound_tag = if s.dns_via_proxy { "proxy" } else { "direct" };
     let listen = if s.allow_non_localhost {
         "0.0.0.0"
@@ -780,12 +762,13 @@ pub fn build_xray_config(
             "settings": http_settings,
         }),
     ];
-    if has_force {
-        inbounds.push(json!({
-            "tag": "force-in", "port": force_port, "listen": listen, "protocol": "socks",
-            "settings": { "auth": "noauth", "udp": true },
-        }));
-    }
+    // Always-on bypass-geo inbound: routes straight to `proxy` (see `force_rule`),
+    // used by the app's own fetches and per-app force-proxy. Localhost-only and
+    // noauth regardless of `allow_non_localhost` — it must never be reachable off-box.
+    inbounds.push(json!({
+        "tag": "force-in", "port": force_port, "listen": "127.0.0.1", "protocol": "socks",
+        "settings": { "auth": "noauth", "udp": true },
+    }));
 
     let mut outbounds = vec![outbound];
     outbounds.extend(po.outbounds.iter().cloned());
@@ -804,6 +787,66 @@ pub fn build_xray_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample() -> Profile {
+        crate::share::parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None)
+            .unwrap()
+    }
+
+    #[test]
+    fn force_in_inbound_is_always_present_and_localhost_only() {
+        let p = sample();
+        let cfg = build_xray_config(
+            &p,
+            &AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+        )
+        .unwrap();
+        let force = cfg["inbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["tag"] == "force-in")
+            .expect("force-in inbound present");
+        // Internal bypass-geo port: localhost-only and noauth, never off-box.
+        assert_eq!(force["listen"], "127.0.0.1");
+        assert_eq!(force["settings"]["auth"], "noauth");
+        // Its rule routes straight to proxy and is the first routing rule.
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+        assert_eq!(rules[0]["inboundTag"][0], "force-in");
+        assert_eq!(rules[0]["outboundTag"], "proxy");
+    }
+
+    #[test]
+    fn force_in_rule_outranks_a_geoip_direct_rule() {
+        // A user "geoip:ru → direct" rule must not capture force-in traffic.
+        let p = sample();
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let geo = RoutingRule {
+            id: "g".into(),
+            remarks: "ru".into(),
+            enabled: true,
+            outbound_tag: "direct".into(),
+            domain: None,
+            ip: Some(vec!["geoip:ru".into()]),
+            port: None,
+            network: None,
+            protocol: None,
+        };
+        let cfg = build_xray_config(&p, &s, std::slice::from_ref(&geo), std::slice::from_ref(&p))
+            .unwrap();
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+        let force_idx = rules
+            .iter()
+            .position(|r| r["inboundTag"][0] == "force-in")
+            .unwrap();
+        let geo_idx = rules.iter().position(|r| r["ip"][0] == "geoip:ru").unwrap();
+        assert!(force_idx < geo_idx, "force-in rule must precede geoip:ru");
+    }
 
     #[test]
     fn socks_auth_gates_the_local_inbounds() {

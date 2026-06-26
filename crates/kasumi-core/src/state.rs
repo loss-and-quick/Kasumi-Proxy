@@ -14,6 +14,15 @@ use crate::profile::{Profile, Protocol};
 pub const DEFAULT_LOCAL_SOCKS_PORT: u16 = 10808;
 pub const DEFAULT_LOCAL_HTTP_PORT: u16 = 10809;
 
+/// Port of the `force-in` socks inbound, derived from the user-facing socks port.
+/// This inbound routes straight to the `proxy` outbound, bypassing the geo rules —
+/// used for the app's own fetches (subscriptions/assets) when the proxy is wanted
+/// regardless of routing. Kept here so the `+2` offset has a single source for the
+/// core config builders and the platform `proxy_status`.
+pub const fn force_socks_port(socks: u16) -> u16 {
+    socks + 2
+}
+
 // Default probe URLs used when delayTestUrl/speedTestUrl are unset.
 pub const DEFAULT_DELAY_TEST_URL: &str = "https://www.gstatic.com/generate_204";
 pub const DEFAULT_SPEED_TEST_URL: &str = "http://speed.cloudflare.com/__down?bytes=10000000";
