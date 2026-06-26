@@ -1,9 +1,9 @@
 # Bundled Binaries
 
-These binaries are **not committed to git** — the cores are fetched by
-`scripts/fetch-cores-android.sh` into `bin/arm64-v8a/` and `bin/x86_64/`, and the
-`kasumi-proxy` daemon is cross-built per arch by
-`scripts/build-daemon-android.sh`. Pinned core versions live in
+These binaries are **not committed to git** — the cores and the `geodat2srs`
+converter are fetched/built by `scripts/fetch-cores.sh android` into
+`bin/arm64-v8a/` and `bin/x86_64/`, and the `kasumi-proxy` daemon is cross-built
+per arch by `scripts/build-daemon-android.sh`. Pinned core versions live in
 `scripts/core-versions.sh`; override via env vars
 `XRAY_VERSION` / `TUN2SOCKS_VERSION` / `SINGBOX_VERSION`.
 
@@ -36,5 +36,5 @@ These binaries are **not committed to git** — the cores are fetched by
 ## Fetching
 
 ```sh
-scripts/fetch-cores-android.sh
+scripts/fetch-cores.sh android
 ```

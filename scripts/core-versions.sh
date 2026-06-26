@@ -1,20 +1,21 @@
 # shellcheck shell=bash
-# Single source of truth for the pinned core versions, sourced by both
-# fetch-cores-android.sh and fetch-cores-desktop.sh. Each value is
-# overridable via the environment (the release workflow passes the upstream
-# latest when bumping). release.yml/nightly.yml grep these defaults to detect
-# upstream updates — keep the `NAME="${NAME:-vX}"` shape.
+# Single source of truth for the pinned core versions, sourced by fetch-cores.sh
+# (and update-core-hashes.sh / nix). Each value is overridable via the environment
+# (the release workflow passes the upstream latest when bumping). release.yml/
+# nightly.yml grep these defaults to detect upstream updates — keep the
+# `NAME="${NAME:-vX}"` shape.
 XRAY_VERSION="${XRAY_VERSION:-v26.3.27}"
 TUN2SOCKS_VERSION="${TUN2SOCKS_VERSION:-v2.6.0}"
 # sing-box runs Hysteria2/TUIC profiles (second core). Pin a 1.13.x line whose
 # config schema matches singbox_config.rs (mixed inbound, tls/utls, hysteria2/tuic).
 SINGBOX_VERSION="${SINGBOX_VERSION:-v1.13.13}"
 # geodat2srs converts geoip/geosite .dat → sing-box .srs rule-sets. Unlike the
-# cores above it ships NO release artifacts — the Android zip cross-builds it
-# from source (scripts/package-release.sh) and the desktop nix/Tauri builds do
-# the same (nix/cores.nix, scripts/fetch-cores-desktop.sh). It has no tags, so
-# pin the commit on main directly. Its go.mod pins sing-box to the same line as
-# SINGBOX_VERSION — bump them together.
+# cores above it ships NO release artifacts — it is built from source at this rev
+# (CGO off, static): scripts/fetch-cores.sh builds it for both the Android module
+# and the desktop Tauri/CI bundles, and the desktop `nix build` uses the matching
+# buildGoModule derivation in nix/cores.nix. It has no tags, so pin the commit on
+# main directly. Its go.mod pins sing-box to the same line as SINGBOX_VERSION —
+# bump them together.
 GEODAT2SRS_REV="${GEODAT2SRS_REV:-abe704106a1ebafa5e9fedfaa3417a9d73702491}"
 
 # Windows only: the wintun driver DLL that sing-box (tun inbound) and tun2socks
