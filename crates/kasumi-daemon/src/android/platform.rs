@@ -25,7 +25,7 @@ use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, re
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{
-    AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
+    force_socks_port, AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
 };
 
 use super::network::run_watcher;
@@ -515,6 +515,7 @@ impl Platform for AndroidPlatform {
             running,
             socks_port: port,
             http_port: http_port().await,
+            force_port: force_socks_port(port),
         })
     }
 

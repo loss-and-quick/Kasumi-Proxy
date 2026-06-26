@@ -140,6 +140,7 @@ mod tests {
                 running: true,
                 socks_port: 10808,
                 http_port: 10809,
+                force_port: 10810,
             })
         }
         fn tune_config(&self, _engine: Engine, _config: &mut Value) {

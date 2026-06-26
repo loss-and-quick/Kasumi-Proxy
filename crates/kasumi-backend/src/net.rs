@@ -19,6 +19,11 @@ pub struct ProxyStatus {
     pub running: bool,
     pub socks_port: u16,
     pub http_port: u16,
+    /// The core's `force-in` socks port: routes straight to the proxy outbound,
+    /// bypassing the geo rules. The app's own fetches use this so a subscription on
+    /// a geo-`direct` host (e.g. a RU-hosted panel the local ISP blocks) still goes
+    /// through the tunnel when proxy mode is wanted.
+    pub force_port: u16,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -73,9 +78,12 @@ pub async fn fetch_url(url: &str, opts: FetchUrlOptions) -> anyhow::Result<Vec<u
         let Some(proxy) = proxy else {
             anyhow::bail!("proxy not running");
         };
+        // Force-proxy: route the attempt through `force-in`, which bypasses the geo
+        // rules — a proxied fetch should always traverse the tunnel, never be sent
+        // `direct` by a `geoip:ru`-style rule. Auto still falls back to direct below.
         match fetch_once(
             url,
-            Some(socks_url(proxy.socks_port)),
+            Some(socks_url(proxy.force_port)),
             ua,
             opts.allow_insecure,
             timeout,
@@ -247,6 +255,7 @@ mod tests {
                 running: false,
                 socks_port: 1080,
                 http_port: 1081,
+                force_port: 1082,
             }),
             ..Default::default()
         };

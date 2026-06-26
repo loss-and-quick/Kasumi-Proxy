@@ -28,7 +28,9 @@ use kasumi_backend::platform::spawn_local_test_core_pre_exec;
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
-use kasumi_core::state::{AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
+use kasumi_core::state::{
+    force_socks_port, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
+};
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
@@ -425,6 +427,7 @@ impl Platform for DesktopPlatform {
             running,
             socks_port: port,
             http_port: self.http_port().await,
+            force_port: force_socks_port(port),
         })
     }
 
