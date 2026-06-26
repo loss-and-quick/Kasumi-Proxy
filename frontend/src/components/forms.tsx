@@ -6,9 +6,17 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+
+/**
+ * Number inputs mutate their value on wheel scroll while focused, even once the
+ * cursor has left them; blur on wheel so the event falls through to page scroll.
+ * Shared so every numeric `<input>` (Field and one-off inline ones) behaves alike.
+ */
+export const blurOnWheel = (e: WheelEvent<HTMLInputElement>) => e.currentTarget.blur();
 
 type Opt<T extends string> = T | { value: T; label: string };
 /** A group renders a non-selectable header above its options (replaces <optgroup>). */
@@ -99,9 +107,7 @@ export const Field = ({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        // Number inputs mutate their value on wheel scroll while focused, even
-        // once the cursor has left them; blur on wheel so the page scrolls instead.
-        onWheel={type === "number" ? (e) => e.currentTarget.blur() : undefined}
+        onWheel={type === "number" ? blurOnWheel : undefined}
       />
     )}
     {error ? (

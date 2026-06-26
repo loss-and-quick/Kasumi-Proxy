@@ -3,7 +3,7 @@
 // Runtime log viewer with copy / refresh.
 // ============================================================
 import { useCallback, useEffect, useState } from "react";
-import { Btn, Dialog, Select, Sheet } from "../../components";
+import { Btn, blurOnWheel, Dialog, Select, Sheet } from "../../components";
 import { useT } from "../../i18n";
 import type { LogTarget } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
@@ -84,7 +84,7 @@ export default function Logs({ onClose }: { onClose: () => void }) {
               type="number"
               value={lines}
               onChange={(e) => setLines(Number(e.target.value || 300))}
-              onWheel={(e) => e.currentTarget.blur()}
+              onWheel={blurOnWheel}
               style={{ width: 100 }}
             />
           </div>
