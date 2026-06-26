@@ -1,12 +1,12 @@
 # The desktop pipeline: the React UI (bun2nix), the crane-tauri app, and the
-# GTK-wrapped `kasumi-desktop` binary with the cores + tray lib wired in.
+# GTK-wrapped `kasumi-desktop` binary with the bundled binaries + tray lib wired in.
 {
   pkgs,
   root,
   crane-tauri,
   toolchain,
   version,
-  cores,
+  binaries,
 }:
 let
   inherit (toolchain) lib craneLib tauriLibs;
@@ -101,12 +101,12 @@ let
       pkgs.copyDesktopItems
     ];
     buildInputs = tauriLibs;
-    # Point the unprivileged GUI at the bundled cores (it reads KASUMI_BIN_DIR and
-    # forwards it to the root helper it spawns; --set-default lets a dev override).
-    # Put iproute2 on PATH too: the GUI itself runs `ip monitor route` for the
-    # uplink watch, and on NixOS there is no /usr/sbin/ip.
+    # Point the unprivileged GUI at the bundled binaries (it reads KASUMI_BIN_DIR
+    # and forwards it to the root helper it spawns; --set-default lets a dev
+    # override). Put iproute2 on PATH too: the GUI itself runs `ip monitor route`
+    # for the uplink watch, and on NixOS there is no /usr/sbin/ip.
     preFixup = ''
-      gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${cores.desktopCores}/bin")
+      gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${binaries.desktopBinaries}/bin")
       gappsWrapperArgs+=(--prefix PATH : "${lib.makeBinPath [ pkgs.iproute2 ]}")
     '';
     installPhase = ''

@@ -22,7 +22,7 @@ OUT="${1:-$ROOT/build/$("$ROOT/scripts/artifact-name.sh" module)}"
 
 echo "→ [1/4] Fetching cores + geodat2srs…"
 if [ ! -f "$ROOT/module/bin/arm64-v8a/xray" ] || [ ! -f "$ROOT/module/bin/arm64-v8a/geodat2srs" ] || [ "${FORCE_FETCH:-0}" = "1" ]; then
-	bash "$ROOT/scripts/fetch-cores.sh" android
+	bash "$ROOT/scripts/fetch-binaries.sh" android
 else
 	echo "  bin/ already populated (set FORCE_FETCH=1 to re-download)"
 fi

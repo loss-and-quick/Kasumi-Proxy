@@ -1,5 +1,5 @@
 # Versions read from the single sources of truth: the product version from
-# module/module.prop, the pinned core versions from scripts/core-versions.sh.
+# module/module.prop, the pinned binary versions from scripts/binary-versions.sh.
 { pkgs, root }:
 let
   lib = pkgs.lib;
@@ -14,29 +14,29 @@ let
     in
     lib.removePrefix "v" (lib.removePrefix "version=" propLine);
 
-  # Pinned core versions, shared with the fetch scripts so the nix desktop build
+  # Pinned binary versions, shared with the fetch scripts so the nix desktop build
   # ships the SAME versions as the Android zip / CI installers. A line reads
   # `NAME="${NAME:-vX.Y.Z}"`; pull the default between `:-` and `}`.
-  coreVersion =
+  pinnedVersion =
     name:
     let
       line = lib.findFirst (l: lib.hasPrefix "${name}=" l) "" (
-        lib.splitString "\n" (builtins.readFile (root + "/scripts/core-versions.sh"))
+        lib.splitString "\n" (builtins.readFile (root + "/scripts/binary-versions.sh"))
       );
       m = builtins.match ".*:-([^}\"]+).*" line;
     in
-    if m == null then throw "core version ${name} not found in core-versions.sh" else builtins.head m;
+    if m == null then throw "version ${name} not found in binary-versions.sh" else builtins.head m;
 
-  singboxVer = coreVersion "SINGBOX_VERSION";
-  # pin a commit on main (core-versions.sh).
-  geodat2srsRev = coreVersion "GEODAT2SRS_REV";
+  singboxVer = pinnedVersion "SINGBOX_VERSION";
+  # pin a commit on main (binary-versions.sh).
+  geodat2srsRev = pinnedVersion "GEODAT2SRS_REV";
 in
 {
   inherit appVersion singboxVer geodat2srsRev;
-  # Exposed so nix/cores.nix can resolve a core's pinned tag from the version_var
-  # named in scripts/cores.json (the shared asset catalog).
-  inherit coreVersion;
-  xrayVer = coreVersion "XRAY_VERSION";
-  tun2socksVer = coreVersion "TUN2SOCKS_VERSION";
+  # Exposed so nix/binaries.nix can resolve a binary's pinned tag from the
+  # version_var named in scripts/binaries.json (the shared asset catalog).
+  inherit pinnedVersion;
+  xrayVer = pinnedVersion "XRAY_VERSION";
+  tun2socksVer = pinnedVersion "TUN2SOCKS_VERSION";
   singboxVerBare = lib.removePrefix "v" singboxVer;
 }

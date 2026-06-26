@@ -22,8 +22,8 @@ before trusting.
 - `module/` — the installable Android zip root (Magisk dictates `module.prop`, `customize.sh`,
   `service.sh`, `action.sh`, `uninstall.sh`, `META-INF/` at the archive root); `package-release.sh`
   zips from inside it.
-- `scripts/` — `fetch-cores.sh android|desktop` (cores, asset layout in `cores.json`, pins in
-  `core-versions.sh`), `build-daemon-android.sh` (cross-builds the Rust daemon),
+- `scripts/` — `fetch-binaries.sh android|desktop` (cores + extras, asset layout in `binaries.json`, pins in
+  `binary-versions.sh`), `build-daemon-android.sh` (cross-builds the Rust daemon),
   `build-webroot.sh` (UI → `module/webroot/`), `package-release.sh` (assemble zip).
 
 ## Hard rules

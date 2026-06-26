@@ -1,6 +1,6 @@
 # shellcheck shell=bash
-# Single source of truth for the pinned core versions, sourced by fetch-cores.sh
-# (and update-core-hashes.sh / nix). Each value is overridable via the environment
+# Single source of truth for the pinned binary versions, sourced by fetch-binaries.sh
+# (and update-binary-hashes.sh / nix). Each value is overridable via the environment
 # (the release workflow passes the upstream latest when bumping). release.yml/
 # nightly.yml grep these defaults to detect upstream updates — keep the
 # `NAME="${NAME:-vX}"` shape.
@@ -11,9 +11,9 @@ TUN2SOCKS_VERSION="${TUN2SOCKS_VERSION:-v2.6.0}"
 SINGBOX_VERSION="${SINGBOX_VERSION:-v1.13.13}"
 # geodat2srs converts geoip/geosite .dat → sing-box .srs rule-sets. Unlike the
 # cores above it ships NO release artifacts — it is built from source at this rev
-# (CGO off, static): scripts/fetch-cores.sh builds it for both the Android module
+# (CGO off, static): scripts/fetch-binaries.sh builds it for both the Android module
 # and the desktop Tauri/CI bundles, and the desktop `nix build` uses the matching
-# buildGoModule derivation in nix/cores.nix. It has no tags, so pin the commit on
+# buildGoModule derivation in nix/binaries.nix. It has no tags, so pin the commit on
 # main directly. Its go.mod pins sing-box to the same line as SINGBOX_VERSION —
 # bump them together.
 GEODAT2SRS_REV="${GEODAT2SRS_REV:-abe704106a1ebafa5e9fedfaa3417a9d73702491}"

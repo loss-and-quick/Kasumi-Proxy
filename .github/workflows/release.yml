@@ -79,9 +79,9 @@ jobs:
               'frontend/src/' \
               'crates/' \
               'src-tauri/' \
-              'scripts/fetch-cores.sh' \
-              'scripts/cores.json' \
-              'scripts/core-versions.sh' \
+              'scripts/fetch-binaries.sh' \
+              'scripts/binaries.json' \
+              'scripts/binary-versions.sh' \
               'scripts/package-release.sh' \
               2>/dev/null | wc -l)
             [ "$code_commits" -gt 0 ] && has_code_commits=true
@@ -91,9 +91,9 @@ jobs:
           fi
 
           # 2. Upstream binary updates
-          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
-          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
-          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/core-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_xray=$(grep -m1 'XRAY_VERSION=.*:-' scripts/binary-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_t2s=$(grep -m1 'TUN2SOCKS_VERSION=.*:-' scripts/binary-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
+          pinned_sb=$(grep -m1 'SINGBOX_VERSION=.*:-' scripts/binary-versions.sh | sed 's/.*:-\([^}"]*\)}.*/\1/')
 
           latest_xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
           latest_t2s=$(gh release view --repo xjasonlyu/tun2socks --json tagName -q .tagName)
@@ -129,8 +129,8 @@ jobs:
 
       - name: Sync core pins + nix hashes
         # When upstream cores advanced, write the new versions into the pinned
-        # source of truth (core-versions.sh) and regenerate the nix FOD hashes
-        # (core-hashes.json), so the next build — and the committed flake — match.
+        # source of truth (binary-versions.sh) and regenerate the nix FOD hashes
+        # (binary-hashes.json), so the next build — and the committed flake — match.
         # Both build jobs check out the tag, so the synced pins are authoritative
         # for the Android and desktop core fetches; no per-build version override.
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
@@ -143,8 +143,8 @@ jobs:
             -e "s|(XRAY_VERSION=\"\\\$\{XRAY_VERSION:-)[^}]*|\1${XRAY_NEW}|" \
             -e "s|(TUN2SOCKS_VERSION=\"\\\$\{TUN2SOCKS_VERSION:-)[^}]*|\1${T2S_NEW}|" \
             -e "s|(SINGBOX_VERSION=\"\\\$\{SINGBOX_VERSION:-)[^}]*|\1${SB_NEW}|" \
-            scripts/core-versions.sh
-          scripts/update-core-hashes.sh
+            scripts/binary-versions.sh
+          scripts/update-binary-hashes.sh
 
       - name: Setup Bun
         if: steps.changes.outputs.skip != 'true'
@@ -175,7 +175,7 @@ jobs:
 
       # ── Block the auto-bump when a new core's config schema drifted from our
       #    generators. "Sync core pins" above already wrote the new versions into
-      #    core-versions.sh, so this stages those exact cores and runs the
+      #    binary-versions.sh, so this stages those exact cores and runs the
       #    config-validation harness against them. A rejected config fails the job
       #    before any version is bumped or tagged — so we never ship a release whose
       #    pinned core rejects the configs we generate. Only runs when cores moved. ──
@@ -188,7 +188,7 @@ jobs:
 
       - name: Verify the new cores accept our generated configs
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
-        run: scripts/check-core-compat.sh
+        run: scripts/check-binary-compat.sh
 
       - name: Bump version
         if: steps.changes.outputs.skip != 'true'
@@ -225,7 +225,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add module/module.prop update.json CHANGELOG.md \
-            scripts/core-versions.sh scripts/core-hashes.json
+            scripts/binary-versions.sh scripts/binary-hashes.json
           # The version/changelog may already be committed (a hand-prepared
           # skip_bump release, or a re-run) — don't fail when there is nothing new.
           if git diff --cached --quiet; then
@@ -248,7 +248,7 @@ jobs:
           generate_release_notes: true
 
   # ── Android module zip → uploaded to the release `prepare` created. Runs in
-  #    parallel with `desktop`; the committed core-versions.sh on the tag pins the
+  #    parallel with `desktop`; the committed binary-versions.sh on the tag pins the
   #    core fetch. ──
   module:
     needs: prepare
@@ -375,9 +375,9 @@ jobs:
           bun install --frozen-lockfile
           ( cd frontend && bun run build )
 
-      - name: Fetch desktop cores
+      - name: Fetch desktop binaries
         shell: bash
-        run: scripts/fetch-cores.sh desktop ${{ matrix.target }}
+        run: scripts/fetch-binaries.sh desktop ${{ matrix.target }}
 
       - name: Import GPG key (Linux signing, optional)
         if: runner.os == 'Linux'

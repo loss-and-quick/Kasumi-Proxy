@@ -58,7 +58,7 @@
 
         toolchain = import ./nix/toolchain.nix { inherit pkgs crane; };
         version = import ./nix/version.nix { inherit pkgs root; };
-        cores = import ./nix/cores.nix { inherit pkgs root version; };
+        binaries = import ./nix/binaries.nix { inherit pkgs root version; };
         desktop = import ./nix/desktop.nix {
           inherit
             pkgs
@@ -66,13 +66,13 @@
             crane-tauri
             toolchain
             version
-            cores
+            binaries
             ;
         };
       in
       {
         # Reproducible desktop build: `nix build .#kasumi-desktop` (GTK-wrapped,
-        # cores bundled).
+        # binaries bundled).
         packages = {
           inherit (desktop) frontend kasumi-desktop;
           default = desktop.kasumi-desktop;

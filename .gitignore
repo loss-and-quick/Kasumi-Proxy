@@ -1,6 +1,6 @@
 # ── Release-time build artifacts (produced by scripts/) ──────────
-# Cores fetched by fetch-cores-android.sh + the kasumi-proxy daemon built by
-# build-daemon-android.sh — track only the docs/licenses.
+# Cores + geodat2srs fetched/built by fetch-binaries.sh android + the kasumi-proxy
+# daemon built by build-daemon-android.sh — track only the docs/licenses.
 module/bin/*
 !module/bin/README.md
 !module/bin/licenses/
@@ -9,7 +9,7 @@ module/bin/*
 # Production webroot built by build-webroot.sh.
 module/webroot/*
 
-# Desktop cores fetched by fetch-cores-desktop.sh for bundle.externalBin.
+# Desktop binaries fetched/built by fetch-binaries.sh desktop for bundle.externalBin.
 src-tauri/binaries/
 
 # ── Node / Vite ──────────────────────────────────────────────────
