@@ -12,8 +12,6 @@ use crate::desktop::paths::DesktopPaths;
 use crate::desktop::platform::DesktopOs;
 use crate::desktop::silent;
 
-/// fwmark stamped on tun2socks' own upstream socket so it stays out of the tunnel.
-pub(crate) const FWMARK: u32 = 0x1112;
 /// The userspace tun's address; `/15` covers the CGNAT-ish 198.18/15 test net.
 pub(crate) const TUN_ADDR: &str = "198.18.0.1/15";
 
@@ -52,10 +50,6 @@ async fn iface_traffic(iface: Option<&str>) -> (u64, u64) {
 impl DesktopOs for LinuxOs {
     fn new() -> anyhow::Result<Self> {
         Ok(Self)
-    }
-
-    fn tun2socks_fwmark(&self) -> Option<u32> {
-        Some(FWMARK)
     }
 
     async fn precheck_xray(&self, _p: &DesktopPaths) -> anyhow::Result<()> {
