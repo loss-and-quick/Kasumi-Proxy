@@ -21,11 +21,6 @@ impl DesktopOs for WindowsOs {
         Ok(Self)
     }
 
-    fn tun2socks_fwmark(&self) -> Option<u32> {
-        // The server bypass is a host route on Windows — no fwmark needed.
-        None
-    }
-
     async fn precheck_xray(&self, p: &DesktopPaths) -> anyhow::Result<()> {
         // tun2socks loads wintun.dll from its own directory (unlike sing-box, which
         // embeds it), so the xray path genuinely needs the bundled DLL on disk.

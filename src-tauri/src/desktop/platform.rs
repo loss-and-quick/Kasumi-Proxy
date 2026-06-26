@@ -1,8 +1,8 @@
 //! The desktop `Platform`: thin orchestration over the neutral lifecycle steps,
 //! shared by Linux and Windows. The bring-up flow, status reporting and teardown are
-//! identical across both OSes; the handful of genuine differences (tun2socks fwmark,
-//! tun-up wait, byte counters, tun capability, sing-box stack, the wintun precheck)
-//! are funnelled through the [`DesktopOs`] seam, implemented per-OS in `linux::os` /
+//! identical across both OSes; the handful of genuine differences (tun-up wait, byte
+//! counters, tun capability, sing-box stack, the wintun precheck) are funnelled
+//! through the [`DesktopOs`] seam, implemented per-OS in `linux::os` /
 //! `windows::os`. The native tun + routing live in `routing`/`network`. Neutral
 //! lifecycle steps (config build, geo sync, core/tun2socks spawn, liveness verify)
 //! come from `kasumi-backend`.
@@ -41,10 +41,6 @@ pub(crate) trait DesktopOs: Send + Sync {
     fn new() -> anyhow::Result<Self>
     where
         Self: Sized;
-
-    /// fwmark stamped on tun2socks' upstream socket so it stays out of the tunnel.
-    /// Linux pins one; Windows uses a host route instead and returns `None`.
-    fn tun2socks_fwmark(&self) -> Option<u32>;
 
     /// Extra precheck before the xray/tun2socks path (Windows: the bundled
     /// `wintun.dll` must be on disk). Linux has nothing to check.
@@ -225,14 +221,11 @@ impl DesktopPlatform {
             .p
             .backend
             .log(kasumi_core::contract::LogTarget::Tun2socks);
-        let t2s = spawn_tun2socks(
-            &self.p.tun2socks_bin,
-            &tun,
-            socks_port,
-            &t2s_log,
-            self.os.tun2socks_fwmark(),
-        )
-        .await?;
+        // Desktop binds the core's own outbounds to the uplink (see above) to escape
+        // the tun, so tun2socks needs no fwmark — its upstream is loopback (the core's
+        // SOCKS) and never hits routing anyway. (Android still marks it; that param is
+        // load-bearing there, not here.)
+        let t2s = spawn_tun2socks(&self.p.tun2socks_bin, &tun, socks_port, &t2s_log, None).await?;
         let _ = write_text(
             &self.p.tun2socks_pidfile,
             &t2s.id().unwrap_or(0).to_string(),
