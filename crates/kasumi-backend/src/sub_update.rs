@@ -181,13 +181,27 @@ async fn record_and_reload(
         .ok_or_else(|| message.to_string())
 }
 
+/// A fetch error trimmed for the UI. reqwest's outer wrapper repeats the URL
+/// (`error sending request for url (https://…)`) the UI already shows next to the
+/// field, so drop it and surface the underlying cause(s) — `operation timed out`,
+/// `connection refused`. Errors we raise ourselves (`HTTP 403`, `proxy not running`)
+/// have no inner cause and pass through unchanged. The full chain still hits the log.
+fn display_fetch_error(e: &anyhow::Error) -> String {
+    let causes: Vec<String> = e.chain().skip(1).map(|c| c.to_string()).collect();
+    if causes.is_empty() {
+        e.to_string()
+    } else {
+        causes.join(": ")
+    }
+}
+
 async fn fetch_and_map(
     platform: &dyn Platform,
     sub: &Subscription,
     filter: &ProfileFilter,
 ) -> Result<Vec<Profile>, String> {
     let proxy = platform.proxy_status().await.map_err(|e| e.to_string())?;
-    let body = fetch_url(
+    let body = match fetch_url(
         &sub.url,
         FetchUrlOptions {
             mode: sub.update_mode,
@@ -198,7 +212,15 @@ async fn fetch_and_map(
         },
     )
     .await
-    .map_err(|e| e.to_string())?;
+    {
+        Ok(body) => body,
+        Err(e) => {
+            // Full cause chain (with the URL) to the log — the manual "update now"
+            // path logs nowhere else; the UI gets just the cause.
+            log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
+            return Err(display_fetch_error(&e));
+        }
+    };
     let fresh = parse_share_links(&String::from_utf8_lossy(&body), None);
     // An error page / captive portal parses to zero profiles — never wipe a
     // subscription (possibly stopping the tunnel) over that.
@@ -488,5 +510,18 @@ mod tests {
             returned.subscriptions[0].last_error.as_deref(),
             Some("subscription URL is required")
         );
+    }
+
+    #[test]
+    fn display_fetch_error_drops_the_url_wrapper_but_keeps_the_cause() {
+        // A wrapped error (reqwest-style): the outer layer repeats the URL, the
+        // inner is the real cause — only the cause should survive.
+        let wrapped = anyhow::anyhow!("operation timed out")
+            .context("error sending request for url (https://example.com/sub)");
+        assert_eq!(display_fetch_error(&wrapped), "operation timed out");
+
+        // An error we raise ourselves has no inner cause — it passes through whole.
+        let bare = anyhow::anyhow!("HTTP 403");
+        assert_eq!(display_fetch_error(&bare), "HTTP 403");
     }
 }
