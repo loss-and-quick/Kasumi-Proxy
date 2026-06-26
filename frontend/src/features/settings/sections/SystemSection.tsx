@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Card, Icon, ListRow, RowToggle, SectionLabel, Select } from "../../../components";
+import { Card, Field, Icon, ListRow, RowToggle, SectionLabel, Select } from "../../../components";
 import { DEFAULT_LOG_ROTATE_KB } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
 import {
@@ -102,14 +102,12 @@ export function SystemSection({
           />
         </div>
         <div style={{ padding: "12px 0 4px" }}>
-          <div className="field-label">{t("settings.logRotateMaxKb")}</div>
-          <input
+          <Field
+            label={t("settings.logRotateMaxKb")}
             type="number"
-            className="input"
             min={64}
             value={settings.logRotateMaxKb ?? DEFAULT_LOG_ROTATE_KB}
-            onChange={(e) => set("logRotateMaxKb", Number(e.target.value))}
-            onWheel={(e) => e.currentTarget.blur()}
+            onChange={(v) => set("logRotateMaxKb", Number(v))}
           />
         </div>
       </Card>

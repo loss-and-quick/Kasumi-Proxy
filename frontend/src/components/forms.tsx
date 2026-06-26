@@ -64,6 +64,7 @@ export const Field = ({
   hint,
   error,
   area,
+  min,
 }: {
   label?: string;
   value: string | number;
@@ -74,6 +75,7 @@ export const Field = ({
   hint?: string;
   error?: string;
   area?: boolean;
+  min?: number;
 }) => (
   <div className="field">
     {label && <div className="field-label">{label}</div>}
@@ -93,6 +95,7 @@ export const Field = ({
           ...(error ? { borderBottomColor: "var(--error)" } : null),
         }}
         type={type}
+        min={min}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
