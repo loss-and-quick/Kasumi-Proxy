@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================
-# scripts/fetch-cores.sh
+# scripts/fetch-binaries.sh
 # Download the proxy core binaries (xray, sing-box, tun2socks) for one platform
-# and stage them where the build expects. Two modes:
+# and stage them where the build expects, plus the build's other binaries. Two modes:
 #
-#   fetch-cores.sh android
-#     → module/bin/{arm64-v8a,x86_64}/<core>          (Magisk module payload)
+#   fetch-binaries.sh android
+#     → module/bin/{arm64-v8a,x86_64}/<binary>        (Magisk module payload)
 #
-#   fetch-cores.sh desktop [target-triple]            (default: host triple)
-#     → src-tauri/binaries/<core>-<triple>[.exe]      (Tauri externalBin sidecars)
+#   fetch-binaries.sh desktop [target-triple]         (default: host triple)
+#     → src-tauri/binaries/<binary>-<triple>[.exe]    (Tauri externalBin sidecars)
 #       plus the desktop-only extras next to the cores: libcronet (sing-box naive
 #       outbound), wintun.dll (Windows tun2socks), and geodat2srs (built from
 #       source at the pinned GEODAT2SRS_REV — it ships no release artifacts).
 #
-# The per-core release-asset layout is read from scripts/cores.json (the single
-# source of truth, shared with nix/cores.nix and update-core-hashes.sh); versions
-# come from scripts/core-versions.sh. These binaries are NOT committed (.gitignore).
+# The prebuilt cores' release-asset layout is read from scripts/binaries.json (the
+# single source of truth, shared with nix/binaries.nix and update-binary-hashes.sh);
+# versions come from scripts/binary-versions.sh. These binaries are NOT committed
+# (.gitignore).
 #
 # Honours PROJECT_ROOT so the flake `nix run` wrapper can point at the caller's
 # working tree (the in-store $0 copy is read-only).
@@ -23,9 +24,9 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=scripts/core-versions.sh
-. "$HERE/core-versions.sh"
-CATALOG="$HERE/cores.json"
+# shellcheck source=scripts/binary-versions.sh
+. "$HERE/binary-versions.sh"
+CATALOG="$HERE/binaries.json"
 ROOT="${PROJECT_ROOT:-$(cd "$HERE/.." && pwd)}"
 
 TMP="$(mktemp -d)"
@@ -114,7 +115,7 @@ CORES="xray tun2socks sing-box"
 
 fetch_android() {
 	local out="$ROOT/module/bin"
-	echo "→ android cores → module/bin/"
+	echo "→ android binaries → module/bin/"
 	# abi (module dir) : catalog arch : Go GOARCH (geodat2srs is a static linux
 	# cross — runs root-invoked on the rooted device).
 	for triple in "arm64-v8a:android-arm64:arm64" "x86_64:android-amd64:amd64"; do
@@ -157,7 +158,7 @@ fetch_desktop() {
 
 	local out="$ROOT/src-tauri/binaries"
 	mkdir -p "$out"
-	echo "→ desktop cores for $target"
+	echo "→ desktop binaries for $target"
 	local sbdir=""
 	for core in $CORES; do
 		local d
@@ -199,7 +200,7 @@ case "${1:-}" in
 android) fetch_android ;;
 desktop) shift; fetch_desktop "${1:-}" ;;
 *)
-	echo "usage: fetch-cores.sh android | desktop [target-triple]" >&2
+	echo "usage: fetch-binaries.sh android | desktop [target-triple]" >&2
 	exit 2
 	;;
 esac

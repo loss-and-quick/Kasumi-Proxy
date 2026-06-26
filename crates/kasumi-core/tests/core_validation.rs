@@ -7,8 +7,8 @@
 //! `Security`, `SsMethod` via `strum::IntoEnumIterator`), not hand-written, so a
 //! new protocol/transport variant is swept automatically.
 //!
-//! The binaries are NOT committed; stage them with `scripts/fetch-cores-desktop.sh`
-//! (pinned versions in `scripts/core-versions.sh`). When they're absent — as in a
+//! The binaries are NOT committed; stage them with `scripts/fetch-binaries.sh desktop`
+//! (pinned versions in `scripts/binary-versions.sh`). When they're absent — as in a
 //! plain CI checkout — every case is skipped and the test passes, so this never
 //! blocks the normal `cargo test --workspace` path. Point at custom binaries with
 //! `KASUMI_XRAY_BIN` / `KASUMI_SINGBOX_BIN`.
@@ -247,7 +247,7 @@ fn generated_configs_validate_against_real_cores() {
     let singbox = find_core("KASUMI_SINGBOX_BIN", "sing-box");
     if xray.is_none() && singbox.is_none() {
         eprintln!(
-            "skipping core validation: no staged binaries in {} (run scripts/fetch-cores-desktop.sh)",
+            "skipping core validation: no staged binaries in {} (run scripts/fetch-binaries.sh desktop)",
             binaries_dir().display()
         );
         return;

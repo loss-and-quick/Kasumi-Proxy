@@ -31,12 +31,12 @@ in
     );
   };
 
-  # Download the core binaries. `fetch-cores android` → module/bin/<abi>/;
-  # `fetch-cores desktop [triple]` → src-tauri/binaries/.
-  fetch-cores = {
+  # Download/build the binaries. `fetch-binaries android` → module/bin/<abi>/;
+  # `fetch-binaries desktop [triple]` → src-tauri/binaries/.
+  fetch-binaries = {
     type = "app";
     program = toString (
-      pkgs.writeShellScript "fetch-cores" ''
+      pkgs.writeShellScript "fetch-binaries" ''
         export PATH=${
           binPath [
             pkgs.curl
@@ -49,7 +49,7 @@ in
           ]
         }:$PATH
         export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-        exec ${pkgs.bash}/bin/bash "${self}/scripts/fetch-cores.sh" "$@"
+        exec ${pkgs.bash}/bin/bash "${self}/scripts/fetch-binaries.sh" "$@"
       ''
     );
   };
@@ -71,9 +71,9 @@ in
     );
   };
 
-  # Assemble the installable Android module zip (geodat2srs + cores + the
-  # cross-built Rust daemon + webroot). Cores + geodat2srs are fetched/built by
-  # scripts/fetch-cores.sh (needs Go), the daemon by cargo-ndk.
+  # Assemble the installable Android module zip (cores + geodat2srs + the
+  # cross-built Rust daemon + webroot). The cores + geodat2srs are fetched/built by
+  # scripts/fetch-binaries.sh (needs Go), the daemon by cargo-ndk.
   package-release = {
     type = "app";
     program = toString (

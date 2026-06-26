@@ -2,7 +2,7 @@ name: Core compatibility
 
 # Runs the config-validation harness against real cores so a core version whose
 # schema drifted from our config generators is caught. Two entry points:
-#   - pull_request touching scripts/core-versions.sh: validates the versions the
+#   - pull_request touching scripts/binary-versions.sh: validates the versions the
 #     PR pins, so a MANUAL bump (not just the release auto-bump) can't merge a pin
 #     our generators don't match.
 #   - schedule / workflow_dispatch: validates the LATEST upstream cores for early
@@ -13,9 +13,9 @@ on:
     # Anything that can change whether a real core accepts our generated configs:
     # the pinned versions (a manual bump), how cores are staged, or the generators.
     paths:
-      - scripts/core-versions.sh
-      - scripts/fetch-cores.sh
-      - scripts/cores.json
+      - scripts/binary-versions.sh
+      - scripts/fetch-binaries.sh
+      - scripts/binaries.json
       - crates/kasumi-core/**
   schedule:
     - cron: "0 0 * * 0"  # Sunday — a day before the Monday release cron
@@ -49,8 +49,8 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             # Validate exactly what the PR pins (catches a hand-edited bump).
-            # shellcheck source=scripts/core-versions.sh
-            . scripts/core-versions.sh
+            # shellcheck source=scripts/binary-versions.sh
+            . scripts/binary-versions.sh
             xray="$XRAY_VERSION"; sb="$SINGBOX_VERSION"
             echo "Validating PR-pinned cores: xray $xray, sing-box $sb"
           else
@@ -67,7 +67,7 @@ jobs:
         env:
           XRAY_VERSION: ${{ steps.versions.outputs.xray }}
           SINGBOX_VERSION: ${{ steps.versions.outputs.singbox }}
-        run: scripts/check-core-compat.sh
+        run: scripts/check-binary-compat.sh
 
       # ── Early-warning issue bookkeeping (schedule/dispatch only; on a PR the red
       #    check is the signal). One tracking issue at a time, deduped by a fixed
