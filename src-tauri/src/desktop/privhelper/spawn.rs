@@ -52,6 +52,15 @@ fn find_elevator() -> Option<PathBuf> {
 /// postinst or by a prior one-time self-`setcap` (see [`self_setcap_target`]).
 /// `None` → no capped helper yet; fall back to elevating via pkexec/sudo.
 fn capped_helper() -> Option<PathBuf> {
+    // A dev `KASUMI_HELPER_BIN` override pins a specific binary; the NixOS
+    // `/run/wrappers/bin/kasumi-helper` wrapper points at the *installed* helper — a
+    // different binary — so it must not shadow the override. With the override set,
+    // only the override's own file caps qualify here; otherwise the caller falls back
+    // to setcap/elevation, which run the override directly.
+    if std::env::var_os("KASUMI_HELPER_BIN").is_some() {
+        let bin = helper_bin().ok()?;
+        return has_file_caps(&bin).then_some(bin);
+    }
     let wrapper = PathBuf::from("/run/wrappers/bin/kasumi-helper");
     if wrapper.exists() {
         return Some(wrapper);
