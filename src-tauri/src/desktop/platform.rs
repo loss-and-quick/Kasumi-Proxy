@@ -16,12 +16,18 @@ use tokio::sync::mpsc;
 
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::read_json;
-use kasumi_backend::lifecycle::{random_tun_iface, spawn_core, spawn_tun2socks, verify_core_alive};
+use kasumi_backend::lifecycle::{
+    core_argv, core_env, random_tun_iface, tun2socks_argv, verify_core_alive,
+};
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     spawn_local_test_core, BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities,
     StartDataPath, StopDataPath, TestCore,
 };
+#[cfg(not(target_os = "linux"))]
+use kasumi_backend::proc::spawn_logged;
+#[cfg(target_os = "linux")]
+use kasumi_backend::proc::spawn_logged_pre_exec;
 // Unix-only: the pre_exec variant that raises an ambient CAP_NET_RAW for a test core.
 #[cfg(unix)]
 use kasumi_backend::platform::spawn_local_test_core_pre_exec;
@@ -167,7 +173,12 @@ impl DesktopPlatform {
         prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file).await?;
 
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
-        let child = spawn_core(&self.p.singbox_bin, &cfg, &log, &dat_dir, false).await?;
+        let child = spawn_supervised(
+            &core_argv(&self.p.singbox_bin, &cfg),
+            &core_env(&dat_dir),
+            &log,
+        )
+        .await?;
         let pid = child.id().unwrap_or(0) as i32;
         let _ = write_text(&self.p.pidfile, &pid.to_string()).await;
         if !verify_core_alive(pid, &self.p.singbox_bin, 6, Duration::from_millis(250)).await {
@@ -208,7 +219,12 @@ impl DesktopPlatform {
         }
 
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
-        let child = spawn_core(&self.p.xray_bin, &cfg, &log, &dat_dir, false).await?;
+        let child = spawn_supervised(
+            &core_argv(&self.p.xray_bin, &cfg),
+            &core_env(&dat_dir),
+            &log,
+        )
+        .await?;
         let pid = child.id().unwrap_or(0) as i32;
         let _ = write_text(&self.p.pidfile, &pid.to_string()).await;
         if !verify_core_alive(pid, &self.p.xray_bin, 6, Duration::from_millis(250)).await {
@@ -227,7 +243,12 @@ impl DesktopPlatform {
         // the tun, so tun2socks needs no fwmark — its upstream is loopback (the core's
         // SOCKS) and never hits routing anyway. (Android still marks it; that param is
         // load-bearing there, not here.)
-        let t2s = spawn_tun2socks(&self.p.tun2socks_bin, &tun, socks_port, &t2s_log, None).await?;
+        let t2s = spawn_supervised(
+            &tun2socks_argv(&self.p.tun2socks_bin, &tun, socks_port, None),
+            &std::collections::HashMap::new(),
+            &t2s_log,
+        )
+        .await?;
         let _ = write_text(
             &self.p.tun2socks_pidfile,
             &t2s.id().unwrap_or(0).to_string(),
@@ -277,6 +298,40 @@ fn now_secs() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// The one supervised-spawn seam for every long-lived data-path process (the core
+/// and, in the xray path, tun2socks). Callers build the command with the shared argv
+/// / env builders ([`core_argv`] / [`tun2socks_argv`]); supervision is identical for
+/// all of them and lives only here.
+///
+/// On Linux it stamps `PR_SET_PDEATHSIG` ([`die_with_parent`]) into the forked child,
+/// so an unclean helper exit (crash / SIGKILL) — where the normal stop/teardown never
+/// runs — still reaps the child instead of leaving it holding a tun + routes with
+/// `service-state` stuck at "stopped". Other targets fall back to a plain spawn.
+async fn spawn_supervised(
+    argv: &[String],
+    env: &std::collections::HashMap<String, String>,
+    log: &Path,
+) -> std::io::Result<tokio::process::Child> {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: die_with_parent is async-signal-safe per the pre_exec contract.
+        unsafe {
+            spawn_logged_pre_exec(
+                argv,
+                env,
+                log,
+                false,
+                crate::desktop::capabilities::die_with_parent,
+            )
+            .await
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        spawn_logged(argv, env, log, false).await
+    }
 }
 
 #[async_trait]
