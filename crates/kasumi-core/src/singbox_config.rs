@@ -173,18 +173,24 @@ fn build_singbox_transport(p: &Profile) -> Option<Value> {
             if !w.path.is_empty() {
                 v["path"] = w.path.clone().into();
             }
-            if !w.host.is_empty() {
-                let mut headers = Map::new();
-                headers.insert("Host".into(), w.host.clone().into());
-                for (k, val) in &w.headers {
-                    headers.insert(k.clone(), val.clone().into());
-                }
-                v["headers"] = Value::Object(headers);
-            } else if !w.headers.is_empty() {
-                let mut headers = Map::new();
-                for (k, val) in &w.headers {
-                    headers.insert(k.clone(), val.clone().into());
-                }
+            // The ws `Host` header: an explicit profile host wins, otherwise fall
+            // back to the server domain *without* the port. Left unset, sing-box
+            // sends the server address with its port (`domain:443`), which
+            // host-routing gateways (edge platforms) reject with HTTP 400 — xray
+            // sends the bare domain, which is why the same profile works there.
+            let host = if !w.host.is_empty() {
+                w.host.clone()
+            } else {
+                p.endpoint().map(|e| e.address.clone()).unwrap_or_default()
+            };
+            let mut headers = Map::new();
+            if !host.is_empty() {
+                headers.insert("Host".into(), host.into());
+            }
+            for (k, val) in &w.headers {
+                headers.insert(k.clone(), val.clone().into());
+            }
+            if !headers.is_empty() {
                 v["headers"] = Value::Object(headers);
             }
             if w.early_data > 0 {
@@ -1375,5 +1381,41 @@ mod tests {
             .unwrap();
         assert_eq!(remote["type"], "https");
         assert_eq!(remote["detour"], "proxy");
+    }
+
+    #[test]
+    fn ws_host_header_defaults_to_server_domain_without_port() {
+        let proxy = |uri: &str| {
+            let p = crate::share::parse_share_link(uri, None).unwrap();
+            let cfg = build_singbox_config(
+                &p,
+                &AdvancedSettings::default(),
+                &[],
+                std::slice::from_ref(&p),
+                SingboxBuildOpts::default(),
+            )
+            .unwrap();
+            cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["tag"] == "proxy")
+                .cloned()
+                .unwrap()
+        };
+
+        // No ws host in the profile → the Host header must be the bare server domain,
+        // never "<domain>:443" (which host-routing gateways 400 on; the bug this guards).
+        let o = proxy(
+            "vless://11111111-1111-1111-1111-111111111111@gw.example.com:443?type=ws&path=%2Fvmess&security=tls&sni=gw.example.com",
+        );
+        assert_eq!(o["transport"]["type"], "ws");
+        assert_eq!(o["transport"]["headers"]["Host"], "gw.example.com");
+
+        // An explicit ws host still wins.
+        let o = proxy(
+            "vless://11111111-1111-1111-1111-111111111111@gw.example.com:443?type=ws&path=%2Fvmess&host=front.example.com&security=tls&sni=gw.example.com",
+        );
+        assert_eq!(o["transport"]["headers"]["Host"], "front.example.com");
     }
 }
