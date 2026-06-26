@@ -33,6 +33,9 @@ let
 in
 {
   inherit appVersion singboxVer geodat2srsRev;
+  # Exposed so nix/cores.nix can resolve a core's pinned tag from the version_var
+  # named in scripts/cores.json (the shared asset catalog).
+  inherit coreVersion;
   xrayVer = coreVersion "XRAY_VERSION";
   tun2socksVer = coreVersion "TUN2SOCKS_VERSION";
   singboxVerBare = lib.removePrefix "v" singboxVer;
