@@ -572,6 +572,79 @@ fn build_singbox_dns_rule_for_domains(
     }
 }
 
+/// Split `host`, `host:port`, or `[v6]:port` into the bare host and an optional port.
+fn split_dns_host_port(s: &str) -> (String, Option<u16>) {
+    let s = s.trim();
+    if let Some(rest) = s.strip_prefix('[') {
+        // IPv6 literal: `[addr]` or `[addr]:port`.
+        if let Some((addr, after)) = rest.split_once(']') {
+            let port = after.strip_prefix(':').and_then(|p| p.parse().ok());
+            return (addr.to_string(), port);
+        }
+    }
+    // A single colon means `host:port`; more than one is a bracketless IPv6 literal.
+    if s.matches(':').count() == 1 {
+        if let Some((h, p)) = s.split_once(':') {
+            if let Ok(port) = p.parse::<u16>() {
+                return (h.to_string(), Some(port));
+            }
+        }
+    }
+    (s.to_string(), None)
+}
+
+/// Translate a DNS address into a sing-box DNS server object, honouring an optional
+/// URL scheme so a single text field accepts every transport sing-box supports:
+/// plain IPv4/UDP (`1.1.1.1`), DoT (`tls://…`), DoH (`https://1.1.1.1/dns-query`),
+/// DoQ (`quic://…`), DoH3 (`h3://…`), `tcp://…`, and `local`/`localhost`. A bare
+/// address stays plain UDP, so existing settings keep working. The `+local` xray
+/// suffix collapses to the base transport. Conventions mirror v2rayN / xray-core.
+fn build_singbox_dns_server(tag: &str, addr: &str) -> Value {
+    let addr = addr.trim();
+    if addr.eq_ignore_ascii_case("local") || addr.eq_ignore_ascii_case("localhost") {
+        return json!({ "type": "local", "tag": tag });
+    }
+
+    let (scheme, rest) = match addr.split_once("://") {
+        Some((s, r)) => (s.to_ascii_lowercase().replace("+local", ""), r),
+        None => (String::new(), addr),
+    };
+    let dns_type = if scheme.is_empty() {
+        "udp"
+    } else {
+        scheme.as_str()
+    };
+
+    // Only DoH/DoH3 carry a request path; for the rest the whole remainder is host[:port].
+    let (hostport, path) = if matches!(dns_type, "https" | "h3") {
+        match rest.split_once('/') {
+            Some((hp, p)) => (hp, Some(format!("/{p}"))),
+            None => (rest, None),
+        }
+    } else {
+        (rest, None)
+    };
+
+    let (host, port) = split_dns_host_port(hostport);
+    let mut server = json!({ "type": dns_type, "tag": tag, "server": host });
+    if let Some(port) = port {
+        server["server_port"] = port.into();
+    }
+    if let Some(path) = path.filter(|p| p != "/") {
+        server["path"] = path.into();
+    }
+    // sing-box refuses a DNS server whose address is a domain unless it is told how
+    // to resolve that domain. Bootstrap such servers through `local` (which is an
+    // IP in the default setup); the `local` server itself must not point at itself.
+    let is_domain = server["server"]
+        .as_str()
+        .is_some_and(|h| h.parse::<std::net::IpAddr>().is_err());
+    if is_domain && tag != "local" {
+        server["domain_resolver"] = json!({ "server": "local" });
+    }
+    server
+}
+
 fn build_singbox_dns(
     s: &AdvancedSettings,
     routing_rules: &[RoutingRule],
@@ -581,14 +654,11 @@ fn build_singbox_dns(
     let domestic = split_list(s.domestic_dns.as_deref().unwrap_or(""), &["223.5.5.5"])[0].clone();
     let hosts = parse_hosts(s.dns_hosts.as_deref().unwrap_or(""));
 
-    let mut remote_server = json!({ "type": "udp", "tag": "remote", "server": remote });
+    let mut remote_server = build_singbox_dns_server("remote", &remote);
     if s.dns_via_proxy {
         remote_server["detour"] = "proxy".into();
     }
-    let mut servers = vec![
-        remote_server,
-        json!({ "type": "udp", "tag": "local", "server": domestic }),
-    ];
+    let mut servers = vec![remote_server, build_singbox_dns_server("local", &domestic)];
     let mut rules: Vec<Value> = Vec::new();
     let mut dns_rule_set_tags = Tags::new();
 
@@ -1241,5 +1311,69 @@ mod tests {
         // A protocol that does accept uTLS still gets it (guard against an over-broad skip).
         let anytls = proxy(&build("anytls://pw@a.ex:443?sni=s.ex&fp=chrome"));
         assert_eq!(anytls["tls"]["utls"]["enabled"], true);
+    }
+
+    #[test]
+    fn dns_address_scheme_is_detected() {
+        // Bare address stays plain UDP (back-compat with stored settings).
+        assert_eq!(
+            build_singbox_dns_server("remote", "1.1.1.1"),
+            json!({ "type": "udp", "tag": "remote", "server": "1.1.1.1" })
+        );
+        // DoH: scheme + host + path, default port omitted.
+        assert_eq!(
+            build_singbox_dns_server("remote", "https://1.1.1.1/dns-query"),
+            json!({ "type": "https", "tag": "remote", "server": "1.1.1.1", "path": "/dns-query" })
+        );
+        // DoT with explicit port and a hostname: the domain address gets a bootstrap
+        // resolver so sing-box can resolve it (it refuses a bare domain server).
+        assert_eq!(
+            build_singbox_dns_server("remote", "tls://dns.google:853"),
+            json!({
+                "type": "tls", "tag": "remote", "server": "dns.google",
+                "server_port": 853, "domain_resolver": { "server": "local" }
+            })
+        );
+        // DoQ / DoH3 schemes pass through; `+local` collapses to the base transport.
+        assert_eq!(
+            build_singbox_dns_server("remote", "quic://9.9.9.9")["type"],
+            "quic"
+        );
+        assert_eq!(
+            build_singbox_dns_server("remote", "h3://1.1.1.1/dns-query")["type"],
+            "h3"
+        );
+        assert_eq!(
+            build_singbox_dns_server("local", "https+local://77.88.8.8/dns-query")["type"],
+            "https"
+        );
+        // local / localhost map to the system resolver with no server address.
+        assert_eq!(
+            build_singbox_dns_server("local", "local"),
+            json!({ "type": "local", "tag": "local" })
+        );
+        // IPv6 literal with brackets keeps the address and parses the port.
+        assert_eq!(
+            build_singbox_dns_server("local", "[2606:4700:4700::1111]:53"),
+            json!({ "type": "udp", "tag": "local", "server": "2606:4700:4700::1111", "server_port": 53 })
+        );
+    }
+
+    #[test]
+    fn dns_via_proxy_detours_remote_server_with_scheme() {
+        let s = AdvancedSettings {
+            remote_dns: Some("https://1.1.1.1/dns-query".into()),
+            dns_via_proxy: true,
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let remote = dns["servers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|x| x["tag"] == "remote")
+            .unwrap();
+        assert_eq!(remote["type"], "https");
+        assert_eq!(remote["detour"], "proxy");
     }
 }

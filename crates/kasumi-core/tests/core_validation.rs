@@ -331,6 +331,26 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             vec![],
             false,
         ),
+        // DoH/DoT via a URL scheme in the address field — both an IP endpoint and a
+        // domain endpoint (the latter exercises the bootstrap `domain_resolver`).
+        (
+            "dns-doh-ip",
+            AdvancedSettings {
+                remote_dns: Some("https://1.1.1.1/dns-query".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "dns-doh-domain",
+            AdvancedSettings {
+                remote_dns: Some("https://cloudflare-dns.com/dns-query".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
         // LAN-facing listen address (0.0.0.0).
         (
             "allow-lan",
