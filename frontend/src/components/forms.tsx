@@ -96,6 +96,9 @@ export const Field = ({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
+        // Number inputs mutate their value on wheel scroll while focused, even
+        // once the cursor has left them; blur on wheel so the page scrolls instead.
+        onWheel={type === "number" ? (e) => e.currentTarget.blur() : undefined}
       />
     )}
     {error ? (

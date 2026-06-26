@@ -109,6 +109,7 @@ export function SystemSection({
             min={64}
             value={settings.logRotateMaxKb ?? DEFAULT_LOG_ROTATE_KB}
             onChange={(e) => set("logRotateMaxKb", Number(e.target.value))}
+            onWheel={(e) => e.currentTarget.blur()}
           />
         </div>
       </Card>

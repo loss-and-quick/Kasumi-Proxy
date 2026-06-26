@@ -84,6 +84,7 @@ export default function Logs({ onClose }: { onClose: () => void }) {
               type="number"
               value={lines}
               onChange={(e) => setLines(Number(e.target.value || 300))}
+              onWheel={(e) => e.currentTarget.blur()}
               style={{ width: 100 }}
             />
           </div>
