@@ -82,6 +82,7 @@ impl Platform for StubPlatform {
             running: false,
             socks_port: 0,
             http_port: 0,
+            force_port: 0,
         })
     }
 }

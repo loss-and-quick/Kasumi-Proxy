@@ -232,6 +232,7 @@ fn test_proxy(port: u16) -> ProxyStatus {
         running: true,
         socks_port: port,
         http_port: port + 1,
+        force_port: kasumi_core::state::force_socks_port(port, port + 1),
     }
 }
 

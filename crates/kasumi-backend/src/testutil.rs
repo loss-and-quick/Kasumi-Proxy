@@ -93,6 +93,7 @@ impl Platform for TestPlatform {
             running: false,
             socks_port: 1080,
             http_port: 1081,
+            force_port: 1082,
         })
     }
 }

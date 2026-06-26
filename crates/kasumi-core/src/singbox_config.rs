@@ -1,7 +1,7 @@
 //! Build a complete sing-box config from a Profile + AdvancedSettings. Builds a
 //! `serde_json::Value` directly. The emitted config is validated against the real
 //! core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted invariants
-//! are covered by the unit tests below.
+//! (e.g. inbound/route shape) are covered by the unit tests below.
 
 use serde_json::{json, Map, Value};
 
@@ -10,8 +10,8 @@ use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
-    AdvancedSettings, AppFilterMode, DomainStrategy, RoutingMode, RoutingRule,
-    DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+    force_socks_port, AdvancedSettings, AppFilterMode, DomainStrategy, RoutingMode, RoutingRule,
+    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
 };
 
 fn wire<T: serde::Serialize>(v: &T) -> String {
@@ -925,6 +925,10 @@ fn build_singbox_route(
         rules.extend(retry_ip_rules.iter().cloned());
     }
 
+    // Always-on bypass-geo rule for the `force-in` inbound (app's own fetches); the
+    // per-app force path adds the tun-force rule the same way when enabled. Both sit
+    // ahead of the geo/user rules.
+    rules.insert(0, json!({ "inbound": ["force-in"], "outbound": "proxy" }));
     let has_force = s
         .app_filter
         .values()
@@ -1067,7 +1071,16 @@ pub fn build_singbox_config(
     if let Some((u, p)) = socks_auth {
         socks_in["users"] = json!([{ "username": u, "password": p }]);
     }
-    let mut inbounds = vec![socks_in];
+    // Always-on bypass-geo inbound (see route's `force-in` rule); localhost-only and
+    // noauth regardless of `allow_non_localhost` — internal use for the app's fetches.
+    // `http_port` is only passed so the force port matches `proxy_status` (which can't
+    // know the active engine); sing-box itself has no separate http inbound.
+    let http_port = s.local_http_port.unwrap_or(DEFAULT_LOCAL_HTTP_PORT);
+    let force_in = json!({
+        "type": "mixed", "tag": "force-in",
+        "listen": "127.0.0.1", "listen_port": force_socks_port(socks_port, http_port),
+    });
+    let mut inbounds = vec![socks_in, force_in];
     if !opts.no_tun {
         inbounds.extend(build_singbox_tun_inbounds(s));
     }
@@ -1116,6 +1129,43 @@ pub fn build_singbox_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn force_in_inbound_is_always_present_and_localhost_only() {
+        let p = crate::share::parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        let cfg = build_singbox_config(
+            &p,
+            &AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let force = cfg["inbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["tag"] == "force-in")
+            .expect("force-in inbound present");
+        // Internal bypass-geo port: localhost-only mixed inbound.
+        assert_eq!(force["type"], "mixed");
+        assert_eq!(force["listen"], "127.0.0.1");
+        // Its route rule sends force-in straight to proxy, ahead of the first
+        // direct rule (the always-present private-IP bypass / any geo rule).
+        let rules = cfg["route"]["rules"].as_array().unwrap();
+        let force_idx = rules
+            .iter()
+            .position(|r| r["inbound"][0] == "force-in" && r["outbound"] == "proxy")
+            .expect("force-in → proxy route rule present");
+        let direct_idx = rules
+            .iter()
+            .position(|r| r["outbound"] == "direct")
+            .unwrap();
+        assert!(
+            force_idx < direct_idx,
+            "force-in rule must precede direct rules"
+        );
+    }
 
     #[test]
     fn socks_auth_adds_users_to_the_mixed_inbound() {

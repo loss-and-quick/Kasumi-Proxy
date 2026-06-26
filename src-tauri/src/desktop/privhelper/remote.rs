@@ -110,6 +110,7 @@ impl Platform for RemotePlatform {
                 running,
                 socks_port,
                 http_port,
+                force_port: kasumi_core::state::force_socks_port(socks_port, http_port),
             }),
             other => anyhow::bail!("unexpected reply to ProxyStatus: {other:?}"),
         }
