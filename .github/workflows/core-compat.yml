@@ -18,7 +18,7 @@ on:
       - scripts/binaries.json
       - crates/kasumi-core/**
   schedule:
-    - cron: "0 0 * * 0"  # Sunday — a day before the Monday release cron
+    - cron: "0 0 * * 0" # Sunday — a day before the Monday release cron
   workflow_dispatch:
 
 permissions:
@@ -61,6 +61,17 @@ jobs:
           fi
           echo "xray=$xray" >> "$GITHUB_OUTPUT"
           echo "singbox=$sb" >> "$GITHUB_OUTPUT"
+
+      # The config harness skips geo-dependent cases (e.g. xray fake-dns, whose DNS
+      # rule references `geoip:!private`) when geoip.dat is absent.
+      # into the cores' dir so those cases validate too.
+      - name: Stage geoip/geosite data
+        run: |
+          mkdir -p src-tauri/binaries
+          curl -fsSL https://github.com/v2fly/geoip/releases/latest/download/geoip.dat \
+            -o src-tauri/binaries/geoip.dat
+          curl -fsSL https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat \
+            -o src-tauri/binaries/geosite.dat
 
       - name: Validate generated configs against the cores
         id: check
