@@ -1,0 +1,36 @@
+{
+  "_comment": "Single source of truth for the release-asset layout of the prebuilt cores (xray / sing-box / tun2socks). Read by scripts/fetch-cores.sh (jq), nix/cores.nix (fromJSON) and scripts/update-core-hashes.sh (jq). Versions live in scripts/core-versions.sh (keyed by version_var). URL = https://github.com/<repo>/releases/download/<TAG>/<file>, where TAG is the version_var value and {ver} expands to TAG without the leading 'v'. member is the binary's name inside the archive (a glob; the extractor also matches member.exe on Windows). geodat2srs is intentionally absent: it ships no release artifacts and is built from source at GEODAT2SRS_REV.",
+  "xray": {
+    "repo": "XTLS/Xray-core",
+    "version_var": "XRAY_VERSION",
+    "member": "xray",
+    "assets": {
+      "linux-amd64": { "file": "Xray-linux-64.zip", "archive": "zip" },
+      "windows-amd64": { "file": "Xray-windows-64.zip", "archive": "zip" },
+      "android-arm64": { "file": "Xray-android-arm64-v8a.zip", "archive": "zip" },
+      "android-amd64": { "file": "Xray-android-amd64.zip", "archive": "zip" }
+    }
+  },
+  "tun2socks": {
+    "repo": "xjasonlyu/tun2socks",
+    "version_var": "TUN2SOCKS_VERSION",
+    "member": "tun2socks*",
+    "assets": {
+      "linux-amd64": { "file": "tun2socks-linux-amd64.zip", "archive": "zip" },
+      "windows-amd64": { "file": "tun2socks-windows-amd64.zip", "archive": "zip" },
+      "android-arm64": { "file": "tun2socks-linux-arm64.zip", "archive": "zip" },
+      "android-amd64": { "file": "tun2socks-linux-amd64.zip", "archive": "zip" }
+    }
+  },
+  "sing-box": {
+    "repo": "SagerNet/sing-box",
+    "version_var": "SINGBOX_VERSION",
+    "member": "sing-box",
+    "assets": {
+      "linux-amd64": { "file": "sing-box-{ver}-linux-amd64.tar.gz", "archive": "tgz" },
+      "windows-amd64": { "file": "sing-box-{ver}-windows-amd64.zip", "archive": "zip" },
+      "android-arm64": { "file": "sing-box-{ver}-android-arm64.tar.gz", "archive": "tgz" },
+      "android-amd64": { "file": "sing-box-{ver}-android-amd64.tar.gz", "archive": "tgz" }
+    }
+  }
+}

@@ -22,7 +22,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Stage xray / sing-box / tun2socks / libcronet for the target (honours the
 # XRAY_VERSION / SINGBOX_VERSION / TUN2SOCKS_VERSION overrides via core-versions.sh).
-"$ROOT/scripts/fetch-cores-desktop.sh" "${1:-}"
+"$ROOT/scripts/fetch-cores.sh" desktop "${1:-}"
 
 # Run the harness with the staged cores present (it auto-detects them under
 # src-tauri/binaries and validates every generated config against the real cores).
