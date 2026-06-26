@@ -423,11 +423,12 @@ impl Platform for DesktopPlatform {
             .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
         let pid = read_pidfile(&self.p.pidfile).await;
         let running = pid > 0 && pid_matches_any(pid, &self.p.core_bins()).await;
+        let http_port = self.http_port().await;
         Ok(ProxyStatus {
             running,
             socks_port: port,
-            http_port: self.http_port().await,
-            force_port: force_socks_port(port),
+            http_port,
+            force_port: force_socks_port(port, http_port),
         })
     }
 

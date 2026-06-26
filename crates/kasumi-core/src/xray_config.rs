@@ -718,7 +718,7 @@ pub fn build_xray_config(
 
     let socks_port = s.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
     let http_port = s.local_http_port.unwrap_or(DEFAULT_LOCAL_HTTP_PORT);
-    let force_port = force_socks_port(socks_port);
+    let force_port = force_socks_port(socks_port, http_port);
     let dns_outbound_tag = if s.dns_via_proxy { "proxy" } else { "direct" };
     let listen = if s.allow_non_localhost {
         "0.0.0.0"

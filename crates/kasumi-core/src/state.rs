@@ -14,13 +14,23 @@ use crate::profile::{Profile, Protocol};
 pub const DEFAULT_LOCAL_SOCKS_PORT: u16 = 10808;
 pub const DEFAULT_LOCAL_HTTP_PORT: u16 = 10809;
 
-/// Port of the `force-in` socks inbound, derived from the user-facing socks port.
-/// This inbound routes straight to the `proxy` outbound, bypassing the geo rules —
-/// used for the app's own fetches (subscriptions/assets) when the proxy is wanted
-/// regardless of routing. Kept here so the `+2` offset has a single source for the
-/// core config builders and the platform `proxy_status`.
-pub const fn force_socks_port(socks: u16) -> u16 {
-    socks + 2
+/// Port of the `force-in` socks inbound, derived from the user-facing ports. This
+/// inbound routes straight to the `proxy` outbound, bypassing the geo rules — used
+/// for the app's own fetches (subscriptions/assets) when the proxy is wanted
+/// regardless of routing.
+///
+/// Sits at `socks + 2` (the default layout is socks, http = socks + 1, force =
+/// socks + 2). A custom `http_port` could land on `socks + 2`, so step past it when
+/// it does — `force-in` and `http-in` must never claim the same port or the core
+/// won't bind. Deterministic in `(socks, http)`, so the config builders and the
+/// platform `proxy_status` compute the identical port without coordinating.
+pub const fn force_socks_port(socks: u16, http: u16) -> u16 {
+    let candidate = socks.saturating_add(2);
+    if candidate == http {
+        socks.saturating_add(3)
+    } else {
+        candidate
+    }
 }
 
 // Default probe URLs used when delayTestUrl/speedTestUrl are unset.
@@ -362,6 +372,16 @@ mod tests {
         let g: Group = serde_json::from_str(r#"{"id":"g-main","name":"Main"}"#).unwrap();
         assert_eq!(g.sub_id, None);
         assert!(serde_json::to_value(&g).unwrap().get("subId").is_none());
+    }
+
+    #[test]
+    fn force_socks_port_steps_past_a_colliding_http_port() {
+        // Default layout: socks, http = socks + 1 → force = socks + 2, no collision.
+        assert_eq!(force_socks_port(10808, 10809), 10810);
+        // A custom http_port on socks + 2 would clash with force-in → step to socks + 3.
+        assert_eq!(force_socks_port(10808, 10810), 10811);
+        // socks + 3 itself never collides (only reached when http == socks + 2).
+        assert_eq!(force_socks_port(10808, 10811), 10810);
     }
 
     #[test]

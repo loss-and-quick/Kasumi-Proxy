@@ -11,7 +11,7 @@ use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
     force_socks_port, AdvancedSettings, AppFilterMode, DomainStrategy, RoutingMode, RoutingRule,
-    DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
 };
 
 fn wire<T: serde::Serialize>(v: &T) -> String {
@@ -1073,9 +1073,12 @@ pub fn build_singbox_config(
     }
     // Always-on bypass-geo inbound (see route's `force-in` rule); localhost-only and
     // noauth regardless of `allow_non_localhost` — internal use for the app's fetches.
+    // `http_port` is only passed so the force port matches `proxy_status` (which can't
+    // know the active engine); sing-box itself has no separate http inbound.
+    let http_port = s.local_http_port.unwrap_or(DEFAULT_LOCAL_HTTP_PORT);
     let force_in = json!({
         "type": "mixed", "tag": "force-in",
-        "listen": "127.0.0.1", "listen_port": force_socks_port(socks_port),
+        "listen": "127.0.0.1", "listen_port": force_socks_port(socks_port, http_port),
     });
     let mut inbounds = vec![socks_in, force_in];
     if !opts.no_tun {
