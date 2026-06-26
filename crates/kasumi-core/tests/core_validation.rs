@@ -1,7 +1,8 @@
 //! Validates that the configs our builders emit are actually accepted by the real
-//! cores (`xray run -test` / `sing-box check`), catching schema drift that the
-//! byte-exact golden fixtures can't — e.g. a field our builder emits that a pinned
-//! core version rejects.
+//! cores (`xray run -test` / `sing-box check`), catching schema drift — e.g. a field
+//! our builder emits that a pinned core version rejects. This is the config-output
+//! safety net: `core-compat.yml` runs it with staged cores on every PR touching
+//! `crates/kasumi-core/**`.
 //!
 //! The case matrix is GENERATED from our own enums (`Protocol`, `Network`,
 //! `Security`, `SsMethod` via `strum::IntoEnumIterator`), not hand-written, so a

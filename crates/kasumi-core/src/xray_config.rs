@@ -1,6 +1,7 @@
 //! Build a complete Xray `config.json` from a Profile + AdvancedSettings.
-//! Builds a `serde_json::Value` directly; pinned against committed reference
-//! fixtures (compared as Value, so key order is irrelevant).
+//! Builds a `serde_json::Value` directly. The emitted config is validated against
+//! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
+//! invariants are covered by the unit tests below.
 
 use serde_json::{json, Map, Value};
 
@@ -803,36 +804,6 @@ pub fn build_xray_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const FIXTURES: &str = include_str!("../tests/fixtures/xray_config.json");
-
-    #[test]
-    fn build_matches_reference() {
-        let cases: Vec<Value> = serde_json::from_str(FIXTURES).unwrap();
-        assert_eq!(cases.len(), 38);
-        for c in &cases {
-            let label = c["label"].as_str().unwrap();
-            let uri = c["uri"].as_str().unwrap();
-            let settings: AdvancedSettings = serde_json::from_value(c["settings"].clone()).unwrap();
-            let rules: Vec<RoutingRule> =
-                serde_json::from_value(c["routingRules"].clone()).unwrap();
-            // Cases exercising editor-only fields carry a flat profile (a URI can't
-            // express them); upgrade it through the migration. Otherwise parse the URI.
-            let profile = if c.get("profile").is_some_and(|p| !p.is_null()) {
-                let mut flat = c["profile"].clone();
-                crate::migrate::migrate_profile(&mut flat);
-                serde_json::from_value(flat)
-                    .unwrap_or_else(|e| panic!("migrate profile for {label}: {e}"))
-            } else {
-                crate::share::parse_share_link(uri, None)
-                    .unwrap_or_else(|| panic!("parse failed for {label}: {uri}"))
-            };
-            let built =
-                build_xray_config(&profile, &settings, &rules, std::slice::from_ref(&profile))
-                    .unwrap_or_else(|e| panic!("build failed for {label}: {e}"));
-            assert_eq!(built, c["config"], "config mismatch for {label}");
-        }
-    }
 
     #[test]
     fn socks_auth_gates_the_local_inbounds() {
