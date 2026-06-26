@@ -14,7 +14,8 @@ on:
     # the pinned versions (a manual bump), how cores are staged, or the generators.
     paths:
       - scripts/core-versions.sh
-      - scripts/fetch-cores-desktop.sh
+      - scripts/fetch-cores.sh
+      - scripts/cores.json
       - crates/kasumi-core/**
   schedule:
     - cron: "0 0 * * 0"  # Sunday — a day before the Monday release cron

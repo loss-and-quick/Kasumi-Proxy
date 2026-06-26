@@ -79,8 +79,8 @@ jobs:
               'frontend/src/' \
               'crates/' \
               'src-tauri/' \
-              'scripts/fetch-cores-android.sh' \
-              'scripts/fetch-cores-desktop.sh' \
+              'scripts/fetch-cores.sh' \
+              'scripts/cores.json' \
               'scripts/core-versions.sh' \
               'scripts/package-release.sh' \
               2>/dev/null | wc -l)
@@ -306,9 +306,6 @@ jobs:
           # Mirror flake.nix NDK 28.0.13004108 (== r28).
           ndk-version: r28
 
-      - name: Clone geodat2srs
-        run: git clone https://github.com/loss-and-quick/geodat2srs.git "$HOME/geodat2srs"
-
       - name: Install UI dependencies
         run: bun install --frozen-lockfile
 
@@ -380,7 +377,7 @@ jobs:
 
       - name: Fetch desktop cores
         shell: bash
-        run: scripts/fetch-cores-desktop.sh ${{ matrix.target }}
+        run: scripts/fetch-cores.sh desktop ${{ matrix.target }}
 
       - name: Import GPG key (Linux signing, optional)
         if: runner.os == 'Linux'

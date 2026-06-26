@@ -42,8 +42,8 @@ jobs:
             'frontend/src/'
             'crates/'
             'src-tauri/'
-            'scripts/fetch-cores-android.sh'
-            'scripts/fetch-cores-desktop.sh'
+            'scripts/fetch-cores.sh'
+            'scripts/cores.json'
             'scripts/core-versions.sh'
             'scripts/package-release.sh'
           )
@@ -124,9 +124,6 @@ jobs:
         with:
           ndk-version: r28
 
-      - name: Clone geodat2srs
-        run: git clone https://github.com/loss-and-quick/geodat2srs.git "$HOME/geodat2srs"
-
       - name: Install UI dependencies
         # bun workspace rooted at the repo — install from root against the single bun.lock.
         run: bun install --frozen-lockfile
@@ -199,7 +196,7 @@ jobs:
 
       - name: Fetch desktop cores
         shell: bash
-        run: scripts/fetch-cores-desktop.sh ${{ matrix.target }}
+        run: scripts/fetch-cores.sh desktop ${{ matrix.target }}
 
       - name: Build desktop bundles
         shell: bash
