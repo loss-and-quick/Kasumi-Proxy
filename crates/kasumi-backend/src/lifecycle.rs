@@ -4,7 +4,7 @@
 //! up. A `Platform`'s `start_data_path` orchestrates these and wraps its own
 //! OS-specific routing/tun/sysctl around them.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
@@ -296,6 +296,18 @@ pub async fn inject_singbox_ifaces(
 
 // ---------- core + tun2socks spawn ----------
 
+/// The core's argv (`<bin> run -c <cfg>`) and the env it needs (xray reads its geo
+/// `.dat` assets from `XRAY_LOCATION_ASSET`). Split out so a caller that supervises
+/// the spawn itself (e.g. the desktop helper's `PR_SET_PDEATHSIG` path) can reuse the
+/// exact same command without duplicating it.
+pub fn core_argv(bin: &str, cfg: &str) -> Vec<String> {
+    vec![bin.to_owned(), "run".into(), "-c".into(), cfg.to_owned()]
+}
+
+pub fn core_env(dat_dir: &str) -> HashMap<String, String> {
+    HashMap::from([("XRAY_LOCATION_ASSET".to_owned(), dat_dir.to_owned())])
+}
+
 /// Spawn the selected core (`<bin> run -c <cfg>`), logging to `log_path`. The
 /// caller persists the returned pid to its pidfile.
 pub async fn spawn_core(
@@ -305,11 +317,9 @@ pub async fn spawn_core(
     dat_dir: &str,
     kill_on_drop: bool,
 ) -> std::io::Result<Child> {
-    let env =
-        std::collections::HashMap::from([("XRAY_LOCATION_ASSET".to_owned(), dat_dir.to_owned())]);
     spawn_logged(
-        &[bin.to_owned(), "run".into(), "-c".into(), cfg.to_owned()],
-        &env,
+        &core_argv(bin, cfg),
+        &core_env(dat_dir),
         log_path,
         kill_on_drop,
     )
@@ -335,11 +345,9 @@ pub async unsafe fn spawn_core_pre_exec<F>(
 where
     F: FnMut() -> std::io::Result<()> + Send + Sync + 'static,
 {
-    let env =
-        std::collections::HashMap::from([("XRAY_LOCATION_ASSET".to_owned(), dat_dir.to_owned())]);
     spawn_logged_pre_exec(
-        &[bin.to_owned(), "run".into(), "-c".into(), cfg.to_owned()],
-        &env,
+        &core_argv(bin, cfg),
+        &core_env(dat_dir),
         log_path,
         kill_on_drop,
         pre_exec,
@@ -358,6 +366,18 @@ pub async fn spawn_tun2socks(
     log_path: &Path,
     fwmark: Option<u32>,
 ) -> std::io::Result<Child> {
+    spawn_logged(
+        &tun2socks_argv(bin, iface, socks_port, fwmark),
+        &HashMap::new(),
+        log_path,
+        false,
+    )
+    .await
+}
+
+/// tun2socks' argv. Split out (like [`core_argv`]) so a caller that supervises the
+/// spawn itself can reuse the exact command. tun2socks needs no special env.
+pub fn tun2socks_argv(bin: &str, iface: &str, socks_port: u16, fwmark: Option<u32>) -> Vec<String> {
     let mut argv = vec![
         bin.to_owned(),
         "-device".into(),
@@ -369,7 +389,7 @@ pub async fn spawn_tun2socks(
         argv.push("-fwmark".into());
         argv.push(mark.to_string());
     }
-    spawn_logged(&argv, &std::collections::HashMap::new(), log_path, false).await
+    argv
 }
 
 /// Confirm the core stayed up: a bad config makes it exit within ~1s.

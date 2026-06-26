@@ -130,6 +130,43 @@ pub fn raise_net_raw_ambient() -> std::io::Result<()> {
     }
 }
 
+/// A `pre_exec` hook tying a spawned data-path process (the core / tun2socks) to the
+/// helper that is its parent: `PR_SET_PDEATHSIG(SIGTERM)` makes the kernel SIGTERM
+/// the child the instant the helper dies — including an *unclean* exit (crash /
+/// SIGKILL) where no teardown code can run. SIGTERM (not KILL) lets sing-box remove
+/// its own tun + auto_route on the way out, so an orphaned core can't strand a tun /
+/// routes and leave `service-state` reporting "stopped" while traffic is still
+/// captured. The `getppid() == 1` guard closes the fork→prctl race: if the helper
+/// already died (child reparented to init), PDEATHSIG would never fire, so exit
+/// rather than exec an unsupervised core.
+///
+/// # Async-signal-safety
+///
+/// Only `prctl` / `getppid` / `_exit` — no allocation, locks, or stdio — per the
+/// `pre_exec` contract.
+pub fn die_with_parent() -> std::io::Result<()> {
+    // SAFETY: async-signal-safe syscalls only, per the contract above.
+    let rc = unsafe {
+        libc::prctl(
+            libc::PR_SET_PDEATHSIG,
+            libc::SIGTERM as libc::c_ulong,
+            0,
+            0,
+            0,
+        )
+    };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: getppid is async-signal-safe and never fails.
+    if unsafe { libc::getppid() } == 1 {
+        // SAFETY: _exit is async-signal-safe; the helper is already gone, so don't
+        // bring up an unsupervised core that nothing would ever reap.
+        unsafe { libc::_exit(0) };
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
