@@ -197,6 +197,18 @@ impl DesktopPlatform {
         let cfg_text = read_text(&cfg).await.unwrap_or_default();
         let bypass = routing::resolve_bypass_cidrs(&cfg_text).await;
 
+        // bind the core's own
+        // egress outbounds (proxy + direct) to the physical uplink so they escape the
+        // tun at the socket layer instead of looping back through tun2socks. Without
+        // this, the `direct` outbound carrying geo-`direct` (e.g. RU) traffic is
+        // captured by the split-default and loops. Gated on CAP_NET_RAW (the
+        // privileged data-path owner); a harmless no-op in unprivileged in-process
+        // dev, where there's no managed tun to escape. (sing-box's `auto_route` path
+        // escapes via its own `auto_detect_interface` and is bound elsewhere.)
+        if can_bind_uplink() {
+            inject_uplink_bind(CoreEngine::Xray, Path::new(&cfg)).await;
+        }
+
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
         let child = spawn_core(&self.p.xray_bin, &cfg, &log, &dat_dir, false).await?;
         let pid = child.id().unwrap_or(0) as i32;
@@ -239,20 +251,20 @@ impl Default for DesktopPlatform {
     }
 }
 
-/// Whether a test core spawned from *this* process will hold an effective
-/// `CAP_NET_RAW`, so its uplink bind (`SO_BINDTODEVICE` / `bind_interface`) can
-/// escape an active tun. Only the privileged data-path owner qualifies: the root
-/// helper on Linux, the LocalSystem service on Windows. In-process dev on unix is
-/// unprivileged and skips the bind.
+/// Whether a core spawned from *this* process will hold an effective `CAP_NET_RAW`,
+/// so its uplink bind (`SO_BINDTODEVICE` / `bind_interface`) can escape an active tun.
+/// Gates both the main bridged core's bind and the test-core bind. Only the
+/// privileged data-path owner qualifies: the root helper on Linux, the LocalSystem
+/// service on Windows. In-process dev on unix is unprivileged and skips the bind
+/// (there's no managed tun to escape there anyway).
 ///
-/// This is the real precondition the test-core bind needs. It checks the effective
-/// `CAP_NET_RAW` directly (which reads true under a root *or* caps-only helper
-/// whose bounding set keeps `NET_RAW`, and false for unprivileged dev) instead of
-/// the old `geteuid() == 0` proxy — so the gate stays honest whether the helper is
-/// launched as root (pkexec) or as the GUI uid with file caps (NixOS wrappers).
-/// Fails closed on a query error (see
+/// It checks the effective `CAP_NET_RAW` directly (which reads true under a root *or*
+/// caps-only helper whose bounding set keeps `NET_RAW`, and false for unprivileged
+/// dev) instead of the old `geteuid() == 0` proxy — so the gate stays honest whether
+/// the helper is launched as root (pkexec) or as the GUI uid with file caps (NixOS
+/// wrappers). Fails closed on a query error (see
 /// [`capabilities::has_effective_net_raw`]).
-fn test_core_can_bind() -> bool {
+fn can_bind_uplink() -> bool {
     #[cfg(target_os = "linux")]
     {
         crate::desktop::capabilities::has_effective_net_raw()
@@ -482,7 +494,7 @@ impl Platform for DesktopPlatform {
         // default route, so the bind is a harmless no-op. (In-process dev runs
         // unprivileged: skip the bind — it'd need CAP_NET_RAW and there's no managed
         // tun to escape anyway.)
-        let bound = test_core_can_bind() && inject_uplink_bind(engine, cfg_path).await;
+        let bound = can_bind_uplink() && inject_uplink_bind(engine, cfg_path).await;
         let bin = self.core_bin(engine).to_owned();
         let dat = self.p.backend.dat_dir.to_string_lossy().into_owned();
 
@@ -514,11 +526,13 @@ impl Platform for DesktopPlatform {
     }
 }
 
-/// Rewrite the test core's config to bind its proxy outbound to the physical uplink
-/// (`SO_BINDTODEVICE` / `bind_interface`) so its traffic escapes an active tun.
-/// Returns whether a bind was actually written (needs a resolved uplink device and a
-/// writable JSON config); the caller grants the matching `CAP_NET_RAW` only when this
-/// is true, so the test core never carries the cap without using it.
+/// Rewrite a core's config to bind its egress outbounds (proxy + direct) to the
+/// physical uplink (`SO_BINDTODEVICE` / `bind_interface`) so its traffic escapes an
+/// active tun. Used for both the main bridged core (so its `direct` outbound doesn't
+/// loop the split-default tun) and helper-spawned test cores. Returns whether a bind
+/// was actually written (needs a resolved uplink device and a writable JSON config);
+/// for a test core the caller grants the matching `CAP_NET_RAW` only when this is
+/// true, so the test core never carries the cap without using it.
 async fn inject_uplink_bind(engine: Engine, cfg_path: &Path) -> bool {
     let Some(dev) = routing::uplink_device().await else {
         return false;
@@ -529,7 +543,7 @@ async fn inject_uplink_bind(engine: Engine, cfg_path: &Path) -> bool {
     let Ok(mut cfg) = serde_json::from_str::<Value>(&text) else {
         return false;
     };
-    crate::desktop::net::bind_proxy_outbound(engine, &mut cfg, &dev);
+    kasumi_core::outbound_bind::bind_uplink_outbounds(engine, &mut cfg, &dev);
     match serde_json::to_string(&cfg) {
         Ok(s) => write_text(cfg_path, &s).await.is_ok(),
         Err(_) => false,
