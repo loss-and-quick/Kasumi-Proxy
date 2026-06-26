@@ -383,16 +383,18 @@ pub fn run() {
                 .level_for("kasumi_desktop_lib", log::LevelFilter::Debug);
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             if let Ok(paths) = desktop::paths::DesktopPaths::resolve() {
-                if paths.portable {
-                    use tauri_plugin_log::{Target, TargetKind};
-                    log_builder = log_builder.targets([
-                        Target::new(TargetKind::Stdout),
-                        Target::new(TargetKind::Folder {
-                            path: std::path::PathBuf::from(&paths.datadir).join("logs"),
-                            file_name: None,
-                        }),
-                    ]);
-                }
+                use tauri_plugin_log::{Target, TargetKind};
+                // Write the app log to <datadir>/daemon.log, beside the core logs.
+                // Desktop has no separate daemon process, so the in-app log viewer's
+                // `Daemon` target — which reads <datadir>/daemon.log — would otherwise
+                // show an empty file while these lines went to the OS log dir.
+                log_builder = log_builder.targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::Folder {
+                        path: std::path::PathBuf::from(&paths.datadir),
+                        file_name: Some("daemon".into()),
+                    }),
+                ]);
             }
             app.handle().plugin(log_builder.build())?;
 
