@@ -1,6 +1,7 @@
 //! Build a complete sing-box config from a Profile + AdvancedSettings. Builds a
-//! `serde_json::Value` directly; pinned against committed reference fixtures
-//! (Value-compared, so key order is irrelevant).
+//! `serde_json::Value` directly. The emitted config is validated against the real
+//! core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted invariants
+//! are covered by the unit tests below.
 
 use serde_json::{json, Map, Value};
 
@@ -1115,46 +1116,6 @@ pub fn build_singbox_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const FIXTURES: &str = include_str!("../tests/fixtures/singbox_config.json");
-
-    #[test]
-    fn build_matches_reference() {
-        let cases: Vec<Value> = serde_json::from_str(FIXTURES).unwrap();
-        assert!(cases.len() >= 12, "expected a healthy corpus");
-        for c in &cases {
-            let label = c["label"].as_str().unwrap();
-            let uri = c["uri"].as_str().unwrap();
-            let settings: AdvancedSettings = serde_json::from_value(c["settings"].clone()).unwrap();
-            let rules: Vec<RoutingRule> =
-                serde_json::from_value(c["routingRules"].clone()).unwrap();
-            let srs = c["srsDir"].as_str().unwrap_or("");
-            // Cases exercising editor-only fields carry a flat profile (a URI can't
-            // express them); upgrade it through the migration. Otherwise parse the URI.
-            let profile = if c.get("profile").is_some_and(|p| !p.is_null()) {
-                let mut flat = c["profile"].clone();
-                crate::migrate::migrate_profile(&mut flat);
-                serde_json::from_value(flat)
-                    .unwrap_or_else(|e| panic!("migrate profile for {label}: {e}"))
-            } else {
-                crate::share::parse_share_link(uri, None)
-                    .unwrap_or_else(|| panic!("parse failed for {label}: {uri}"))
-            };
-            let opts = SingboxBuildOpts {
-                no_tun: false,
-                srs_dir: srs,
-            };
-            let built = build_singbox_config(
-                &profile,
-                &settings,
-                &rules,
-                std::slice::from_ref(&profile),
-                opts,
-            )
-            .unwrap_or_else(|e| panic!("build failed for {label}: {e}"));
-            assert_eq!(built, c["config"], "config mismatch for {label}");
-        }
-    }
 
     #[test]
     fn socks_auth_adds_users_to_the_mixed_inbound() {

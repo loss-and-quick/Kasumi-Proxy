@@ -1,7 +1,8 @@
 //! Validates that the configs our builders emit are actually accepted by the real
-//! cores (`xray run -test` / `sing-box check`), catching schema drift that the
-//! byte-exact golden fixtures can't — e.g. a field our builder emits that a pinned
-//! core version rejects.
+//! cores (`xray run -test` / `sing-box check`), catching schema drift — e.g. a field
+//! our builder emits that a pinned core version rejects. This is the config-output
+//! safety net: `core-compat.yml` runs it with staged cores on every PR touching
+//! `crates/kasumi-core/**`.
 //!
 //! The case matrix is GENERATED from our own enums (`Protocol`, `Network`,
 //! `Security`, `SsMethod` via `strum::IntoEnumIterator`), not hand-written, so a
@@ -22,7 +23,7 @@ use strum::IntoEnumIterator;
 use kasumi_core::core_config::build_core_config;
 use kasumi_core::enums::{CoreEngine, Network, Security, SsMethod};
 use kasumi_core::profile::{Profile, Protocol};
-use kasumi_core::state::AdvancedSettings;
+use kasumi_core::state::{AdvancedSettings, DomainStrategy, RoutingMode, RoutingRule};
 
 // ── valid credential / crypto material (cores validate these) ──
 const UUID: &str = "11111111-1111-1111-1111-111111111111";
@@ -180,6 +181,189 @@ fn generate() -> Vec<(String, Profile)> {
     cases
 }
 
+// ── settings/routing matrix ──
+//
+// The protocol sweep above exercises every protocol/transport/security with
+// DEFAULT settings and no rules. To also cover the config-builder branches the
+// golden fixtures used to pin (routing modes, sniffing, fragment, mux, socks auth,
+// fake-dns, LAN listen, domain strategy, DNS routing), sweep a representative
+// profile through a settings matrix — once per engine (forced via
+// `core_by_protocol`) so both builders are exercised. Variants are geo-independent
+// except where noted (`needs_geo`): routing-rules mode is covered with plain
+// domain/IP rules that need no geoip/geosite/srs data, so the matrix runs wherever
+// the cores are staged; a geo-needing variant (e.g. xray fake-dns, whose DNS rule
+// references `geoip:!private`) is skipped when `geoip.dat` isn't present.
+
+/// A config to validate: profile + the settings/rules it's built with. `needs_geo`
+/// marks a case whose emitted config references geoip/geosite data not staged by
+/// `fetch-binaries.sh` — it's validated only when that data is available.
+struct Case {
+    name: String,
+    profile: Profile,
+    settings: AdvancedSettings,
+    rules: Vec<RoutingRule>,
+    needs_geo: bool,
+}
+
+/// A couple of plain (non-geo) routing rules: a domain → direct and an IP →
+/// direct. These exercise Rules-mode rule emission without needing geo data.
+fn plain_rules() -> Vec<RoutingRule> {
+    vec![
+        RoutingRule {
+            id: "d".into(),
+            remarks: "direct-domain".into(),
+            enabled: true,
+            outbound_tag: "direct".into(),
+            domain: Some(vec!["example.com".into()]),
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+        },
+        RoutingRule {
+            id: "i".into(),
+            remarks: "direct-ip".into(),
+            enabled: true,
+            outbound_tag: "direct".into(),
+            domain: None,
+            ip: Some(vec!["10.0.0.0/8".into()]),
+            port: None,
+            network: None,
+            protocol: None,
+        },
+    ]
+}
+
+/// Named settings/rules variants, each exercising a distinct builder branch. The
+/// trailing bool is `needs_geo` — true when the emitted config references geoip/
+/// geosite data (xray fake-dns pulls `geoip:!private` into the DNS block).
+fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>, bool)> {
+    // Each variant is a single (or couple of) field override(s) on the defaults —
+    // written with struct-update syntax rather than `mut … = default()` so the
+    // intent (which branch is exercised) reads off the field name.
+    vec![
+        (
+            "global",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Global,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "rules-empty",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // Rules mode with plain (non-geo) rules + sniffing/routeOnly toggled.
+        (
+            "rules-sniff-routonly",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                domain_sniffing: true,
+                route_only: true,
+                ..Default::default()
+            },
+            plain_rules(),
+            false,
+        ),
+        // Every domain strategy the builder branches on.
+        (
+            "ds-ipondemand",
+            AdvancedSettings {
+                domain_strategy: DomainStrategy::IpOnDemand,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // xray outbound features.
+        (
+            "fragment",
+            AdvancedSettings {
+                fragment: true,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "mux",
+            AdvancedSettings {
+                mux: true,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // Local-inbound auth (both fields required to engage).
+        (
+            "socks-auth",
+            AdvancedSettings {
+                socks_username: Some("u".into()),
+                socks_password: Some("p".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // DNS branches. fake-dns emits `geoip:!private` on xray → needs geoip.dat.
+        (
+            "fake-dns",
+            AdvancedSettings {
+                fake_dns: true,
+                ..Default::default()
+            },
+            vec![],
+            true,
+        ),
+        (
+            "dns-direct",
+            AdvancedSettings {
+                dns_via_proxy: false,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // LAN-facing listen address (0.0.0.0).
+        (
+            "allow-lan",
+            AdvancedSettings {
+                allow_non_localhost: true,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+    ]
+}
+
+/// Settings cases: a representative profile × every variant × both engines.
+fn settings_cases() -> Vec<Case> {
+    let vless = make(Protocol::Vless, Some(Network::Tcp), Security::Tls, "vless")
+        .expect("representative vless builds");
+    let mut cases = Vec::new();
+    for (label, mut settings, rules, needs_geo) in settings_variants() {
+        for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+            settings.core_by_protocol.insert(Protocol::Vless, engine);
+            cases.push(Case {
+                name: format!("settings/{label}/{}", wire(&engine)),
+                profile: vless.clone(),
+                settings: settings.clone(),
+                rules: rules.clone(),
+                needs_geo,
+            });
+        }
+    }
+    cases
+}
+
 // ── core invocation ──
 
 fn binaries_dir() -> PathBuf {
@@ -207,13 +391,14 @@ fn find_core(env_var: &str, prefix: &str) -> Option<PathBuf> {
 
 fn write_config(
     profile: &Profile,
+    settings: &AdvancedSettings,
+    rules: &[RoutingRule],
     srs_dir: &Path,
 ) -> Option<(tempfile::TempDir, PathBuf, CoreEngine)> {
-    let settings = AdvancedSettings::default();
     let built = build_core_config(
         profile,
-        &settings,
-        &[],
+        settings,
+        rules,
         std::slice::from_ref(profile),
         &srs_dir.to_string_lossy(),
     )
@@ -241,8 +426,9 @@ fn validate(engine: CoreEngine, bin: &Path, cfg: &Path, asset_dir: &Path) -> (bo
     (out.status.success(), combined)
 }
 
-#[test]
-fn generated_configs_validate_against_real_cores() {
+/// Build + run every case against the staged cores. Shared by the protocol and
+/// settings sweeps. Skips wholesale when no cores are staged (plain CI).
+fn validate_all(cases: Vec<Case>) {
     let xray = find_core("KASUMI_XRAY_BIN", "xray");
     let singbox = find_core("KASUMI_SINGBOX_BIN", "sing-box");
     if xray.is_none() && singbox.is_none() {
@@ -255,11 +441,29 @@ fn generated_configs_validate_against_real_cores() {
 
     let asset_dir = binaries_dir();
     let srs_dir = tempfile::tempdir().unwrap();
+    // geoip.dat isn't staged by fetch-binaries.sh (the app downloads it to its
+    // datadir at runtime), so a config that references geoip/geosite data can't be
+    // validated where cores are staged without it. Skip those cases with a count
+    // rather than failing them for missing data.
+    let has_geo = asset_dir.join("geoip.dat").is_file();
 
     let mut failures = Vec::new();
     let mut checked = 0;
-    for (name, profile) in generate() {
-        let Some((_keep, cfg, engine)) = write_config(&profile, srs_dir.path()) else {
+    let mut skipped_geo = 0;
+    for Case {
+        name,
+        profile,
+        settings,
+        rules,
+        needs_geo,
+    } in cases
+    {
+        if needs_geo && !has_geo {
+            skipped_geo += 1;
+            continue;
+        }
+        let Some((_keep, cfg, engine)) = write_config(&profile, &settings, &rules, srs_dir.path())
+        else {
             continue; // our builder declined this combo — not a core problem.
         };
         let bin = match engine {
@@ -275,8 +479,16 @@ fn generated_configs_validate_against_real_cores() {
     }
 
     eprintln!(
-        "core validation: {}/{checked} configs accepted",
-        checked - failures.len()
+        "core validation: {}/{checked} configs accepted{}",
+        checked - failures.len(),
+        if skipped_geo > 0 {
+            format!(
+                ", {skipped_geo} geo-dependent skipped (no geoip.dat in {})",
+                asset_dir.display()
+            )
+        } else {
+            String::new()
+        }
     );
     assert!(
         failures.is_empty(),
@@ -289,4 +501,24 @@ fn generated_configs_validate_against_real_cores() {
         checked > 0,
         "no cases validated — staged binaries unreadable?"
     );
+}
+
+#[test]
+fn protocol_matrix_validates_against_real_cores() {
+    let cases = generate()
+        .into_iter()
+        .map(|(name, profile)| Case {
+            name,
+            settings: AdvancedSettings::default(),
+            rules: vec![],
+            needs_geo: false,
+            profile,
+        })
+        .collect();
+    validate_all(cases);
+}
+
+#[test]
+fn settings_matrix_validates_against_real_cores() {
+    validate_all(settings_cases());
 }
