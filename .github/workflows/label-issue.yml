@@ -41,6 +41,7 @@ jobs:
                   { needle: "frontend", label: "frontend" },
                   { needle: "backend", label: "backend" },
                   { needle: "build", label: "ci" },
+                  { needle: "nix", label: "nix" },
                   { needle: "documentation", label: "documentation" },
                 ],
               },
