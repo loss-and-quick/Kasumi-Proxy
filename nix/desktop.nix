@@ -110,6 +110,7 @@ let
       gappsWrapperArgs+=(--prefix PATH : "${lib.makeBinPath [ pkgs.iproute2 ]}")
     '';
     installPhase = ''
+      runHook preInstall
       mkdir -p $out/bin
       cp ${tauri.app}/bin/kasumi-desktop $out/bin/kasumi-desktop
       # The GUI spawns this sibling for the data-path (privilege separation). The
@@ -130,6 +131,7 @@ let
         }
       } \
         $out/share/icons/hicolor/256x256/apps/kasumi-proxy.png
+      runHook postInstall
     '';
     # A `.desktop` entry so the app shows up in the launcher (copyDesktopItems hook).
     desktopItems = [
