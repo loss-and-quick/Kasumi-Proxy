@@ -20,6 +20,7 @@ body:
         - Desktop app (Tauri — tray, autostart, packaging)
         - Protocols / config generation
         - Build / release / CI
+        - Nix / packaging
         - Other
     validations:
       required: true

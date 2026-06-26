@@ -41,6 +41,7 @@ body:
         - Web UI (frontend)
         - Proxy core / backend
         - Build / CI / release
+        - Nix / packaging
         - Documentation
         - Other / not sure
     validations:

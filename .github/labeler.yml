@@ -51,6 +51,14 @@ ci:
       - any-glob-to-any-file:
           - ".github/**"
 
+nix:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.nix"
+          - "**/*.nix"
+          - "flake.lock"
+          - "nix/**"
+
 documentation:
   - changed-files:
       - any-glob-to-any-file:
