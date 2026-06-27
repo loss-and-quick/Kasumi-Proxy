@@ -224,6 +224,13 @@ pub async fn uplink_device() -> Option<String> {
     (!alias.is_empty()).then(|| alias.to_string())
 }
 
+/// Source-address pin for the uplink bind. Windows binds by interface index
+/// (`IP_UNICAST_IF`), which doesn't suffer the multi-homed source-selection issue the
+/// Linux `SO_BINDTODEVICE` path does, so no source override is emitted here.
+pub async fn uplink_source() -> Option<String> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
