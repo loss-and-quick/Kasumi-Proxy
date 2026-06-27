@@ -9,7 +9,10 @@ import {
   type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "../i18n";
+import { Btn } from "./buttons";
 import { Icon } from "./icons";
+import { Dialog } from "./overlays";
 
 /**
  * Number inputs mutate their value on wheel scroll while focused, even once the
@@ -117,6 +120,262 @@ export const Field = ({
     ) : null}
   </div>
 );
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+// Clock-dial geometry (SVG viewBox is DIAL_SIZE square, centred at DIAL_C).
+const DIAL_SIZE = 256;
+const DIAL_C = DIAL_SIZE / 2;
+const RING_OUTER = 100; // hours 0–11 and the minute ring
+const RING_INNER = 62; // hours 12–23
+const toRad = (deg: number) => (deg * Math.PI) / 180;
+const dialPos = (deg: number, r: number) => ({
+  x: DIAL_C + r * Math.sin(toRad(deg)),
+  y: DIAL_C - r * Math.cos(toRad(deg)),
+});
+
+/**
+ * Material-3 clock-dial used by IntervalField. Drives an hour/minute pair via
+ * pointer drag on a circular face; releasing in hour mode auto-advances to
+ * minutes, like the Android time picker. Hours fill two rings (0–11 outer,
+ * 12–23 inner) so the whole 0–23 range — including 0 — is reachable.
+ */
+function ClockDial({
+  mode,
+  setMode,
+  h,
+  m,
+  setH,
+  setM,
+}: {
+  mode: "h" | "m";
+  setMode: (mode: "h" | "m") => void;
+  h: number;
+  m: number;
+  setH: (h: number) => void;
+  setM: (m: number) => void;
+}) {
+  const t = useT();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const dragging = useRef(false);
+  // Drives the hand's CSS transition: animate the sweep on tap, but track the
+  // pointer 1:1 while dragging (no lag).
+  const [dragActive, setDragActive] = useState(false);
+  // Auto-advance hours → minutes after a short beat so the picked hour is
+  // visible before the dial flips (instant felt jarring).
+  const advanceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(advanceTimer.current), []);
+
+  const apply = (e: React.PointerEvent) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const dx = ((e.clientX - rect.left) / rect.width) * DIAL_SIZE - DIAL_C;
+    const dy = ((e.clientY - rect.top) / rect.height) * DIAL_SIZE - DIAL_C;
+    let deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
+    if (deg < 0) deg += 360;
+    if (mode === "h") {
+      const idx = Math.round(deg / 30) % 12;
+      const inner = Math.hypot(dx, dy) < (RING_OUTER + RING_INNER) / 2;
+      setH(inner ? idx + 12 : idx);
+    } else {
+      setM(Math.round(deg / 6) % 60);
+    }
+  };
+
+  // Highlighted value drives the hand + selector; outer-ring hours and the 0–55
+  // minute labels sit on RING_OUTER, inner-ring hours on RING_INNER. The hand
+  // is drawn pointing straight up and rotated, so a CSS transition on the
+  // rotation animates the sweep between values (like the Android picker).
+  const selDeg = mode === "h" ? (h % 12) * 30 : m * 6;
+  const selR = mode === "h" && h >= 12 ? RING_INNER : RING_OUTER;
+  const onLabel = mode === "h" || m % 5 === 0;
+
+  const labels =
+    mode === "h"
+      ? [
+          ...Array.from({ length: 12 }, (_, i) => ({ v: i, r: RING_OUTER })),
+          ...Array.from({ length: 12 }, (_, i) => ({ v: i + 12, r: RING_INNER })),
+        ]
+      : Array.from({ length: 12 }, (_, i) => ({ v: i * 5, r: RING_OUTER }));
+
+  return (
+    <div className="timepicker">
+      <div className="timepicker-head">
+        <div className="timepicker-seg">
+          <button
+            type="button"
+            className={`timepicker-num${mode === "h" ? " active" : ""}`}
+            onClick={() => {
+              clearTimeout(advanceTimer.current);
+              setMode("h");
+            }}
+          >
+            {pad2(h)}
+          </button>
+          <span className="timepicker-unit">{t("interval.hours")}</span>
+        </div>
+        <span className="timepicker-colon">:</span>
+        <div className="timepicker-seg">
+          <button
+            type="button"
+            className={`timepicker-num${mode === "m" ? " active" : ""}`}
+            onClick={() => {
+              clearTimeout(advanceTimer.current);
+              setMode("m");
+            }}
+          >
+            {pad2(m)}
+          </button>
+          <span className="timepicker-unit">{t("interval.minutes")}</span>
+        </div>
+      </div>
+
+      <svg
+        ref={svgRef}
+        className="timepicker-dial"
+        viewBox={`0 0 ${DIAL_SIZE} ${DIAL_SIZE}`}
+        width={DIAL_SIZE}
+        height={DIAL_SIZE}
+        role="presentation"
+        onPointerDown={(e) => {
+          svgRef.current?.setPointerCapture(e.pointerId);
+          clearTimeout(advanceTimer.current);
+          dragging.current = true;
+          setDragActive(true);
+          apply(e);
+        }}
+        onPointerMove={(e) => {
+          if (dragging.current) apply(e);
+        }}
+        onPointerUp={() => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          setDragActive(false);
+          if (mode === "h") advanceTimer.current = setTimeout(() => setMode("m"), 320);
+        }}
+      >
+        <circle cx={DIAL_C} cy={DIAL_C} r={DIAL_C - 8} className="dial-face" />
+        <g
+          className={`dial-hand-group${dragActive ? " dragging" : ""}`}
+          style={{ transform: `rotate(${selDeg}deg)` }}
+        >
+          <line x1={DIAL_C} y1={DIAL_C} x2={DIAL_C} y2={DIAL_C - selR} className="dial-hand" />
+          <circle cx={DIAL_C} cy={DIAL_C - selR} r={20} className="dial-selector" />
+          {!onLabel && <circle cx={DIAL_C} cy={DIAL_C - selR} r={2} className="dial-pivot-end" />}
+        </g>
+        <circle cx={DIAL_C} cy={DIAL_C} r={5} className="dial-pivot" />
+        {/* key={mode} remounts the set on each hour⇄minute switch, replaying the
+            fade/scale so the dial transition reads as a crossfade. */}
+        <g className="dial-labels" key={mode}>
+          {labels.map(({ v, r }) => {
+            const idx = mode === "h" ? v % 12 : v / 5;
+            const p = dialPos(idx * 30, r);
+            const selected = (mode === "h" ? h : m) === v;
+            return (
+              <text
+                key={v}
+                x={p.x}
+                y={p.y}
+                className={`dial-label${selected ? " selected" : ""}${r === RING_INNER ? " inner" : ""}`}
+              >
+                {pad2(v)}
+              </text>
+            );
+          })}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Interval picker for a duration stored as a minute count. Tapping the field
+ * opens a Material-3 clock-dial dialog (see ClockDial). Built in-house rather
+ * than reusing `<input type="time">`: that native control is a wall-clock widget
+ * whose desktop (WebKitGTK) implementation could not reach a 0-hour value. Hours
+ * are capped at 23 and minutes at 59 (max interval 23:59).
+ */
+export const IntervalField = ({
+  label,
+  minutes,
+  onChange,
+  error,
+}: {
+  label?: string;
+  minutes: number;
+  onChange: (minutes: number) => void;
+  error?: string;
+}) => {
+  const t = useT();
+  const safe = Math.max(0, Math.floor(minutes) || 0);
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"h" | "m">("h");
+  const [draftH, setDraftH] = useState(h);
+  const [draftM, setDraftM] = useState(m);
+
+  const openPicker = () => {
+    setDraftH(h);
+    setDraftM(m);
+    setMode("h");
+    setOpen(true);
+  };
+  const commit = () => {
+    onChange(draftH * 60 + draftM);
+    setOpen(false);
+  };
+
+  return (
+    <div className="field">
+      {label && <div className="field-label">{label}</div>}
+      <button
+        type="button"
+        className="input interval-trigger"
+        style={error ? { borderBottomColor: "var(--error)" } : undefined}
+        onClick={openPicker}
+      >
+        <span>{`${pad2(h)}:${pad2(m)}`}</span>
+        <Icon name="schedule" />
+      </button>
+      {error ? (
+        <div style={{ fontSize: 11.5, color: "var(--error)", marginTop: 5 }}>{error}</div>
+      ) : null}
+      {/* Portal to <body>: the picker opens from inside a Sheet, so a centred
+          dialog must escape that sheet's absolute-positioned, clipped body and
+          out-stack it (sheet-over-sheet would just overlap at the bottom). */}
+      {createPortal(
+        <Dialog
+          open={open}
+          title={t("interval.pickTitle")}
+          onClose={() => setOpen(false)}
+          actions={
+            <>
+              <Btn variant="text" onClick={() => setOpen(false)}>
+                {t("interval.cancel")}
+              </Btn>
+              <Btn variant="text" onClick={commit}>
+                {t("interval.ok")}
+              </Btn>
+            </>
+          }
+        >
+          <ClockDial
+            mode={mode}
+            setMode={setMode}
+            h={draftH}
+            m={draftM}
+            setH={setDraftH}
+            setM={setDraftM}
+          />
+        </Dialog>,
+        document.body,
+      )}
+    </div>
+  );
+};
 
 const normOpt = <T extends string>(o: Opt<T>): { value: T; label: string } =>
   typeof o === "string" ? { value: o, label: o === "" ? "— none —" : o } : o;

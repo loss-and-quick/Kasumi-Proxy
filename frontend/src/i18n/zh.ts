@@ -76,6 +76,12 @@ const zh = {
   "time.ago": "{n}{unit}前",
   "time.unit.m": "分",
   "time.unit.h": "时",
+  "interval.pickTitle": "更新间隔",
+  "interval.ok": "确定",
+  "interval.cancel": "取消",
+  "interval.hours": "小时",
+  "interval.minutes": "分钟",
+
   // profiles
   "profiles.title": "配置",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

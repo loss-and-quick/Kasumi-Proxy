@@ -11,6 +11,7 @@ import {
   Field,
   Icon,
   IconBtn,
+  IntervalField,
   RowToggle,
   Select,
   Sheet,
@@ -19,13 +20,7 @@ import {
 } from "../../components";
 import { useFormatters, useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
-import {
-  clockToMinutes,
-  isInsecureHttpUrl,
-  isLocalOrPrivateHost,
-  minutesToClock,
-  uid,
-} from "../../lib/utils";
+import { isInsecureHttpUrl, isLocalOrPrivateHost, minutesToClock, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText, readText } from "../profiles/clipboard";
 
@@ -229,11 +224,10 @@ export default function Subscriptions() {
           />
           {importAutoUpdate && (
             <div style={{ paddingLeft: 54 }}>
-              <Field
+              <IntervalField
                 label={t("subs.interval")}
-                value={minutesToClock(importInterval)}
-                type="time"
-                onChange={(v) => setImportInterval(clockToMinutes(v))}
+                minutes={importInterval}
+                onChange={setImportInterval}
               />
             </div>
           )}
@@ -683,11 +677,10 @@ function SubEditSheet({
       />
       {d.autoUpdate && (
         <div style={{ paddingLeft: 54 }}>
-          <Field
+          <IntervalField
             label={t("subs.interval")}
-            value={minutesToClock(d.interval)}
-            type="time"
-            onChange={(v) => set("interval", clockToMinutes(v))}
+            minutes={d.interval}
+            onChange={(v) => set("interval", v)}
             error={errors.interval}
           />
         </div>

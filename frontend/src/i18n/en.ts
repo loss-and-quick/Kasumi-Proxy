@@ -81,6 +81,12 @@ const en = {
   "time.ago": "{n}{unit} ago",
   "time.unit.m": "m",
   "time.unit.h": "h",
+  "interval.pickTitle": "Update interval",
+  "interval.ok": "OK",
+  "interval.cancel": "Cancel",
+  "interval.hours": "Hours",
+  "interval.minutes": "Minutes",
+
   // profiles
   "profiles.title": "Profiles",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

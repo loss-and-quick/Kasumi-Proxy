@@ -76,6 +76,12 @@ const hi = {
   "time.ago": "{n}{unit} पहले",
   "time.unit.m": "मि",
   "time.unit.h": "घ",
+  "interval.pickTitle": "अपडेट अंतराल",
+  "interval.ok": "ठीक है",
+  "interval.cancel": "रद्द करें",
+  "interval.hours": "घंटे",
+  "interval.minutes": "मिनट",
+
   // profiles
   "profiles.title": "प्रोफ़ाइल",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {
