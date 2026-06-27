@@ -14,6 +14,16 @@ use crate::state::{
     DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
 };
 
+/// iproute2 table + rule-priority indices that native sing-box `auto_route`
+/// installs on Linux. The main tun uses sing-tun's defaults (`DefaultIPRoute2TableIndex`
+/// = 2022, `DefaultIPRoute2RuleIndex` = 9000); the force tun is shifted onto its own
+/// table + rule so two `auto_route` tuns don't collide (see `build_singbox_tun_inbounds`).
+/// Desktop teardown of orphaned routing keys off exactly these — keep them in sync.
+pub const SINGBOX_MAIN_TABLE: u32 = 2022;
+pub const SINGBOX_MAIN_RULE_PRIO: u32 = 9000;
+pub const SINGBOX_FORCE_TABLE: u32 = 2023;
+pub const SINGBOX_FORCE_RULE_PRIO: u32 = 9010;
+
 fn wire<T: serde::Serialize>(v: &T) -> String {
     serde_json::to_value(v)
         .ok()
@@ -955,7 +965,7 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
             // tun-in's table (2022) and sing-box FATALs with "add route 0: file
             // exists". The kernel filters packets into each tun by uid, then each
             // tun's default route lives in its own table.
-            "iproute2_table_index": 2023, "iproute2_rule_index": 9010,
+            "iproute2_table_index": SINGBOX_FORCE_TABLE, "iproute2_rule_index": SINGBOX_FORCE_RULE_PRIO,
             "stack": stack, "strict_route": s.strict_route,
             "include_uid": force_uids,
         }));
