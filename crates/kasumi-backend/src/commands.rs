@@ -16,13 +16,13 @@ use serde::{Deserialize, Serialize};
 
 use kasumi_core::contract::{Capabilities, FetchMode, LogTarget, ServiceState, WsInfo};
 use kasumi_core::core_config::{build_core_config, CoreConfig};
+use kasumi_core::mutate::{apply_mutation, MutationIntent};
 use kasumi_core::profile::Profile;
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::state::{default_app_state, AppState, DEFAULT_LOG_ROTATE_KB};
-use kasumi_core::sub_apply::{deduplicate_profiles_scoped, remove_profiles_by_sub_id};
 
 use crate::fs::{read_text, write_text};
-use crate::fsjson::{read_json, write_bytes_atomic, write_json_atomic};
+use crate::fsjson::{read_json, write_bytes_atomic};
 use crate::net::{fetch_url, used_ports, FetchUrlOptions};
 use crate::platform::{AppInfo, Platform};
 
@@ -53,11 +53,13 @@ fn err(msg: impl Into<String>) -> CommandError {
 pub enum Command {
     ReadState,
     ReadProfiles,
-    WriteState {
-        state: Box<AppState>,
-    },
-    WriteProfiles {
-        profiles: Vec<Profile>,
+    /// The single write path: apply one domain intent to the persisted state. The
+    /// handler reads the current state, applies the intent (pure
+    /// `kasumi_core::mutate`), runs the write-side middleware chain, persists, and
+    /// returns the new canonical `AppState`. Routed through the `Service` so it runs
+    /// under the state-write lock; the stateless `dispatch` rejects it.
+    Mutate {
+        intent: Box<MutationIntent>,
     },
     #[serde(rename_all = "camelCase")]
     FetchSubscription {
@@ -126,25 +128,6 @@ pub enum Command {
     #[serde(rename_all = "camelCase")]
     SpeedTest {
         profile_id: String,
-    },
-    // Pure profile-list transforms (dedup / sub-removal). Exposed over dispatch so
-    // the UI runs the canonical `kasumi_core::sub_apply` logic instead of
-    // reimplementing it; the caller passes its in-memory list and persists the
-    // returned one.
-    #[serde(rename_all = "camelCase")]
-    DeduplicateProfiles {
-        profiles: Vec<Profile>,
-        #[serde(default)]
-        active_id: Option<String>,
-        #[serde(default)]
-        group_id: Option<String>,
-    },
-    #[serde(rename_all = "camelCase")]
-    RemoveProfilesBySubId {
-        profiles: Vec<Profile>,
-        sub_id: String,
-        #[serde(default)]
-        sub_group_id: Option<String>,
     },
     // Lifecycle: stateful, owned by the Service's serialized chain. The stateless
     // `dispatch` rejects them; `Service::dispatch` intercepts and runs them.
@@ -259,55 +242,6 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                 .unwrap_or_default();
             Ok(Response::Profiles(profiles))
         }
-        Command::WriteState { state } => {
-            // The UI replaces the whole persisted state on every edit. Before it
-            // lands, run the write-side middleware chain so domain invariants that
-            // span a state transition hold — e.g. a subscription whose group_id
-            // changed drags its profiles to the new group. The chain is pure; the
-            // router stays a thin reader/writer.
-            //
-            // The split dispatch sends profiles here as `[]` and the real profiles
-            // via a separate WriteProfiles; operate on the profiles currently on
-            // disk so middleware sees the full state, then persist both halves.
-            let prev = crate::state::read_app_state(platform)
-                .await
-                .unwrap_or_else(default_app_state);
-            let mut next = *state;
-            if next.profiles.is_empty() {
-                next.profiles = prev.profiles.clone();
-            }
-            crate::state_mw::default_chain().run(&prev, &mut next);
-            crate::state::write_app_state(platform, &next)
-                .await
-                .map_err(|e| err(e.to_string()))?;
-            Ok(Response::Ok)
-        }
-        Command::WriteProfiles { profiles } => {
-            write_json_atomic(&paths.profiles, &profiles)
-                .await
-                .map_err(|e| err(e.to_string()))?;
-            Ok(Response::Ok)
-        }
-
-        Command::DeduplicateProfiles {
-            profiles,
-            active_id,
-            group_id,
-        } => {
-            let (kept, _removed) =
-                deduplicate_profiles_scoped(&profiles, active_id.as_deref(), group_id.as_deref());
-            Ok(Response::Profiles(kept))
-        }
-        Command::RemoveProfilesBySubId {
-            profiles,
-            sub_id,
-            sub_group_id,
-        } => Ok(Response::Profiles(remove_profiles_by_sub_id(
-            &profiles,
-            &sub_id,
-            sub_group_id.as_deref(),
-        ))),
-
         Command::FetchSubscription {
             url,
             mode,
@@ -503,7 +437,8 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             .map(Response::Speed)
             .map_err(err),
 
-        Command::Start { .. }
+        Command::Mutate { .. }
+        | Command::Start { .. }
         | Command::Stop
         | Command::Restart { .. }
         | Command::ReloadAppFilter
@@ -511,6 +446,26 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             "stateful commands must be dispatched through the Service",
         )),
     }
+}
+
+/// Apply one [`MutationIntent`] to the persisted state and return the new canonical
+/// `AppState`. Read current → apply intent (pure) → run the write-side middleware
+/// chain (invariants) → persist. The caller (`Service`) holds the state-write lock so
+/// concurrent mutations don't lose each other's update.
+pub(crate) async fn run_mutation(
+    platform: &dyn Platform,
+    intent: &MutationIntent,
+) -> Result<AppState, CommandError> {
+    let prev = crate::state::read_app_state(platform)
+        .await
+        .unwrap_or_else(default_app_state);
+    let mut next = prev.clone();
+    apply_mutation(&mut next, intent);
+    crate::state_mw::default_chain().run(&prev, &mut next);
+    crate::state::write_app_state(platform, &next)
+        .await
+        .map_err(|e| err(e.to_string()))?;
+    Ok(next)
 }
 
 const LOG_TARGETS: [LogTarget; 4] = [
@@ -523,6 +478,7 @@ const LOG_TARGETS: [LogTarget; 4] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fsjson::write_json_atomic;
     use crate::testutil::{sample_vless as vless, TestPlatform};
     use kasumi_core::contract::RunState;
 
@@ -538,41 +494,60 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_then_read_state_roundtrips() {
+    async fn mutate_applies_intent_persists_and_returns_canonical() {
         let (p, _d) = TestPlatform::new();
-        let mut state = default_app_state();
-        state.active_id = Some("p1".into());
-        dispatch(
+        // Seed a profile via an AddProfiles intent...
+        let prof = vless();
+        let id = prof.meta().id.clone();
+        let next = run_mutation(
             &p,
-            Command::WriteState {
-                state: Box::new(state.clone()),
+            &MutationIntent::AddProfiles {
+                profiles: vec![prof],
             },
         )
         .await
         .unwrap();
-        let Response::State(back) = dispatch(&p, Command::ReadState).await.unwrap() else {
+        assert_eq!(next.profiles.len(), 1);
+
+        // ...set it active, then remove it: the chain must null the now-dangling
+        // active_id, and the persisted state must reflect both writes (no split).
+        run_mutation(
+            &p,
+            &MutationIntent::SetActive {
+                id: Some(id.clone()),
+            },
+        )
+        .await
+        .unwrap();
+        let after = run_mutation(&p, &MutationIntent::RemoveProfiles { ids: vec![id] })
+            .await
+            .unwrap();
+        assert!(after.profiles.is_empty());
+        assert_eq!(after.active_id, None);
+
+        // The split is gone: one Mutate writes both files; ReadState/ReadProfiles agree.
+        let Response::State(state) = dispatch(&p, Command::ReadState).await.unwrap() else {
             panic!()
         };
-        assert_eq!(back.active_id.as_deref(), Some("p1"));
+        assert_eq!(state.active_id, None);
+        let Response::Profiles(profs) = dispatch(&p, Command::ReadProfiles).await.unwrap() else {
+            panic!()
+        };
+        assert!(profs.is_empty());
     }
 
     #[tokio::test]
-    async fn write_then_read_profiles_roundtrips() {
+    async fn mutate_is_rejected_on_stateless_path() {
         let (p, _d) = TestPlatform::new();
-        let prof = vless();
-        dispatch(
+        let e = dispatch(
             &p,
-            Command::WriteProfiles {
-                profiles: vec![prof.clone()],
+            Command::Mutate {
+                intent: Box::new(MutationIntent::SetActive { id: None }),
             },
         )
         .await
-        .unwrap();
-        let Response::Profiles(back) = dispatch(&p, Command::ReadProfiles).await.unwrap() else {
-            panic!()
-        };
-        assert_eq!(back.len(), 1);
-        assert_eq!(back[0].meta().id, prof.meta().id);
+        .unwrap_err();
+        assert!(e.0.contains("must be dispatched through the Service"));
     }
 
     #[tokio::test]

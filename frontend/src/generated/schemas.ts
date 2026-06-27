@@ -663,6 +663,93 @@ export const CapabilitiesSchema = z.object({
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
 
+export const ImportModeSchema = z.union([z.literal("merge"), z.literal("replace")]);
+export type ImportMode = z.infer<typeof ImportModeSchema>;
+
+
+export const MutationIntent_SerializeSchema = z.union([z.object({
+	kind: z.literal("addGroup"),
+	id: z.string(),
+	name: z.string(),
+}), z.object({
+	kind: z.literal("addProfiles"),
+	profiles: z.array(ProfileSchema),
+}), z.object({
+	kind: z.literal("cloneProfile"),
+	id: z.string(),
+	newId: z.string(),
+	remarks: z.string(),
+}), z.object({
+	kind: z.literal("deduplicateProfiles"),
+	activeId: z.string().nullable(),
+	groupId: z.string().nullable(),
+}), z.object({
+	kind: z.literal("importBackup"),
+	incoming: AppState_SerializeSchema,
+	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("importRoutingRules"),
+	rules: z.array(RoutingRule_SerializeSchema),
+	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("moveProfiles"),
+	ids: z.array(z.string()),
+	groupId: z.string(),
+}), z.object({
+	kind: z.literal("removeAssetFile"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeGroup"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeProfiles"),
+	ids: z.array(z.string()),
+}), z.object({
+	kind: z.literal("removeRoutingRule"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeSub"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeUnreachable"),
+	groupId: z.string().nullable(),
+}), z.object({
+	kind: z.literal("renameGroup"),
+	id: z.string(),
+	name: z.string(),
+}), z.object({
+	kind: z.literal("reorderGroups"),
+	from: z.number(),
+	to: z.number(),
+}), z.object({
+	kind: z.literal("reorderRoutingRules"),
+	from: z.number(),
+	to: z.number(),
+}), z.object({
+	kind: z.literal("replaceState"),
+	state: AppState_SerializeSchema,
+}), z.object({
+	kind: z.literal("setActive"),
+	id: z.string().nullable(),
+}), z.object({
+	kind: z.literal("setSettings"),
+	settings: AdvancedSettings_SerializeSchema,
+}), z.object({
+	kind: z.literal("upsertAssetFile"),
+	asset: AssetFileSchema,
+}), z.object({
+	kind: z.literal("upsertProfile"),
+	profile: ProfileSchema,
+}), z.object({
+	kind: z.literal("upsertRoutingRule"),
+	rule: RoutingRule_SerializeSchema,
+}), z.object({
+	kind: z.literal("upsertSub"),
+	subscription: Subscription_SerializeSchema,
+})]);
+export type MutationIntent_Serialize = z.infer<typeof MutationIntent_SerializeSchema>;
+
+
 export const LogTargetSchema = z.union([z.literal("daemon"), z.literal("singbox"), z.literal("tun2socks"), z.literal("xray")]);
 export type LogTarget = z.infer<typeof LogTargetSchema>;
 
@@ -677,11 +764,6 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("capabilities"),
 }), z.object({
 	cmd: z.literal("clearLogs"),
-}), z.object({
-	cmd: z.literal("deduplicateProfiles"),
-	profiles: z.array(ProfileSchema),
-	activeId: z.string().nullable(),
-	groupId: z.string().nullable(),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
 	filename: z.string(),
@@ -710,6 +792,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	target: LogTargetSchema.nullable(),
 	lines: z.number().nullable(),
 }), z.object({
+	cmd: z.literal("mutate"),
+	intent: MutationIntent_SerializeSchema,
+}), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
 	groupId: z.string().nullable(),
@@ -725,11 +810,6 @@ export const Command_SerializeSchema = z.union([z.object({
 	profileId: z.string(),
 }), z.object({
 	cmd: z.literal("reloadAppFilter"),
-}), z.object({
-	cmd: z.literal("removeProfilesBySubId"),
-	profiles: z.array(ProfileSchema),
-	subId: z.string(),
-	subGroupId: z.string().nullable(),
 }), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable(),
@@ -747,15 +827,92 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("stop"),
 }), z.object({
-	cmd: z.literal("writeProfiles"),
-	profiles: z.array(ProfileSchema),
-}), z.object({
-	cmd: z.literal("writeState"),
-	state: AppState_SerializeSchema,
-}), z.object({
 	cmd: z.literal("wsInfo"),
 })]);
 export type Command_Serialize = z.infer<typeof Command_SerializeSchema>;
+
+
+export const MutationIntent_DeserializeSchema = z.union([z.object({
+	kind: z.literal("addGroup"),
+	id: z.string(),
+	name: z.string(),
+}), z.object({
+	kind: z.literal("addProfiles"),
+	profiles: z.array(ProfileSchema),
+}), z.object({
+	kind: z.literal("cloneProfile"),
+	id: z.string(),
+	newId: z.string(),
+	remarks: z.string(),
+}), z.object({
+	kind: z.literal("deduplicateProfiles"),
+	activeId: z.string().nullable().optional(),
+	groupId: z.string().nullable().optional(),
+}), z.object({
+	kind: z.literal("importBackup"),
+	incoming: AppState_DeserializeSchema,
+	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("importRoutingRules"),
+	rules: z.array(RoutingRule_DeserializeSchema),
+	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("moveProfiles"),
+	ids: z.array(z.string()),
+	groupId: z.string(),
+}), z.object({
+	kind: z.literal("removeAssetFile"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeGroup"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeProfiles"),
+	ids: z.array(z.string()),
+}), z.object({
+	kind: z.literal("removeRoutingRule"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeSub"),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeUnreachable"),
+	groupId: z.string().nullable().optional(),
+}), z.object({
+	kind: z.literal("renameGroup"),
+	id: z.string(),
+	name: z.string(),
+}), z.object({
+	kind: z.literal("reorderGroups"),
+	from: z.number(),
+	to: z.number(),
+}), z.object({
+	kind: z.literal("reorderRoutingRules"),
+	from: z.number(),
+	to: z.number(),
+}), z.object({
+	kind: z.literal("replaceState"),
+	state: AppState_DeserializeSchema,
+}), z.object({
+	kind: z.literal("setActive"),
+	id: z.string().nullable().optional(),
+}), z.object({
+	kind: z.literal("setSettings"),
+	settings: AdvancedSettings_DeserializeSchema,
+}), z.object({
+	kind: z.literal("upsertAssetFile"),
+	asset: AssetFileSchema,
+}), z.object({
+	kind: z.literal("upsertProfile"),
+	profile: ProfileSchema,
+}), z.object({
+	kind: z.literal("upsertRoutingRule"),
+	rule: RoutingRule_DeserializeSchema,
+}), z.object({
+	kind: z.literal("upsertSub"),
+	subscription: Subscription_DeserializeSchema,
+})]);
+export type MutationIntent_Deserialize = z.infer<typeof MutationIntent_DeserializeSchema>;
 
 
 export const Command_DeserializeSchema = z.union([z.object({
@@ -768,11 +925,6 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("capabilities"),
 }), z.object({
 	cmd: z.literal("clearLogs"),
-}), z.object({
-	cmd: z.literal("deduplicateProfiles"),
-	profiles: z.array(ProfileSchema),
-	activeId: z.string().nullable().optional(),
-	groupId: z.string().nullable().optional(),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
 	filename: z.string(),
@@ -801,6 +953,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	target: LogTargetSchema.nullable().optional(),
 	lines: z.number().nullable().optional(),
 }), z.object({
+	cmd: z.literal("mutate"),
+	intent: MutationIntent_DeserializeSchema,
+}), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
 	groupId: z.string().nullable().optional(),
@@ -816,11 +971,6 @@ export const Command_DeserializeSchema = z.union([z.object({
 	profileId: z.string(),
 }), z.object({
 	cmd: z.literal("reloadAppFilter"),
-}), z.object({
-	cmd: z.literal("removeProfilesBySubId"),
-	profiles: z.array(ProfileSchema),
-	subId: z.string(),
-	subGroupId: z.string().nullable().optional(),
 }), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable().optional(),
@@ -838,12 +988,6 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("stop"),
 }), z.object({
-	cmd: z.literal("writeProfiles"),
-	profiles: z.array(ProfileSchema),
-}), z.object({
-	cmd: z.literal("writeState"),
-	state: AppState_DeserializeSchema,
-}), z.object({
 	cmd: z.literal("wsInfo"),
 })]);
 export type Command_Deserialize = z.infer<typeof Command_DeserializeSchema>;
@@ -855,6 +999,10 @@ export type Command = z.infer<typeof CommandSchema>;
 
 export const GroupSchema = z.union([Group_DeserializeSchema, Group_SerializeSchema]);
 export type Group = z.infer<typeof GroupSchema>;
+
+
+export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, MutationIntent_SerializeSchema]);
+export type MutationIntent = z.infer<typeof MutationIntentSchema>;
 
 
 export const WsInfoSchema = z.object({
