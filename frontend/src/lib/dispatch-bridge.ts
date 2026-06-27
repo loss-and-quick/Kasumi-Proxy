@@ -103,13 +103,18 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     },
 
     async ping(profileId) {
-      const state = lastState ?? (await this.readState());
+      // Read fresh: a stale cache here would wrongly report "0" for a profile it no
+      // longer knows about (and pingAll fans out through this path).
+      const state = await this.readState();
       const p = state.profiles.find((x) => x.meta.id === profileId);
       if (!p || !profileAddress(p) || profilePort(p) == null) return 0;
       return asPing(await dispatch({ cmd: "ping", profileId } as Command));
     },
     async pingAll(ids, onResult) {
-      const state = lastState ?? (await this.readState());
+      // TCP-ping needs each profile's address/port, so read fresh state rather than
+      // trusting a possibly-stale cache — a stale cache would filter out the
+      // requested ids and make the batch finish instantly without testing anything.
+      const state = await this.readState();
       const out: Record<string, number> = {};
       const want = new Set(ids);
       const profiles = state.profiles.filter(
@@ -122,7 +127,10 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
           const p = profiles[i++];
           let ms = 0;
           try {
-            ms = await this.ping(p.meta.id);
+            // We already read fresh state above and filtered to profiles with a
+            // valid address/port, so dispatch the ping command directly instead of
+            // going through this.ping() (which would re-read state per profile).
+            ms = asPing(await dispatch({ cmd: "ping", profileId: p.meta.id } as Command));
           } catch {
             /* failure → 0 */
           }
@@ -138,24 +146,23 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return asPing(await dispatch({ cmd: "realPing", profileId } as Command));
     },
     async realPingAll(ids, onResult) {
-      const state = lastState ?? (await this.readState());
       const out: Record<string, number> = {};
-      const want = new Set(ids);
-      const profiles = state.profiles.filter((p) => want.has(p.meta.id));
-      // Fire one per profile and let the daemon bound how many probe cores run at
-      // once; each resolves independently so results stream in as they land.
-      // Ok(None) (unreachable) comes back as -1; a thrown error is the infra-failure
-      // case (-2 → "err"), kept distinct.
+      // Fire one per profile id straight at the daemon (it loads the profile from
+      // disk and bounds how many probe cores run at once); each resolves
+      // independently so results stream in as they land. We deliberately don't
+      // gate on the cached state here — a stale cache would silently drop ids and
+      // make the whole batch a no-op. Ok(None) (unreachable) comes back as -1; a
+      // thrown error is the infra-failure case (-2 → "err"), kept distinct.
       await Promise.all(
-        profiles.map(async (p) => {
+        [...new Set(ids)].map(async (id) => {
           let ms: number;
           try {
-            ms = await this.realPing(p.meta.id);
+            ms = await this.realPing(id);
           } catch {
             ms = -2;
           }
-          out[p.meta.id] = ms;
-          onResult?.(p.meta.id, ms);
+          out[id] = ms;
+          onResult?.(id, ms);
         }),
       );
       return out;
@@ -165,20 +172,20 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return asSpeed(await dispatch({ cmd: "speedTest", profileId } as Command));
     },
     async speedTestAll(ids, onResult) {
-      const state = lastState ?? (await this.readState());
       const out: Record<string, number> = {};
-      const want = new Set(ids);
-      const profiles = state.profiles.filter((p) => want.has(p.meta.id));
+      // Same as realPingAll: drive the batch off the ids the caller passed, not the
+      // cached state — the daemon resolves each profile by id, so a stale cache
+      // must never be allowed to collapse the list into a silent no-op.
       await Promise.all(
-        profiles.map(async (p) => {
+        [...new Set(ids)].map(async (id) => {
           let bps: number;
           try {
-            bps = await this.speedTest(p.meta.id);
+            bps = await this.speedTest(id);
           } catch {
             bps = -2;
           }
-          out[p.meta.id] = bps;
-          onResult?.(p.meta.id, bps);
+          out[id] = bps;
+          onResult?.(id, bps);
         }),
       );
       return out;
@@ -223,7 +230,12 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return asProfiles(profiles);
     },
     async applySubscription(subId) {
-      return asState(await dispatch({ cmd: "applySubscription", subId } as Command));
+      // Returns the canonical state — refresh the cache like readState/mutate do, so
+      // the next cache reader (e.g. ping's address/port lookup) can't drift after a
+      // subscription apply swaps the profile set out from under it.
+      const next = asState(await dispatch({ cmd: "applySubscription", subId } as Command));
+      lastState = next;
+      return next;
     },
     onSubApplied(cb) {
       return push.subscribeSubApplied((raw) => {
