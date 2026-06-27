@@ -589,13 +589,17 @@ async fn inject_uplink_bind(engine: Engine, cfg_path: &Path) -> bool {
     let Some(dev) = routing::uplink_device().await else {
         return false;
     };
+    // Pin the source address too, so the device bind escapes the tun deterministically
+    // on a multi-homed host (see `bind_uplink_outbounds`). `None` on platforms/paths
+    // that can't resolve it keeps the device-only behaviour.
+    let source = routing::uplink_source().await;
     let Some(text) = read_text(cfg_path).await else {
         return false;
     };
     let Ok(mut cfg) = serde_json::from_str::<Value>(&text) else {
         return false;
     };
-    kasumi_core::outbound_bind::bind_uplink_outbounds(engine, &mut cfg, &dev);
+    kasumi_core::outbound_bind::bind_uplink_outbounds(engine, &mut cfg, &dev, source.as_deref());
     match serde_json::to_string(&cfg) {
         Ok(s) => write_text(cfg_path, &s).await.is_ok(),
         Err(_) => false,

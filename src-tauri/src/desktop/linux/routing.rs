@@ -126,6 +126,29 @@ pub async fn uplink_device() -> Option<String> {
     read_default_route().await.map(|(_, dev)| dev)
 }
 
+/// The preferred source address of the current default route (`default … src <ip>`).
+/// Pinned alongside the uplink device so a multi-homed host can't pick another NIC's
+/// source and black-hole the reply (see `outbound_bind::bind_uplink_outbounds`).
+/// `None` when the default route carries no `src` (then the device bind is used alone).
+pub async fn uplink_source() -> Option<String> {
+    let (code, out) = run_out(&[IP, "route", "show", "default"]).await;
+    if code != 0 {
+        return None;
+    }
+    parse_default_src(&out)
+}
+
+/// Pull the `src <ip>` from a `default via … dev … src <ip>` line.
+fn parse_default_src(out: &str) -> Option<String> {
+    let line = out
+        .lines()
+        .find(|l| l.trim_start().starts_with("default"))?;
+    let toks: Vec<&str> = line.split_whitespace().collect();
+    toks.windows(2)
+        .find(|w| w[0] == "src")
+        .map(|w| w[1].to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,5 +161,20 @@ mod tests {
             Some(("192.168.1.1".to_string(), "wlan0".to_string()))
         );
         assert_eq!(parse_default_route("unreachable default"), None);
+    }
+
+    #[test]
+    fn parses_default_src() {
+        let out = "default via 192.168.1.1 dev eno1 proto dhcp src 192.168.1.5 metric 100";
+        assert_eq!(parse_default_src(out), Some("192.168.1.5".to_string()));
+        // A default route without a src (and no default line at all) yields None.
+        assert_eq!(
+            parse_default_src("default via 192.168.1.1 dev eno1 metric 100"),
+            None
+        );
+        assert_eq!(
+            parse_default_src("192.168.1.0/24 dev eno1 src 192.168.1.5"),
+            None
+        );
     }
 }

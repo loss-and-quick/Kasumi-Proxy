@@ -30,7 +30,20 @@ const EGRESS_TAGS: [&str; 2] = ["proxy", "direct"];
 /// xray exposes this as `streamSettings.sockopt.interface` (→ `SO_BINDTODEVICE` /
 /// `IP_UNICAST_IF`); sing-box as a top-level `bind_interface`. sing-box's wireguard
 /// outbound lives under `endpoints`, so both arrays are scanned.
-pub fn bind_uplink_outbounds(engine: CoreEngine, cfg: &mut Value, iface: &str) {
+///
+/// `source` pins the egress *source address* alongside the device. On a multi-homed
+/// host (several NICs on one subnet) `SO_BINDTODEVICE` alone lets the kernel pick a
+/// different NIC's source address, so the reply lands on the other interface and is
+/// dropped — the dial then times out and the bind silently fails to escape the tun.
+/// Pinning the source to the uplink's own address (xray `sendThrough`, sing-box
+/// `inet4_bind_address`) makes the escape deterministic. `None` keeps the device-only
+/// behaviour (single-homed hosts, or where the source can't be resolved).
+pub fn bind_uplink_outbounds(
+    engine: CoreEngine,
+    cfg: &mut Value,
+    iface: &str,
+    source: Option<&str>,
+) {
     for key in ["outbounds", "endpoints"] {
         let Some(arr) = cfg.get_mut(key).and_then(Value::as_array_mut) else {
             continue;
@@ -45,17 +58,25 @@ pub fn bind_uplink_outbounds(engine: CoreEngine, cfg: &mut Value, iface: &str) {
             };
             match engine {
                 CoreEngine::Xray => {
-                    let stream = map.entry("streamSettings").or_insert_with(|| json!({}));
-                    if let Some(sock) = stream
-                        .as_object_mut()
-                        .map(|s| s.entry("sockopt").or_insert_with(|| json!({})))
-                        .and_then(Value::as_object_mut)
                     {
-                        sock.insert("interface".into(), iface.into());
+                        let stream = map.entry("streamSettings").or_insert_with(|| json!({}));
+                        if let Some(sock) = stream
+                            .as_object_mut()
+                            .map(|s| s.entry("sockopt").or_insert_with(|| json!({})))
+                            .and_then(Value::as_object_mut)
+                        {
+                            sock.insert("interface".into(), iface.into());
+                        }
+                    }
+                    if let Some(src) = source {
+                        map.insert("sendThrough".into(), src.into());
                     }
                 }
                 CoreEngine::SingBox => {
                     map.insert("bind_interface".into(), iface.into());
+                    if let Some(src) = source {
+                        map.insert("inet4_bind_address".into(), src.into());
+                    }
                 }
             }
         }
@@ -76,16 +97,19 @@ mod tests {
             { "tag": "direct", "protocol": "freedom" },
             { "tag": "block", "protocol": "blackhole" },
         ] });
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1");
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", Some("192.168.1.5"));
         assert_eq!(
             x["outbounds"][0]["streamSettings"]["sockopt"]["interface"],
             "eno1"
         );
+        assert_eq!(x["outbounds"][0]["sendThrough"], "192.168.1.5");
         assert_eq!(
             x["outbounds"][1]["streamSettings"]["sockopt"]["interface"],
             "eno1"
         );
+        assert_eq!(x["outbounds"][1]["sendThrough"], "192.168.1.5");
         assert!(x["outbounds"][2].get("streamSettings").is_none());
+        assert!(x["outbounds"][2].get("sendThrough").is_none());
 
         // sing-box: top-level bind_interface on the proxy + direct outbounds and the
         // wireguard proxy endpoint, leaving service outbounds untouched.
@@ -97,10 +121,30 @@ mod tests {
             ],
             "endpoints": [{ "tag": "proxy", "type": "wireguard" }],
         });
-        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "wlan0");
+        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "wlan0", Some("192.168.1.2"));
         assert_eq!(s["outbounds"][0]["bind_interface"], "wlan0");
+        assert_eq!(s["outbounds"][0]["inet4_bind_address"], "192.168.1.2");
         assert_eq!(s["outbounds"][1]["bind_interface"], "wlan0");
+        assert_eq!(s["outbounds"][1]["inet4_bind_address"], "192.168.1.2");
         assert!(s["outbounds"][2].get("bind_interface").is_none());
         assert_eq!(s["endpoints"][0]["bind_interface"], "wlan0");
+        assert_eq!(s["endpoints"][0]["inet4_bind_address"], "192.168.1.2");
+    }
+
+    #[test]
+    fn source_is_optional() {
+        // No source → device-only binding (single-homed hosts keep the old shape).
+        let mut x = json!({ "outbounds": [{ "tag": "proxy", "protocol": "vless" }] });
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", None);
+        assert_eq!(
+            x["outbounds"][0]["streamSettings"]["sockopt"]["interface"],
+            "eno1"
+        );
+        assert!(x["outbounds"][0].get("sendThrough").is_none());
+
+        let mut s = json!({ "outbounds": [{ "tag": "proxy", "type": "vless" }] });
+        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "eno1", None);
+        assert_eq!(s["outbounds"][0]["bind_interface"], "eno1");
+        assert!(s["outbounds"][0].get("inet4_bind_address").is_none());
     }
 }
