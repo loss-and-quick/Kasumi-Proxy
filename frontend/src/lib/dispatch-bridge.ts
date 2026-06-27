@@ -198,26 +198,12 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     },
 
     async readState() {
+      // One read: the backend returns the full canonical state — profiles merged in,
+      // schema-migrated and normalized (base group ensured, legacy assets dropped,
+      // dangling active_id nulled). The UI renders it as-is; no client-side merge,
+      // ensure, or persist (the read counterpart of the single Mutate write path).
       const state = asState(await dispatch({ cmd: "readState" } as Command));
-      const profilesReply = asProfiles(await dispatch({ cmd: "readProfiles" } as Command));
-      // Legacy migration: profiles used to live inside app-state.json. If the split
-      // file is empty but app-state still carries the old array, adopt + persist.
-      const legacy = Array.isArray(state.profiles) ? state.profiles : [];
-      const migrated = profilesReply.length === 0 && legacy.length > 0;
-      state.profiles = migrated ? legacy : profilesReply;
-      // "g-main" is the base group: the emptyProfile/share-import default that can't
-      // be deleted, so the app assumes it always exists. Guarantee it on a fresh
-      // install (and persist so the backend's state is well-formed next time).
-      let ensured = false;
-      if (!state.groups.some((g) => g.id === "g-main")) {
-        state.groups = [{ id: "g-main", name: "Main" }, ...state.groups];
-        ensured = true;
-      }
       lastState = state;
-      // A one-time client migration (legacy inline profiles / a missing base group):
-      // persist the corrected state wholesale via the bulk replace intent.
-      if (migrated || ensured)
-        await this.mutate({ kind: "replaceState", state } as unknown as MutationIntent);
       return state;
     },
     async mutate(intent) {

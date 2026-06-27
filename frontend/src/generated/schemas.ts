@@ -802,8 +802,6 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("ping"),
 	profileId: z.string(),
 }), z.object({
-	cmd: z.literal("readProfiles"),
-}), z.object({
 	cmd: z.literal("readState"),
 }), z.object({
 	cmd: z.literal("realPing"),
@@ -962,8 +960,6 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("ping"),
 	profileId: z.string(),
-}), z.object({
-	cmd: z.literal("readProfiles"),
 }), z.object({
 	cmd: z.literal("readState"),
 }), z.object({

@@ -52,7 +52,6 @@ fn err(msg: impl Into<String>) -> CommandError {
 #[serde(tag = "cmd", rename_all = "camelCase")]
 pub enum Command {
     ReadState,
-    ReadProfiles,
     /// The single write path: apply one domain intent to the persisted state. The
     /// handler reads the current state, applies the intent (pure
     /// `kasumi_core::mutate`), runs the write-side middleware chain, persists, and
@@ -231,16 +230,13 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
     let paths = platform.paths();
     match cmd {
         Command::ReadState => {
-            let state = read_json::<AppState>(&paths.app_state)
+            // The single read path: the full canonical state — profiles merged in,
+            // schema-migrated and normalized — so the UI renders it as-is (no
+            // client-side merge/normalize, mirroring the single Mutate write path).
+            let state = crate::state::read_app_state(platform)
                 .await
                 .unwrap_or_else(default_app_state);
             Ok(Response::State(Box::new(state)))
-        }
-        Command::ReadProfiles => {
-            let profiles = read_json::<Vec<Profile>>(&paths.profiles)
-                .await
-                .unwrap_or_default();
-            Ok(Response::Profiles(profiles))
         }
         Command::FetchSubscription {
             url,
@@ -537,15 +533,13 @@ mod tests {
         assert!(after.profiles.is_empty());
         assert_eq!(after.active_id, None);
 
-        // The split is gone: one Mutate writes both files; ReadState/ReadProfiles agree.
+        // One Mutate writes both files; ReadState merges them back into one canonical
+        // state with profiles included.
         let Response::State(state) = dispatch(&p, Command::ReadState).await.unwrap() else {
             panic!()
         };
         assert_eq!(state.active_id, None);
-        let Response::Profiles(profs) = dispatch(&p, Command::ReadProfiles).await.unwrap() else {
-            panic!()
-        };
-        assert!(profs.is_empty());
+        assert!(state.profiles.is_empty());
     }
 
     #[tokio::test]

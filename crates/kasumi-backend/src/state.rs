@@ -25,7 +25,11 @@ pub async fn read_app_state(platform: &dyn Platform) -> Option<AppState> {
         }
     }
     kasumi_core::migrate::migrate_app_state(&mut doc);
-    serde_json::from_value(doc).ok()
+    let mut state: AppState = serde_json::from_value(doc).ok()?;
+    // Typed read-side normalization (g-main, legacy assets, dangling active_id) — the
+    // load-time counterpart to the write-side chain, so callers get canonical state.
+    kasumi_core::normalize::normalize_app_state(&mut state);
+    Some(state)
 }
 
 /// Persist an [`AppState`] back to the split files (both writes atomic).

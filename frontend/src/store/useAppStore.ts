@@ -39,12 +39,6 @@ export interface ToastItem {
 const TOAST_LIMIT = 3;
 const TOAST_DURATION_MS = 2600;
 
-const LEGACY_DEFAULT_ASSET_IDS = new Set(["asset-geoip", "asset-geosite"]);
-
-function stripLegacyDefaultAssets(assetFiles: AssetFile[]): AssetFile[] {
-  return assetFiles.filter((asset) => !(asset.locked && LEGACY_DEFAULT_ASSET_IDS.has(asset.id)));
-}
-
 interface Store extends AppState {
   service: ServiceStatus;
   uploadRate: number;
@@ -258,7 +252,9 @@ export const useAppStore = create<Store>((set, get) => {
       const subscriptions = needsMigration
         ? state.subscriptions.map((s) => ({ ...s, interval: s.interval * 60 }))
         : state.subscriptions;
-      const assetFiles0 = stripLegacyDefaultAssets(state.assetFiles);
+      // Base group, legacy default assets and a dangling active_id are normalized by
+      // the backend read path now; the frontend just renders what it returns.
+      const assetFiles0 = state.assetFiles;
       const settings = mergeSettings(state.settings);
       set({
         ...state,

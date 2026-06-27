@@ -636,10 +636,14 @@ mod tests {
         r1.unwrap();
         r2.unwrap();
 
-        let Response::Profiles(profs) = svc.dispatch(Command::ReadProfiles).await.unwrap() else {
+        let Response::State(state) = svc.dispatch(Command::ReadState).await.unwrap() else {
             panic!()
         };
-        let mut ids: Vec<&str> = profs.iter().map(|p| p.meta().id.as_str()).collect();
+        let mut ids: Vec<&str> = state
+            .profiles
+            .iter()
+            .map(|p| p.meta().id.as_str())
+            .collect();
         ids.sort_unstable();
         assert_eq!(ids, vec!["a", "b"]);
     }

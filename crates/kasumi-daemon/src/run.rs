@@ -92,7 +92,6 @@ async fn wait_for_signal() {
 fn parse_cli(args: &[String]) -> Option<Command> {
     Some(match args.first()?.as_str() {
         "readState" => Command::ReadState,
-        "readProfiles" => Command::ReadProfiles,
         "status" => Command::Status,
         "wsInfo" => Command::WsInfo,
         "capabilities" => Command::Capabilities,
