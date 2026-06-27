@@ -210,6 +210,13 @@ pub async fn clear_xray_routing(route_state_file: &str) {
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
+/// No-op on Windows: native sing-box rides its embedded wintun, whose driver
+/// reclaims the adapter (and its routes) when the core process exits, so there are
+/// no orphaned `auto_route` ip-rules/tables to flush like on Linux. (A hard kill
+/// leaving a wedged adapter is a separate wintun job-object concern.) The signature
+/// matches the Linux seam so `platform.rs` can call it unconditionally.
+pub async fn clear_singbox_autoroute(_tun_iface_file: &str, _tun2_iface_file: &str) {}
+
 /// The physical uplink adapter name of the current default route — what a
 /// helper-spawned test core binds its outbound to (`bind_interface` /
 /// `sockopt.interface`) so it escapes an active tun. `None` when offline.

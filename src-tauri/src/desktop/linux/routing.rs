@@ -119,6 +119,57 @@ pub async fn clear_xray_routing(route_state_file: &str) {
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
+/// Tear down orphaned native-sing-box `auto_route` artifacts (policy ip-rules, route
+/// tables, split-default) that a core left behind when it didn't exit cleanly — a
+/// crash or a SIGKILL after the graceful window. sing-box removes these itself on a
+/// clean SIGTERM; this is the fallback for when it can't, and the orphans otherwise
+/// wedge routing into a now-dead tun (with `strict_route` on, a stuck kill-switch),
+/// black-holing all traffic until `~/kasumi-panic.sh` is run by hand.
+///
+/// Idempotent and scoped to the exact tables/rule-priorities Magic configures (see
+/// `kasumi_core::singbox_config`), so Tailscale / WireGuard / xray routing is left
+/// untouched. Safe to call in xray mode (no rules at these priorities exist there).
+pub async fn clear_singbox_autoroute(tun_iface_file: &str, tun2_iface_file: &str) {
+    use kasumi_core::singbox_config::{
+        SINGBOX_FORCE_RULE_PRIO, SINGBOX_FORCE_TABLE, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
+    };
+
+    // Policy ip-rules: a single priority can carry more than one rule, so loop on
+    // `del` until it reports there's nothing left at that priority.
+    for prio in SINGBOX_MAIN_RULE_PRIO..=SINGBOX_FORCE_RULE_PRIO {
+        let p = prio.to_string();
+        while silent(&[IP, "rule", "del", "priority", &p]).await == 0 {}
+    }
+    // Drain the per-tun route tables (main + force).
+    for table in [SINGBOX_MAIN_TABLE, SINGBOX_FORCE_TABLE] {
+        silent(&[IP, "route", "flush", "table", &table.to_string()]).await;
+    }
+    // Split-default routes — delete a `0/1` / `128/1` only when it points at one of
+    // *our* tun devices; a foreign VPN's split-default must survive.
+    let mut ours: Vec<String> = Vec::new();
+    for f in [tun_iface_file, tun2_iface_file] {
+        if let Some(name) = read_text(f).await.map(|s| s.trim().to_owned()) {
+            if !name.is_empty() {
+                ours.push(name);
+            }
+        }
+    }
+    for cidr in ["0.0.0.0/1", "128.0.0.0/1"] {
+        let (code, out) = run_out(&[IP, "route", "show", cidr]).await;
+        if code == 0 && parse_route_dev(&out).is_some_and(|d| ours.iter().any(|n| n == d)) {
+            silent(&[IP, "route", "del", cidr]).await;
+        }
+    }
+    silent(&[IP, "route", "flush", "cache"]).await;
+}
+
+/// The `dev <name>` of a single-route `ip route show <cidr>` line, or `None`.
+fn parse_route_dev(out: &str) -> Option<&str> {
+    let line = out.lines().next()?;
+    let toks: Vec<&str> = line.split_whitespace().collect();
+    toks.windows(2).find(|w| w[0] == "dev").map(|w| w[1])
+}
+
 /// The physical uplink device of the current default route — what a helper-spawned
 /// test core binds its outbound to (`SO_BINDTODEVICE`) so it escapes an active tun.
 /// `None` when there's no default route (offline: nothing to test against anyway).
@@ -161,6 +212,22 @@ mod tests {
             Some(("192.168.1.1".to_string(), "wlan0".to_string()))
         );
         assert_eq!(parse_default_route("unreachable default"), None);
+    }
+
+    #[test]
+    fn parses_route_dev() {
+        // sing-box installs the split-default into its tun.
+        assert_eq!(
+            parse_route_dev("0.0.0.0/1 dev tun8f3a scope link"),
+            Some("tun8f3a")
+        );
+        assert_eq!(
+            parse_route_dev("128.0.0.0/1 dev tun8f3a table 2022"),
+            Some("tun8f3a")
+        );
+        // No device (or empty output) yields None.
+        assert_eq!(parse_route_dev("unreachable 0.0.0.0/1"), None);
+        assert_eq!(parse_route_dev(""), None);
     }
 
     #[test]
