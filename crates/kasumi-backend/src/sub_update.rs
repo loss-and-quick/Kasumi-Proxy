@@ -22,7 +22,7 @@ use kasumi_core::sub_apply::{
 
 use crate::net::{fetch_url, FetchUrlOptions};
 use crate::platform::Platform;
-use crate::state::{read_app_state, write_app_state};
+use crate::state::read_app_state;
 
 /// How often to re-evaluate which subscriptions are due.
 pub const TICK: Duration = Duration::from_secs(60);
@@ -277,7 +277,9 @@ async fn apply(
         );
         next.profiles = kept;
     }
-    let _ = write_app_state(platform, &next).await;
+    // Same write tail as the intent path: run the write-side chain (invariants) then
+    // persist. Keeps the chain the single enforcement point across save and fetch.
+    let _ = crate::commands::persist_with_chain(platform, &current, &mut next).await;
 
     if res.active_affected {
         let running = platform
@@ -318,23 +320,25 @@ fn config_changed(prev: &AppState, old_active: Option<&Profile>, next: &AppState
 }
 
 async fn record_error(platform: &dyn Platform, sub_id: &str, message: &str) {
-    let Some(mut state) = read_app_state(platform).await else {
+    let Some(prev) = read_app_state(platform).await else {
         return;
     };
-    if !state.subscriptions.iter().any(|x| x.id == sub_id) {
+    if !prev.subscriptions.iter().any(|x| x.id == sub_id) {
         return;
     }
-    for x in state.subscriptions.iter_mut() {
+    let mut next = prev.clone();
+    for x in next.subscriptions.iter_mut() {
         if x.id == sub_id {
             x.last_error = Some(message.to_owned());
         }
     }
-    let _ = write_app_state(platform, &state).await;
+    let _ = crate::commands::persist_with_chain(platform, &prev, &mut next).await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::write_app_state;
     use crate::testutil::{sample_vless, TestPlatform};
     use kasumi_core::state::default_app_state;
     use std::sync::Mutex as StdMutex;
