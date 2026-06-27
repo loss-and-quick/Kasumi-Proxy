@@ -23,7 +23,8 @@ export default function Logs({ onClose }: { onClose: () => void }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setText(await bridge.log({ target, lines }));
+      const raw = await bridge.log({ target, lines });
+      setText(raw.trimEnd().split("\n").reverse().join("\n"));
     } catch (e: unknown) {
       setText(e instanceof Error ? e.message : String(e));
     } finally {
