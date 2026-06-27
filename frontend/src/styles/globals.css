@@ -114,6 +114,10 @@ body {
   .device.wide .scroll { padding-left: 28px; padding-right: 28px; }
   /* No bottom nav on desktop: drop its scroll clearance and lower the FAB. */
   .device.wide .scroll { padding-bottom: 32px; }
+  /* Still keep clearance under the FAB (60px tall at bottom: 28px) so it never
+     covers the last row. More specific than the rule above, which would
+     otherwise out-specify .scroll.with-fab and reintroduce the overlap. */
+  .device.wide .scroll.with-fab { padding-bottom: calc(112px + var(--window-inset-bottom, 0px)); }
   .device.wide .fab { bottom: calc(28px + var(--window-inset-bottom, 0px)); }
   /* The snackbar clears the bottom nav on mobile; there is none on desktop. */
   .device.wide .snackbar-stack { bottom: calc(24px + var(--window-inset-bottom, 0px)); }
