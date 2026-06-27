@@ -100,18 +100,15 @@ pub fn same_profile_identity(a: &Profile, b: &Profile) -> bool {
 }
 
 fn profile_dedup_key(p: &Profile) -> String {
-    let secret = p.uuid().or_else(|| p.password()).unwrap_or("");
-    let port = p
-        .port()
-        .map(|x| x.to_string())
-        .unwrap_or_else(|| "null".into());
-    format!(
-        "{}|{}|{}|{}",
-        wire(&p.protocol()),
-        p.address(),
-        port,
-        secret
-    )
+    let mut v = serde_json::to_value(p).expect("profile serializes");
+    if let Some(meta) = v.get_mut("meta").and_then(|m| m.as_object_mut()) {
+        for k in [
+            "id", "remarks", "ping", "speed", "subId", "groupId", "coreType",
+        ] {
+            meta.remove(k);
+        }
+    }
+    v.to_string()
 }
 
 /// Drop duplicate endpoints, keeping the first (or the active one).
@@ -381,6 +378,52 @@ mod tests {
         // active dup wins
         let (kept2, _) = deduplicate_profiles(&[a, b], Some("b"));
         assert_eq!(kept2[0].meta().id, "b");
+    }
+
+    #[test]
+    fn dedup_distinguishes_transport_variants_on_one_endpoint() {
+        let host = "node.example.net";
+        let uid = "11111111-1111-1111-1111-111111111111";
+        let trojan_pw = "s3cret-pw";
+        let links = vec![
+            // vless on :443 — reality / ws / xhttp / grpc differ only by transport + tls
+            format!("vless://{uid}@{host}:443?type=tcp&security=reality&pbk=PK0&sni=s0&sid=aa#vless-reality"),
+            format!("vless://{uid}@{host}:443?type=ws&security=tls&host={host}&path=%2Fws#vless-ws"),
+            format!("vless://{uid}@{host}:443?type=xhttp&security=tls&path=%2Fxh&mode=packet-up#vless-xhttp"),
+            format!("vless://{uid}@{host}:443?type=grpc&security=tls&serviceName=%2Fg1#vless-grpc"),
+            // vmess on :443 — grpc vs ws, same uuid
+            vmess_link(host, uid, 443, "grpc", "/g2", "vmess-grpc"),
+            vmess_link(host, uid, 443, "ws", "/w2", "vmess-ws"),
+            // vmess on a distinct port — plain tcp
+            vmess_link(host, uid, 26867, "tcp", "", "vmess-tcp"),
+            // trojan on :443 — grpc vs ws, same password
+            format!("trojan://{trojan_pw}@{host}:443?type=grpc&security=tls&serviceName=%2Fg3#trojan-grpc"),
+            format!("trojan://{trojan_pw}@{host}:443?type=ws&security=tls&path=%2Ftw#trojan-ws"),
+            // trojan on a distinct port — plain tcp, no tls
+            format!("trojan://{trojan_pw}@{host}:26869?type=tcp&security=none#trojan-tcp"),
+        ];
+        let profiles: Vec<Profile> = links.iter().map(|u| p(u)).collect();
+        assert_eq!(profiles.len(), 10, "all synthetic links must parse");
+        let (kept, removed) = deduplicate_profiles(&profiles, None);
+        assert_eq!(
+            removed,
+            0,
+            "transport/tls variants are not dups; got {} kept",
+            kept.len()
+        );
+        assert_eq!(kept.len(), 10);
+    }
+
+    /// Build a synthetic vmess `vmess://<base64-json>` link from parts, so the
+    /// fixture does not carry a hand-encoded blob.
+    fn vmess_link(host: &str, uid: &str, port: u16, net: &str, path: &str, ps: &str) -> String {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        let json = serde_json::json!({
+            "v": "2", "ps": ps, "add": host, "port": port, "id": uid,
+            "aid": 0, "net": net, "type": "none", "host": "", "path": path,
+            "tls": if net == "tcp" { "none" } else { "tls" }, "scy": "auto"
+        });
+        format!("vmess://{}", STANDARD.encode(json.to_string()))
     }
 
     #[test]
