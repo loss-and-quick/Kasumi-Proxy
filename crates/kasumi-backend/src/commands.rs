@@ -260,7 +260,24 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             Ok(Response::Profiles(profiles))
         }
         Command::WriteState { state } => {
-            write_json_atomic(&paths.app_state, &state)
+            // The UI replaces the whole persisted state on every edit. Before it
+            // lands, run the write-side middleware chain so domain invariants that
+            // span a state transition hold — e.g. a subscription whose group_id
+            // changed drags its profiles to the new group. The chain is pure; the
+            // router stays a thin reader/writer.
+            //
+            // The split dispatch sends profiles here as `[]` and the real profiles
+            // via a separate WriteProfiles; operate on the profiles currently on
+            // disk so middleware sees the full state, then persist both halves.
+            let prev = crate::state::read_app_state(platform)
+                .await
+                .unwrap_or_else(default_app_state);
+            let mut next = *state;
+            if next.profiles.is_empty() {
+                next.profiles = prev.profiles.clone();
+            }
+            crate::state_mw::default_chain().run(&prev, &mut next);
+            crate::state::write_app_state(platform, &next)
                 .await
                 .map_err(|e| err(e.to_string()))?;
             Ok(Response::Ok)

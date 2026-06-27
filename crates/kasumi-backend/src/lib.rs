@@ -17,6 +17,7 @@ pub mod platform;
 pub mod proc;
 pub mod service;
 pub mod state;
+pub mod state_mw;
 pub mod sub_update;
 
 #[cfg(test)]
