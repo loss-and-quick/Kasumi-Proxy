@@ -25,6 +25,7 @@ pub mod core_config;
 pub mod enums;
 pub mod migrate;
 pub mod mixins;
+pub mod mutate;
 pub mod outbound_bind;
 pub mod profile;
 pub mod share;

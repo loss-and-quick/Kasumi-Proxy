@@ -363,6 +363,19 @@ pub fn default_app_state() -> AppState {
     }
 }
 
+/// Null a dangling `active_id`: a required invariant for [`crate::core_config`],
+/// which looks the active profile up by id and fails when it's missing. After any
+/// edit that may have removed the active profile (a removal, a group/sub deletion,
+/// a backup restore), clear `active_id` when it no longer points at a live profile.
+/// Pure; idempotent.
+pub fn fixup_active_id(state: &mut AppState) {
+    if let Some(id) = &state.active_id {
+        if !state.profiles.iter().any(|p| p.meta().id == *id) {
+            state.active_id = None;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

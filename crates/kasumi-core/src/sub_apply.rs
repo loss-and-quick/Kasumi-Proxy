@@ -272,6 +272,13 @@ pub struct SubApplyResult {
 }
 
 /// Apply one fetched-and-mapped subscription body to the current state.
+///
+/// This is the *fetch* path's profile reconciliation (read-modify-write under the
+/// lifecycle lock). The *save* path has its own counterpart — the `UpsertSub` arm of
+/// [`crate::mutate::apply_mutation`], which keeps a sub's profiles with its group when
+/// a plain edit (no fetch) changes `group_id` (via [`migrate_profiles_to_new_group`]).
+/// Two mechanisms by design: a save never goes through here, and a fetch never goes
+/// through `apply_mutation`.
 pub fn apply_subscription_profiles(
     profiles: &[Profile],
     subscriptions: &[Subscription],
