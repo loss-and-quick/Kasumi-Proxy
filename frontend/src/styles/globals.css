@@ -284,6 +284,50 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .input-row { display: flex; gap: 10px; }
 .input-row > .field { flex: 1; margin-bottom: 0; }
 
+/* Interval picker (subscription update interval): clock-dial trigger + dialog */
+.interval-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; cursor: pointer; text-align: left;
+}
+.interval-trigger .material-symbols-rounded { font-size: 20px; color: var(--on-surface-variant); }
+
+.timepicker { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.timepicker-head { display: flex; align-items: flex-start; gap: 10px; }
+.timepicker-seg { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.timepicker-num {
+  width: 88px; height: 70px; border: none; border-radius: 14px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 42px; font-weight: 400; letter-spacing: 1px;
+  background: var(--sc-highest); color: var(--on-surface);
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.timepicker-num.active { background: var(--primary-container); color: var(--on-primary-container); }
+.timepicker-colon { font-size: 42px; line-height: 70px; color: var(--on-surface); }
+.timepicker-unit { font-size: 11px; color: var(--on-surface-variant); }
+
+.timepicker-dial { touch-action: none; user-select: none; max-width: 100%; height: auto; }
+.dial-face { fill: var(--sc-highest); }
+.dial-hand { stroke: var(--primary); stroke-width: 2.5; }
+.dial-pivot { fill: var(--primary); }
+.dial-pivot-end { fill: var(--on-primary); }
+.dial-selector { fill: var(--primary); }
+/* Animate the hand sweep on tap; transform-box anchors the rotation to the
+   viewBox centre. While dragging the transition is killed so it tracks 1:1. */
+.dial-hand-group {
+  transform-box: view-box; transform-origin: 128px 128px;
+  transition: transform var(--dur-base) var(--ease-enter);
+}
+.dial-hand-group.dragging { transition: none; }
+/* Crossfade the number set when switching hours⇄minutes (replayed via key). */
+.dial-labels { animation: dialLabels var(--dur-slow) var(--ease-enter); transform-box: view-box; transform-origin: 128px 128px; }
+@keyframes dialLabels { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: scale(1); } }
+.dial-label {
+  fill: var(--on-surface); font-family: var(--font-ui); font-size: 15px;
+  text-anchor: middle; dominant-baseline: central; pointer-events: none;
+  transition: fill var(--dur-fast);
+}
+.dial-label.inner { font-size: 13px; fill: var(--on-surface-variant); }
+.dial-label.selected { fill: var(--on-primary); font-weight: 600; }
+
 /* ---------- Custom select: a styled trigger + a portalled Material menu, so the
    dropdown looks identical on every platform (no OS-native <select> popup). ---- */
 .select-trigger {
@@ -426,7 +470,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .sheet-title { font-size: 19px; font-weight: 600; flex: 1; }
 .sheet-body { padding: 4px 20px calc(24px + var(--window-inset-bottom, 0px)); overflow-y: auto; }
 
-.dialog { position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop var(--dur-base) var(--ease-enter); }
+.dialog { position: absolute; left: 0; right: 0; margin-inline: auto; width: min(calc(100% - 48px), 360px); top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop var(--dur-base) var(--ease-enter); }
 @keyframes pop { from { transform: translateY(-50%) scale(0.9); opacity: 0; } }
 .dialog.leaving { pointer-events: none; animation: pop-out var(--dur-base) var(--ease-exit) forwards; }
 @keyframes pop-out { to { transform: translateY(-50%) scale(0.92); opacity: 0; } }

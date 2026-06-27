@@ -77,6 +77,12 @@ const vi = {
   "time.ago": "{n}{unit} trước",
   "time.unit.m": "ph",
   "time.unit.h": "g",
+  "interval.pickTitle": "Khoảng cập nhật",
+  "interval.ok": "OK",
+  "interval.cancel": "Hủy",
+  "interval.hours": "Giờ",
+  "interval.minutes": "Phút",
+
   // profiles
   "profiles.title": "Hồ sơ",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

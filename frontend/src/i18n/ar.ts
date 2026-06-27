@@ -94,6 +94,12 @@ const ar = {
   "time.ago": "منذ {n}{unit}",
   "time.unit.m": "د",
   "time.unit.h": "س",
+  "interval.pickTitle": "فترة التحديث",
+  "interval.ok": "موافق",
+  "interval.cancel": "إلغاء",
+  "interval.hours": "ساعات",
+  "interval.minutes": "دقائق",
+
   // profiles
   "profiles.title": "الملفات التعريفية",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {

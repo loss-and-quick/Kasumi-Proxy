@@ -90,6 +90,12 @@ const ru = {
   "time.ago": "{n}{unit} назад",
   "time.unit.m": "м",
   "time.unit.h": "ч",
+  "interval.pickTitle": "Интервал обновления",
+  "interval.ok": "ОК",
+  "interval.cancel": "Отмена",
+  "interval.hours": "Часы",
+  "interval.minutes": "Минуты",
+
   // profiles
   "profiles.title": "Профили",
   "profiles.subtitle": (vars: Vars | undefined, runtime: MessageRuntime) => {
