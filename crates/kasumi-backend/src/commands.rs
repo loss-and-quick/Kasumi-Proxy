@@ -461,11 +461,23 @@ pub(crate) async fn run_mutation(
         .unwrap_or_else(default_app_state);
     let mut next = prev.clone();
     apply_mutation(&mut next, intent);
-    crate::state_mw::default_chain().run(&prev, &mut next);
-    crate::state::write_app_state(platform, &next)
+    persist_with_chain(platform, &prev, &mut next)
         .await
         .map_err(|e| err(e.to_string()))?;
     Ok(next)
+}
+
+/// Run the write-side middleware chain over `prev` → `next`, then persist `next`.
+/// The single tail every persisted state change shares — the intent path
+/// ([`run_mutation`]) and the subscription fetch path ([`crate::sub_update`]) — so
+/// the chain is the one place invariants are enforced, on every write.
+pub(crate) async fn persist_with_chain(
+    platform: &dyn Platform,
+    prev: &AppState,
+    next: &mut AppState,
+) -> std::io::Result<()> {
+    crate::state_mw::default_chain().run(prev, next);
+    crate::state::write_app_state(platform, next).await
 }
 
 const LOG_TARGETS: [LogTarget; 4] = [
