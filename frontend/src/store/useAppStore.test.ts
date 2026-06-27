@@ -17,6 +17,7 @@ type BridgeMock = {
   [K in keyof Bridge]: ReturnType<typeof vi.fn<Bridge[K]>>;
 };
 
+import { applyMutation } from "../lib/apply-mutation";
 import { uid } from "../lib/utils";
 import { EMPTY_SETTINGS } from "./defaults";
 
@@ -140,27 +141,13 @@ function createBridgeMock(): BridgeMock {
     listApps: vi.fn(async () => []),
     reloadAppFilter: vi.fn(async () => ({ ok: true })),
     readState: vi.fn(async () => makeState()),
-    writeState: vi.fn(async (_state: AppState) => {}),
+    // Wired in beforeEach to run the real applyMutation against the live store
+    // state (so tests validate the canonical mutation logic too).
+    mutate: vi.fn(async (_intent) => makeState()),
     fetchSubscription: vi.fn(
       async (_url: string, _opts?: { userAgent?: string; allowInsecure?: boolean }) => [],
     ),
     applySubscription: vi.fn(async (_subId: string) => makeState()),
-    deduplicateProfiles: vi.fn(async (profiles: Profile[], _activeId: string | null) => {
-      // Canonical dedup key (protocol + endpoint); mirrors the backend logic.
-      const seen = new Set<string>();
-      const out: Profile[] = [];
-      for (const p of profiles) {
-        const ep = "endpoint" in p ? `${p.endpoint.address}:${p.endpoint.port}` : "";
-        const key = `${p.protocol}|${ep}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(p);
-      }
-      return out;
-    }),
-    removeProfilesBySubId: vi.fn(async (profiles: Profile[], _subId: string) =>
-      profiles.filter((p) => p.meta.subId !== _subId),
-    ),
     onSubApplied: vi.fn((_cb: (info: SubAppliedEvent) => void) => () => {}),
     downloadAsset: vi.fn(
       async (_filename: string, _url: string, _mode?: "auto" | "proxy" | "direct") => ({
@@ -192,6 +179,24 @@ beforeEach(async () => {
   }));
 
   ({ useAppStore } = await import("./useAppStore"));
+
+  // The backend's Mutate is faithfully emulated: apply the intent to the store's
+  // current persisted slice with the same logic the Rust backend runs, return the
+  // canonical state. Mirrors the round-trip the real bridge performs.
+  bridge.mutate.mockImplementation(async (intent) => {
+    const s = useAppStore.getState();
+    const prev: AppState = {
+      profiles: s.profiles,
+      groups: s.groups,
+      subscriptions: s.subscriptions,
+      routingRules: s.routingRules,
+      assetFiles: s.assetFiles,
+      settings: s.settings,
+      activeId: s.activeId,
+      version: s.version,
+    };
+    return applyMutation(prev, intent);
+  });
 });
 
 describe("useAppStore", () => {
@@ -266,9 +271,12 @@ describe("useAppStore", () => {
     await useAppStore.getState().hydrate();
 
     expect(useAppStore.getState().settings.routingMode).toBe("global");
-    expect(bridge.writeState).toHaveBeenCalledWith(
+    expect(bridge.mutate).toHaveBeenCalledWith(
       expect.objectContaining({
-        settings: expect.objectContaining({ routingMode: "global" }),
+        kind: "replaceState",
+        state: expect.objectContaining({
+          settings: expect.objectContaining({ routingMode: "global" }),
+        }),
       }),
     );
   });
@@ -281,9 +289,12 @@ describe("useAppStore", () => {
     await useAppStore.getState().hydrate();
 
     expect(useAppStore.getState().subscriptions[0].interval).toBe(360);
-    const written = bridge.writeState.mock.calls[bridge.writeState.mock.calls.length - 1]?.[0];
-    expect(written?.subscriptions[0].interval).toBe(360);
-    expect(written?.version).toBeTruthy();
+    const replaces = bridge.mutate.mock.calls
+      .map((c) => c[0])
+      .filter((i): i is Extract<typeof i, { kind: "replaceState" }> => i.kind === "replaceState");
+    const replace = replaces[replaces.length - 1];
+    expect(replace?.state.subscriptions[0].interval).toBe(360);
+    expect(replace?.state.version).toBeTruthy();
   });
 
   it("hydrate leaves versioned state intact (no re-migration)", async () => {
@@ -314,7 +325,7 @@ describe("useAppStore", () => {
     await useAppStore.getState().setActive("p2");
 
     expect(useAppStore.getState().activeId).toBe("p2");
-    expect(bridge.writeState).toHaveBeenCalled();
+    expect(bridge.mutate).toHaveBeenCalledWith(expect.objectContaining({ kind: "setActive" }));
     expect(bridge.start).toHaveBeenCalledWith("p2");
   });
 
@@ -352,7 +363,7 @@ describe("useAppStore", () => {
     await pending;
   });
 
-  it("upsertProfile inserts then updates by id", () => {
+  it("upsertProfile inserts then updates by id", async () => {
     const p1 = makeVless({ meta: { id: "p1", remarks: "One" } });
     const p2 = makeVless({
       meta: { id: "p2", remarks: "Two" },
@@ -366,15 +377,17 @@ describe("useAppStore", () => {
       activeId: null,
     });
 
-    useAppStore.getState().upsertProfile(p2);
+    await useAppStore.getState().upsertProfile(p2);
     expect(useAppStore.getState().profiles.map((p) => p.meta.id)).toEqual(["p2", "p1"]);
 
-    useAppStore.getState().upsertProfile({ ...p2, meta: { ...p2.meta, remarks: "Two updated" } });
+    await useAppStore
+      .getState()
+      .upsertProfile({ ...p2, meta: { ...p2.meta, remarks: "Two updated" } });
     expect(useAppStore.getState().profiles).toHaveLength(2);
     expect(useAppStore.getState().profiles[0].meta.remarks).toBe("Two updated");
   });
 
-  it("cloneProfile resets ping/speed stats and subscription link", () => {
+  it("cloneProfile resets ping/speed stats and subscription link", async () => {
     const src = makeVless({
       meta: { id: "p1", remarks: "Node", ping: 123, speed: 9_000, subId: "s1" },
     });
@@ -386,7 +399,7 @@ describe("useAppStore", () => {
       activeId: null,
     });
 
-    useAppStore.getState().cloneProfile("p1");
+    await useAppStore.getState().cloneProfile("p1");
 
     const copy = useAppStore.getState().profiles.find((p) => p.meta.id !== "p1");
     expect(copy).toBeDefined();
@@ -446,7 +459,7 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().profiles.map((p) => p.meta.id)).toEqual(["p2"]);
   });
 
-  it("removeAssetFile removes the asset without touching routing settings", () => {
+  it("removeAssetFile removes the asset without touching routing settings", async () => {
     const geoip = makeAsset({ id: "asset-geoip" });
     useAppStore.setState({
       profiles: [],
@@ -457,7 +470,7 @@ describe("useAppStore", () => {
       activeId: null,
     });
 
-    useAppStore.getState().removeAssetFile(geoip.id);
+    await useAppStore.getState().removeAssetFile(geoip.id);
 
     expect(useAppStore.getState().assetFiles).toEqual([]);
     expect(useAppStore.getState().settings.routingMode).toBe("rules");
@@ -599,7 +612,7 @@ describe("useAppStore", () => {
     it("addProfiles pushes profileImported activity", async () => {
       await useAppStore.getState().hydrate();
       const profiles = [makeVless({ meta: { id: "p1" } }), makeVless({ meta: { id: "p2" } })];
-      useAppStore.getState().addProfiles(profiles);
+      await useAppStore.getState().addProfiles(profiles);
 
       const feed = useAppStore.getState().recentActivity;
       expect(feed).toHaveLength(1);
@@ -642,8 +655,8 @@ describe("useAppStore", () => {
 
     it("newer events appear before older ones", async () => {
       await useAppStore.getState().hydrate();
-      useAppStore.getState().addProfiles([makeVless({ meta: { id: "p1" } })]);
-      useAppStore.getState().addProfiles([makeVless({ meta: { id: "p2" } })]);
+      await useAppStore.getState().addProfiles([makeVless({ meta: { id: "p1" } })]);
+      await useAppStore.getState().addProfiles([makeVless({ meta: { id: "p2" } })]);
 
       const feed = useAppStore.getState().recentActivity;
       expect(feed[0].at).toBeGreaterThanOrEqual(feed[1].at);
@@ -712,7 +725,7 @@ describe("useAppStore", () => {
       await useAppStore.getState().hydrate();
       const profile = makeVless({ meta: { id: "p1", remarks: "MyNode" } });
 
-      useAppStore.getState().upsertProfile(profile);
+      await useAppStore.getState().upsertProfile(profile);
 
       const feed = useAppStore.getState().recentActivity;
       expect(feed[0].icon).toBe("edit_note");

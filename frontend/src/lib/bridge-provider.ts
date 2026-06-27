@@ -97,20 +97,14 @@ export const bridge: Bridge = {
   async readState() {
     return (await loadBridge()).readState();
   },
-  async writeState(state) {
-    return (await loadBridge()).writeState(state);
+  async mutate(intent) {
+    return (await loadBridge()).mutate(intent);
   },
   async fetchSubscription(url, opts) {
     return (await loadBridge()).fetchSubscription(url, opts);
   },
   async applySubscription(subId) {
     return (await loadBridge()).applySubscription(subId);
-  },
-  async deduplicateProfiles(profiles, activeId, groupId) {
-    return (await loadBridge()).deduplicateProfiles(profiles, activeId, groupId);
-  },
-  async removeProfilesBySubId(profiles, subId, subGroupId) {
-    return (await loadBridge()).removeProfilesBySubId(profiles, subId, subGroupId);
   },
   onSubApplied(cb) {
     let unsubscribed = false;

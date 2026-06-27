@@ -9,7 +9,14 @@
 // ============================================================
 
 import type { Command, Profile, Response } from "../generated/bindings";
-import type { AppEntry, AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
+import type {
+  AppEntry,
+  AppState,
+  Bridge,
+  MutationIntent,
+  ResourceUpdateMode,
+  ServiceStatus,
+} from "./bridge";
 import { parseCapabilities, parseServiceStatus } from "./bridge";
 import { profileAddress, profilePort } from "./profile-utils";
 
@@ -207,19 +214,16 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
         ensured = true;
       }
       lastState = state;
-      if (migrated || ensured) await this.writeState(state);
+      // A one-time client migration (legacy inline profiles / a missing base group):
+      // persist the corrected state wholesale via the bulk replace intent.
+      if (migrated || ensured)
+        await this.mutate({ kind: "replaceState", state } as unknown as MutationIntent);
       return state;
     },
-    async writeState(state) {
-      lastState = state;
-      const { profiles, ...rest } = state;
-      await Promise.all([
-        dispatch({
-          cmd: "writeState",
-          state: { ...rest, profiles: [] },
-        } as unknown as Command),
-        dispatch({ cmd: "writeProfiles", profiles } as unknown as Command),
-      ]);
+    async mutate(intent) {
+      const next = asState(await dispatch({ cmd: "mutate", intent } as unknown as Command));
+      lastState = next;
+      return next;
     },
 
     async fetchSubscription(url, opts) {
@@ -234,26 +238,6 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     },
     async applySubscription(subId) {
       return asState(await dispatch({ cmd: "applySubscription", subId } as Command));
-    },
-    async deduplicateProfiles(profiles, activeId, groupId) {
-      return asProfiles(
-        await dispatch({
-          cmd: "deduplicateProfiles",
-          profiles,
-          activeId,
-          groupId: groupId ?? null,
-        } as Command),
-      );
-    },
-    async removeProfilesBySubId(profiles, subId, subGroupId) {
-      return asProfiles(
-        await dispatch({
-          cmd: "removeProfilesBySubId",
-          profiles,
-          subId,
-          subGroupId: subGroupId ?? null,
-        } as Command),
-      );
     },
     onSubApplied(cb) {
       return push.subscribeSubApplied((raw) => {
@@ -299,20 +283,9 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       const text = await file.text();
       const { AppStateSchema } = await import("../generated/schemas");
       const incoming = AppStateSchema.parse(JSON.parse(text)) as unknown as AppState;
-      const current = await this.readState();
-      const merged: AppState =
-        mode === "replace"
-          ? { ...incoming, profiles: current.profiles }
-          : {
-              ...current,
-              profiles: [...current.profiles, ...incoming.profiles],
-              groups: [...current.groups, ...incoming.groups],
-              subscriptions: [...current.subscriptions, ...incoming.subscriptions],
-              routingRules: [...current.routingRules, ...incoming.routingRules],
-              assetFiles: [...current.assetFiles, ...incoming.assetFiles],
-              settings: incoming.settings,
-            };
-      await this.writeState(merged);
+      // Let the backend own the merge + invariants; ship the parsed backup as an
+      // importBackup intent.
+      await this.mutate({ kind: "importBackup", incoming, mode } as unknown as MutationIntent);
     },
   };
   return bridge;

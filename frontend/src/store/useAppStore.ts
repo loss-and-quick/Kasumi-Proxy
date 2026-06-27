@@ -13,6 +13,7 @@ import type {
   AppState,
   AssetFile,
   Capabilities,
+  MutationIntent,
   ResourceUpdateMode,
   RoutingRule,
   ServiceStatus,
@@ -27,17 +28,6 @@ import type { ActivityEvent } from "./activity";
 import { ActivityService } from "./activity";
 import { EMPTY_SETTINGS, mergeSettings } from "./defaults";
 import { errorMessage } from "./errors";
-import {
-  activeIdAfterProfileRemoval,
-  activeIdAfterSubRemoval,
-  insertProfileAfter,
-  mergeBackupState,
-  moveItemByIndex,
-  moveProfilesToGroup,
-  removeProfilesByIds,
-  upsertById,
-  upsertProfileFront,
-} from "./state-mutations";
 
 /** A queued, auto-dismissing notification shown by the <Toaster>. */
 export interface ToastItem {
@@ -69,7 +59,6 @@ interface Store extends AppState {
   recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
 
   hydrate: () => Promise<void>;
-  flush: () => Promise<void>;
   notify: (msg: string) => void;
   dismissToast: (id: string) => void;
 
@@ -134,12 +123,22 @@ export const useAppStore = create<Store>((set, get) => {
   const pushActivity = (icon: string, text: string, color?: string) => {
     set({ recentActivity: activity.add(icon, text, color) });
   };
-  // Mutate state and persist it. Returns the flush promise so every mutator
-  // can be awaited uniformly (see the Promise<void> action signatures).
-  const patch = (fn: (s: Store) => Partial<Store>) => {
-    set(fn);
-    return get().flush();
-  };
+  // Adopt the canonical persisted-state slice the backend returned (the rest of
+  // the store — service status, toasts, etc. — is UI-only and left untouched).
+  const applyState = (next: AppState) =>
+    set({
+      profiles: next.profiles,
+      groups: next.groups,
+      subscriptions: next.subscriptions,
+      routingRules: next.routingRules,
+      assetFiles: next.assetFiles,
+      settings: mergeSettings(next.settings),
+      activeId: next.activeId,
+      version: next.version ?? __MODULE_VERSION__,
+    });
+  // The single write path: dispatch one domain intent and render the canonical
+  // AppState the backend returns. No local invariant logic, no full-state shipping.
+  const mutate = (intent: MutationIntent) => bridge.mutate(intent).then(applyState);
   let lastTrafficSample: { uploadBytes: number; downloadBytes: number; at: number } | null = null;
   // hydrate() can run more than once (tests, dev StrictMode) — register the
   // background watchers a single time.
@@ -299,13 +298,12 @@ export const useAppStore = create<Store>((set, get) => {
         settings.routingMode !== state.settings.routingMode
       ) {
         set({ assetFiles });
-        await bridge.writeState({
-          ...state,
-          subscriptions,
-          assetFiles,
-          settings,
-          version: __MODULE_VERSION__,
-        });
+        // One-time client migration: persist the corrected state wholesale via the
+        // bulk replace intent (the only non-granular write path).
+        await mutate({
+          kind: "replaceState",
+          state: { ...state, subscriptions, assetFiles, settings, version: __MODULE_VERSION__ },
+        } as unknown as MutationIntent);
       }
       // The daemon fetches & applies subscriptions headlessly; reload the
       // persisted state whenever it pushes a subApplied event.
@@ -313,21 +311,6 @@ export const useAppStore = create<Store>((set, get) => {
         subAppliedWatchStarted = true;
         bridge.onSubApplied((info) => void onDaemonSubApplied(info));
       }
-    },
-    async flush() {
-      const { profiles, groups, subscriptions, routingRules, assetFiles, settings, activeId } =
-        get();
-      await bridge.writeState({
-        profiles,
-        groups,
-        subscriptions,
-        routingRules,
-        assetFiles,
-        settings,
-        activeId,
-        // Stamp every write with the current build version (see __MODULE_VERSION__).
-        version: __MODULE_VERSION__,
-      });
     },
     notify(msg) {
       showNativeToast(msg);
@@ -351,10 +334,9 @@ export const useAppStore = create<Store>((set, get) => {
 
     async setActive(id) {
       set((s) => ({
-        activeId: id,
         recentProfileIds: [id, ...s.recentProfileIds.filter((x) => x !== id)].slice(0, 5),
       }));
-      await get().flush();
+      await mutate({ kind: "setActive", id });
       if (isServiceUp(get().service.state)) {
         try {
           await showStartingState(id);
@@ -383,7 +365,6 @@ export const useAppStore = create<Store>((set, get) => {
           pushActivity("stop_circle", translateCurrent("activity.serviceStopped"), "var(--error)");
           get().notify(translateCurrent("store.service.stopped"));
         } else if (activeId) {
-          await get().flush();
           await showStartingState(activeId);
           syncService(await bridge.start(activeId));
           const remarks =
@@ -408,7 +389,6 @@ export const useAppStore = create<Store>((set, get) => {
       const { activeId } = get();
       try {
         if (activeId) {
-          await get().flush();
           await showStartingState(activeId);
           syncService(await bridge.start(activeId));
         } else {
@@ -432,66 +412,45 @@ export const useAppStore = create<Store>((set, get) => {
       }
     },
 
-    upsertProfile(p) {
-      const done = patch((s) => ({ profiles: upsertProfileFront(s.profiles, p) }));
+    async upsertProfile(p) {
+      await mutate({ kind: "upsertProfile", profile: p });
       pushActivity(
         "edit_note",
         translateCurrent("activity.profileSaved", { remarks: p.meta.remarks }),
       );
-      return done;
     },
     async removeProfile(id) {
-      const wasActive = get().activeId === id;
-      if (wasActive)
+      if (get().activeId === id)
         await stopServiceIfRunning(translateCurrent("store.service.stoppedProfileRemoved"));
-      set((s) => ({
-        profiles: removeProfilesByIds(s.profiles, new Set([id])),
-        activeId: activeIdAfterProfileRemoval(s.activeId, new Set([id])),
-      }));
-      await get().flush();
+      await mutate({ kind: "removeProfiles", ids: [id] });
     },
     async removeProfiles(ids) {
-      const removed = new Set(ids);
       const activeId = get().activeId;
-      const removingActive = activeId != null && removed.has(activeId);
-      if (removingActive)
+      if (activeId != null && ids.includes(activeId))
         await stopServiceIfRunning(translateCurrent("store.service.stoppedProfileDeleted"));
-      set((s) => ({
-        profiles: removeProfilesByIds(s.profiles, removed),
-        activeId: activeIdAfterProfileRemoval(s.activeId, removed),
-      }));
-      await get().flush();
+      await mutate({ kind: "removeProfiles", ids });
     },
     cloneProfile(id) {
-      return patch((s) => {
-        const src = s.profiles.find((p) => p.meta.id === id);
-        if (!src) return {};
-        const copy: Profile = {
-          ...src,
-          meta: {
-            ...src.meta,
-            id: uid(),
-            remarks: `${src.meta.remarks} (${translateCurrent("store.profile.copySuffix")})`,
-            subId: null,
-            ping: null,
-            speed: null,
-          },
-        };
-        return { profiles: insertProfileAfter(s.profiles, id, copy) };
+      const src = get().profiles.find((p) => p.meta.id === id);
+      if (!src) return Promise.resolve();
+      return mutate({
+        kind: "cloneProfile",
+        id,
+        newId: uid(),
+        remarks: `${src.meta.remarks} (${translateCurrent("store.profile.copySuffix")})`,
       });
     },
     moveProfiles(ids, groupId) {
-      return patch((s) => ({ profiles: moveProfilesToGroup(s.profiles, ids, groupId) }));
+      return mutate({ kind: "moveProfiles", ids, groupId });
     },
     async addProfiles(profiles) {
       if (!profiles.length) return;
-      const done = patch((s) => ({ profiles: [...profiles, ...s.profiles] }));
+      await mutate({ kind: "addProfiles", profiles });
       pushActivity(
         "download",
         translateCurrent("activity.profileImported", { count: profiles.length }),
       );
       get().notify(translateCurrent("store.profile.imported", { count: profiles.length }));
-      await done;
     },
 
     async pingProfile(id) {
@@ -642,14 +601,9 @@ export const useAppStore = create<Store>((set, get) => {
         get().notify(translateCurrent("store.ping.noUnreachable"));
         return;
       }
-      const removingActive = activeId != null && unreachable.has(activeId);
-      if (removingActive)
+      if (activeId != null && unreachable.has(activeId))
         await stopServiceIfRunning(translateCurrent("store.service.stoppedProfileRemoved"));
-      set((s) => ({
-        profiles: removeProfilesByIds(s.profiles, unreachable),
-        activeId: activeIdAfterProfileRemoval(s.activeId, unreachable),
-      }));
-      await get().flush();
+      await mutate({ kind: "removeUnreachable", groupId: groupId ?? null });
       pushActivity(
         "delete_sweep",
         translateCurrent("activity.unreachableRemoved", { count: unreachable.size }),
@@ -683,38 +637,32 @@ export const useAppStore = create<Store>((set, get) => {
 
     async removeDuplicates(groupId?: string) {
       const { profiles, activeId } = get();
-      // Scoped dedup runs in the backend (kasumi-core); it always keeps the active
-      // profile, so the running data-path is never affected.
-      const kept = await bridge.deduplicateProfiles(profiles, activeId, groupId);
-      const removed = profiles.length - kept.length;
+      const before = profiles.length;
+      // Dedup runs server-side and always keeps the active profile, so the running
+      // data-path is never affected.
+      await mutate({ kind: "deduplicateProfiles", activeId, groupId: groupId ?? null });
+      const removed = before - get().profiles.length;
       if (!removed) {
         get().notify(translateCurrent("store.dedup.none"));
         return;
       }
-      set(() => ({ profiles: kept }));
       pushActivity(
         "content_cut",
         translateCurrent("activity.duplicatesRemoved", { count: removed }),
       );
       get().notify(translateCurrent("store.dedup.done", { count: removed }));
-      await get().flush();
     },
 
     async addGroup(name) {
       const id = uid();
-      await patch((s) => ({ groups: [...s.groups, { id, name }] }));
+      await mutate({ kind: "addGroup", id, name });
       return id;
     },
     renameGroup(id, name) {
-      return patch((s) => ({ groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) }));
+      return mutate({ kind: "renameGroup", id, name });
     },
     reorderGroups(from, to) {
-      return patch((s) => {
-        // g-main stays pinned at index 0: never move it, never drop above it.
-        const pinned = s.groups[0]?.id === "g-main" ? 1 : 0;
-        if (from < pinned) return {};
-        return { groups: moveItemByIndex(s.groups, from, Math.max(pinned, to)) };
-      });
+      return mutate({ kind: "reorderGroups", from, to });
     },
     async removeGroup(id) {
       if (id === "g-main") return;
@@ -722,32 +670,20 @@ export const useAppStore = create<Store>((set, get) => {
       const activeProfile = profiles.find((p) => p.meta.id === activeId);
       // The group holding the active profile is protected from deletion.
       if (activeProfile?.meta.groupId === id) return;
-      const removed = new Set(profiles.filter((p) => p.meta.groupId === id).map((p) => p.meta.id));
-      set((s) => ({
-        groups: s.groups.filter((g) => g.id !== id),
-        profiles: removeProfilesByIds(s.profiles, removed),
-      }));
-      await get().flush();
+      await mutate({ kind: "removeGroup", id });
     },
 
     async upsertSub(sub) {
       // The daemon's auto-update loop re-reads state every tick, so a new or
       // edited subscription is picked up within a minute — no wakeup needed.
-      await patch((s) => ({ subscriptions: upsertById(s.subscriptions, sub) }));
+      await mutate({ kind: "upsertSub", subscription: sub });
     },
     async removeSub(id) {
       const { profiles, activeId } = get();
       const activeProfile = profiles.find((p) => p.meta.id === activeId);
       if (activeProfile?.meta.subId === id)
         await stopServiceIfRunning(translateCurrent("store.service.stoppedSubRemoved"));
-      // Profile pruning runs in the backend (kasumi-core); the rest is local.
-      const kept = await bridge.removeProfilesBySubId(profiles, id);
-      set((s) => ({
-        subscriptions: s.subscriptions.filter((x) => x.id !== id),
-        profiles: kept,
-        activeId: activeIdAfterSubRemoval(s.profiles, s.activeId, id),
-      }));
-      await get().flush();
+      await mutate({ kind: "removeSub", id });
     },
     async updateSub(id) {
       const { subscriptions, service } = get();
@@ -758,11 +694,10 @@ export const useAppStore = create<Store>((set, get) => {
       // the failure is explained up front rather than as a fetch timeout (the
       // backend can't tell a stopped proxy from an unreachable URL).
       if (sub.updateMode === "proxy" && !isServiceUp(service.state)) {
-        patch((s) => ({
-          subscriptions: s.subscriptions.map((x) =>
-            x.id === id ? { ...x, lastError: translateCurrent("common.proxyNotRunning") } : x,
-          ),
-        }));
+        await mutate({
+          kind: "upsertSub",
+          subscription: { ...sub, lastError: translateCurrent("common.proxyNotRunning") },
+        });
         get().notify(translateCurrent("common.proxyNotRunning"));
         return;
       }
@@ -774,20 +709,12 @@ export const useAppStore = create<Store>((set, get) => {
         // active data-path when affected; we just reflect the result.
         next = await bridge.applySubscription(id);
       } catch (e: unknown) {
-        patch((s) => ({
-          subscriptions: s.subscriptions.map((x) =>
-            x.id === id ? { ...x, lastError: errorMessage(e) } : x,
-          ),
-        }));
+        await mutate({ kind: "upsertSub", subscription: { ...sub, lastError: errorMessage(e) } });
         get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
         return;
       }
 
-      set({
-        profiles: next.profiles,
-        subscriptions: next.subscriptions,
-        activeId: next.activeId,
-      });
+      applyState(next);
       await get().refreshStatus();
 
       const updated = next.subscriptions.find((x) => x.id === id);
@@ -810,43 +737,35 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     addRoutingRule(rule) {
-      return patch((s) => ({ routingRules: upsertById(s.routingRules, rule) }));
+      return mutate({ kind: "upsertRoutingRule", rule });
     },
     updateRoutingRule(id, rulePatch) {
-      return patch((s) => ({
-        routingRules: s.routingRules.map((rule) =>
-          rule.id === id ? { ...rule, ...rulePatch } : rule,
-        ),
-      }));
+      const rule = get().routingRules.find((r) => r.id === id);
+      if (!rule) return Promise.resolve();
+      return mutate({ kind: "upsertRoutingRule", rule: { ...rule, ...rulePatch } });
     },
     removeRoutingRule(id) {
-      return patch((s) => ({ routingRules: s.routingRules.filter((rule) => rule.id !== id) }));
+      return mutate({ kind: "removeRoutingRule", id });
     },
     reorderRoutingRules(from, to) {
-      return patch((s) => ({ routingRules: moveItemByIndex(s.routingRules, from, to) }));
+      return mutate({ kind: "reorderRoutingRules", from, to });
     },
     importRoutingRules(rules, mode) {
       // Re-id imported rules so they never collide with existing ones.
       const incoming = rules.map((rule) => ({ ...rule, id: uid() }));
-      return patch((s) => ({
-        routingRules: mode === "replace" ? incoming : [...s.routingRules, ...incoming],
-      }));
+      return mutate({ kind: "importRoutingRules", rules: incoming, mode });
     },
 
     addAssetFile(asset) {
-      return patch((s) => ({ assetFiles: upsertById(s.assetFiles, asset) }));
+      return mutate({ kind: "upsertAssetFile", asset });
     },
     updateAssetFile(id, assetPatch) {
-      return patch((s) => ({
-        assetFiles: s.assetFiles.map((asset) =>
-          asset.id === id ? { ...asset, ...assetPatch } : asset,
-        ),
-      }));
+      const asset = get().assetFiles.find((a) => a.id === id);
+      if (!asset) return Promise.resolve();
+      return mutate({ kind: "upsertAssetFile", asset: { ...asset, ...assetPatch } });
     },
     removeAssetFile(id) {
-      return patch((s) => ({
-        assetFiles: s.assetFiles.filter((asset) => asset.id !== id),
-      }));
+      return mutate({ kind: "removeAssetFile", id });
     },
     async downloadAsset(id, mode = "auto") {
       const asset = get().assetFiles.find((item) => item.id === id);
@@ -864,11 +783,10 @@ export const useAppStore = create<Store>((set, get) => {
         );
         return;
       }
-      patch((s) => ({
-        assetFiles: s.assetFiles.map((item) =>
-          item.id === id ? { ...item, lastUpdated: Date.now() } : item,
-        ),
-      }));
+      await mutate({
+        kind: "upsertAssetFile",
+        asset: { ...asset, lastUpdated: Date.now() },
+      });
       pushActivity(
         "file_download_done",
         translateCurrent("activity.assetDownloaded", { name: asset.remarks }),
@@ -877,22 +795,14 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     setSetting(k, v) {
-      return patch((s) => ({
-        settings: { ...s.settings, [k]: v },
-      }));
+      return mutate({ kind: "setSettings", settings: { ...get().settings, [k]: v } });
     },
 
     setAppFilterMode(key, mode) {
-      // Functional update reads the latest appFilter inside the setter, so
-      // rapid toggles never overwrite each other via a stale closure.
-      return patch((s) => {
-        const next = { ...(s.settings.appFilter ?? {}) };
-        if (mode === null) delete next[key];
-        else next[key] = mode;
-        return {
-          settings: { ...s.settings, appFilter: next },
-        };
-      });
+      const appFilter = { ...(get().settings.appFilter ?? {}) };
+      if (mode === null) delete appFilter[key];
+      else appFilter[key] = mode;
+      return mutate({ kind: "setSettings", settings: { ...get().settings, appFilter } });
     },
 
     async importBackup(json, mode) {
@@ -919,7 +829,9 @@ export const useAppStore = create<Store>((set, get) => {
       if (mode === "replace" && isServiceUp(get().service.state)) {
         await stopServiceIfRunning(translateCurrent("store.service.stoppedBeforeBackupRestore"));
       }
-      await patch((s) => mergeBackupState(s, incoming, mode));
+      // `incoming` is a Zod-parsed AppState; it carries schemaVersion at runtime
+      // even though the UI's AppState type omits it (the backend owns it).
+      await mutate({ kind: "importBackup", incoming, mode } as unknown as MutationIntent);
       pushActivity("backup", translateCurrent("activity.backupRestored"));
       get().notify(
         skipped > 0

@@ -25,12 +25,13 @@ export type {
   Capabilities,
   Group,
   LogTarget,
+  MutationIntent_Serialize as MutationIntent,
   RoutingRule,
   SubAppliedEvent,
   Subscription_Serialize as Subscription,
 } from "../generated/bindings";
 
-import type { AppState_Serialize } from "../generated/bindings";
+import type { AppState_Serialize, MutationIntent_Serialize } from "../generated/bindings";
 
 // The persisted app state as the UI holds it. `schemaVersion` is an on-disk
 // migration detail owned by the Rust read path, so the frontend neither tracks
@@ -89,7 +90,12 @@ export interface Bridge {
 
   // persistence (source of truth lives in module files, not localStorage)
   readState(): Promise<AppState>;
-  writeState(state: AppState): Promise<void>;
+  // The single write path: dispatch one domain intent; the backend applies it,
+  // enforces invariants, persists, and returns the new canonical state the UI
+  // renders. No full-state shipping, no local invariant logic. Bulk replaces
+  // (one-time client migration on hydrate, file backup restore) use the
+  // `replaceState` / `importBackup` intents — there is no separate writeState.
+  mutate(intent: MutationIntent_Serialize): Promise<AppState>;
 
   // subscriptions
   fetchSubscription(
@@ -102,20 +108,6 @@ export interface Bridge {
   // state. Soft failures are recorded as the subscription's `lastError` in the
   // returned state; the UI reloads from it instead of running the apply locally.
   applySubscription(subId: string): Promise<AppState>;
-
-  // Run kasumi-core's canonical profile-list transforms server-side and return
-  // the surviving profiles (the caller persists them) — so the dedup / sub-removal
-  // logic is never reimplemented on the frontend.
-  deduplicateProfiles(
-    profiles: Profile[],
-    activeId: string | null,
-    groupId?: string,
-  ): Promise<Profile[]>;
-  removeProfilesBySubId(
-    profiles: Profile[],
-    subId: string,
-    subGroupId?: string | null,
-  ): Promise<Profile[]>;
 
   // The daemon fetches & applies auto-update subscriptions itself; this stream
   // tells the UI to reload the persisted state. Returns an unsubscribe.
