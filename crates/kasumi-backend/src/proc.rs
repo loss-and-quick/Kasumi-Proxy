@@ -260,9 +260,17 @@ mod imp {
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            send_signal(pid, libc::SIGKILL);
-        } else {
-            send_signal(pid, libc::SIGKILL);
+        }
+        send_signal(pid, libc::SIGKILL);
+        // Wait for the pid to actually vanish before returning: a sing-box auto_route
+        // core still owns its tun + routing rules until it's reaped, and the caller
+        // (stop_data_path) spawns the next core as soon as we return — overlapping tuns
+        // wedge routing. Bounded so a stuck/unreapable pid can't hang the stop path.
+        for _ in 0..20 {
+            if !pid_exists(pid).await {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 }
