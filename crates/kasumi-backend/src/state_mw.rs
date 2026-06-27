@@ -1,24 +1,31 @@
 //! Write-side middleware for [`AppState`].
 //!
-//! `WriteState` is the "replace the whole persisted state" escape hatch the UI
-//! uses for every edit. That makes it a natural sink for cross-cutting domain
-//! rules that must hold whenever state is saved — "a subscription whose group
-//! changed drags its profiles along", "a dangling active_id is nulled", and so
-//! on. Left inline, those rules rot the command router; collected here as small,
-//! pure, individually testable rules they stay next to the domain they express.
+//! Every persisted edit flows through one path: the `Mutate` command applies a
+//! domain intent (`kasumi_core::mutate`) and then runs this chain before the write.
+//! That makes the chain the natural sink for cross-cutting *invariants* that must
+//! hold whenever state is saved — "a dangling active_id is nulled", "a deleted
+//! group's profiles are pruned" — regardless of which intent triggered the save. An
+//! intent's *own* consequences (e.g. a subscription dragging its profiles when its
+//! group changes) belong in `apply_mutation`, next to that intent; the chain is only
+//! for rules that span every edit. Collected here as small, pure, individually
+//! testable rules, they stay next to the domain they express.
 //!
 //! Each rule sees both the state currently on disk (`prev`) and the state about
 //! to replace it (`next`), so it can react to a *transition* — something a
 //! read-side normalizer can't do, since on read there is no "before". Rules that
 //! only need a single state are of course free to ignore `prev`.
 //!
+//! Rules are *pure*: they only rearrange in-memory data and return `()`. A rule that
+//! needs a side-effect — e.g. "the active profile was removed, so stop the
+//! data-path" — does not belong here; that lives in the `Service`, which owns the
+//! lifecycle. Keep this layer about state invariants only.
+//!
 //! Registration order is load-bearing: a rule that assumes another already ran
 //! must be pushed after it (see [`WriteChain::run`]). Keep that order in one
 //! place — the [`default_chain`] constructor — so it is visible at a glance and
 //! not scattered across init sites.
 
-use kasumi_core::state::AppState;
-use kasumi_core::sub_apply::migrate_profiles_to_new_group;
+use kasumi_core::state::{fixup_active_id, AppState};
 
 /// A single write-side rule. Pure: no I/O, deterministic, trivially unit-testable.
 ///
@@ -71,28 +78,20 @@ impl Default for WriteChain {
     }
 }
 
-/// Move a subscription's profiles to its new group whenever `group_id` changed
-/// between `prev` and `next`. Profiles the user dragged to a *third* group are
-/// left where they are — only the ones still in the subscription's previous
-/// target group follow it.
-pub struct MigrateSubGroups;
+/// Null a dangling `active_id` after the edit. The single invariant
+/// [`kasumi_core::core_config`] depends on (it looks the active profile up by id and
+/// fails when it's missing); enforced here so backup imports, headless sub-updates
+/// that drop the active, and direct `profiles.json` edits can't leave it pointing at
+/// a profile that no longer exists. Runs last, after any rule that removes profiles.
+pub struct FixupDanglingActiveId;
 
-impl WriteMiddleware for MigrateSubGroups {
+impl WriteMiddleware for FixupDanglingActiveId {
     fn name(&self) -> &'static str {
-        "migrate-sub-groups"
+        "fixup-dangling-active-id"
     }
 
-    fn apply(&self, prev: &AppState, next: &mut AppState) {
-        for new_sub in &next.subscriptions {
-            let Some(prev_sub) = prev.subscriptions.iter().find(|s| s.id == new_sub.id) else {
-                continue;
-            };
-            if let (Some(old_g), Some(new_g)) = (&prev_sub.group_id, &new_sub.group_id) {
-                if old_g != new_g {
-                    migrate_profiles_to_new_group(&mut next.profiles, &new_sub.id, old_g, new_g);
-                }
-            }
-        }
+    fn apply(&self, _prev: &AppState, next: &mut AppState) {
+        fixup_active_id(next);
     }
 }
 
@@ -103,7 +102,9 @@ impl WriteMiddleware for MigrateSubGroups {
 /// the sequence. Add new rules here as the dependency graph grows.
 pub fn default_chain() -> WriteChain {
     let mut chain = WriteChain::new();
-    chain.push(MigrateSubGroups);
+    // Runs last so it sees the final profile set; add profile-removing rules before
+    // it as the graph grows.
+    chain.push(FixupDanglingActiveId);
     chain
 }
 
@@ -112,148 +113,53 @@ mod tests {
     use super::*;
     use kasumi_core::profile::Profile;
     use kasumi_core::share::parse_share_link;
-    use kasumi_core::state::{default_app_state, Group, Subscription};
+    use kasumi_core::state::default_app_state;
 
     fn p(uri: &str) -> Profile {
         parse_share_link(uri, None).unwrap()
     }
 
-    fn sub(id: &str, group: Option<&str>) -> Subscription {
-        Subscription {
-            id: id.into(),
-            remarks: "Sub".into(),
-            url: String::new(),
-            enabled: true,
-            group_id: group.map(str::to_string),
-            auto_update: false,
-            interval: 60,
-            allow_insecure: false,
-            user_agent: String::new(),
-            filter: String::new(),
-            update_mode: Default::default(),
-            last_updated: String::new(),
-            count: 0,
-            last_error: None,
-            prev_profile: None,
-            next_profile: None,
-        }
-    }
+    #[test]
+    fn fixup_nulls_dangling_active_id() {
+        let mut a = p("vless://u1@e.x:443?type=tcp#A");
+        a.meta_mut().id = "live".into();
+        let prev = default_app_state();
+        let mut next = default_app_state();
+        next.profiles = vec![a];
+        next.active_id = Some("ghost".into()); // not in profiles
+        default_chain().run(&prev, &mut next);
+        assert_eq!(next.active_id, None);
 
-    fn state_with(subs: Vec<Subscription>, mut profiles: Vec<Profile>) -> AppState {
-        let mut s = default_app_state();
-        // Give every profile a stable id for the assertions.
-        for (i, p) in profiles.iter_mut().enumerate() {
-            p.meta_mut().id = format!("p{i}");
-        }
-        s.subscriptions = subs;
-        s.groups = vec![
-            Group {
-                id: "g-old".into(),
-                name: "Old".into(),
-                sub_id: None,
-            },
-            Group {
-                id: "g-new".into(),
-                name: "New".into(),
-                sub_id: None,
-            },
-            Group {
-                id: "g-manual".into(),
-                name: "Manual".into(),
-                sub_id: None,
-            },
-        ];
-        s.profiles = profiles;
-        s
+        // A live active id survives.
+        next.active_id = Some("live".into());
+        default_chain().run(&prev, &mut next);
+        assert_eq!(next.active_id.as_deref(), Some("live"));
     }
 
     #[test]
-    fn migrate_follows_group_change_and_preserves_manual_moves() {
-        // s1 owned two profiles in g-old, one dragged to g-manual by hand.
-        let mut a = p("vless://u1@e.x:443?type=tcp#A");
-        a.meta_mut().sub_id = Some("s1".into());
-        a.meta_mut().group_id = "g-old".into();
-        let mut b = p("vless://u2@e.x:443?type=tcp#B");
-        b.meta_mut().sub_id = Some("s1".into());
-        b.meta_mut().group_id = "g-old".into();
-        let mut manual = p("vless://u3@e.x:443?type=tcp#M");
-        manual.meta_mut().sub_id = Some("s1".into());
-        manual.meta_mut().group_id = "g-manual".into();
-        // s2 has a profile in g-old too — must not be touched by s1's move.
-        let mut other = p("vless://u4@e.x:443?type=tcp#O");
-        other.meta_mut().sub_id = Some("s2".into());
-        other.meta_mut().group_id = "g-old".into();
-
-        let prev = state_with(
-            vec![sub("s1", Some("g-old")), sub("s2", Some("g-old"))],
-            vec![],
-        );
-        let mut next = state_with(
-            vec![sub("s1", Some("g-new")), sub("s2", Some("g-old"))],
-            vec![a, b, manual, other],
-        );
-
-        default_chain().run(&prev, &mut next);
-
-        let group_of = |id: &str| {
-            next.profiles
-                .iter()
-                .find(|p| p.meta().id == id)
-                .unwrap()
-                .meta()
-                .group_id
-                .as_str()
-        };
-        // s1's g-old profiles followed the subscription to g-new.
-        assert_eq!(group_of("p0"), "g-new");
-        assert_eq!(group_of("p1"), "g-new");
-        // The manual move and the other subscription are untouched.
-        assert_eq!(group_of("p2"), "g-manual");
-        assert_eq!(group_of("p3"), "g-old");
-    }
-
-    #[test]
-    fn no_change_when_group_id_unchanged() {
-        let mut a = p("vless://u1@e.x:443?type=tcp#A");
-        a.meta_mut().sub_id = Some("s1".into());
-        a.meta_mut().group_id = "g-old".into();
-        let prev = state_with(vec![sub("s1", Some("g-old"))], vec![]);
-        let mut next = state_with(vec![sub("s1", Some("g-old"))], vec![a]);
-        default_chain().run(&prev, &mut next);
-        assert_eq!(next.profiles[0].meta().group_id.as_str(), "g-old");
-    }
-
-    #[test]
-    fn new_subscription_leaves_existing_profiles_alone() {
-        // s1 newly added (no prev entry) — nothing to migrate from.
-        let mut a = p("vless://u1@e.x:443?type=tcp#A");
-        a.meta_mut().sub_id = Some("s1".into());
-        a.meta_mut().group_id = "g-old".into();
-        let prev = state_with(vec![], vec![]);
-        let mut next = state_with(vec![sub("s1", Some("g-new"))], vec![a]);
-        default_chain().run(&prev, &mut next);
-        assert_eq!(next.profiles[0].meta().group_id.as_str(), "g-old");
+    fn default_chain_has_the_fixup_rule() {
+        assert_eq!(default_chain().len(), 1);
     }
 
     #[test]
     fn chain_runs_rules_in_registration_order() {
-        // A sentinel rule that flips a marker; verify it ran by side effect.
-        struct Flip;
-        impl WriteMiddleware for Flip {
+        // Two sentinels writing the same field; the later one wins, proving order.
+        struct SetMtu(i64);
+        impl WriteMiddleware for SetMtu {
             fn name(&self) -> &'static str {
-                "flip"
+                "set-mtu"
             }
             fn apply(&self, _prev: &AppState, next: &mut AppState) {
-                next.settings.mtu = 9999;
+                next.settings.mtu = self.0;
             }
         }
         let mut chain = WriteChain::new();
-        chain.push(Flip);
-        chain.push(MigrateSubGroups);
+        chain.push(SetMtu(1111));
+        chain.push(SetMtu(2222));
         assert_eq!(chain.len(), 2);
         let prev = default_app_state();
         let mut next = default_app_state();
         chain.run(&prev, &mut next);
-        assert_eq!(next.settings.mtu, 9999);
+        assert_eq!(next.settings.mtu, 2222);
     }
 }
