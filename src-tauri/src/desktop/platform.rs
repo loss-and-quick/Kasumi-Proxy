@@ -172,6 +172,11 @@ impl DesktopPlatform {
 
         prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file).await?;
 
+        // Defensive sweep before bring-up: if a previous core crashed (so stop_data_path
+        // never ran its teardown), its orphaned auto_route rules would otherwise survive
+        // and black-hole the fresh tun. Idempotent — clears nothing on a clean start.
+        routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
+
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
         let child = spawn_supervised(
             &core_argv(&self.p.singbox_bin, &cfg),
@@ -405,6 +410,10 @@ impl Platform for DesktopPlatform {
         )
         .await;
         routing::clear_xray_routing(&self.p.route_state_file).await;
+        // Fallback: a native sing-box core that didn't exit cleanly (crash / SIGKILL)
+        // leaves its auto_route ip-rules/tables behind; sweep them so they don't wedge
+        // the next bring-up. No-op for xray (no rules at those priorities).
+        routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
         kill_if_running(
             read_pidfile(&self.p.tun2socks_pidfile).await,
             Some(&self.p.tun2socks_bin),
