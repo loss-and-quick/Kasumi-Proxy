@@ -193,6 +193,26 @@ pub fn remove_profiles_by_sub_id(
         .collect()
 }
 
+/// Move a subscription's profiles from `old_group` to `new_group` in place,
+/// returning how many moved. Profiles manually dragged to a *third* group are
+/// left untouched — only the ones still in the subscription's previous target
+/// group follow it to the new one. Pure: no I/O.
+pub fn migrate_profiles_to_new_group(
+    profiles: &mut [Profile],
+    sub_id: &str,
+    old_group: &str,
+    new_group: &str,
+) -> usize {
+    let mut moved = 0;
+    for p in profiles.iter_mut() {
+        if p.meta().sub_id.as_deref() == Some(sub_id) && p.meta().group_id == old_group {
+            p.meta_mut().group_id = new_group.to_string();
+            moved += 1;
+        }
+    }
+    moved
+}
+
 /// Filter a freshly fetched batch and stamp each with the subscription's id/group.
 pub fn map_fetched_subscription_profiles(
     fresh_raw: &[Profile],
@@ -252,6 +272,13 @@ pub struct SubApplyResult {
 }
 
 /// Apply one fetched-and-mapped subscription body to the current state.
+///
+/// This is the *fetch* path's profile reconciliation (read-modify-write under the
+/// lifecycle lock). The *save* path has its own counterpart — the `UpsertSub` arm of
+/// [`crate::mutate::apply_mutation`], which keeps a sub's profiles with its group when
+/// a plain edit (no fetch) changes `group_id` (via [`migrate_profiles_to_new_group`]).
+/// Two mechanisms by design: a save never goes through here, and a fetch never goes
+/// through `apply_mutation`.
 pub fn apply_subscription_profiles(
     profiles: &[Profile],
     subscriptions: &[Subscription],

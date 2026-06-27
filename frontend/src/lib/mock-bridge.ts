@@ -9,6 +9,7 @@
 
 import type { Endpoint, Meta, Profile, Protocol, Tls, Transport } from "../generated/bindings";
 import { AppStateSchema } from "../generated/schemas";
+import { applyMutation } from "./apply-mutation";
 import type { AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
 import { emptyProfile, type ProfileOf, profileAddress, profilePort } from "./profile-utils";
 import { seedAppState } from "./seed";
@@ -265,15 +266,11 @@ export const mockBridge: Bridge = {
     });
   },
 
-  async writeState(s: AppState) {
-    state = {
-      ...s,
-      profiles: [...s.profiles],
-      groups: [...s.groups],
-      subscriptions: [...s.subscriptions],
-      routingRules: [...s.routingRules],
-      assetFiles: [...s.assetFiles],
-    };
+  async mutate(intent) {
+    // No backend in dev: apply the intent locally with the same logic the Rust
+    // backend runs, then return the canonical state.
+    state = applyMutation(state, intent);
+    return this.readState();
   },
 
   async fetchSubscription(url: string): Promise<Profile[]> {
@@ -298,26 +295,6 @@ export const mockBridge: Bridge = {
     const others = state.profiles.filter((p) => p.meta.subId !== sub.id);
     state = { ...state, profiles: [...others, ...mapped] };
     return this.readState();
-  },
-
-  async deduplicateProfiles(profiles, activeId, groupId) {
-    const inScope = (p: Profile) => !groupId || groupId === "all" || p.meta.groupId === groupId;
-    const keyOf = (p: Profile) => `${p.protocol}|${profileAddress(p)}|${profilePort(p) ?? ""}`;
-    const keep = new Map<string, string>();
-    for (const p of profiles) {
-      if (!inScope(p)) continue;
-      const k = keyOf(p);
-      if (!keep.has(k) || p.meta.id === activeId) keep.set(k, p.meta.id);
-    }
-    return profiles.filter((p) => !inScope(p) || keep.get(keyOf(p)) === p.meta.id);
-  },
-
-  async removeProfilesBySubId(profiles, subId, subGroupId) {
-    return profiles.filter((p) => {
-      if (p.meta.subId !== subId) return true;
-      if (subGroupId != null && p.meta.groupId !== subGroupId) return true;
-      return false;
-    });
   },
 
   // No backend daemon in dev, so headless sub-applies never happen.

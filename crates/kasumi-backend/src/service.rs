@@ -52,6 +52,9 @@ pub struct Service {
     platform: Arc<dyn Platform>,
     /// The single in-flight lifecycle chain; held across a start/stop/restart.
     serialize: Mutex<()>,
+    /// Serializes `Mutate` writes so two concurrent edits (both transports dispatch
+    /// each command on its own task) can't read-modify-write over each other.
+    state_write: Mutex<()>,
     events: broadcast::Sender<PushFrame>,
     /// Installed core version labels, probed once at construction.
     cores: crate::platform::InstalledCores,
@@ -75,6 +78,7 @@ impl Service {
         Arc::new(Self {
             platform,
             serialize: Mutex::new(()),
+            state_write: Mutex::new(()),
             events,
             cores,
             sub_attempts: Mutex::new(HashMap::new()),
@@ -102,6 +106,13 @@ impl Service {
                 self.serialized(LifecycleCmd::Restart(profile_id)).await
             }
             Command::ReloadAppFilter => self.serialized(LifecycleCmd::ReloadAppFilter).await,
+            Command::Mutate { intent } => {
+                // Hold the state-write lock across the whole read-modify-write so
+                // concurrent edits serialize into one consistent result.
+                let _g = self.state_write.lock().await;
+                let state = commands::run_mutation(&*self.platform, &intent).await?;
+                Ok(Response::State(Box::new(state)))
+            }
             Command::ApplySubscription { sub_id } => {
                 let state = sub_update::update_subscription(
                     &*self.platform,
@@ -596,6 +607,41 @@ mod tests {
         assert_eq!(value.service.state, RunState::Connecting);
         assert_eq!(value.core, "Xray 1.0");
         assert!(value.active_id.is_some());
+    }
+
+    #[tokio::test]
+    async fn concurrent_mutations_serialize_without_lost_update() {
+        use kasumi_core::mutate::MutationIntent;
+        let (platform, _d) = RecordingPlatform::new();
+        crate::state::write_app_state(&*platform, &default_app_state())
+            .await
+            .unwrap();
+        let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+
+        let mut a = sample_vless();
+        a.meta_mut().id = "a".into();
+        let mut b = sample_vless();
+        b.meta_mut().id = "b".into();
+
+        // Two edits race; without the state-write lock both read the empty list and
+        // one overwrites the other. The lock must settle them to both profiles.
+        let (r1, r2) = tokio::join!(
+            svc.dispatch(Command::Mutate {
+                intent: Box::new(MutationIntent::AddProfiles { profiles: vec![a] }),
+            }),
+            svc.dispatch(Command::Mutate {
+                intent: Box::new(MutationIntent::AddProfiles { profiles: vec![b] }),
+            }),
+        );
+        r1.unwrap();
+        r2.unwrap();
+
+        let Response::Profiles(profs) = svc.dispatch(Command::ReadProfiles).await.unwrap() else {
+            panic!()
+        };
+        let mut ids: Vec<&str> = profs.iter().map(|p| p.meta().id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["a", "b"]);
     }
 
     #[tokio::test]
