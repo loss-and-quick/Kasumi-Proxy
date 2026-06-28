@@ -1,19 +1,24 @@
 //! Linux capabilities for the desktop data-path helper. Launched as root (pkexec)
 //! or with file caps (NixOS `security.wrappers`, the deb/rpm postinst), the helper
 //! drops its bounding set to [`keep_set`] on startup — which also caps every core /
-//! tun2socks / `ip` it execs — and raises caps into the forked children's ambient
-//! set so they survive exec when the helper runs caps-only (not root): `CAP_NET_RAW`
-//! for the test cores' uplink bind, `CAP_NET_ADMIN` for the active core's own tun
-//! (sing-box) and tun2socks' tun + fwmark. All no-ops for an unprivileged in-process
-//! dev run, and inert under a root helper where children already inherit every cap.
+//! tun2socks / `ip` it execs. When it runs caps-only (not root), a child doesn't
+//! inherit the helper's caps across exec, so at startup the helper raises both data-
+//! path caps into its own ambient set ([`raise_data_path_caps_ambient`]), and every
+//! exec'd child inherits them: `NET_ADMIN` (the active core's own tun / tun2socks'
+//! tun + fwmark / the routing `ip` calls) and `NET_RAW` (the cores' uplink bind —
+//! `SO_BINDTODEVICE` / `bind_interface`, used by both the active bridged core and
+//! the test cores). All no-ops for an unprivileged dev run, and inert under a root
+//! helper where children already inherit every cap. Process reaping across exec is
+//! `PR_SET_PDEATHSIG`, baked into the backend spawn path (see `proc::spawn_logged`).
 
 use caps::{CapSet, Capability, CapsHashSet};
 
 /// The caps the data-path needs; the helper keeps these and drops the rest.
 ///
 /// - `NET_ADMIN` — tun creation, `ip` routing, tun2socks' fwmark.
-/// - `NET_RAW` — a test core's uplink bind (`SO_BINDTODEVICE` / `bind_interface`);
-///   the active core bypasses via host-routes and needs none.
+/// - `NET_RAW` — the cores' uplink bind (`SO_BINDTODEVICE` / `bind_interface`),
+///   used by both the active bridged core (so its egress escapes an active tun) and
+///   the test cores.
 /// - `CHOWN` — hand the helper socket to the GUI uid.
 /// - `DAC_OVERRIDE` — write logs/state into the user-owned datadir + run_dir as
 ///   root. Retires with the socket/dir-ownership restructure (then `CHOWN` too).
@@ -56,13 +61,12 @@ pub fn drop_unneeded_bounding() -> anyhow::Result<CapsHashSet> {
     Ok(dropped)
 }
 
-/// Seed the caps a forked child may raise into its ambient set — `CAP_NET_RAW` (test
-/// cores' uplink bind) and `CAP_NET_ADMIN` (the active core's own tun / tun2socks'
-/// tun + fwmark) — into the process's inheritable set, the precondition for that
-/// raise (`PR_CAP_AMBIENT_RAISE` needs the cap in both permitted and inheritable, and
-/// both launchers start with an empty inheritable set). Both are already permitted
-/// (they're in [`keep_set`]), so this needs no `CAP_SETPCAP`. Idempotent; run once at
-/// startup.
+/// Seed the data-path caps into the process's inheritable set — the precondition for
+/// raising them into the ambient set at startup ([`raise_data_path_caps_ambient`]):
+/// `PR_CAP_AMBIENT_RAISE` needs the cap in both permitted and inheritable, and both a
+/// pkexec-root and a file-cap start begin with an empty inheritable set. Both are
+/// already permitted (they're in [`keep_set`]), so this needs no `CAP_SETPCAP`.
+/// Idempotent; run once at startup.
 pub fn seed_child_inheritable() -> anyhow::Result<()> {
     let mut set = caps::read(None, CapSet::Inheritable)
         .map_err(|e| anyhow::anyhow!("read inheritable set: {e}"))?;
@@ -119,10 +123,10 @@ const PR_CAP_AMBIENT_RAISE: libc::c_int = 2;
 const CAP_NET_RAW_NR: libc::c_uint = Capability::CAP_NET_RAW as libc::c_uint;
 const CAP_NET_ADMIN_NR: libc::c_uint = Capability::CAP_NET_ADMIN as libc::c_uint;
 
-/// Shared body of the `pre_exec` raises below: raise one capability into the ambient
-/// set — the only way to grant a cap across exec into a core that has no file caps.
-/// Needs the cap in permitted + inheritable (see [`seed_child_inheritable`]). A single
-/// raw `prctl(2)`, so async-signal-safe per the `pre_exec` contract.
+/// Raise one capability into the calling thread's ambient set, the only way to grant a
+/// cap across exec into a child that has no file caps. Needs the cap in permitted +
+/// inheritable (see [`seed_child_inheritable`]). A single raw `prctl(2)`, so also
+/// async-signal-safe for the `pre_exec` use below.
 fn raise_ambient(cap_nr: libc::c_uint) -> std::io::Result<()> {
     // SAFETY: one prctl syscall; async-signal-safe per the contract above.
     let rc = unsafe { libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap_nr, 0, 0) };
@@ -133,57 +137,22 @@ fn raise_ambient(cap_nr: libc::c_uint) -> std::io::Result<()> {
     }
 }
 
-/// A `pre_exec` hook raising `CAP_NET_RAW` into the forked child's ambient set, so a
-/// test core's uplink bind survives exec. Run ONLY here, never process-wide, so the
-/// cap stays off the helper's own threads and the active core; inert under root,
-/// load-bearing when caps-only. Fails closed: an `Err` aborts the exec rather than
-/// running a test core unbound.
-pub fn raise_net_raw_ambient() -> std::io::Result<()> {
-    raise_ambient(CAP_NET_RAW_NR)
-}
-
-/// A `pre_exec` hook raising `CAP_NET_ADMIN` into the forked child's ambient set, so
-/// the active core can create its own tun (sing-box) and tun2socks can open the tun +
-/// set its fwmark when the helper runs caps-only (not root). Inert under a root helper
-/// where the child already inherits every cap. Fails closed: an `Err` aborts the exec
-/// rather than running a core that can't open its tun.
-pub fn raise_net_admin_ambient() -> std::io::Result<()> {
-    raise_ambient(CAP_NET_ADMIN_NR)
-}
-
-/// A `pre_exec` hook tying a spawned data-path process (the core / tun2socks) to the
-/// helper that is its parent: `PR_SET_PDEATHSIG(SIGTERM)` makes the kernel SIGTERM
-/// the child the instant the helper dies — including an *unclean* exit (crash /
-/// SIGKILL) where no teardown code can run. SIGTERM (not KILL) lets sing-box remove
-/// its own tun + auto_route on the way out, so an orphaned core can't strand a tun /
-/// routes and leave `service-state` reporting "stopped" while traffic is still
-/// captured. The `getppid() == 1` guard closes the fork→prctl race: if the helper
-/// already died (child reparented to init), PDEATHSIG would never fire, so exit
-/// rather than exec an unsupervised core.
-///
-/// # Async-signal-safety
-///
-/// Only `prctl` / `getppid` / `_exit` — no allocation, locks, or stdio — per the
-/// `pre_exec` contract.
-pub fn die_with_parent() -> std::io::Result<()> {
-    // SAFETY: async-signal-safe syscalls only, per the contract above.
-    let rc = unsafe {
-        libc::prctl(
-            libc::PR_SET_PDEATHSIG,
-            libc::SIGTERM as libc::c_ulong,
-            0,
-            0,
-            0,
-        )
-    };
-    if rc != 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    // SAFETY: getppid is async-signal-safe and never fails.
-    if unsafe { libc::getppid() } == 1 {
-        // SAFETY: _exit is async-signal-safe; the helper is already gone, so don't
-        // bring up an unsupervised core that nothing would ever reap.
-        unsafe { libc::_exit(0) };
+/// Raise both data-path caps (`NET_ADMIN` + `NET_RAW`) into the helper's own ambient
+/// set, once at startup, so every core / tun2socks / `ip` it later execs inherits
+/// them across exec when the helper runs caps-only (not root): `NET_ADMIN` for the
+/// active core's own tun (sing-box) / tun2socks' tun + fwmark / the routing `ip`
+/// calls; `NET_RAW` for the cores' uplink bind (`SO_BINDTODEVICE` / `bind_interface`)
+/// — used by both the active bridged core and the test cores. Every data-path child
+/// legitimately needs both, so a process-wide raise is the whole fix — no per-spawn
+/// `pre_exec` plumbing. MUST run on the main thread before the tokio runtime spawns
+/// its workers (the ambient set is copied into threads at creation). Needs the caps
+/// in permitted + inheritable (see [`seed_child_inheritable`]); inert under a root
+/// helper, where children already inherit every cap.
+pub fn raise_data_path_caps_ambient() -> anyhow::Result<()> {
+    for cap_nr in [CAP_NET_ADMIN_NR, CAP_NET_RAW_NR] {
+        raise_ambient(cap_nr).map_err(|e| {
+            anyhow::anyhow!("raise data-path cap {cap_nr} into the ambient set: {e}")
+        })?;
     }
     Ok(())
 }

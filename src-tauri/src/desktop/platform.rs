@@ -24,13 +24,7 @@ use kasumi_backend::platform::{
     spawn_local_test_core, BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities,
     StartDataPath, StopDataPath, TestCore,
 };
-#[cfg(not(target_os = "linux"))]
 use kasumi_backend::proc::spawn_logged;
-#[cfg(target_os = "linux")]
-use kasumi_backend::proc::spawn_logged_pre_exec;
-// Unix-only: the pre_exec variant that raises an ambient CAP_NET_RAW for a test core.
-#[cfg(unix)]
-use kasumi_backend::platform::spawn_local_test_core_pre_exec;
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
@@ -178,10 +172,11 @@ impl DesktopPlatform {
         routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
 
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
-        let child = spawn_supervised(
+        let child = spawn_logged(
             &core_argv(&self.p.singbox_bin, &cfg),
             &core_env(&dat_dir),
             &log,
+            false,
         )
         .await?;
         let pid = child.id().unwrap_or(0) as i32;
@@ -224,10 +219,11 @@ impl DesktopPlatform {
         }
 
         let dat_dir = self.p.backend.dat_dir.to_string_lossy().into_owned();
-        let child = spawn_supervised(
+        let child = spawn_logged(
             &core_argv(&self.p.xray_bin, &cfg),
             &core_env(&dat_dir),
             &log,
+            false,
         )
         .await?;
         let pid = child.id().unwrap_or(0) as i32;
@@ -248,10 +244,11 @@ impl DesktopPlatform {
         // the tun, so tun2socks needs no fwmark — its upstream is loopback (the core's
         // SOCKS) and never hits routing anyway. (Android still marks it; that param is
         // load-bearing there, not here.)
-        let t2s = spawn_supervised(
+        let t2s = spawn_logged(
             &tun2socks_argv(&self.p.tun2socks_bin, &tun, socks_port, None),
             &std::collections::HashMap::new(),
             &t2s_log,
+            false,
         )
         .await?;
         let _ = write_text(
@@ -303,50 +300,6 @@ fn now_secs() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
-}
-
-/// The one supervised-spawn seam for every long-lived data-path process (the core
-/// and, in the xray path, tun2socks). Callers build the command with the shared argv
-/// / env builders ([`core_argv`] / [`tun2socks_argv`]); supervision is identical for
-/// all of them and lives only here.
-///
-/// On Linux it stamps `PR_SET_PDEATHSIG` ([`die_with_parent`]) into the forked child,
-/// so an unclean helper exit (crash / SIGKILL) — where the normal stop/teardown never
-/// runs — still reaps the child instead of leaving it holding a tun + routes with
-/// `service-state` stuck at "stopped". When the helper holds the data-path caps it
-/// also raises an ambient `CAP_NET_ADMIN` into the child, so the active core can
-/// create its own tun (sing-box) and tun2socks its tun + fwmark even under the
-/// caps-only launcher (a root helper's children already inherit it; an unprivileged
-/// dev run skips the raise, which would otherwise fail closed). Other targets fall
-/// back to a plain spawn.
-async fn spawn_supervised(
-    argv: &[String],
-    env: &std::collections::HashMap<String, String>,
-    log: &Path,
-) -> std::io::Result<tokio::process::Child> {
-    #[cfg(target_os = "linux")]
-    {
-        use crate::desktop::capabilities::{
-            die_with_parent, is_privileged_data_path, raise_net_admin_ambient,
-        };
-        if is_privileged_data_path() {
-            // SAFETY: both hooks are async-signal-safe single syscalls per the
-            // pre_exec contract; chaining them keeps that property.
-            return unsafe {
-                spawn_logged_pre_exec(argv, env, log, false, || {
-                    die_with_parent()?;
-                    raise_net_admin_ambient()
-                })
-                .await
-            };
-        }
-        // SAFETY: die_with_parent is async-signal-safe per the pre_exec contract.
-        unsafe { spawn_logged_pre_exec(argv, env, log, false, die_with_parent).await }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        spawn_logged(argv, env, log, false).await
-    }
 }
 
 #[async_trait]
@@ -571,34 +524,14 @@ impl Platform for DesktopPlatform {
         // default route, so the bind is a harmless no-op. (In-process dev runs
         // unprivileged: skip the bind — it'd need CAP_NET_RAW and there's no managed
         // tun to escape anyway.)
-        let bound = can_bind_uplink() && inject_uplink_bind(engine, cfg_path).await;
+        //
+        // CAP_NET_RAW for the bind is inherited from the helper's ambient set (raised
+        // once at startup), so there's no per-spawn cap handling here: under root the
+        // child already has every cap; under the caps-only launcher it gets NET_RAW
+        // from the ambient set; unprivileged dev skips the bind entirely (above).
+        let _bound = can_bind_uplink() && inject_uplink_bind(engine, cfg_path).await;
         let bin = self.core_bin(engine).to_owned();
         let dat = self.p.backend.dat_dir.to_string_lossy().into_owned();
-
-        // Linux: if we injected the uplink bind the test core needs CAP_NET_RAW to
-        // honor it, so raise it into the forked child's ambient set before exec
-        // (inert under root where the child already inherits all bounding caps, but
-        // load-bearing when the helper runs caps-only). Fails closed if the raise
-        // errors, so a test core never silently runs without the bind. Windows is
-        // LocalSystem (all caps) and the pre_exec seam is unix-only, so it spawns
-        // plainly there.
-        #[cfg(target_os = "linux")]
-        if bound {
-            // SAFETY: `raise_net_raw_ambient` is a single raw prctl — async-signal-safe,
-            // the only requirement the pre_exec contract imposes.
-            return unsafe {
-                spawn_local_test_core_pre_exec(
-                    &bin,
-                    cfg_path,
-                    log_path,
-                    &dat,
-                    crate::desktop::capabilities::raise_net_raw_ambient,
-                )
-                .await
-            };
-        }
-        let _ = bound;
-
         spawn_local_test_core(&bin, cfg_path, log_path, &dat).await
     }
 }
