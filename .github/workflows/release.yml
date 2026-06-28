@@ -323,7 +323,7 @@ jobs:
           # here), so the name lives in one place — same as nightly.yml.
           files: build/*.zip
 
-  # ── Desktop installers (Linux deb/AppImage, Windows NSIS/MSI + portable zip) →
+  # ── Desktop installers (Linux deb/rpm/AppImage, Windows NSIS/MSI + portable zip) →
   #    uploaded to the same release. Cores are fetched per-target into
   #    src-tauri/binaries/ and bundled via the externalBin overlay. AppImage GPG
   #    signing is opt-in (active only when the secret is set). macOS isn't shipped
@@ -427,7 +427,7 @@ jobs:
           dir="target/${{ matrix.target }}/release/bundle"
           mkdir -p dist
           find "$dir" -type f \
-            \( -name '*.deb' -o -name '*.AppImage' -o -name '*-setup.exe' -o -name '*.msi' -o -name '*.sig' \) \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*-setup.exe' -o -name '*.msi' -o -name '*.sig' \) \
             -exec cp {} dist/ \;
           ls -la dist
 
