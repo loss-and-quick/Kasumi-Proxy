@@ -663,6 +663,10 @@ export const CapabilitiesSchema = z.object({
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
 
+export const TestKindSchema = z.union([z.literal("realPing"), z.literal("speed"), z.literal("tcpPing")]);
+export type TestKind = z.infer<typeof TestKindSchema>;
+
+
 export const ImportModeSchema = z.union([z.literal("merge"), z.literal("replace")]);
 export type ImportMode = z.infer<typeof ImportModeSchema>;
 
@@ -825,6 +829,10 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("stop"),
 }), z.object({
+	cmd: z.literal("testLog"),
+	profileId: z.string(),
+	kind: TestKindSchema,
+}), z.object({
 	cmd: z.literal("wsInfo"),
 })]);
 export type Command_Serialize = z.infer<typeof Command_SerializeSchema>;
@@ -983,6 +991,10 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("status"),
 }), z.object({
 	cmd: z.literal("stop"),
+}), z.object({
+	cmd: z.literal("testLog"),
+	profileId: z.string(),
+	kind: TestKindSchema,
 }), z.object({
 	cmd: z.literal("wsInfo"),
 })]);
