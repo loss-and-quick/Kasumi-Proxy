@@ -454,6 +454,11 @@ const es = {
   "logs.clearConfirm": "¿Borrar todos los archivos de registro?",
   "logs.cleared": "Registros borrados",
   "logs.clearFailed": "No se pudieron borrar los registros",
+  "testlog.open": "Ver registro de error",
+  "testlog.titlePing": "Registro de comprobación de ping",
+  "testlog.titleSpeed": "Registro de prueba de velocidad",
+  "testlog.rerun": "Repetir comprobación",
+  "testlog.empty": "No hay registro de esta comprobación: tuvo éxito o aún no se ha ejecutado.",
   // backup
   "backup.title": "Copia y restauración",
   "backup.export": "Exportar",

@@ -6,7 +6,7 @@
 // ============================================================
 
 import { create } from "zustand";
-import type { Profile } from "../generated/bindings";
+import type { Profile, TestKind } from "../generated/bindings";
 import { translateCurrent } from "../i18n";
 import type {
   AdvancedSettings,
@@ -69,12 +69,10 @@ interface Store extends AppState {
   cloneProfile: (id: string) => Promise<void>;
   moveProfiles: (ids: string[], groupId: string) => Promise<void>;
   addProfiles: (profiles: Profile[]) => Promise<void>;
-  pingProfile: (id: string) => Promise<void>;
-  realPingProfile: (id: string) => Promise<void>;
-  speedTestProfile: (id: string) => Promise<void>;
-  pingAll: (groupId?: string) => Promise<void>;
-  realPingAll: (groupId?: string) => Promise<void>;
-  speedTestAll: (groupId?: string) => Promise<void>;
+  // One profile / a whole group, parameterised by which diagnostic to run
+  // (tcp-ping · real-ping · speed-test) — see the `TestKind` enum shared with Rust.
+  testProfile: (id: string, kind: TestKind) => Promise<void>;
+  testAll: (kind: TestKind, groupId?: string) => Promise<void>;
   removeUnreachable: (groupId?: string) => Promise<void>;
   removeDuplicates: (groupId?: string) => Promise<void>;
   selectBest: (groupId?: string) => Promise<void>;
@@ -449,141 +447,93 @@ export const useAppStore = create<Store>((set, get) => {
       get().notify(translateCurrent("store.profile.imported", { count: profiles.length }));
     },
 
-    async pingProfile(id) {
-      if (get().pinging.has(id)) return;
-      set((s) => ({ pinging: new Set([...s.pinging, id]) }));
-      try {
-        const ms = await bridge.ping(id);
+    // One diagnostic on one profile. tcp-ping and real-ping write `meta.ping`;
+    // speed-test writes `meta.speed`. Only the core-backed tests (real-ping /
+    // speed-test) can fail with a surfaced error → the infra-failure sentinel
+    // (-2 → "err") plus a toast; tcp-ping just drops its spinner (its `0`/unreachable
+    // result already maps to null/"✗").
+    async testProfile(id, kind) {
+      const speed = kind === "speed";
+      if ((speed ? get().speedTesting : get().pinging).has(id)) return;
+      set((s) =>
+        speed
+          ? { speedTesting: new Set([...s.speedTesting, id]) }
+          : { pinging: new Set([...s.pinging, id]) },
+      );
+      const finish = (value: number | null) =>
         set((s) => ({
           profiles: s.profiles.map((p) =>
-            p.meta.id === id ? { ...p, meta: { ...p.meta, ping: ms || null } } : p,
+            p.meta.id === id
+              ? { ...p, meta: speed ? { ...p.meta, speed: value } : { ...p.meta, ping: value } }
+              : p,
           ),
-          pinging: new Set([...s.pinging].filter((x) => x !== id)),
+          ...(speed
+            ? { speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)) }
+            : { pinging: new Set([...s.pinging].filter((x) => x !== id)) }),
         }));
-      } catch {
-        set((s) => ({ pinging: new Set([...s.pinging].filter((x) => x !== id)) }));
-      }
-    },
-    async realPingProfile(id) {
-      if (get().pinging.has(id)) return;
-      set((s) => ({ pinging: new Set([...s.pinging, id]) }));
       try {
-        const ms = await bridge.realPing(id);
-        set((s) => ({
-          profiles: s.profiles.map((p) =>
-            p.meta.id === id ? { ...p, meta: { ...p.meta, ping: ms } } : p,
-          ),
-          pinging: new Set([...s.pinging].filter((x) => x !== id)),
-        }));
+        const v =
+          kind === "tcpPing"
+            ? await bridge.ping(id)
+            : kind === "realPing"
+              ? await bridge.realPing(id)
+              : await bridge.speedTest(id);
+        // tcp-ping treats 0 as "no result" (→ null); the core tests keep their value.
+        finish(kind === "tcpPing" ? v || null : v);
       } catch (e) {
-        // A surfaced error (the probe core couldn't start) is the infra-failure
-        // state (-2 → "err"), distinct from an unreachable server (-1 → "✗") which
-        // comes back as a normal Ok(None). Tell the user why.
-        set((s) => ({
-          profiles: s.profiles.map((p) =>
-            p.meta.id === id ? { ...p, meta: { ...p.meta, ping: -2 } } : p,
-          ),
-          pinging: new Set([...s.pinging].filter((x) => x !== id)),
-        }));
+        if (kind === "tcpPing") {
+          set((s) => ({ pinging: new Set([...s.pinging].filter((x) => x !== id)) }));
+          return;
+        }
+        finish(-2);
         get().notify(translateCurrent("store.ping.testFailed", { error: errorMessage(e) }));
       }
     },
-    async speedTestProfile(id) {
-      if (get().speedTesting.has(id)) return;
-      set((s) => ({ speedTesting: new Set([...s.speedTesting, id]) }));
-      try {
-        const bps = await bridge.speedTest(id);
+
+    // The same diagnostic across a group (or all). Batch concurrency + port
+    // allocation live inside the bridge (so the on-demand test cores never collide
+    // on a SOCKS port — see ws-bridge realPingAll); each result streams back via the
+    // callback the moment it resolves, so we update that one profile and clear its
+    // spinner progressively instead of waiting for the whole run.
+    async testAll(kind, groupId) {
+      const speed = kind === "speed";
+      if ((speed ? get().speedTesting : get().pinging).size) return;
+      const ids = get()
+        .profiles.filter((p) => !groupId || groupId === "all" || p.meta.groupId === groupId)
+        .map((p) => p.meta.id);
+      if (!ids.length) return;
+      get().notify(translateCurrent("store.ping.started"));
+      set(speed ? { speedTesting: new Set(ids) } : { pinging: new Set(ids) });
+      const apply = (id: string, value: number) =>
         set((s) => ({
           profiles: s.profiles.map((p) =>
-            p.meta.id === id ? { ...p, meta: { ...p.meta, speed: bps } } : p,
+            p.meta.id === id
+              ? {
+                  ...p,
+                  meta: speed
+                    ? { ...p.meta, speed: value }
+                    : { ...p.meta, ping: kind === "tcpPing" ? value || null : value },
+                }
+              : p,
           ),
-          speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)),
+          ...(speed
+            ? { speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)) }
+            : { pinging: new Set([...s.pinging].filter((x) => x !== id)) }),
         }));
-      } catch (e) {
-        set((s) => ({
-          profiles: s.profiles.map((p) =>
-            p.meta.id === id ? { ...p, meta: { ...p.meta, speed: -2 } } : p,
-          ),
-          speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)),
-        }));
-        get().notify(translateCurrent("store.ping.testFailed", { error: errorMessage(e) }));
-      }
-    },
-    // Batch tests run their concurrency + port allocation inside the bridge
-    // (so the on-demand test cores never collide on a SOCKS port — see
-    // ws-bridge realPingAll). The bridge streams each profile's result back
-    // via the callback the moment it resolves, so we update that one profile
-    // and clear its spinner progressively instead of waiting for the whole run.
-    async pingAll(groupId?: string) {
-      if (get().pinging.size) return;
-      const ids = get()
-        .profiles.filter((p) => !groupId || groupId === "all" || p.meta.groupId === groupId)
-        .map((p) => p.meta.id);
-      if (!ids.length) return;
-      get().notify(translateCurrent("store.ping.started"));
-      set({ pinging: new Set(ids) });
       try {
-        await bridge.pingAll(ids, (id, ms) => {
-          set((s) => ({
-            profiles: s.profiles.map((p) =>
-              p.meta.id === id ? { ...p, meta: { ...p.meta, ping: ms || null } } : p,
-            ),
-            pinging: new Set([...s.pinging].filter((x) => x !== id)),
-          }));
-        });
+        if (kind === "tcpPing") await bridge.pingAll(ids, apply);
+        else if (kind === "realPing") await bridge.realPingAll(ids, apply);
+        else await bridge.speedTestAll(ids, apply);
       } finally {
-        set({ pinging: new Set() });
+        set(speed ? { speedTesting: new Set() } : { pinging: new Set() });
       }
       get().notify(translateCurrent("store.ping.complete"));
-      pushActivity("speed", translateCurrent("activity.pingComplete", { count: ids.length }));
-    },
-
-    async realPingAll(groupId?: string) {
-      if (get().pinging.size) return;
-      const ids = get()
-        .profiles.filter((p) => !groupId || groupId === "all" || p.meta.groupId === groupId)
-        .map((p) => p.meta.id);
-      if (!ids.length) return;
-      get().notify(translateCurrent("store.ping.started"));
-      set({ pinging: new Set(ids) });
-      try {
-        await bridge.realPingAll(ids, (id, ms) => {
-          set((s) => ({
-            profiles: s.profiles.map((p) =>
-              p.meta.id === id ? { ...p, meta: { ...p.meta, ping: ms } } : p,
-            ),
-            pinging: new Set([...s.pinging].filter((x) => x !== id)),
-          }));
-        });
-      } finally {
-        set({ pinging: new Set() });
-      }
-      get().notify(translateCurrent("store.ping.complete"));
-      pushActivity("speed", translateCurrent("activity.pingComplete", { count: ids.length }));
-    },
-
-    async speedTestAll(groupId?: string) {
-      if (get().speedTesting.size) return;
-      const ids = get()
-        .profiles.filter((p) => !groupId || groupId === "all" || p.meta.groupId === groupId)
-        .map((p) => p.meta.id);
-      if (!ids.length) return;
-      get().notify(translateCurrent("store.ping.started"));
-      set({ speedTesting: new Set(ids) });
-      try {
-        await bridge.speedTestAll(ids, (id, bps) => {
-          set((s) => ({
-            profiles: s.profiles.map((p) =>
-              p.meta.id === id ? { ...p, meta: { ...p.meta, speed: bps } } : p,
-            ),
-            speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)),
-          }));
-        });
-      } finally {
-        set({ speedTesting: new Set() });
-      }
-      get().notify(translateCurrent("store.ping.complete"));
-      pushActivity("speed", translateCurrent("activity.speedTestComplete", { count: ids.length }));
+      pushActivity(
+        "speed",
+        translateCurrent(speed ? "activity.speedTestComplete" : "activity.pingComplete", {
+          count: ids.length,
+        }),
+      );
     },
 
     async removeUnreachable(groupId?: string) {

@@ -1,5 +1,5 @@
 import { EmptyHint, SectionLabel } from "../../components";
-import type { Group, Profile } from "../../generated/bindings";
+import type { Group, Profile, TestKind } from "../../generated/bindings";
 import { ProfileRow } from "./ProfileRow";
 
 export function ProfilesList({
@@ -13,6 +13,7 @@ export function ProfilesList({
   onUse,
   onEdit,
   onMore,
+  onShowTestLog,
 }: {
   groups: Group[];
   byGroup: Record<string, Profile[]>;
@@ -24,6 +25,7 @@ export function ProfilesList({
   onUse: (id: string) => void;
   onEdit: (id: string) => void;
   onMore: (profile: Profile) => void;
+  onShowTestLog: (profile: Profile, kind: TestKind) => void;
 }) {
   return (
     <div className="scroll with-fab" style={{ paddingTop: 0 }}>
@@ -45,6 +47,7 @@ export function ProfilesList({
                 onUse={() => onUse(profile.meta.id)}
                 onEdit={() => onEdit(profile.meta.id)}
                 onMore={() => onMore(profile)}
+                onShowTestLog={(kind) => onShowTestLog(profile, kind)}
               />
             ))}
           </div>

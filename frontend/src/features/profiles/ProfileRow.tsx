@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Card, EngineTag, Icon, Ping, ProtoTag, Speed, Spinner } from "../../components";
-import type { Profile } from "../../generated/bindings";
+import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import {
   profileEndpointLabel,
@@ -19,6 +19,7 @@ export function ProfileRow({
   onUse,
   onEdit,
   onMore,
+  onShowTestLog,
 }: {
   profile: Profile;
   active: boolean;
@@ -28,6 +29,7 @@ export function ProfileRow({
   onUse: () => void;
   onEdit: () => void;
   onMore: () => void;
+  onShowTestLog: (kind: TestKind) => void;
 }) {
   const settings = useAppStore((s) => s.settings);
   const isPinging = useAppStore((s) => s.pinging.has(profile.meta.id));
@@ -144,23 +146,49 @@ export function ProfileRow({
             </span>
           </div>
         </div>
-        <div style={{ textAlign: "right", flex: "0 0 auto", paddingRight: 4 }}>
+      </button>
+      {/* The metrics sit outside the "use profile" button so an `err` can be its own
+          button (opening the test-core log) without nesting interactive elements. */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-end",
+          justifyContent: "center",
+          flex: "0 0 auto",
+          textAlign: "right",
+          padding: "0 8px",
+        }}
+      >
+        <div>
           {isPinging ? (
             <Spinner />
           ) : (
-            <Ping value={profile.meta.ping ?? null} animate={pingJustFinished} />
+            <ErrTrigger
+              value={profile.meta.ping ?? null}
+              title={t("testlog.open")}
+              onShow={() => onShowTestLog("realPing")}
+            >
+              <Ping value={profile.meta.ping ?? null} animate={pingJustFinished} />
+            </ErrTrigger>
           )}
           {(isSpeedTesting || profile.meta.speed != null) && (
             <div style={{ marginTop: 2 }}>
               {isSpeedTesting ? (
                 <Spinner />
               ) : (
-                <Speed value={profile.meta.speed} animate={speedJustFinished} />
+                <ErrTrigger
+                  value={profile.meta.speed ?? null}
+                  title={t("testlog.open")}
+                  onShow={() => onShowTestLog("speed")}
+                >
+                  <Speed value={profile.meta.speed} animate={speedJustFinished} />
+                </ErrTrigger>
               )}
             </div>
           )}
         </div>
-      </button>
+      </div>
       {!bulkMode && (
         <div
           style={{
@@ -195,5 +223,36 @@ export function ProfileRow({
         </div>
       )}
     </Card>
+  );
+}
+
+/** Makes an `err` metric tappable (→ its test log); a passing value renders inert. */
+function ErrTrigger({
+  value,
+  title,
+  onShow,
+  children,
+}: {
+  value: number | null;
+  title: string;
+  onShow: () => void;
+  children: ReactNode;
+}) {
+  if (value == null || value >= 0) return <>{children}</>;
+  return (
+    <button
+      type="button"
+      className="btn-reset"
+      title={title}
+      onClick={onShow}
+      style={{
+        cursor: "pointer",
+        textDecoration: "underline",
+        textUnderlineOffset: 2,
+        font: "inherit",
+      }}
+    >
+      {children}
+    </button>
   );
 }

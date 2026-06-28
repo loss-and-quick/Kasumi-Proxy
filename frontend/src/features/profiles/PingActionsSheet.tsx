@@ -1,12 +1,11 @@
 import { Sheet, SheetAction } from "../../components";
+import type { TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 
 export function PingActionsSheet({
   open,
   onClose,
-  onTcping,
-  onRealping,
-  onSpeedTest,
+  onTestAll,
   onDeleteUnreachable,
   onSelectBest,
   pinging,
@@ -14,9 +13,7 @@ export function PingActionsSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  onTcping: () => void;
-  onRealping: () => void;
-  onSpeedTest: () => void;
+  onTestAll: (kind: TestKind) => void;
   onDeleteUnreachable: () => void;
   onSelectBest: () => void;
   pinging: boolean;
@@ -34,21 +31,21 @@ export function PingActionsSheet({
           icon="lan"
           label={t("profiles.pingSheet.tcping")}
           sub={t("profiles.pingSheet.tcpingSub")}
-          onClick={onTcping}
+          onClick={() => onTestAll("tcpPing")}
           disabled={busy}
         />
         <SheetAction
           icon="travel_explore"
           label={t("profiles.pingSheet.realping")}
           sub={t("profiles.pingSheet.realpingSub")}
-          onClick={onRealping}
+          onClick={() => onTestAll("realPing")}
           disabled={busy}
         />
         <SheetAction
           icon="speed"
           label={t("profiles.pingSheet.speedtest")}
           sub={t("profiles.pingSheet.speedtestSub")}
-          onClick={onSpeedTest}
+          onClick={() => onTestAll("speed")}
           disabled={busy}
         />
         <div className="divider" />

@@ -13,6 +13,7 @@ import type {
   Profile,
   RunState,
   SubAppliedEvent,
+  TestKind,
   ServiceStatus as WireServiceStatus,
 } from "../generated/bindings";
 
@@ -29,6 +30,7 @@ export type {
   RoutingRule,
   SubAppliedEvent,
   Subscription_Serialize as Subscription,
+  TestKind,
 } from "../generated/bindings";
 
 import type { AppState_Serialize, MutationIntent_Serialize } from "../generated/bindings";
@@ -86,6 +88,9 @@ export interface Bridge {
   speedTest(profileId: string): Promise<number>; // bytes/sec, -1 = unreachable
   speedTestAll(ids: string[], onResult?: BatchProgress): Promise<Record<string, number>>;
   log(input?: { target?: LogTarget; lines?: number }): Promise<string>;
+  // The retained core log of a profile's last failed real-ping / speed-test, so the
+  // UI can open the reason behind an `err`. Empty when the test passed or never ran.
+  testLog(profileId: string, kind: TestKind): Promise<string>;
   clearLogs(): Promise<{ ok: boolean; error?: string }>;
 
   // persistence (source of truth lives in module files, not localStorage)

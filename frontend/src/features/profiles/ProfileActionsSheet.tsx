@@ -1,5 +1,5 @@
 import { Sheet, SheetAction } from "../../components";
-import type { Profile } from "../../generated/bindings";
+import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 
 export function ProfileActionsSheet({
@@ -10,9 +10,7 @@ export function ProfileActionsSheet({
   onClone,
   onShare,
   onShowQr,
-  onPing,
-  onRealPing,
-  onSpeedTest,
+  onTest,
   onDelete,
   pinging,
   speedTesting,
@@ -24,9 +22,7 @@ export function ProfileActionsSheet({
   onClone: (profile: Profile) => void;
   onShare: (profile: Profile) => void;
   onShowQr: (profile: Profile) => void;
-  onPing: (profile: Profile) => void;
-  onRealPing: (profile: Profile) => void;
-  onSpeedTest: (profile: Profile) => void;
+  onTest: (profile: Profile, kind: TestKind) => void;
   onDelete: (profile: Profile) => void;
   pinging: boolean;
   speedTesting: boolean;
@@ -68,19 +64,19 @@ export function ProfileActionsSheet({
           <SheetAction
             icon="lan"
             label={t("profiles.sheet.latency")}
-            onClick={() => onPing(profile)}
+            onClick={() => onTest(profile, "tcpPing")}
             disabled={busy}
           />
           <SheetAction
             icon="travel_explore"
             label={t("profiles.sheet.realLatency")}
-            onClick={() => onRealPing(profile)}
+            onClick={() => onTest(profile, "realPing")}
             disabled={busy}
           />
           <SheetAction
             icon="speed"
             label={t("profiles.sheet.speedtest")}
-            onClick={() => onSpeedTest(profile)}
+            onClick={() => onTest(profile, "speed")}
             disabled={busy}
           />
           <div className="divider" />

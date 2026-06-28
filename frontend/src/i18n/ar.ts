@@ -524,6 +524,11 @@ const ar = {
   "logs.clearConfirm": "هل تريد مسح جميع ملفات السجل؟",
   "logs.cleared": "تم مسح السجلات",
   "logs.clearFailed": "تعذر مسح السجلات",
+  "testlog.open": "عرض سجل الخطأ",
+  "testlog.titlePing": "سجل فحص البينغ",
+  "testlog.titleSpeed": "سجل اختبار السرعة",
+  "testlog.rerun": "إعادة الفحص",
+  "testlog.empty": "لا يوجد سجل لهذا الفحص — نجح أو لم يُشغَّل بعد.",
   // backup
   "backup.title": "نسخ احتياطي واستعادة",
   "backup.export": "تصدير",

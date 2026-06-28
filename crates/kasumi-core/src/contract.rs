@@ -16,6 +16,14 @@ pub enum LogTarget {
     Tun2socks,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum TestKind {
+    TcpPing,
+    RealPing,
+    Speed,
+}
+
 /// How a network job (subscription fetch, asset download) reaches the net.
 /// Reused as a subscription's `updateMode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
@@ -209,6 +217,22 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&LogTarget::Tun2socks).unwrap(),
             "\"tun2socks\""
+        );
+    }
+
+    #[test]
+    fn test_kind_values() {
+        assert_eq!(
+            serde_json::to_string(&TestKind::TcpPing).unwrap(),
+            "\"tcpPing\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TestKind::RealPing).unwrap(),
+            "\"realPing\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TestKind::Speed).unwrap(),
+            "\"speed\""
         );
     }
 }
