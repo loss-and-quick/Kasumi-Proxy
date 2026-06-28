@@ -177,8 +177,6 @@ export const MetaSchema = z.object({
 	remarks: z.string(),
 	groupId: z.string(),
 	subId: z.string().nullable().optional(),
-	ping: z.number().nullable().optional(),
-	speed: z.number().nullable().optional(),
 	coreType: CoreEngineSchema.nullable().optional(),
 });
 export type Meta = z.infer<typeof MetaSchema>;
@@ -715,9 +713,6 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("removeSub"),
 	id: z.string(),
 }), z.object({
-	kind: z.literal("removeUnreachable"),
-	groupId: z.string().nullable(),
-}), z.object({
 	kind: z.literal("renameGroup"),
 	id: z.string(),
 	name: z.string(),
@@ -881,9 +876,6 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("removeSub"),
 	id: z.string(),
-}), z.object({
-	kind: z.literal("removeUnreachable"),
-	groupId: z.string().nullable().optional(),
 }), z.object({
 	kind: z.literal("renameGroup"),
 	id: z.string(),

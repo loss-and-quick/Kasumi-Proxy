@@ -53,9 +53,7 @@ fn migrate_v0_to_v1(v: &mut Value) {
     }
 }
 
-const META_KEYS: &[&str] = &[
-    "id", "remarks", "groupId", "subId", "ping", "speed", "coreType",
-];
+const META_KEYS: &[&str] = &["id", "remarks", "groupId", "subId", "coreType"];
 const ENDPOINT_KEYS: &[&str] = &["address", "port"];
 const TRANSPORT_KEYS: &[&str] = &[
     "network",
@@ -205,12 +203,6 @@ fn fix_meta(meta: &mut Map<String, Value>) {
         Some("xray") | Some("sing-box") => {}
         _ => {
             meta.insert("coreType".into(), Value::Null);
-        }
-    }
-    // ping/speed dropped the `-1` failure sentinel in favour of null.
-    for k in ["ping", "speed"] {
-        if meta.get(k).and_then(Value::as_i64) == Some(-1) {
-            meta.insert(k.into(), Value::Null);
         }
     }
 }
@@ -383,7 +375,7 @@ mod tests {
         let flat = json!({
             "protocol": "vless",
             "id": "x", "remarks": "Home", "groupId": "g-main", "subId": null,
-            "ping": -1, "speed": null, "coreType": "global",
+            "coreType": "global",
             "address": "ex.com", "port": 443,
             "network": "ws", "headerType": "none", "host": "cdn.ex.com", "path": "/ws",
             "wsEarlyData": 2048, "wsEarlyDataHeader": "Sec-WebSocket-Protocol",
@@ -403,7 +395,7 @@ mod tests {
         // Coarse structural checks.
         assert!(v["meta"].is_object());
         assert!(v["meta"]["coreType"].is_null(), "global → null");
-        assert!(v["meta"]["ping"].is_null(), "-1 → null");
+        assert!(v["meta"].get("ping").is_none(), "ping dropped");
         assert_eq!(v["transport"]["kind"], "ws");
         assert_eq!(v["transport"]["earlyData"], 2048);
         assert!(v["transport"].get("network").is_none());

@@ -8,8 +8,6 @@
         "remarks": "DE Node",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -61,8 +59,6 @@
         "remarks": "XH",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -115,8 +111,6 @@
         "remarks": "EX",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -168,8 +162,6 @@
         "remarks": "GRPC",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -227,8 +219,6 @@
         "remarks": "WS",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -284,8 +274,6 @@
         "remarks": "T",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -335,8 +323,6 @@
         "remarks": "🇦🇹 23 - AT - Trojan/TLS/UTLS - 443",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -386,8 +372,6 @@
         "remarks": "VM",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -445,8 +429,6 @@
         "remarks": "GRPC-VM",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -506,8 +488,6 @@
         "remarks": "SSWS",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -561,8 +541,6 @@
         "remarks": "SSOBFS",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -612,8 +590,6 @@
         "remarks": "FI Node",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -662,8 +638,6 @@
         "remarks": "hy.ex",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -712,8 +686,6 @@
         "remarks": "JP",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -763,8 +735,6 @@
         "remarks": "AT",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -811,8 +781,6 @@
         "remarks": "NV",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -858,8 +826,6 @@
         "remarks": "ST",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -902,8 +868,6 @@
         "remarks": "SL",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -946,8 +910,6 @@
         "remarks": "sanya-wg-tunnel",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -977,8 +939,6 @@
         "remarks": "my-socks",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -998,8 +958,6 @@
         "remarks": "s5",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -1019,8 +977,6 @@
         "remarks": "my-http",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {
@@ -1063,8 +1019,6 @@
         "remarks": "my-https",
         "groupId": "g-main",
         "subId": null,
-        "ping": null,
-        "speed": null,
         "coreType": null
       },
       "endpoint": {

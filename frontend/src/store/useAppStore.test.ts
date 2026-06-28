@@ -58,7 +58,6 @@ function makeVless(overrides: VlessOverrides = {}): Vless {
       remarks: overrides.meta?.remarks ?? "Node",
       groupId: overrides.meta?.groupId ?? "g-main",
       subId: overrides.meta?.subId ?? null,
-      ping: overrides.meta?.ping ?? null,
     },
     endpoint: { ...base.endpoint, ...overrides.endpoint },
     transport: overrides.transport ?? base.transport,
@@ -388,16 +387,15 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().profiles[0].meta.remarks).toBe("Two updated");
   });
 
-  it("cloneProfile resets ping/speed stats and subscription link", async () => {
-    const src = makeVless({
-      meta: { id: "p1", remarks: "Node", ping: 123, speed: 9_000, subId: "s1" },
-    });
+  it("cloneProfile detaches the subscription link and leaves the copy untested", async () => {
+    const src = makeVless({ meta: { id: "p1", remarks: "Node", subId: "s1" } });
     useAppStore.setState({
       profiles: [src],
       groups: [],
       subscriptions: [],
       settings: DEFAULT_SETTINGS,
       activeId: null,
+      testResults: { p1: { ping: 123, speed: 9_000 } },
     });
 
     await useAppStore.getState().cloneProfile("p1");
@@ -405,37 +403,36 @@ describe("useAppStore", () => {
     const copy = useAppStore.getState().profiles.find((p) => p.meta.id !== "p1");
     expect(copy).toBeDefined();
     expect(copy?.meta.remarks).toBe("Node (copy)");
-    expect(copy?.meta.ping).toBeNull();
-    expect(copy?.meta.speed).toBeNull();
     expect(copy?.meta.subId).toBeNull();
+    // ephemeral test results don't carry to the fresh copy id
+    expect(useAppStore.getState().testResults[copy?.meta.id ?? ""]).toBeUndefined();
   });
 
-  it("ping/realPing/speed results land in meta (nested), not a flat top-level field", async () => {
-    const p = makeVless({ meta: { id: "p1", ping: null, speed: null } });
+  it("ping/realPing/speed results land in the ephemeral testResults map, not the profile", async () => {
+    const p = makeVless({ meta: { id: "p1" } });
     useAppStore.setState({
       profiles: [p],
       groups: [],
       subscriptions: [],
       settings: DEFAULT_SETTINGS,
       activeId: null,
+      testResults: {},
     });
 
     bridge.ping.mockResolvedValueOnce(88);
     await useAppStore.getState().testProfile("p1", "tcpPing");
-    let stored = useAppStore.getState().profiles[0];
-    expect(stored.meta.ping).toBe(88);
-    expect((stored as Record<string, unknown>).ping).toBeUndefined();
+    expect(useAppStore.getState().testResults.p1.ping).toBe(88);
+    // the persisted profile is never touched by a test
+    const meta = useAppStore.getState().profiles[0].meta as Record<string, unknown>;
+    expect(meta.ping).toBeUndefined();
 
     bridge.realPing.mockResolvedValueOnce(150);
     await useAppStore.getState().testProfile("p1", "realPing");
-    stored = useAppStore.getState().profiles[0];
-    expect(stored.meta.ping).toBe(150);
+    expect(useAppStore.getState().testResults.p1.ping).toBe(150);
 
     bridge.speedTest.mockResolvedValueOnce(1_500_000);
     await useAppStore.getState().testProfile("p1", "speed");
-    stored = useAppStore.getState().profiles[0];
-    expect(stored.meta.speed).toBe(1_500_000);
-    expect((stored as Record<string, unknown>).speed).toBeUndefined();
+    expect(useAppStore.getState().testResults.p1.speed).toBe(1_500_000);
   });
 
   it("removeProfile stops service and clears active id when removing active profile", async () => {
@@ -640,12 +637,15 @@ describe("useAppStore", () => {
     });
 
     it("selectBest pushes bestSelected activity", async () => {
-      const best = makeVless({ meta: { id: "p1", remarks: "FastNode", ping: 10 } });
-      const slow = makeVless({ meta: { id: "p2", remarks: "SlowNode", ping: 200 } });
+      const best = makeVless({ meta: { id: "p1", remarks: "FastNode" } });
+      const slow = makeVless({ meta: { id: "p2", remarks: "SlowNode" } });
       bridge.readState.mockResolvedValue(
         makeState({ profiles: [best, slow], activeId: best.meta.id }),
       );
       await useAppStore.getState().hydrate();
+      useAppStore.setState({
+        testResults: { p1: { ping: 10, speed: null }, p2: { ping: 200, speed: null } },
+      });
 
       useAppStore.getState().selectBest();
 
@@ -677,10 +677,11 @@ describe("useAppStore", () => {
     });
 
     it("removeUnreachable pushes unreachableRemoved activity", async () => {
-      const dead = makeVless({ meta: { id: "p1", ping: -1 } });
-      const alive = makeVless({ meta: { id: "p2", ping: 20 } });
+      const dead = makeVless({ meta: { id: "p1" } });
+      const alive = makeVless({ meta: { id: "p2" } });
       bridge.readState.mockResolvedValue(makeState({ profiles: [dead, alive] }));
       await useAppStore.getState().hydrate();
+      useAppStore.setState({ testResults: { p1: { ping: -1, speed: null } } });
 
       await useAppStore.getState().removeUnreachable();
 
@@ -688,6 +689,29 @@ describe("useAppStore", () => {
       expect(feed[0].icon).toBe("delete_sweep");
       expect(feed[0].color).toBe("var(--error)");
       expect(feed[0].text).toMatch(/1/);
+    });
+
+    it("removeUnreachable deletes the -1 ids and keeps survivors' test results", async () => {
+      const dead = makeVless({ meta: { id: "p1" } });
+      const alive = makeVless({ meta: { id: "p2" } });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [dead, alive] }));
+      await useAppStore.getState().hydrate();
+      useAppStore.setState({
+        testResults: { p1: { ping: -1, speed: null }, p2: { ping: 20, speed: null } },
+      });
+      // The unreachable set is resolved from testResults (the backend never sees it),
+      // so the store removes by id; the canonical echo only prunes the dropped id.
+      bridge.mutate.mockImplementationOnce(async (intent) => {
+        expect(intent).toEqual({ kind: "removeProfiles", ids: ["p1"] });
+        return makeState({ profiles: [makeVless({ meta: { id: "p2" } })] });
+      });
+
+      await useAppStore.getState().removeUnreachable();
+
+      const state = useAppStore.getState();
+      expect(state.profiles.map((p) => p.meta.id)).toEqual(["p2"]);
+      expect(state.testResults.p2.ping).toBe(20);
+      expect(state.testResults.p1).toBeUndefined();
     });
 
     it("removeDuplicates pushes duplicatesRemoved activity", async () => {

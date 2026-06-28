@@ -61,8 +61,6 @@ export default function Editor({
         id: cur.meta.id,
         remarks: cur.meta.remarks,
         subId: cur.meta.subId,
-        ping: cur.meta.ping,
-        speed: cur.meta.speed,
         coreType: cur.meta.coreType,
       };
       if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };

@@ -386,10 +386,6 @@ export type Meta = {
 	groupId: string,
 	/**  Owning subscription id, or `null` for a manually added profile. */
 	subId?: string | null,
-	/**  Latency in ms, or `null` if never tested. */
-	ping?: number | null,
-	/**  Throughput in bytes/sec; `-1` = failed, `null` = never tested. */
-	speed?: number | null,
 	/**  Per-profile core override; `None` resolves by protocol/settings. */
 	coreType?: CoreEngine | null,
 };
@@ -418,11 +414,6 @@ export type MutationIntent_Deserialize =
 ({ kind: "moveProfiles"; ids: string[]; groupId: string }) & { activeId?: never; asset?: never; from?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
 /**  Prepend a batch of profiles (share-link / file import). */
 ({ kind: "addProfiles"; profiles: Profile[] }) & { activeId?: never; asset?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
-/**
- *  Drop profiles whose last ping was unreachable (`-1`) within the scope
- *  (`None`/`"all"` = every group).
- */
-({ kind: "removeUnreachable"; groupId?: string | null }) & { activeId?: never; asset?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
 /**  Drop duplicate endpoints within the scope, always keeping the active one. */
 ({ kind: "deduplicateProfiles"; activeId?: string | null; groupId?: string | null }) & { asset?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "addGroup"; id: string; name: string }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "renameGroup"; id: string; name: string }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "removeGroup"; id: string }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
 /**  Reorder by index; `g-main` stays pinned at 0. */
@@ -470,11 +461,6 @@ export type MutationIntent_Serialize =
 ({ kind: "moveProfiles"; ids: string[]; groupId: string }) & { activeId?: never; asset?: never; from?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
 /**  Prepend a batch of profiles (share-link / file import). */
 ({ kind: "addProfiles"; profiles: Profile[] }) & { activeId?: never; asset?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
-/**
- *  Drop profiles whose last ping was unreachable (`-1`) within the scope
- *  (`None`/`"all"` = every group).
- */
-({ kind: "removeUnreachable"; groupId: string | null }) & { activeId?: never; asset?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
 /**  Drop duplicate endpoints within the scope, always keeping the active one. */
 ({ kind: "deduplicateProfiles"; activeId: string | null; groupId: string | null }) & { asset?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "addGroup"; id: string; name: string }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "renameGroup"; id: string; name: string }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "removeGroup"; id: string }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | 
 /**  Reorder by index; `g-main` stays pinned at 0. */

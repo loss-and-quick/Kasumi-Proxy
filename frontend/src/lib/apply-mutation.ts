@@ -80,8 +80,6 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
           id: intent.newId,
           remarks: intent.remarks,
           subId: null,
-          ping: null,
-          speed: null,
         },
       };
       const profiles = [...state.profiles];
@@ -99,14 +97,6 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
     }
     case "addProfiles":
       return { ...state, profiles: [...(intent.profiles as Profile[]), ...state.profiles] };
-    case "removeUnreachable": {
-      const inScope = (p: Profile) =>
-        !intent.groupId || intent.groupId === "all" || p.meta.groupId === intent.groupId;
-      return {
-        ...state,
-        profiles: state.profiles.filter((p) => !(inScope(p) && p.meta.ping === -1)),
-      };
-    }
     case "deduplicateProfiles":
       return {
         ...state,

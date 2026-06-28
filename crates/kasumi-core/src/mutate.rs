@@ -64,13 +64,6 @@ pub enum MutationIntent {
     AddProfiles {
         profiles: Vec<Profile>,
     },
-    /// Drop profiles whose last ping was unreachable (`-1`) within the scope
-    /// (`None`/`"all"` = every group).
-    #[serde(rename_all = "camelCase")]
-    RemoveUnreachable {
-        #[serde(default)]
-        group_id: Option<String>,
-    },
     /// Drop duplicate endpoints within the scope, always keeping the active one.
     #[serde(rename_all = "camelCase")]
     DeduplicateProfiles {
@@ -185,8 +178,6 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 m.id = new_id.clone();
                 m.remarks = remarks.clone();
                 m.sub_id = None;
-                m.ping = None;
-                m.speed = None;
                 state.profiles.insert(idx + 1, copy);
             }
         }
@@ -203,15 +194,6 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             let mut next = profiles.clone();
             next.append(&mut state.profiles);
             state.profiles = next;
-        }
-        MutationIntent::RemoveUnreachable { group_id } => {
-            let in_scope = |p: &Profile| match group_id.as_deref() {
-                None | Some("all") => true,
-                Some(g) => p.meta().group_id == g,
-            };
-            state
-                .profiles
-                .retain(|p| !(in_scope(p) && p.meta().ping == Some(-1)));
         }
         MutationIntent::DeduplicateProfiles {
             active_id,
@@ -495,7 +477,6 @@ mod tests {
         let mut s = base();
         let mut src = with_id("trojan://pw@a.com:443#A", "a", "g-main");
         src.meta_mut().sub_id = Some("s1".into());
-        src.meta_mut().ping = Some(50);
         s.profiles = vec![src, with_id("trojan://pw@b.com:443#B", "b", "g-main")];
         apply_mutation(
             &mut s,
@@ -510,7 +491,6 @@ mod tests {
         let copy = &s.profiles[1];
         assert_eq!(copy.meta().remarks, "A (copy)");
         assert_eq!(copy.meta().sub_id, None);
-        assert_eq!(copy.meta().ping, None);
     }
 
     #[test]
@@ -543,27 +523,6 @@ mod tests {
         );
         let ids: Vec<&str> = s.profiles.iter().map(|p| p.meta().id.as_str()).collect();
         assert_eq!(ids, vec!["a", "b"]);
-    }
-
-    #[test]
-    fn remove_unreachable_scoped() {
-        let mut s = base();
-        let mut dead = with_id("trojan://pw@a.com:443#A", "a", "g-main");
-        dead.meta_mut().ping = Some(-1);
-        let mut dead_other = with_id("trojan://pw@b.com:443#B", "b", "g2");
-        dead_other.meta_mut().ping = Some(-1);
-        let mut alive = with_id("trojan://pw@c.com:443#C", "c", "g-main");
-        alive.meta_mut().ping = Some(40);
-        s.profiles = vec![dead, dead_other, alive];
-        // Scope g-main: only "a" goes; "b" (other group) survives.
-        apply_mutation(
-            &mut s,
-            &MutationIntent::RemoveUnreachable {
-                group_id: Some("g-main".into()),
-            },
-        );
-        let ids: Vec<&str> = s.profiles.iter().map(|p| p.meta().id.as_str()).collect();
-        assert_eq!(ids, vec!["b", "c"]);
     }
 
     #[test]
