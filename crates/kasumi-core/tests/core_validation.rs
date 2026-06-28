@@ -33,6 +33,10 @@ const WG_PUB: &str = "xK8Tw4nv6TBWHl3WlVqoMLVrNsejQdC7/7jiTlR2rg8=";
 const REALITY_PBK: &str = "c7twR4u_IvJsLGDqYsx2yb1nr2Kg74vsRlA_ou8c4QQ";
 const SS_KEY_16: &str = "MTIzNDU2Nzg5MGFiY2RlZg==";
 const SS_KEY_32: &str = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=";
+// A valid base64 ECHConfigList (`sing-box generate ech-keypair example.com`),
+// the raw form share links carry in the `ech` parameter.
+const ECH_CONFIG_LIST_B64: &str =
+    "AEb+DQBCAAAgACAYjkLlzMEK3J2Dcv8wBSVwYDz4j8o9tRSTBPSr+m52FwAMAAEAAQABAAIAAQADAAtleGFtcGxlLmNvbQAA";
 
 /// The wire string of a serde enum (e.g. `Network::Ws` → `"ws"`).
 fn wire<T: serde::Serialize>(v: &T) -> String {
@@ -176,6 +180,17 @@ fn generate() -> Vec<(String, Profile)> {
         if let Some(p) = make(Protocol::Vless, Some(Network::Tcp), sec, &name) {
             cases.push((name, p));
         }
+    }
+
+    // 5. VLESS-WS carrying an ECH config. Share links ship the raw base64
+    // ECHConfigList; sing-box wants it PEM-armored, so this exercises the
+    // wrapping in `singbox_config` against the real `sing-box check`.
+    let name = "ech/vless-ws".to_string();
+    if let Some(Profile::Vless(mut v)) =
+        make(Protocol::Vless, Some(Network::Ws), Security::Tls, &name)
+    {
+        v.tls.ech = ECH_CONFIG_LIST_B64.to_string();
+        cases.push((name, Profile::Vless(v)));
     }
 
     cases
