@@ -14,7 +14,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use kasumi_core::contract::{Capabilities, FetchMode, LogTarget, ServiceState, WsInfo};
+use kasumi_core::contract::{Capabilities, FetchMode, LogTarget, ServiceState, TestKind, WsInfo};
 use kasumi_core::core_config::{build_core_config, CoreConfig};
 use kasumi_core::mutate::{apply_mutation, MutationIntent};
 use kasumi_core::profile::Profile;
@@ -103,6 +103,11 @@ pub enum Command {
     #[serde(rename_all = "camelCase")]
     DumpConfig {
         profile_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    TestLog {
+        profile_id: String,
+        kind: TestKind,
     },
     #[serde(rename_all = "camelCase")]
     ParseShareLinks {
@@ -412,6 +417,10 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             Ok(Response::Text(text))
         }
 
+        Command::TestLog { profile_id, kind } => Ok(Response::Text(
+            crate::jobs::read_test_log(platform, &profile_id, kind).await,
+        )),
+
         Command::ParseShareLinks { text, group_id } => Ok(Response::Profiles(parse_share_links(
             &text,
             group_id.as_deref(),
@@ -460,6 +469,13 @@ pub(crate) async fn run_mutation(
     persist_with_chain(platform, &prev, &mut next)
         .await
         .map_err(|e| err(e.to_string()))?;
+    let kept: std::collections::HashSet<&str> =
+        next.profiles.iter().map(|p| p.meta().id.as_str()).collect();
+    for p in &prev.profiles {
+        if !kept.contains(p.meta().id.as_str()) {
+            crate::jobs::remove_test_logs(platform, &p.meta().id).await;
+        }
+    }
     Ok(next)
 }
 
