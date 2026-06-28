@@ -293,7 +293,7 @@ export function Select<T extends string>({
               type="button"
               className="select-overlay"
               aria-label="Close"
-              onPointerDown={() => setOpen(false)}
+              onClick={() => setOpen(false)}
             />
             <div
               ref={menuRef}
