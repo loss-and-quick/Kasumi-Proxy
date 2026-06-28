@@ -308,7 +308,12 @@ fn now_secs() -> u64 {
 /// On Linux it stamps `PR_SET_PDEATHSIG` ([`die_with_parent`]) into the forked child,
 /// so an unclean helper exit (crash / SIGKILL) — where the normal stop/teardown never
 /// runs — still reaps the child instead of leaving it holding a tun + routes with
-/// `service-state` stuck at "stopped". Other targets fall back to a plain spawn.
+/// `service-state` stuck at "stopped". When the helper holds the data-path caps it
+/// also raises an ambient `CAP_NET_ADMIN` into the child, so the active core can
+/// create its own tun (sing-box) and tun2socks its tun + fwmark even under the
+/// caps-only launcher (a root helper's children already inherit it; an unprivileged
+/// dev run skips the raise, which would otherwise fail closed). Other targets fall
+/// back to a plain spawn.
 async fn spawn_supervised(
     argv: &[String],
     env: &std::collections::HashMap<String, String>,
@@ -316,17 +321,22 @@ async fn spawn_supervised(
 ) -> std::io::Result<tokio::process::Child> {
     #[cfg(target_os = "linux")]
     {
-        // SAFETY: die_with_parent is async-signal-safe per the pre_exec contract.
-        unsafe {
-            spawn_logged_pre_exec(
-                argv,
-                env,
-                log,
-                false,
-                crate::desktop::capabilities::die_with_parent,
-            )
-            .await
+        use crate::desktop::capabilities::{
+            die_with_parent, is_privileged_data_path, raise_net_admin_ambient,
+        };
+        if is_privileged_data_path() {
+            // SAFETY: both hooks are async-signal-safe single syscalls per the
+            // pre_exec contract; chaining them keeps that property.
+            return unsafe {
+                spawn_logged_pre_exec(argv, env, log, false, || {
+                    die_with_parent()?;
+                    raise_net_admin_ambient()
+                })
+                .await
+            };
         }
+        // SAFETY: die_with_parent is async-signal-safe per the pre_exec contract.
+        unsafe { spawn_logged_pre_exec(argv, env, log, false, die_with_parent).await }
     }
     #[cfg(not(target_os = "linux"))]
     {

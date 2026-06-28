@@ -1,8 +1,11 @@
 //! Linux capabilities for the desktop data-path helper. Launched as root (pkexec)
-//! or with file caps (NixOS `security.wrappers`), the helper drops its bounding set
-//! to [`keep_set`] on startup — which also caps every core / tun2socks / `ip` it
-//! execs — and raises an ambient `CAP_NET_RAW` for the test cores so their uplink
-//! bind survives exec. All no-ops for an unprivileged in-process dev run.
+//! or with file caps (NixOS `security.wrappers`, the deb/rpm postinst), the helper
+//! drops its bounding set to [`keep_set`] on startup — which also caps every core /
+//! tun2socks / `ip` it execs — and raises caps into the forked children's ambient
+//! set so they survive exec when the helper runs caps-only (not root): `CAP_NET_RAW`
+//! for the test cores' uplink bind, `CAP_NET_ADMIN` for the active core's own tun
+//! (sing-box) and tun2socks' tun + fwmark. All no-ops for an unprivileged in-process
+//! dev run, and inert under a root helper where children already inherit every cap.
 
 use caps::{CapSet, Capability, CapsHashSet};
 
@@ -53,16 +56,23 @@ pub fn drop_unneeded_bounding() -> anyhow::Result<CapsHashSet> {
     Ok(dropped)
 }
 
-/// Seed `CAP_NET_RAW` into the process's inheritable set, the precondition for the
-/// test cores' ambient raise (`PR_CAP_AMBIENT_RAISE` needs the cap in both permitted
-/// and inheritable, and both launchers start with an empty inheritable set). Needs
-/// no `CAP_SETPCAP` (the cap is already permitted). Idempotent; run once at startup.
-pub fn seed_test_core_inheritable() -> anyhow::Result<()> {
+/// Seed the caps a forked child may raise into its ambient set — `CAP_NET_RAW` (test
+/// cores' uplink bind) and `CAP_NET_ADMIN` (the active core's own tun / tun2socks'
+/// tun + fwmark) — into the process's inheritable set, the precondition for that
+/// raise (`PR_CAP_AMBIENT_RAISE` needs the cap in both permitted and inheritable, and
+/// both launchers start with an empty inheritable set). Both are already permitted
+/// (they're in [`keep_set`]), so this needs no `CAP_SETPCAP`. Idempotent; run once at
+/// startup.
+pub fn seed_child_inheritable() -> anyhow::Result<()> {
     let mut set = caps::read(None, CapSet::Inheritable)
         .map_err(|e| anyhow::anyhow!("read inheritable set: {e}"))?;
-    if set.insert(Capability::CAP_NET_RAW) {
+    let mut changed = false;
+    for cap in [Capability::CAP_NET_RAW, Capability::CAP_NET_ADMIN] {
+        changed |= set.insert(cap);
+    }
+    if changed {
         caps::set(None, CapSet::Inheritable, &set)
-            .map_err(|e| anyhow::anyhow!("seed CAP_NET_RAW into inheritable set: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("seed child caps into inheritable set: {e}"))?;
     }
     Ok(())
 }
@@ -104,30 +114,41 @@ pub fn has_effective_net_raw() -> bool {
 /// (stable kernel constants from `linux/uapi/prctl.h`).
 const PR_CAP_AMBIENT: libc::c_int = 47;
 const PR_CAP_AMBIENT_RAISE: libc::c_int = 2;
-/// Numeric capability number for `CAP_NET_RAW`, read off the `caps` enum so it
-/// stays in lock-step with the crate (no hand-typed magic number); libc doesn't
-/// export `CAP_*`.
+/// Numeric capability numbers, read off the `caps` enum so they stay in lock-step
+/// with the crate (no hand-typed magic number); libc doesn't export `CAP_*`.
 const CAP_NET_RAW_NR: libc::c_uint = Capability::CAP_NET_RAW as libc::c_uint;
+const CAP_NET_ADMIN_NR: libc::c_uint = Capability::CAP_NET_ADMIN as libc::c_uint;
 
-/// A `pre_exec` hook raising `CAP_NET_RAW` into the forked child's ambient set, the
-/// only way to grant a cap across exec into the test core (it has no file caps).
-/// Run ONLY here, never process-wide, so the cap stays off the helper's own threads
-/// and the active core. Needs the cap in permitted + inheritable (see
-/// [`seed_test_core_inheritable`]); inert under root, load-bearing when caps-only.
-/// Fails closed: an `Err` aborts the exec rather than running a test core unbound.
-///
-/// # Async-signal-safety
-///
-/// A single raw `prctl(2)` — no allocation, locks, or stdio — per the `pre_exec`
-/// contract.
-pub fn raise_net_raw_ambient() -> std::io::Result<()> {
+/// Shared body of the `pre_exec` raises below: raise one capability into the ambient
+/// set — the only way to grant a cap across exec into a core that has no file caps.
+/// Needs the cap in permitted + inheritable (see [`seed_child_inheritable`]). A single
+/// raw `prctl(2)`, so async-signal-safe per the `pre_exec` contract.
+fn raise_ambient(cap_nr: libc::c_uint) -> std::io::Result<()> {
     // SAFETY: one prctl syscall; async-signal-safe per the contract above.
-    let rc = unsafe { libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, CAP_NET_RAW_NR, 0, 0) };
+    let rc = unsafe { libc::prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, cap_nr, 0, 0) };
     if rc == 0 {
         Ok(())
     } else {
         Err(std::io::Error::last_os_error())
     }
+}
+
+/// A `pre_exec` hook raising `CAP_NET_RAW` into the forked child's ambient set, so a
+/// test core's uplink bind survives exec. Run ONLY here, never process-wide, so the
+/// cap stays off the helper's own threads and the active core; inert under root,
+/// load-bearing when caps-only. Fails closed: an `Err` aborts the exec rather than
+/// running a test core unbound.
+pub fn raise_net_raw_ambient() -> std::io::Result<()> {
+    raise_ambient(CAP_NET_RAW_NR)
+}
+
+/// A `pre_exec` hook raising `CAP_NET_ADMIN` into the forked child's ambient set, so
+/// the active core can create its own tun (sing-box) and tun2socks can open the tun +
+/// set its fwmark when the helper runs caps-only (not root). Inert under a root helper
+/// where the child already inherits every cap. Fails closed: an `Err` aborts the exec
+/// rather than running a core that can't open its tun.
+pub fn raise_net_admin_ambient() -> std::io::Result<()> {
+    raise_ambient(CAP_NET_ADMIN_NR)
 }
 
 /// A `pre_exec` hook tying a spawned data-path process (the core / tun2socks) to the
@@ -233,16 +254,16 @@ mod tests {
     }
 
     // Seeding is idempotent: running it twice (and under any starting inheritable
-    // set) leaves NET_RAW inheritable and never errors on a root test runner; under
-    // an unprivileged runner the insert/set is a no-op error that we only assert
-    // doesn't panic. The ambient raise itself is verified at runtime on a box with
-    // an active tun (see the handoff's verification section).
+    // set) leaves NET_RAW + NET_ADMIN inheritable and never errors on a root test
+    // runner; under an unprivileged runner the insert/set is a no-op error that we
+    // only assert doesn't panic. The ambient raise itself is verified at runtime on a
+    // box with an active tun (see the handoff's verification section).
     #[test]
-    fn seed_test_core_inheritable_is_idempotent() {
-        let first = seed_test_core_inheritable();
+    fn seed_child_inheritable_is_idempotent() {
+        let first = seed_child_inheritable();
         if first.is_ok() {
             // A successful seed must be stable on repeat.
-            assert!(seed_test_core_inheritable().is_ok());
+            assert!(seed_child_inheritable().is_ok());
         }
     }
 
@@ -254,5 +275,8 @@ mod tests {
     fn cap_net_raw_nr_matches_the_kernel_abi() {
         assert_eq!(CAP_NET_RAW_NR, 13);
         assert_eq!(Capability::CAP_NET_RAW as libc::c_uint, 13);
+        // CAP_NET_ADMIN is capability 12 in the kernel ABI.
+        assert_eq!(CAP_NET_ADMIN_NR, 12);
+        assert_eq!(Capability::CAP_NET_ADMIN as libc::c_uint, 12);
     }
 }

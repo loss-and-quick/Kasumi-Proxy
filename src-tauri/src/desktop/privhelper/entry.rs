@@ -120,15 +120,17 @@ fn run() -> anyhow::Result<()> {
             ),
             Err(e) => log::warn!("could not drop the bounding set ({e}); running with full caps"),
         }
-        // Seed CAP_NET_RAW into the inheritable set so the ambient raise the test
-        // cores get in their pre_exec (see platform.rs spawn_test_core) succeeds —
+        // Seed CAP_NET_RAW + CAP_NET_ADMIN into the inheritable set so the ambient
+        // raises the children get in their pre_exec succeed — test cores raise
+        // NET_RAW (uplink bind, see platform.rs spawn_test_core), the active core /
+        // tun2socks raise NET_ADMIN (own tun + fwmark, see spawn_supervised).
         // PR_CAP_AMBIENT_RAISE needs the cap in both permitted and inheritable, and
         // both a pkexec-root start and a file-cap start begin with an empty
-        // inheritable set. A failure is non-fatal: the test-core ambient raise then
-        // fails closed and the test core simply runs without the bind (the
-        // pre-root-bind state).
-        if let Err(e) = crate::desktop::capabilities::seed_test_core_inheritable() {
-            log::warn!("could not seed CAP_NET_RAW into the inheritable set ({e})");
+        // inheritable set. A failure is non-fatal: the ambient raise then fails
+        // closed (a test core runs without the bind; the active core would fail to
+        // open its tun under a caps-only helper).
+        if let Err(e) = crate::desktop::capabilities::seed_child_inheritable() {
+            log::warn!("could not seed child caps into the inheritable set ({e})");
         }
     }
 
