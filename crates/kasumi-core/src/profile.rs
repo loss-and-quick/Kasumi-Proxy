@@ -492,7 +492,7 @@ mod tests {
         let json = serde_json::json!({
             "protocol": "vless",
             "meta": { "id": "p1", "remarks": "Home", "groupId": "g-main",
-                "subId": null, "ping": 42, "speed": null, "coreType": null },
+                "subId": null, "coreType": null },
             "endpoint": { "address": "ex.com", "port": 443 },
             "transport": { "kind": "ws", "host": "ex.com", "path": "/v" },
             "tls": { "security": "reality", "sni": "ex.com", "fingerprint": "chrome",
@@ -503,7 +503,7 @@ mod tests {
         let p: Profile = serde_json::from_value(json).unwrap();
         assert_eq!(p.protocol(), Protocol::Vless);
         assert_eq!(p.meta().id, "p1");
-        assert_eq!(p.meta().ping, Some(42));
+        assert_eq!(p.meta().sub_id, None);
         let Profile::Vless(v) = &p else {
             panic!("not vless")
         };

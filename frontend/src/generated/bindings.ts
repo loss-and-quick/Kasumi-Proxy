@@ -386,10 +386,6 @@ export type Meta = {
 	groupId: string,
 	/**  Owning subscription id, or `null` for a manually added profile. */
 	subId?: string | null,
-	/**  Latency in ms, or `null` if never tested. */
-	ping?: number | null,
-	/**  Throughput in bytes/sec; `-1` = failed, `null` = never tested. */
-	speed?: number | null,
 	/**  Per-profile core override; `None` resolves by protocol/settings. */
 	coreType?: CoreEngine | null,
 };

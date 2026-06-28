@@ -45,6 +45,7 @@ const ManageGroupsSheet = lazy(() =>
 
 export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string | "new") => void }) {
   const profiles = useAppStore((s) => s.profiles);
+  const testResults = useAppStore((s) => s.testResults);
   const groups = useAppStore((s) => s.groups);
   const activeId = useAppStore((s) => s.activeId);
   const notify = useAppStore((s) => s.notify);
@@ -101,15 +102,15 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
     // While searching, rank by fuzzy relevance instead of the chosen sort.
     list = fuzzyFilterSort(list, query, profileSearchText);
   } else {
+    const pingRank = (id: string) => {
+      const p = testResults[id]?.ping;
+      return p != null && p >= 0 ? p : Number.MAX_SAFE_INTEGER;
+    };
     list = [...list].sort((left, right) => {
       if (sort === "ping") {
         return (
-          (left.meta.ping != null && left.meta.ping >= 0
-            ? left.meta.ping
-            : Number.MAX_SAFE_INTEGER) -
-            (right.meta.ping != null && right.meta.ping >= 0
-              ? right.meta.ping
-              : Number.MAX_SAFE_INTEGER) || left.meta.remarks.localeCompare(right.meta.remarks)
+          pingRank(left.meta.id) - pingRank(right.meta.id) ||
+          left.meta.remarks.localeCompare(right.meta.remarks)
         );
       }
       return left.meta.remarks.localeCompare(right.meta.remarks);

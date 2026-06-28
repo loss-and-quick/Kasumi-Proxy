@@ -177,8 +177,6 @@ export const MetaSchema = z.object({
 	remarks: z.string(),
 	groupId: z.string(),
 	subId: z.string().nullable().optional(),
-	ping: z.number().nullable().optional(),
-	speed: z.number().nullable().optional(),
 	coreType: CoreEngineSchema.nullable().optional(),
 });
 export type Meta = z.infer<typeof MetaSchema>;

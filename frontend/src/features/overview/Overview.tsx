@@ -39,6 +39,9 @@ export default function Overview({
   const uploadRate = useAppStore((s) => s.uploadRate);
   const assetFiles = useAppStore((s) => s.assetFiles);
   const activeId = useAppStore((s) => s.activeId);
+  const activePing = useAppStore((s) =>
+    activeId ? (s.testResults[activeId]?.ping ?? null) : null,
+  );
   const settings = useAppStore((s) => s.settings);
   const busy = useAppStore((s) => s.busy);
   const toggleService = useAppStore((s) => s.toggleService);
@@ -210,12 +213,8 @@ export default function Overview({
               <Stat
                 icon="bolt"
                 label={t("overview.ping")}
-                value={active ? pingLabel(active.meta.ping ?? null) : "—"}
-                color={
-                  active && active.meta.ping != null && active.meta.ping < 0
-                    ? "var(--error)"
-                    : undefined
-                }
+                value={active ? pingLabel(activePing) : "—"}
+                color={active && activePing != null && activePing < 0 ? "var(--error)" : undefined}
               />
             </div>
           </div>

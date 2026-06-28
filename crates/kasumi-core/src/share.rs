@@ -159,8 +159,6 @@ fn meta(remarks: String, group_id: Option<&str>) -> Meta {
         remarks,
         group_id: group_id.unwrap_or("g-main").to_string(),
         sub_id: None,
-        ping: None,
-        speed: None,
         core_type: None,
     }
 }

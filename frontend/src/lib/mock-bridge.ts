@@ -65,9 +65,6 @@ function simPing(): number {
   return Math.floor(Math.random() * 200) + 10 + Math.floor(Math.random() * 150);
 }
 
-/** Stamp a profile's ping/speed without touching the nested structure. */
-const withPing = (p: Profile, ping: number): Profile => ({ ...p, meta: { ...p.meta, ping } });
-
 /** Simulate a subscription fetch: return a few nested profiles */
 function simFetchSub(url: string): Profile[] {
   const tag = url.slice(0, 20);
@@ -160,10 +157,9 @@ export const mockBridge: Bridge = {
     };
   },
 
-  async ping(profileId: string): Promise<number> {
+  async ping(_profileId: string): Promise<number> {
     await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
     const ms = simPing();
-    state.profiles = state.profiles.map((p) => (p.meta.id === profileId ? withPing(p, ms) : p));
     return ms;
   },
 
@@ -182,7 +178,6 @@ export const mockBridge: Bridge = {
         await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
         const ms = simPing();
         results[p.meta.id] = ms;
-        state.profiles = state.profiles.map((x) => (x.meta.id === p.meta.id ? withPing(x, ms) : x));
         onResult?.(p.meta.id, ms);
       }
     };
@@ -190,10 +185,9 @@ export const mockBridge: Bridge = {
     return results;
   },
 
-  async realPing(profileId: string): Promise<number> {
+  async realPing(_profileId: string): Promise<number> {
     await new Promise((r) => setTimeout(r, 800 + Math.random() * 1200));
     const ms = Math.random() < 0.15 ? -1 : simPing();
-    state.profiles = state.profiles.map((p) => (p.meta.id === profileId ? withPing(p, ms) : p));
     return ms;
   },
 
@@ -212,7 +206,6 @@ export const mockBridge: Bridge = {
         await new Promise((r) => setTimeout(r, 400 + Math.random() * 600));
         const ms = Math.random() < 0.15 ? -1 : simPing();
         results[p.meta.id] = ms;
-        state.profiles = state.profiles.map((x) => (x.meta.id === p.meta.id ? withPing(x, ms) : x));
         onResult?.(p.meta.id, ms);
       }
     };
@@ -251,11 +244,8 @@ export const mockBridge: Bridge = {
 -- Mock log lines above (${lines}) --`);
   },
 
-  testLog(profileId, kind): Promise<string> {
-    const profile = state.profiles.find((p) => p.meta.id === profileId);
-    const metric = kind === "speed" ? profile?.meta.speed : profile?.meta.ping;
-    // Mirror the backend: a log exists only while that check is failing (`err`).
-    if (metric == null || metric >= 0) return Promise.resolve("");
+  testLog(_profileId, kind): Promise<string> {
+    // The UI only opens this from a failed (`err`) check, so emit a sample core log.
     const stamp = new Date().toISOString();
     return Promise.resolve(`${stamp} [MOCK:${kind}] starting test core on 127.0.0.1:24600
 ${stamp} [MOCK:${kind}] [Warning] failed to dial to upstream: dial tcp: i/o timeout

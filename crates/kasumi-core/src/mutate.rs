@@ -178,8 +178,6 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 m.id = new_id.clone();
                 m.remarks = remarks.clone();
                 m.sub_id = None;
-                m.ping = None;
-                m.speed = None;
                 state.profiles.insert(idx + 1, copy);
             }
         }
@@ -479,7 +477,6 @@ mod tests {
         let mut s = base();
         let mut src = with_id("trojan://pw@a.com:443#A", "a", "g-main");
         src.meta_mut().sub_id = Some("s1".into());
-        src.meta_mut().ping = Some(50);
         s.profiles = vec![src, with_id("trojan://pw@b.com:443#B", "b", "g-main")];
         apply_mutation(
             &mut s,
@@ -494,7 +491,6 @@ mod tests {
         let copy = &s.profiles[1];
         assert_eq!(copy.meta().remarks, "A (copy)");
         assert_eq!(copy.meta().sub_id, None);
-        assert_eq!(copy.meta().ping, None);
     }
 
     #[test]

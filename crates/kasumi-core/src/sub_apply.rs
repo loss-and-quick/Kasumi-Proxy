@@ -102,9 +102,7 @@ pub fn same_profile_identity(a: &Profile, b: &Profile) -> bool {
 fn profile_dedup_key(p: &Profile) -> String {
     let mut v = serde_json::to_value(p).expect("profile serializes");
     if let Some(meta) = v.get_mut("meta").and_then(|m| m.as_object_mut()) {
-        for k in [
-            "id", "remarks", "ping", "speed", "subId", "groupId", "coreType",
-        ] {
+        for k in ["id", "remarks", "subId", "groupId", "coreType"] {
             meta.remove(k);
         }
     }

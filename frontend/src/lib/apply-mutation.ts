@@ -80,8 +80,6 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
           id: intent.newId,
           remarks: intent.remarks,
           subId: null,
-          ping: null,
-          speed: null,
         },
       };
       const profiles = [...state.profiles];

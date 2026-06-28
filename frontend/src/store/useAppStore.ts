@@ -35,6 +35,14 @@ export interface ToastItem {
   msg: string;
 }
 
+/** A profile's last test result. Ephemeral, session-only frontend state keyed by
+ *  profile id — never persisted (a ping/speed is a point-in-time measurement that
+ *  goes stale the moment it lands), so it lives here, outside the canonical state. */
+export interface ProfileTest {
+  ping: number | null; // ms; -1 unreachable, -2 probe failed, null no result
+  speed: number | null; // bytes/sec; -2 probe failed, null no result
+}
+
 // Most toasts the stack shows at once; older ones drop off as new ones arrive.
 const TOAST_LIMIT = 3;
 const TOAST_DURATION_MS = 2600;
@@ -48,6 +56,7 @@ interface Store extends AppState {
   busy: boolean; // true while a service lifecycle op is in flight
   pinging: Set<string>; // profile ids currently being pinged
   speedTesting: Set<string>; // profile ids currently being speed-tested
+  testResults: Record<string, ProfileTest>; // last ping/speed per profile id (ephemeral)
   toasts: ToastItem[];
   recentActivity: ActivityEvent[];
   recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
@@ -115,25 +124,29 @@ export const useAppStore = create<Store>((set, get) => {
   const pushActivity = (icon: string, text: string, color?: string) => {
     set({ recentActivity: activity.add(icon, text, color) });
   };
+  // Merge one profile's test result into the map, defaulting the untouched metric.
+  const withTest = (
+    s: Pick<Store, "testResults">,
+    id: string,
+    patch: Partial<ProfileTest>,
+  ): Record<string, ProfileTest> => ({
+    ...s.testResults,
+    [id]: { ...(s.testResults[id] ?? { ping: null, speed: null }), ...patch },
+  });
   // Adopt the canonical persisted-state slice the backend returned (the rest of
   // the store — service status, toasts, etc. — is UI-only and left untouched).
-  // ping/speed are persisted fields, but the test commands never write their
-  // result back — only this in-memory store holds it. So the value the backend
-  // echoes is at best equal, at worst a stale persisted one; prefer the prior
-  // in-memory value by id so a mutation doesn't reset (or rewind) test status.
   const applyState = (next: AppState) =>
     set((s) => {
-      const prior = new Map(s.profiles.map((p) => [p.meta.id, p.meta]));
-      const profiles = next.profiles.map((p) => {
-        const had = prior.get(p.meta.id);
-        if (!had || (had.ping == null && had.speed == null)) return p;
-        return {
-          ...p,
-          meta: { ...p.meta, ping: had.ping ?? p.meta.ping, speed: had.speed ?? p.meta.speed },
-        };
-      });
+      // testResults is keyed by id and lives only here; drop entries for profiles
+      // that no longer exist so the map can't grow without bound (cheap no-op when
+      // nothing went stale, to avoid re-rendering subscribers on every mutation).
+      const ids = new Set(next.profiles.map((p) => p.meta.id));
+      const stale = Object.keys(s.testResults).some((id) => !ids.has(id));
+      const testResults = stale
+        ? Object.fromEntries(Object.entries(s.testResults).filter(([id]) => ids.has(id)))
+        : s.testResults;
       return {
-        profiles,
+        profiles: next.profiles,
         groups: next.groups,
         subscriptions: next.subscriptions,
         routingRules: next.routingRules,
@@ -141,6 +154,7 @@ export const useAppStore = create<Store>((set, get) => {
         settings: mergeSettings(next.settings),
         activeId: next.activeId,
         version: next.version ?? __MODULE_VERSION__,
+        testResults,
       };
     });
   // The single write path: dispatch one domain intent and render the canonical
@@ -243,6 +257,7 @@ export const useAppStore = create<Store>((set, get) => {
     busy: false,
     pinging: new Set<string>(),
     speedTesting: new Set<string>(),
+    testResults: {},
     toasts: [],
     recentActivity: [],
     recentProfileIds: [],
@@ -477,11 +492,7 @@ export const useAppStore = create<Store>((set, get) => {
       );
       const finish = (value: number | null) =>
         set((s) => ({
-          profiles: s.profiles.map((p) =>
-            p.meta.id === id
-              ? { ...p, meta: speed ? { ...p.meta, speed: value } : { ...p.meta, ping: value } }
-              : p,
-          ),
+          testResults: withTest(s, id, speed ? { speed: value } : { ping: value }),
           ...(speed
             ? { speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)) }
             : { pinging: new Set([...s.pinging].filter((x) => x !== id)) }),
@@ -521,15 +532,10 @@ export const useAppStore = create<Store>((set, get) => {
       set(speed ? { speedTesting: new Set(ids) } : { pinging: new Set(ids) });
       const apply = (id: string, value: number) =>
         set((s) => ({
-          profiles: s.profiles.map((p) =>
-            p.meta.id === id
-              ? {
-                  ...p,
-                  meta: speed
-                    ? { ...p.meta, speed: value }
-                    : { ...p.meta, ping: kind === "tcpPing" ? value || null : value },
-                }
-              : p,
+          testResults: withTest(
+            s,
+            id,
+            speed ? { speed: value } : { ping: kind === "tcpPing" ? value || null : value },
           ),
           ...(speed
             ? { speedTesting: new Set([...s.speedTesting].filter((x) => x !== id)) }
@@ -552,20 +558,22 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     async removeUnreachable(groupId?: string) {
-      const { profiles, activeId } = get();
+      const { profiles, activeId, testResults } = get();
       const affected =
         !groupId || groupId === "all"
           ? profiles
           : profiles.filter((p) => p.meta.groupId === groupId);
-      const unreachable = new Set(affected.filter((p) => p.meta.ping === -1).map((p) => p.meta.id));
+      const unreachable = new Set(
+        affected.filter((p) => testResults[p.meta.id]?.ping === -1).map((p) => p.meta.id),
+      );
       if (!unreachable.size) {
         get().notify(translateCurrent("store.ping.noUnreachable"));
         return;
       }
       if (activeId != null && unreachable.has(activeId))
         await stopServiceIfRunning(translateCurrent("store.service.stoppedProfileRemoved"));
-      // ping lives only in the frontend store, so the backend can't tell which
-      // profiles are unreachable — remove them by the ids we resolved here.
+      // Test results live only in the frontend store, so the backend can't tell
+      // which profiles are unreachable — remove them by the ids we resolved here.
       await mutate({ kind: "removeProfiles", ids: [...unreachable] });
       pushActivity(
         "delete_sweep",
@@ -576,14 +584,15 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     async selectBest(groupId?: string) {
-      const { profiles } = get();
+      const { profiles, testResults } = get();
+      const ping = (id: string) => testResults[id]?.ping ?? null;
       const candidates =
         !groupId || groupId === "all"
           ? profiles
           : profiles.filter((p) => p.meta.groupId === groupId);
       const best = candidates
-        .filter((p) => p.meta.ping != null && p.meta.ping > 0)
-        .sort((a, b) => (a.meta.ping ?? Infinity) - (b.meta.ping ?? Infinity))[0];
+        .filter((p) => ping(p.meta.id) != null && (ping(p.meta.id) as number) > 0)
+        .sort((a, b) => (ping(a.meta.id) ?? Infinity) - (ping(b.meta.id) ?? Infinity))[0];
       if (!best) {
         get().notify(translateCurrent("store.ping.noPingData"));
         return;

@@ -18,12 +18,6 @@ pub struct Meta {
     /// Owning subscription id, or `null` for a manually added profile.
     #[serde(default)]
     pub sub_id: Option<String>,
-    /// Latency in ms, or `null` if never tested.
-    #[serde(default)]
-    pub ping: Option<i64>,
-    /// Throughput in bytes/sec; `-1` = failed, `null` = never tested.
-    #[serde(default)]
-    pub speed: Option<i64>,
     /// Per-profile core override; `None` resolves by protocol/settings.
     #[serde(default)]
     pub core_type: Option<CoreEngine>,
@@ -294,13 +288,11 @@ mod tests {
         let m: Meta =
             serde_json::from_str(r#"{"id":"a","remarks":"Home","groupId":"g-main"}"#).unwrap();
         assert_eq!(m.sub_id, None);
-        assert_eq!(m.ping, None);
         assert_eq!(m.core_type, None);
         let v = serde_json::to_value(&m).unwrap();
         assert_eq!(v["groupId"], "g-main");
         assert!(v["coreType"].is_null());
         assert!(v["subId"].is_null());
-        assert!(v["ping"].is_null());
     }
 
     #[test]

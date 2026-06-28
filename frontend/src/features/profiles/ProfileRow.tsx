@@ -34,6 +34,7 @@ export function ProfileRow({
   const settings = useAppStore((s) => s.settings);
   const isPinging = useAppStore((s) => s.pinging.has(profile.meta.id));
   const isSpeedTesting = useAppStore((s) => s.speedTesting.has(profile.meta.id));
+  const test = useAppStore((s) => s.testResults[profile.meta.id]);
   // Pop the value in only when a test just finished (spinner → value), not on
   // every list mount — so opening the screen doesn't flash every row's metric.
   const wasPinging = useRef(isPinging);
@@ -165,24 +166,24 @@ export function ProfileRow({
             <Spinner />
           ) : (
             <ErrTrigger
-              value={profile.meta.ping ?? null}
+              value={test?.ping ?? null}
               title={t("testlog.open")}
               onShow={() => onShowTestLog("realPing")}
             >
-              <Ping value={profile.meta.ping ?? null} animate={pingJustFinished} />
+              <Ping value={test?.ping ?? null} animate={pingJustFinished} />
             </ErrTrigger>
           )}
-          {(isSpeedTesting || profile.meta.speed != null) && (
+          {(isSpeedTesting || test?.speed != null) && (
             <div style={{ marginTop: 2 }}>
               {isSpeedTesting ? (
                 <Spinner />
               ) : (
                 <ErrTrigger
-                  value={profile.meta.speed ?? null}
+                  value={test?.speed ?? null}
                   title={t("testlog.open")}
                   onShow={() => onShowTestLog("speed")}
                 >
-                  <Speed value={profile.meta.speed} animate={speedJustFinished} />
+                  <Speed value={test?.speed ?? null} animate={speedJustFinished} />
                 </ErrTrigger>
               )}
             </div>

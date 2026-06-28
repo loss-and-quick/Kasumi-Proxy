@@ -30,9 +30,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "minIdleSession": 0,
@@ -67,9 +65,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "protocol": "custom",
@@ -84,9 +80,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "password": "",
@@ -127,9 +121,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "obfsPassword": "",
@@ -174,9 +166,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "naiveQuic": false,
@@ -216,9 +206,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "method": "aes-256-gcm",
@@ -264,9 +252,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "password": "",
@@ -305,9 +291,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "password": "",
@@ -324,9 +308,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "muxEnabled": false,
@@ -373,9 +355,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "password": "",
@@ -419,9 +399,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "muxEnabled": false,
@@ -469,9 +447,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "muxEnabled": false,
@@ -520,9 +496,7 @@ export const EMPTY_PROFILES = {
       "coreType": null,
       "groupId": "",
       "id": "",
-      "ping": null,
       "remarks": "New profile",
-      "speed": null,
       "subId": null
     },
     "mtu": 1420,
