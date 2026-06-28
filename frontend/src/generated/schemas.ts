@@ -715,9 +715,6 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("removeSub"),
 	id: z.string(),
 }), z.object({
-	kind: z.literal("removeUnreachable"),
-	groupId: z.string().nullable(),
-}), z.object({
 	kind: z.literal("renameGroup"),
 	id: z.string(),
 	name: z.string(),
@@ -881,9 +878,6 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("removeSub"),
 	id: z.string(),
-}), z.object({
-	kind: z.literal("removeUnreachable"),
-	groupId: z.string().nullable().optional(),
 }), z.object({
 	kind: z.literal("renameGroup"),
 	id: z.string(),
