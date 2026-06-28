@@ -307,9 +307,28 @@ impl Service {
         });
 
         self.spawn_network_watch();
+        self.spawn_resume_watch();
         self.spawn_watchdog();
         self.spawn_sub_updater();
         self.spawn_status_push();
+    }
+
+    /// Restart the data-path if it's up or coming up — re-pinning routing and rebuilding
+    /// the core after the network or system changed under it. Returns whether it ran, so
+    /// a caller can fall back to the boot auto-start. Takes the lifecycle lock itself.
+    async fn restart_if_up(&self) -> bool {
+        let _g = self.serialize.lock().await;
+        let coming_up = self
+            .platform
+            .service_state()
+            .await
+            .ok()
+            .map(|s| s.engine.is_some() || s.state == RunState::Connecting)
+            .unwrap_or(false);
+        if coming_up {
+            let _ = self.run_lifecycle(LifecycleCmd::Restart(None)).await;
+        }
+        coming_up
     }
 
     fn spawn_network_watch(self: &Arc<Self>) {
@@ -319,21 +338,32 @@ impl Service {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             while rx.recv().await.is_some() {
-                {
+                // Re-pin if the data-path is up; otherwise try the boot auto-start.
+                if !this.restart_if_up().await {
                     let _g = this.serialize.lock().await;
-                    let st = this.platform.service_state().await.ok();
-                    // Re-pin if the data-path is up or in the middle of coming up;
-                    // otherwise try the boot auto-start.
-                    let coming_up = st
-                        .map(|s| s.engine.is_some() || s.state == RunState::Connecting)
-                        .unwrap_or(false);
-                    if coming_up {
-                        let _ = this.run_lifecycle(LifecycleCmd::Restart(None)).await;
-                    } else {
-                        this.maybe_auto_start().await;
-                    }
+                    this.maybe_auto_start().await;
+                    drop(_g);
                 }
                 this.emit_status().await;
+            }
+        });
+    }
+
+    /// Restart the data-path each time the machine wakes from suspend/hibernate: a core
+    /// left running across a sleep can hold stale routing/DNS state, and the uplink
+    /// watcher doesn't fire when the default route survives the sleep. Driven by the
+    /// platform's resume signal (logind `PrepareForSleep(false)` on Linux, a power
+    /// notification on Windows); `None` where the platform has no such signal.
+    fn spawn_resume_watch(self: &Arc<Self>) {
+        let Some(mut rx) = self.platform.watch_system_resume() else {
+            return;
+        };
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            while rx.recv().await.is_some() {
+                if this.restart_if_up().await {
+                    this.emit_status().await;
+                }
             }
         });
     }

@@ -226,6 +226,14 @@ pub trait Platform: Send + Sync {
         None
     }
 
+    /// A receiver that yields once each time the machine wakes from suspend/hibernate,
+    /// so the `Service` can restart the data-path: a core left running across a sleep can
+    /// hold stale routing/DNS state that only a restart re-pins. `None` where the platform
+    /// has no resume signal (e.g. Android, which handles wake another way).
+    fn watch_system_resume(&self) -> Option<mpsc::Receiver<()>> {
+        None
+    }
+
     /// Whether all data-path processes are still alive (drives the watchdog).
     /// `None` where the platform can't report it.
     async fn data_path_healthy(&self) -> Option<bool> {
@@ -338,6 +346,7 @@ mod tests {
         p.convert_asset("geoip.dat").await.unwrap();
         assert!(p.app_filter().is_none());
         assert!(p.watch_network_change().is_none());
+        assert!(p.watch_system_resume().is_none());
         assert_eq!(p.data_path_healthy().await, None);
         assert_eq!(p.service_state().await.unwrap().state, RunState::Stopped);
     }
