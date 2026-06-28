@@ -6,6 +6,7 @@
 
 pub(crate) mod network;
 mod os;
+pub(crate) mod resume;
 pub(crate) mod routing;
 
 pub(crate) use os::LinuxOs;

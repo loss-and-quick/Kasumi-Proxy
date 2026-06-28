@@ -40,7 +40,7 @@ use kasumi_core::state::{
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
-use crate::desktop::{network, routing, OsSeam};
+use crate::desktop::{network, resume, routing, OsSeam};
 
 /// The per-OS seam: only the parts of the data-path that genuinely differ between
 /// Linux and Windows. Everything else lives in the shared [`DesktopPlatform`].
@@ -512,6 +512,12 @@ impl Platform for DesktopPlatform {
     fn watch_network_change(&self) -> Option<mpsc::Receiver<()>> {
         let (tx, rx) = mpsc::channel(1);
         tokio::spawn(network::run_watcher(tx));
+        Some(rx)
+    }
+
+    fn watch_system_resume(&self) -> Option<mpsc::Receiver<()>> {
+        let (tx, rx) = mpsc::channel(1);
+        tokio::spawn(resume::run_watcher(tx));
         Some(rx)
     }
 
