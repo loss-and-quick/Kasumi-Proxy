@@ -45,23 +45,28 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
     // Keep the Sender at a stable heap address — the kernel stores this pointer as the
     // callback Context and reads it on every power event, so it must outlive the loop.
     let tx = Box::new(tx);
-    let params = DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
-        Callback: Some(on_power_event),
-        Context: &*tx as *const mpsc::Sender<()> as *mut c_void,
-    };
-    let mut handle: *mut c_void = ptr::null_mut();
-    let rc = unsafe {
-        PowerRegisterSuspendResumeNotification(
-            DEVICE_NOTIFY_CALLBACK,
-            &params as *const _ as HANDLE,
-            &mut handle,
-        )
-    };
-    if rc != 0 {
-        return; // couldn't subscribe — no resume restarts on this host
+    // Register in a block so the raw pointers (not `Send`) drop before the await below:
+    // the kernel copies the callback + context during the call and we never unregister,
+    // so the subscription outlives `handle`.
+    {
+        let params = DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
+            Callback: Some(on_power_event),
+            Context: &*tx as *const mpsc::Sender<()> as *mut c_void,
+        };
+        // The registration handle out-param is `*mut *mut c_void` in windows-sys 0.59.
+        let mut handle: *mut c_void = ptr::null_mut();
+        let rc = unsafe {
+            PowerRegisterSuspendResumeNotification(
+                DEVICE_NOTIFY_CALLBACK,
+                &params as *const _ as HANDLE,
+                &mut handle,
+            )
+        };
+        if rc != 0 {
+            return; // couldn't subscribe — no resume restarts on this host
+        }
     }
-    // Park forever: holding `tx` and `handle` here keeps the callback Context valid and
-    // the subscription alive until the process exits.
+    // Park forever: holding `tx` keeps the callback Context valid until the process exits.
     std::future::pending::<()>().await;
-    drop((tx, handle));
+    drop(tx);
 }
