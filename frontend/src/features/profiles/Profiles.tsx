@@ -6,7 +6,7 @@
 
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Icon } from "../../components";
-import type { Profile } from "../../generated/bindings";
+import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { fuzzyFilterSort } from "../../lib/fuzzy";
@@ -30,6 +30,9 @@ const ImportProfilesSheet = lazy(() =>
 const ProfileActionsSheet = lazy(() =>
   import("./ProfileActionsSheet").then((module) => ({ default: module.ProfileActionsSheet })),
 );
+const TestLogSheet = lazy(() =>
+  import("./TestLogSheet").then((module) => ({ default: module.TestLogSheet })),
+);
 const QrCodeSheet = lazy(() =>
   import("../../components/QrCodeSheet").then((module) => ({ default: module.QrCodeSheet })),
 );
@@ -50,12 +53,8 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const removeProfile = useAppStore((s) => s.removeProfile);
   const removeProfiles = useAppStore((s) => s.removeProfiles);
   const moveProfiles = useAppStore((s) => s.moveProfiles);
-  const pingProfile = useAppStore((s) => s.pingProfile);
-  const realPingProfile = useAppStore((s) => s.realPingProfile);
-  const pingAll = useAppStore((s) => s.pingAll);
-  const realPingAll = useAppStore((s) => s.realPingAll);
-  const speedTestAll = useAppStore((s) => s.speedTestAll);
-  const speedTestProfile = useAppStore((s) => s.speedTestProfile);
+  const testProfile = useAppStore((s) => s.testProfile);
+  const testAll = useAppStore((s) => s.testAll);
   const pinging = useAppStore((s) => s.pinging);
   const speedTesting = useAppStore((s) => s.speedTesting);
   const removeUnreachable = useAppStore((s) => s.removeUnreachable);
@@ -81,6 +80,9 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const [moveGroup, setMoveGroup] = useState<string>(groups[0]?.id ?? "g-main");
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [qrPayload, setQrPayload] = useState<{ title: string; text: string } | null>(null);
+  const [testLogTarget, setTestLogTarget] = useState<{ profile: Profile; kind: TestKind } | null>(
+    null,
+  );
   const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
 
   const toggleSelected = (id: string) =>
@@ -191,7 +193,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   }
 
   async function doBulkPing() {
-    for (const id of selectedIds) await pingProfile(id);
+    for (const id of selectedIds) await testProfile(id, "tcpPing");
     notify(t("profiles.bulkPingDone", { count: selectedIds.length }));
   }
 
@@ -256,6 +258,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         onUse={(id) => void setActive(id)}
         onEdit={onOpenEditor}
         onMore={setSheetProfile}
+        onShowTestLog={(profile, kind) => setTestLogTarget({ profile, kind })}
       />
 
       <button type="button" className="fab" onClick={() => setAddOpen(true)}>
@@ -267,16 +270,8 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         onClose={() => setPingSheetOpen(false)}
         pinging={pinging.size > 0}
         speedTesting={speedTesting.size > 0}
-        onTcping={() => {
-          void pingAll(groupFilter);
-          setPingSheetOpen(false);
-        }}
-        onRealping={() => {
-          void realPingAll(groupFilter);
-          setPingSheetOpen(false);
-        }}
-        onSpeedTest={() => {
-          void speedTestAll(groupFilter);
+        onTestAll={(kind) => {
+          void testAll(kind, groupFilter);
           setPingSheetOpen(false);
         }}
         onDeleteUnreachable={() => {
@@ -317,22 +312,24 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
               void openProfileQr(profile);
               closeSheetProfile();
             }}
-            onPing={(profile) => {
-              void pingProfile(profile.meta.id);
-              closeSheetProfile();
-            }}
-            onRealPing={(profile) => {
-              void realPingProfile(profile.meta.id);
-              closeSheetProfile();
-            }}
-            onSpeedTest={(profile) => {
-              void speedTestProfile(profile.meta.id);
+            onTest={(profile, kind) => {
+              void testProfile(profile.meta.id, kind);
               closeSheetProfile();
             }}
             onDelete={(profile) => {
               setConfirmDel(profile);
               closeSheetProfile();
             }}
+          />
+        </Suspense>
+      )}
+
+      {testLogTarget && (
+        <Suspense fallback={null}>
+          <TestLogSheet
+            profile={testLogTarget.profile}
+            kind={testLogTarget.kind}
+            onClose={() => setTestLogTarget(null)}
           />
         </Suspense>
       )}

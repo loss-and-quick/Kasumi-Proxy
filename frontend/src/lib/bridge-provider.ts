@@ -91,6 +91,9 @@ export const bridge: Bridge = {
   async log(input) {
     return (await loadBridge()).log(input);
   },
+  async testLog(profileId, kind) {
+    return (await loadBridge()).testLog(profileId, kind);
+  },
   async clearLogs() {
     return (await loadBridge()).clearLogs();
   },

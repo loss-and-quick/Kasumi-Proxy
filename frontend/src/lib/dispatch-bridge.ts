@@ -193,6 +193,9 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
         } as Command),
       );
     },
+    async testLog(profileId, kind) {
+      return asText(await dispatch({ cmd: "testLog", profileId, kind } as Command));
+    },
     async clearLogs() {
       return okResult(() => dispatch({ cmd: "clearLogs" } as Command));
     },

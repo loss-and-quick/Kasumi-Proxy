@@ -443,6 +443,11 @@ const vi = {
   "logs.clearConfirm": "Xóa toàn bộ tệp nhật ký?",
   "logs.cleared": "Đã xóa nhật ký",
   "logs.clearFailed": "Không thể xóa nhật ký",
+  "testlog.open": "Xem nhật ký lỗi",
+  "testlog.titlePing": "Nhật ký kiểm tra ping",
+  "testlog.titleSpeed": "Nhật ký kiểm tra tốc độ",
+  "testlog.rerun": "Chạy lại kiểm tra",
+  "testlog.empty": "Không có nhật ký cho lần kiểm tra này — nó đã thành công hoặc chưa chạy.",
   // backup
   "backup.title": "Sao lưu và khôi phục",
   "backup.export": "Xuất",

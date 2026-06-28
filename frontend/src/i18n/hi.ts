@@ -439,6 +439,11 @@ const hi = {
   "logs.clearConfirm": "क्या सभी लॉग फ़ाइलें साफ़ करनी हैं?",
   "logs.cleared": "लॉग साफ़ कर दिए गए",
   "logs.clearFailed": "लॉग साफ़ नहीं हो सके",
+  "testlog.open": "त्रुटि लॉग दिखाएँ",
+  "testlog.titlePing": "पिंग जाँच लॉग",
+  "testlog.titleSpeed": "स्पीड टेस्ट लॉग",
+  "testlog.rerun": "जाँच दोबारा चलाएँ",
+  "testlog.empty": "इस जाँच का कोई लॉग नहीं — यह सफल रही या अभी तक नहीं चली।",
   // backup
   "backup.title": "बैकअप और पुनर्स्थापना",
   "backup.export": "निर्यात",

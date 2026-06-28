@@ -440,6 +440,11 @@ const zh = {
   "logs.clearConfirm": "要清空所有日志文件吗？",
   "logs.cleared": "日志已清空",
   "logs.clearFailed": "清空日志失败",
+  "testlog.open": "查看错误日志",
+  "testlog.titlePing": "Ping 检测日志",
+  "testlog.titleSpeed": "测速日志",
+  "testlog.rerun": "重新检测",
+  "testlog.empty": "此检测没有日志 — 它已通过或尚未运行。",
   // backup
   "backup.title": "备份与恢复",
   "backup.export": "导出",

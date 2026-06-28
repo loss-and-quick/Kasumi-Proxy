@@ -468,6 +468,11 @@ const ru = {
   "logs.clearConfirm": "Очистить все файлы логов?",
   "logs.cleared": "Логи очищены",
   "logs.clearFailed": "Не удалось очистить логи",
+  "testlog.open": "Показать лог ошибки",
+  "testlog.titlePing": "Лог проверки пинга",
+  "testlog.titleSpeed": "Лог теста скорости",
+  "testlog.rerun": "Повторить проверку",
+  "testlog.empty": "Логов нет — проверка прошла или ещё не запускалась.",
   // backup
   "backup.title": "Резервная копия и восстановление",
   "backup.export": "Экспорт",

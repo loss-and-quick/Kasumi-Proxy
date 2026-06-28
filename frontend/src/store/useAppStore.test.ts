@@ -127,6 +127,7 @@ function createBridgeMock(): BridgeMock {
     ping: vi.fn(async (_profileId: string) => 0),
     pingAll: vi.fn(async () => ({})),
     log: vi.fn(async (_input?: { target?: LogTarget; lines?: number }) => ""),
+    testLog: vi.fn(async () => ""),
     clearLogs: vi.fn(async () => ({ ok: true })),
     realPing: vi.fn(async () => 0),
     realPingAll: vi.fn(async () => ({})),
@@ -420,18 +421,18 @@ describe("useAppStore", () => {
     });
 
     bridge.ping.mockResolvedValueOnce(88);
-    await useAppStore.getState().pingProfile("p1");
+    await useAppStore.getState().testProfile("p1", "tcpPing");
     let stored = useAppStore.getState().profiles[0];
     expect(stored.meta.ping).toBe(88);
     expect((stored as Record<string, unknown>).ping).toBeUndefined();
 
     bridge.realPing.mockResolvedValueOnce(150);
-    await useAppStore.getState().realPingProfile("p1");
+    await useAppStore.getState().testProfile("p1", "realPing");
     stored = useAppStore.getState().profiles[0];
     expect(stored.meta.ping).toBe(150);
 
     bridge.speedTest.mockResolvedValueOnce(1_500_000);
-    await useAppStore.getState().speedTestProfile("p1");
+    await useAppStore.getState().testProfile("p1", "speed");
     stored = useAppStore.getState().profiles[0];
     expect(stored.meta.speed).toBe(1_500_000);
     expect((stored as Record<string, unknown>).speed).toBeUndefined();
@@ -668,7 +669,7 @@ describe("useAppStore", () => {
       bridge.speedTestAll = vi.fn(async () => ({ [profile.meta.id]: 5_000_000 }));
       await useAppStore.getState().hydrate();
 
-      await useAppStore.getState().speedTestAll();
+      await useAppStore.getState().testAll("speed");
 
       const feed = useAppStore.getState().recentActivity;
       expect(feed[0].icon).toBe("speed");

@@ -453,6 +453,12 @@ const en = {
   "logs.clearConfirm": "Clear all log files?",
   "logs.cleared": "Logs cleared",
   "logs.clearFailed": "Failed to clear logs",
+  // test-core error log (tap an `err` ping / speed result)
+  "testlog.open": "Show error log",
+  "testlog.titlePing": "Ping check log",
+  "testlog.titleSpeed": "Speed test log",
+  "testlog.rerun": "Re-run check",
+  "testlog.empty": "No log for this check — it passed or hasn't run yet.",
   // backup
   "backup.title": "Backup & Restore",
   "backup.export": "Export",

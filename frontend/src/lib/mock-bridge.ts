@@ -251,6 +251,17 @@ export const mockBridge: Bridge = {
 -- Mock log lines above (${lines}) --`);
   },
 
+  testLog(profileId, kind): Promise<string> {
+    const profile = state.profiles.find((p) => p.meta.id === profileId);
+    const metric = kind === "speed" ? profile?.meta.speed : profile?.meta.ping;
+    // Mirror the backend: a log exists only while that check is failing (`err`).
+    if (metric == null || metric >= 0) return Promise.resolve("");
+    const stamp = new Date().toISOString();
+    return Promise.resolve(`${stamp} [MOCK:${kind}] starting test core on 127.0.0.1:24600
+${stamp} [MOCK:${kind}] [Warning] failed to dial to upstream: dial tcp: i/o timeout
+${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
+  },
+
   async clearLogs() {
     return { ok: true };
   },

@@ -43,9 +43,7 @@ export default function Overview({
   const busy = useAppStore((s) => s.busy);
   const toggleService = useAppStore((s) => s.toggleService);
   const restart = useAppStore((s) => s.restart);
-  const pingAll = useAppStore((s) => s.pingAll);
-  const realPingAll = useAppStore((s) => s.realPingAll);
-  const speedTestAll = useAppStore((s) => s.speedTestAll);
+  const testAll = useAppStore((s) => s.testAll);
   const pinging = useAppStore((s) => s.pinging);
   const speedTesting = useAppStore((s) => s.speedTesting);
   const removeUnreachable = useAppStore((s) => s.removeUnreachable);
@@ -307,16 +305,8 @@ export default function Overview({
           onClose={() => setPingSheetOpen(false)}
           pinging={pinging.size > 0}
           speedTesting={speedTesting.size > 0}
-          onTcping={() => {
-            void pingAll();
-            setPingSheetOpen(false);
-          }}
-          onRealping={() => {
-            void realPingAll();
-            setPingSheetOpen(false);
-          }}
-          onSpeedTest={() => {
-            void speedTestAll();
+          onTestAll={(kind) => {
+            void testAll(kind);
             setPingSheetOpen(false);
           }}
           onDeleteUnreachable={() => {

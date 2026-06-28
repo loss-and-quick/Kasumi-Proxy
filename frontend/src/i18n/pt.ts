@@ -447,6 +447,11 @@ const pt = {
   "logs.clearConfirm": "Limpar todos os arquivos de log?",
   "logs.cleared": "Logs limpos",
   "logs.clearFailed": "Falha ao limpar os logs",
+  "testlog.open": "Ver registro de erro",
+  "testlog.titlePing": "Registro da verificação de ping",
+  "testlog.titleSpeed": "Registro do teste de velocidade",
+  "testlog.rerun": "Repetir verificação",
+  "testlog.empty": "Sem registro para esta verificação — ela passou ou ainda não foi executada.",
   // backup
   "backup.title": "Backup e restauração",
   "backup.export": "Exportar",
