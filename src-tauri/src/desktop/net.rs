@@ -79,6 +79,25 @@ fn collect_xray_servers(cfg: &Value) -> HashSet<String> {
             }
         }
     }
+    // xray \`dns.servers\` — the core's own upstream resolvers; must be host-routed
+    // off the tun or the core can't resolve its proxy-server host. Plain-string
+    // or object-shape; domain servers are skipped (they resolve through the proxy).
+    for sv in cfg
+        .get("dns")
+        .and_then(|d| d.get("servers"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let raw = sv
+            .as_str()
+            .or_else(|| sv.get("address").and_then(Value::as_str));
+        if let Some(addr) = raw {
+            if !addr.is_empty() && addr != "127.0.0.1" && is_literal_ip(addr) {
+                hosts.insert(addr.to_string());
+            }
+        }
+    }
     hosts
 }
 
@@ -180,5 +199,18 @@ mod tests {
         assert!(cidrs.contains(&"1.2.3.4/32".to_string()));
         assert!(cidrs.contains(&"2001:db8::1/128".to_string()));
         assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
+    }
+
+    #[tokio::test]
+    async fn collects_xray_dns_servers() {
+        let cfg = serde_json::json!({
+            "dns": { "servers": ["1.1.1.1", "8.8.8.8", {"address": "223.5.5.5"}, "dns.google"] }
+        })
+        .to_string();
+        let cidrs: Vec<String> = resolve_bypass_cidrs(&cfg, &[]).await;
+        assert!(cidrs.contains(&"1.1.1.1/32".to_string()));
+        assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
+        assert!(cidrs.contains(&"223.5.5.5/32".to_string()));
+        assert!(!cidrs.iter().any(|c| c.starts_with("dns.google")));
     }
 }
