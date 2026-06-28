@@ -82,6 +82,25 @@ fn has_match_fields(rule: &Value, keys: &[&str]) -> bool {
 
 // ---------- TLS ----------
 
+/// Accepts either a raw base64 ECHConfigList (share-link form) or a value that
+/// already carries the PEM armor.
+fn ech_config_pem(ech: &str) -> Vec<String> {
+    let trimmed = ech.trim();
+    if trimmed.contains("-----BEGIN ECH CONFIGS-----") {
+        return trimmed.lines().map(str::to_string).collect();
+    }
+    let base64: String = trimmed.split_whitespace().collect();
+    let mut lines = vec!["-----BEGIN ECH CONFIGS-----".to_string()];
+    lines.extend(
+        base64
+            .as_bytes()
+            .chunks(64)
+            .map(|c| String::from_utf8(c.to_vec()).unwrap_or_default()),
+    );
+    lines.push("-----END ECH CONFIGS-----".to_string());
+    lines
+}
+
 fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<Value> {
     let tls = p.tls()?;
     let active = force || tls.security == Security::Tls || tls.security == Security::Reality;
@@ -152,7 +171,11 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
         t["certificate_public_key_sha256"] = json!([pin]);
     }
     if !tls.ech.is_empty() {
-        t["ech"] = json!({ "enabled": true, "config": [tls.ech] });
+        // sing-box joins `config` with "\n" and runs `pem.Decode`, demanding a
+        // `ECH CONFIGS` PEM block (common/tls/ech.go). Share links carry the raw
+        // base64 ECHConfigList (what xray's `echConfigList` wants), so wrap it in
+        // a PEM block here unless it already is one.
+        t["ech"] = json!({ "enabled": true, "config": ech_config_pem(&tls.ech) });
     }
     // Some outbounds reject a uTLS config: hysteria2/tuic drive their own QUIC TLS
     // stack (sing-box errors `unsupported usage for uTLS` on every dial), and the
@@ -1250,6 +1273,35 @@ mod tests {
         assert!(
             force_idx < direct_idx,
             "force-in rule must precede direct rules"
+        );
+    }
+
+    #[test]
+    fn ech_raw_base64_is_wrapped_in_a_pem_block() {
+        let cfg = ech_config_pem("AEX+DQBB...base64...");
+        assert_eq!(cfg.first().unwrap(), "-----BEGIN ECH CONFIGS-----");
+        assert_eq!(cfg.last().unwrap(), "-----END ECH CONFIGS-----");
+        // Joined the way sing-box does (\n) it must round-trip through pem.Decode.
+        let joined = cfg.join("\n");
+        let body = joined
+            .strip_prefix("-----BEGIN ECH CONFIGS-----\n")
+            .and_then(|s| s.strip_suffix("\n-----END ECH CONFIGS-----"))
+            .unwrap();
+        assert_eq!(body.replace('\n', ""), "AEX+DQBB...base64...");
+    }
+
+    #[test]
+    fn ech_existing_pem_is_split_into_lines_unchanged() {
+        let pem = "-----BEGIN ECH CONFIGS-----\nAAAA\nBBBB\n-----END ECH CONFIGS-----";
+        let cfg = ech_config_pem(pem);
+        assert_eq!(
+            cfg,
+            vec![
+                "-----BEGIN ECH CONFIGS-----",
+                "AAAA",
+                "BBBB",
+                "-----END ECH CONFIGS-----",
+            ]
         );
     }
 
