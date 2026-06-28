@@ -12,7 +12,7 @@ use std::ptr;
 use tokio::sync::mpsc;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::Power::{
-    PowerRegisterSuspendResumeNotification, DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, HPOWERNOTIFY,
+    PowerRegisterSuspendResumeNotification, DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS,
 };
 
 /// `recipient` is a pointer to a `DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS` callback block.
@@ -49,7 +49,7 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
         Callback: Some(on_power_event),
         Context: &*tx as *const mpsc::Sender<()> as *mut c_void,
     };
-    let mut handle: HPOWERNOTIFY = ptr::null_mut();
+    let mut handle: *mut c_void = ptr::null_mut();
     let rc = unsafe {
         PowerRegisterSuspendResumeNotification(
             DEVICE_NOTIFY_CALLBACK,
