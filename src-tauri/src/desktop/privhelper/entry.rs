@@ -120,17 +120,23 @@ fn run() -> anyhow::Result<()> {
             ),
             Err(e) => log::warn!("could not drop the bounding set ({e}); running with full caps"),
         }
-        // Seed CAP_NET_RAW + CAP_NET_ADMIN into the inheritable set so the ambient
-        // raises the children get in their pre_exec succeed — test cores raise
-        // NET_RAW (uplink bind, see platform.rs spawn_test_core), the active core /
-        // tun2socks raise NET_ADMIN (own tun + fwmark, see spawn_supervised).
-        // PR_CAP_AMBIENT_RAISE needs the cap in both permitted and inheritable, and
-        // both a pkexec-root start and a file-cap start begin with an empty
-        // inheritable set. A failure is non-fatal: the ambient raise then fails
-        // closed (a test core runs without the bind; the active core would fail to
-        // open its tun under a caps-only helper).
+        // Seed CAP_NET_RAW + CAP_NET_ADMIN into the inheritable set — the precondition
+        // for raising either into an ambient set (PR_CAP_AMBIENT_RAISE needs the cap in
+        // both permitted and inheritable, and both a pkexec-root and a file-cap start
+        // begin with an empty inheritable set). A failure is non-fatal but the ambient
+        // raises below then fail too.
         if let Err(e) = crate::desktop::capabilities::seed_child_inheritable() {
             log::warn!("could not seed child caps into the inheritable set ({e})");
+        }
+        // Raise the data-path caps (NET_ADMIN + NET_RAW) into our own ambient set now,
+        // on the main thread before the tokio runtime starts, so every core /
+        // tun2socks / `ip` we later exec inherits them — under the caps-only launcher a
+        // child gets no caps across exec otherwise, and the data path fails (sing-box
+        // can't open its tun; a bridged core's uplink bind EPERMs). NET_ADMIN covers
+        // tun/fwmark/`ip`, NET_RAW the `SO_BINDTODEVICE`/`bind_interface` escape.
+        // Non-fatal: a failure just leaves the data path broken, as before.
+        if let Err(e) = crate::desktop::capabilities::raise_data_path_caps_ambient() {
+            log::warn!("could not raise the data-path caps into the ambient set ({e})");
         }
     }
 

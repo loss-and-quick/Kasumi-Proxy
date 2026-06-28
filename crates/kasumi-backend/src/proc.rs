@@ -149,11 +149,49 @@ pub async fn kill_if_running(
     remove_file(pidfile).await;
 }
 
+/// Tie a spawned data-path process (the core / tun2socks) to the helper that is its
+/// parent: `PR_SET_PDEATHSIG(SIGTERM)` makes the kernel SIGTERM the child the instant
+/// the helper dies — including an *unclean* exit (crash / SIGKILL) where no teardown
+/// code can run. SIGTERM (not KILL) lets sing-box remove its own tun + auto_route on
+/// the way out, so an orphaned core can't strand a tun / routes and leave
+/// `service-state` reporting "stopped" while traffic is still captured. The
+/// `getppid() == 1` guard closes the fork→prctl race: if the helper already died
+/// (child reparented to init), PDEATHSIG would never fire, so exit rather than exec
+/// an unsupervised core.
+///
+/// # Async-signal-safety
+///
+/// Only `prctl` / `getppid` / `_exit` — no allocation, locks, or stdio — per the
+/// `pre_exec` contract (it runs between `fork` and `exec`).
+#[cfg(unix)]
+fn die_with_parent() -> std::io::Result<()> {
+    // SAFETY: async-signal-safe syscalls only, per the contract above.
+    let rc = unsafe {
+        libc::prctl(
+            libc::PR_SET_PDEATHSIG,
+            libc::SIGTERM as libc::c_ulong,
+            0,
+            0,
+            0,
+        )
+    };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: getppid is async-signal-safe and never fails.
+    if unsafe { libc::getppid() } == 1 {
+        // SAFETY: _exit is async-signal-safe; the helper is already gone, so don't
+        // bring up an unsupervised core that nothing would ever reap.
+        unsafe { libc::_exit(0) };
+    }
+    Ok(())
+}
+
 /// Build the `tokio::process::Command` for a long-running core/tun2socks child:
 /// argv + env, stdin null, stdout+stderr redirected (truncating) to `log_path`, and
-/// the `kill_on_drop` flag. Everything except the final [`Command::spawn`], so the
-/// pre_exec variant ([`spawn_logged_pre_exec`]) can stamp a hook into the forked
-/// child before exec without duplicating the setup.
+/// the `kill_on_drop` flag. On Unix it stamps `PR_SET_PDEATHSIG` (see
+/// [`die_with_parent`]) into the forked child, so every data-path child is reaped
+/// when its parent helper dies — no per-call-site pre_exec plumbing.
 fn build_logged_command(
     argv: &[String],
     env: &HashMap<String, String>,
@@ -170,12 +208,19 @@ fn build_logged_command(
     cmd.stderr(Stdio::from(err));
     cmd.kill_on_drop(kill_on_drop);
     hide_console(&mut cmd);
+    // SAFETY: die_with_parent is async-signal-safe per the pre_exec contract.
+    #[cfg(unix)]
+    unsafe {
+        cmd.pre_exec(die_with_parent);
+    }
     Ok(cmd)
 }
 
 /// Spawn a long-running process (core/tun2socks) with `env`, its stdout+stderr
-/// redirected (truncating) to `log_path`. Returns the live [`Child`] so the caller
-/// can record its pid and supervise it.
+/// redirected (truncating) to `log_path`. On Unix the child is tied to the caller
+/// via `PR_SET_PDEATHSIG` (see [`die_with_parent`]), so it dies with its parent —
+/// no `pre_exec` argument. Returns the live [`Child`] so the caller can record its
+/// pid and supervise it.
 /// `kill_on_drop` ties the OS process lifetime to the returned [`Child`] handle:
 /// for ephemeral diagnostic cores (ping/speed) the handle may be dropped by a
 /// cancelled future — e.g. the client's WS frame is dropped mid-test — and
@@ -189,32 +234,6 @@ pub async fn spawn_logged(
     kill_on_drop: bool,
 ) -> std::io::Result<Child> {
     build_logged_command(argv, env, log_path, kill_on_drop)?.spawn()
-}
-
-/// Like [`spawn_logged`], but runs `pre_exec` in the forked child before `exec`.
-///
-/// # Safety
-///
-/// `pre_exec` runs after `fork` and before `exec`, so it MUST be async-signal-safe
-/// (no allocation, no locks, no stdio) — it is the caller's contract to pass a
-/// closure that obeys that (e.g. a single raw syscall). Used by the desktop
-/// least-privilege helper to raise an ambient `CAP_NET_RAW` in a test core so its
-/// uplink bind survives exec. Unix-only: the Windows data-path has no fork/exec.
-#[cfg(unix)]
-pub async unsafe fn spawn_logged_pre_exec<F>(
-    argv: &[String],
-    env: &HashMap<String, String>,
-    log_path: impl AsRef<Path>,
-    kill_on_drop: bool,
-    pre_exec: F,
-) -> std::io::Result<Child>
-where
-    F: FnMut() -> std::io::Result<()> + Send + Sync + 'static,
-{
-    let mut cmd = build_logged_command(argv, env, log_path, kill_on_drop)?;
-    // SAFETY: `pre_exec` is async-signal-safe per the caller's contract above.
-    unsafe { cmd.pre_exec(pre_exec) };
-    cmd.spawn()
 }
 
 /// POSIX process identity: a pid's executable is matched by `(dev, ino)` of
@@ -456,26 +475,24 @@ mod tests {
         assert!(body.contains("oops"));
     }
 
-    // The pre_exec seam must preserve the stdio redirection + spawn, and actually
-    // invoke the closure in the forked child. A trivial Ok(()) closure is the
-    // async-signal-safe no-op that exercises the plumbing end to end (the real
-    // cap raise is verified at runtime on a Linux box with an active tun).
+    // Every spawn_logged child is tied to its parent via PR_SET_PDEATHSIG (see
+    // die_with_parent). Exercising the wiring end-to-end: a `sh -c 'printf ran'`
+    // child still runs and writes to the log, proving the pre_exec hook didn't
+    // abort the exec. (The SIGTERM-on-parent-death contract itself is verified at
+    // runtime, not by a unit test.)
     #[cfg(unix)]
     #[tokio::test]
-    async fn spawn_logged_pre_exec_invokes_the_closure() {
+    async fn spawn_logged_stamps_pdeathsig_and_runs() {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("c.log");
-        let mut child = unsafe {
-            spawn_logged_pre_exec(
-                &["sh".into(), "-c".into(), "printf ran".into()],
-                &HashMap::new(),
-                &log,
-                false,
-                || Ok(()),
-            )
-            .await
-            .unwrap()
-        };
+        let mut child = spawn_logged(
+            &["sh".into(), "-c".into(), "printf ran".into()],
+            &HashMap::new(),
+            &log,
+            false,
+        )
+        .await
+        .unwrap();
         child.wait().await.unwrap();
         let body = crate::fs::read_text(&log).await.unwrap();
         assert!(body.contains("ran"));

@@ -8,8 +8,9 @@ pub mod net;
 pub mod singbox;
 
 // Linux capability handling for the least-privilege data-path helper (drop the
-// bounding set to the caps the data-path needs; grant test cores an ambient
-// CAP_NET_RAW). cfg(linux) — `caps` is Linux-only and the helper is Linux-only.
+// bounding set to the caps the data-path needs; raise an ambient CAP_NET_ADMIN so
+// exec'd children inherit it; grant test cores an ambient CAP_NET_RAW). cfg(linux) —
+// `caps` is Linux-only and the helper is Linux-only.
 #[cfg(target_os = "linux")]
 pub mod capabilities;
 
@@ -40,6 +41,10 @@ use kasumi_backend::proc::{run, RunOpts};
 /// Run a command, discarding output and returning its exit code. The desktop path
 /// shells out to the OS routing tools (`ip` on Linux, `route`/`netsh` on Windows),
 /// so a `&str`-slice wrapper over the process layer keeps the call sites readable.
+///
+/// The mutating `ip` calls need `CAP_NET_ADMIN`; under the caps-only launcher the
+/// exec'd `ip` inherits it from the helper's ambient set (raised once at startup in
+/// `capabilities::raise_net_admin_ambient`), so no per-call cap handling here.
 pub(crate) async fn silent(args: &[&str]) -> i32 {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let code = kasumi_backend::proc::silent(&argv).await;
