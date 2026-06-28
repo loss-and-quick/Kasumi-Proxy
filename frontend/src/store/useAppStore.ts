@@ -117,16 +117,31 @@ export const useAppStore = create<Store>((set, get) => {
   };
   // Adopt the canonical persisted-state slice the backend returned (the rest of
   // the store — service status, toasts, etc. — is UI-only and left untouched).
+  // ping/speed are persisted fields, but the test commands never write their
+  // result back — only this in-memory store holds it. So the value the backend
+  // echoes is at best equal, at worst a stale persisted one; prefer the prior
+  // in-memory value by id so a mutation doesn't reset (or rewind) test status.
   const applyState = (next: AppState) =>
-    set({
-      profiles: next.profiles,
-      groups: next.groups,
-      subscriptions: next.subscriptions,
-      routingRules: next.routingRules,
-      assetFiles: next.assetFiles,
-      settings: mergeSettings(next.settings),
-      activeId: next.activeId,
-      version: next.version ?? __MODULE_VERSION__,
+    set((s) => {
+      const prior = new Map(s.profiles.map((p) => [p.meta.id, p.meta]));
+      const profiles = next.profiles.map((p) => {
+        const had = prior.get(p.meta.id);
+        if (!had || (had.ping == null && had.speed == null)) return p;
+        return {
+          ...p,
+          meta: { ...p.meta, ping: had.ping ?? p.meta.ping, speed: had.speed ?? p.meta.speed },
+        };
+      });
+      return {
+        profiles,
+        groups: next.groups,
+        subscriptions: next.subscriptions,
+        routingRules: next.routingRules,
+        assetFiles: next.assetFiles,
+        settings: mergeSettings(next.settings),
+        activeId: next.activeId,
+        version: next.version ?? __MODULE_VERSION__,
+      };
     });
   // The single write path: dispatch one domain intent and render the canonical
   // AppState the backend returns. No local invariant logic, no full-state shipping.
@@ -549,7 +564,9 @@ export const useAppStore = create<Store>((set, get) => {
       }
       if (activeId != null && unreachable.has(activeId))
         await stopServiceIfRunning(translateCurrent("store.service.stoppedProfileRemoved"));
-      await mutate({ kind: "removeUnreachable", groupId: groupId ?? null });
+      // ping lives only in the frontend store, so the backend can't tell which
+      // profiles are unreachable — remove them by the ids we resolved here.
+      await mutate({ kind: "removeProfiles", ids: [...unreachable] });
       pushActivity(
         "delete_sweep",
         translateCurrent("activity.unreachableRemoved", { count: unreachable.size }),

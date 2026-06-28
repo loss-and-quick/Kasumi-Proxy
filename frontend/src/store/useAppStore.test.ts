@@ -690,6 +690,25 @@ describe("useAppStore", () => {
       expect(feed[0].text).toMatch(/1/);
     });
 
+    it("removeUnreachable deletes by id and keeps the in-memory ping over the backend's", async () => {
+      const dead = makeVless({ meta: { id: "p1", ping: -1 } });
+      const alive = makeVless({ meta: { id: "p2", ping: 20 } });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [dead, alive] }));
+      await useAppStore.getState().hydrate();
+      // Test results are never written back, so the canonical state echoes a stale
+      // (or empty) ping — the store removes by id and keeps its own test status.
+      bridge.mutate.mockImplementationOnce(async (intent) => {
+        expect(intent).toEqual({ kind: "removeProfiles", ids: ["p1"] });
+        return makeState({ profiles: [makeVless({ meta: { id: "p2", ping: 999 } })] });
+      });
+
+      await useAppStore.getState().removeUnreachable();
+
+      const profiles = useAppStore.getState().profiles;
+      expect(profiles.map((p) => p.meta.id)).toEqual(["p2"]);
+      expect(profiles[0].meta.ping).toBe(20);
+    });
+
     it("removeDuplicates pushes duplicatesRemoved activity", async () => {
       const a = makeVless({
         meta: { id: "p1", remarks: "Node" },
