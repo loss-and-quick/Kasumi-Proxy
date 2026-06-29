@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
+use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
 
 /// The userspace tun's address + mask; `/15` covers the 198.18/15 test net.
@@ -94,7 +95,7 @@ pub async fn read_resolvers() -> Vec<String> {
     .await;
     out.lines()
         .map(|l| l.trim().to_string())
-        .filter(|ip| !ip.is_empty() && ip != "127.0.0.1" && ip != "::1")
+        .filter(|ip| !is_loopback(ip))
         .collect()
 }
 

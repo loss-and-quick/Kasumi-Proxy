@@ -18,7 +18,7 @@ pub async fn resolve_ips(host: &str) -> Vec<String> {
 /// Add a non-loopback string host to the set.
 fn add_host(hosts: &mut HashSet<String>, h: Option<&Value>) {
     if let Some(s) = h.and_then(Value::as_str) {
-        if !s.is_empty() && s != "127.0.0.1" {
+        if !is_loopback(s) {
             hosts.insert(s.to_string());
         }
     }
@@ -73,7 +73,7 @@ fn collect_xray_servers(cfg: &Value) -> HashSet<String> {
         {
             if let Some(ep) = p.get("endpoint").and_then(Value::as_str) {
                 let host = strip_endpoint_host(ep);
-                if !host.is_empty() && host != "127.0.0.1" {
+                if !host.is_empty() && !is_loopback(&host) {
                     hosts.insert(host);
                 }
             }
@@ -93,7 +93,7 @@ fn collect_xray_servers(cfg: &Value) -> HashSet<String> {
             .as_str()
             .or_else(|| sv.get("address").and_then(Value::as_str));
         if let Some(addr) = raw {
-            if !addr.is_empty() && addr != "127.0.0.1" && is_literal_ip(addr) {
+            if !is_loopback(addr) && is_literal_ip(addr) {
                 hosts.insert(addr.to_string());
             }
         }
@@ -131,6 +131,12 @@ pub fn cidr(ip: &str) -> String {
 pub fn is_literal_ip(addr: &str) -> bool {
     addr.contains(':')
         || (!addr.is_empty() && addr.bytes().all(|b| b.is_ascii_digit() || b == b'.'))
+}
+
+/// Whether \`ip\` is a loopback address that should never be bypass-routed — any
+/// \`127.x\` prefix (\`127.0.0.1\`, \`127.0.0.53\`), \`::1\`, or \`0.0.0.0\`.
+pub fn is_loopback(ip: &str) -> bool {
+    ip.is_empty() || ip.starts_with("127.") || ip == "::1" || ip == "0.0.0.0"
 }
 
 #[cfg(test)]

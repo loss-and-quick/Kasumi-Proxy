@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use kasumi_backend::fs::read_text;
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
+use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
 
 use super::os::{IP, TUN_ADDR};
@@ -60,7 +61,7 @@ async fn read_resolvers() -> Vec<String> {
         let line = line.trim_start();
         if let Some(rest) = line.strip_prefix("nameserver") {
             let ip = rest.trim();
-            if !ip.is_empty() && ip != "127.0.0.1" && ip != "::1" {
+            if !is_loopback(ip) {
                 ips.push(ip.to_string());
             }
         }
