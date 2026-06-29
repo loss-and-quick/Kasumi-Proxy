@@ -15,7 +15,7 @@ use serde_json::Value;
 use kasumi_backend::fs::{read_text, write_text};
 use kasumi_backend::lifecycle::inject_singbox_ifaces;
 
-use crate::desktop::net::{cidr, is_literal_ip, resolve_ips};
+use crate::desktop::net::{cidr, is_literal_ip, is_loopback, resolve_ips};
 
 /// Outbound server hosts + literal DNS server IPs to keep off the tun.
 fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {
@@ -27,7 +27,7 @@ fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {
         .flatten()
     {
         if let Some(server) = ob.get("server").and_then(Value::as_str) {
-            if !server.is_empty() && server != "127.0.0.1" {
+            if !server.is_empty() && !is_loopback(server) {
                 hosts.insert(server.to_string());
             }
         }
