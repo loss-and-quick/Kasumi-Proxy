@@ -1,3 +1,122 @@
+## v0.4.2 — 2026-06-29
+
+### Core updates
+
+- sing-box: `v1.13.13` → `v1.13.14`
+
+### Changes
+
+- [`7bd10f7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7bd10f7) fix(desktop): include xray dns.servers in the bypass CIDR set
+- [`4c04ed5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4c04ed5) fix(desktop): lift data-path caps into the helper's ambient set; one spawn path
+- [`5aa72f1`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5aa72f1) test(core): expand validation matrix with per-field builder branches
+- [`c5faf9b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c5faf9b) fix(desktop): grant the active core CAP_NET_ADMIN under the caps-only helper
+- [`7907be5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7907be5) feat(desktop): build rpm bundle
+- [`1bf3b2e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/1bf3b2e) fix(singbox): PEM-wrap ECH config
+- [`da607f7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/da607f7) fix(profiles): delete unreachable by id, keep test status
+- [`244f276`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/244f276) fix(ui): close select on overlay click, not pointerdown
+- [`3cfa31d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3cfa31d) feat(profiles): open the test-core log behind a failed result
+- [`2d0542e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2d0542e) feat(backend): retain failed test-core logs per profile
+- [`4f1c4eb`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4f1c4eb) fix(desktop): keep the windows resume watcher future Send
+- [`da61579`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/da61579) fix(desktop): correct windows-sys power handle out-param type
+- [`c6baa53`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c6baa53) feat(desktop): signal system resume to the service
+- [`437a9a8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/437a9a8) feat(backend): restart the data-path on system resume
+- [`8b28674`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8b28674) fix(backend): wait for the core to be reaped after SIGKILL
+- [`eb0946d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/eb0946d) fix(desktop): sweep orphaned sing-box auto_route rules on stop/start
+- [`60e747c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/60e747c) fix(subs): replace native time picker with an in-house clock-dial
+- [`eeef7f9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/eeef7f9) fix(frontend): stop batch ping/speed test from no-oping on a stale bridge cache
+- [`4664f22`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4664f22) feat(logs): always reverse log order — newest lines on top
+- [`479ab01`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/479ab01) fix(core): expand dedup key to full serialized profile minus bookkeeping
+- [`5dd2f6f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5dd2f6f) fix(frontend): use Iconify-format SVGs for lan/wifi_off/stars icons
+- [`3844188`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3844188) feat(core): intent-based AppState mutation + active-id fixup
+- [`d092287`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d092287) fix(frontend): keep FAB scroll clearance in the desktop layout
+- [`908a6fe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/908a6fe) fix(frontend): drop the obsolete list-row icon translateZ(0) hack
+- [`5c6e442`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5c6e442) fix(frontend): inline icon SVGs so webkit2gtk stops rendering squares
+- [`23efdec`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/23efdec) fix(desktop): pin the uplink source address so the tun-escape bind survives multi-homing
+- [`2f689c2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2f689c2) fix(core): set ws Host to the server domain when the profile leaves it empty
+- [`3bd4294`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3bd4294) fix(desktop): reap the data-path core when the helper dies
+- [`fb1c4cc`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fb1c4cc) feat(core): accept DNS URL schemes (DoH/DoT/DoQ) in sing-box config
+- [`51d2d06`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/51d2d06) fix(nix): set tauri app version from appVersion
+- [`b14d3e0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b14d3e0) fix(nix): run install hooks so the .desktop entry is copied
+- [`3b624da`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3b624da) fix(ui): blur number inputs on wheel scroll
+- [`22acc54`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/22acc54) fix(core): keep force-in off a custom http_port
+- [`233a47c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/233a47c) feat(backend): route proxied fetches through force-in, not socks-in
+- [`f753647`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f753647) feat(core): always-on force-in inbound that bypasses geo routing
+- [`50c90a9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/50c90a9) fix(desktop): honor KASUMI_HELPER_BIN over the NixOS wrapper
+- [`a0afc81`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a0afc81) fix(desktop): bind core egress outbounds to uplink to break geo-direct TUN loop
+- [`05e3815`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/05e3815) test(core): add a settings/routing matrix to core_validation
+- [`9c04b7a`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9c04b7a) test(core): drop byte-exact golden config fixtures
+- [`3fb4c22`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3fb4c22) fix(desktop): write app log to datadir/daemon.log for the in-app viewer
+- [`5d0d913`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5d0d913) fix(backend): surface subscription fetch cause, drop redundant URL
+- [`d6e7270`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d6e7270) build(nix): source cores from the catalog, drop the geodat2srs clone app
+- [`67fca8d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/67fca8d) build(cores): unify the fetch scripts behind a shared cores.json catalog
+- [`754d9e6`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/754d9e6) fix(desktop): build and bundle geodat2srs for rule_set .srs generation
+- [`1c8e77c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/1c8e77c) feat(nix): grant the helper caps by default, drop the opt-in + polkit path
+- [`2472d44`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2472d44) fix(backend): gate the pre_exec spawn imports to cfg(unix)
+- [`b53cc1b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b53cc1b) style(desktop): rustfmt the stack, clarify the run_dir comment
+- [`ff73fb2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ff73fb2) feat(nix): add a security.wrappers caps option for the helper
+- [`2a40404`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2a40404) feat(desktop): setcap the helper from the deb postinstall
+- [`ab45d2c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ab45d2c) feat(desktop): grant helper caps via a one-time pkexec setcap
+- [`99a84b9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/99a84b9) feat(desktop): grant test cores an ambient CAP_NET_RAW across exec
+- [`48cf9d9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/48cf9d9) feat(desktop): seed inheritable CAP_NET_RAW + switch the bind gate to a real cap check
+- [`f61ccb5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f61ccb5) feat(backend): add a pre_exec spawn seam for the forked child
+- [`6a8c9b8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6a8c9b8) feat(desktop): drop the helper's bounding set to least-privilege caps
+- [`e51085c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e51085c) build(desktop): add the caps crate for Linux least-privilege
+- [`4f77603`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4f77603) fix(desktop): bind test cores to the uplink instead of per-test routes
+- [`bd9c271`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/bd9c271) fix(nix): inject product version into Tauri config
+- [`2ca61d7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2ca61d7) feat(frontend): sync service state to tray, route start/stop actions
+- [`95d547d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/95d547d) feat(desktop): conditional tray menu — Start/Stop/Restart by proxy state
+- [`da17020`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/da17020) feat(desktop): native file picker for backup & routing import/export
+- [`ab4adf5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ab4adf5) feat(desktop): tray quick-switch and restart
+- [`00a8775`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/00a8775) feat(desktop): use the native clipboard with a web fallback
+- [`57974e8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/57974e8) fix(frontend): animate the side rail when an overlay opens
+- [`c9fe024`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c9fe024) fix(desktop): report runtime version in app_version
+- [`4a81d70`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4a81d70) fix(desktop): defer the data-path bring-up off the setup thread
+- [`9455b47`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9455b47) feat(desktop): file logging for the GUI and the privileged helper
+- [`da0dca0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/da0dca0) fix(desktop): drop the duplicate tray icon from the config
+- [`2a50851`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2a50851) feat(module): add action/webui icons
+- [`f8f3dec`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f8f3dec) feat(module): clean uninstall via `kasumi-proxy stop`
+- [`680ed14`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/680ed14) test(desktop): cover quote_arg backslash/quote escaping
+- [`e484dba`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e484dba) fix(desktop): quote elevated helper args per CommandLineToArgvW
+- [`ce9ea38`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ce9ea38) feat(desktop): portable Windows runs the helper transiently, not as a service
+- [`83dc5d2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/83dc5d2) build(windows): register the data-path service from the NSIS installer
+- [`57ef65b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/57ef65b) feat(desktop): Windows data-path runs in a LocalSystem service
+- [`f4d728e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f4d728e) fix(desktop): harden helper socket perms, drop dead unlink
+- [`fd3d366`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fd3d366) feat(nix): opt-in passwordless elevation scoped to the helper
+- [`c3217f4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c3217f4) build: ship kasumi-helper in every package channel
+- [`1651d38`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/1651d38) feat(desktop): GUI runs unprivileged, spawns the root helper (Linux)
+- [`d332a4c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d332a4c) feat(desktop): privilege helper binary, elevated spawn + socket perms
+- [`bb54bbd`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/bb54bbd) feat(desktop): RemotePlatform — GUI-side Platform over the helper
+- [`3d0df60`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3d0df60) feat(desktop): privsep server dispatcher + client transport
+- [`cd0a3a6`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/cd0a3a6) feat(desktop): privilege-separation wire protocol
+- [`d613233`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d613233) feat(nix): add a programs.kasumi-proxy NixOS module
+- [`4ddd1de`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4ddd1de) fix(desktop): forward iproute2 to the elevated Linux data-path on NixOS
+- [`6749982`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6749982) fix(nix): give the @2x icon a legal store-path name
+- [`6f30d0c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6f30d0c) feat(nix): make kasumi-desktop a proper installable package
+- [`20c745e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/20c745e) feat(flake): declare the Cachix cache as a substituter in nixConfig
+- [`c9f6a9e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c9f6a9e) docs(readme): document the Cachix binary cache for local builds
+- [`9ec1d0d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9ec1d0d) test(core): validate generated configs against real xray/sing-box
+- [`bfb006f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/bfb006f) test(backend): cover pid_matches_any candidate scan
+- [`0ec3efe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0ec3efe) test(core): cover migrate intermediate-shape retag and version clamp
+- [`0859d9a`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0859d9a) test(desktop): cover bypass-CIDR aggregation over literal servers
+- [`c83bad4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c83bad4) test(backend): cover proxy-required fetch, port leasing, tun2 cleanup
+- [`7a9f35f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7a9f35f) test(core): cover config_shared, forced-core branches, sub-apply helpers
+- [`f8508da`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f8508da) build(cores): ship libcronet next to sing-box for the naive outbound
+- [`27501ca`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/27501ca) fix(singbox): drop uTLS from the naive outbound
+- [`c88f201`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c88f201) fix(core): route xray-only shadowsocks ciphers to xray
+- [`4dd2fd1`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4dd2fd1) feat(profiles): explain why a group can't be deleted
+- [`f77a855`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f77a855) feat(settings): drop redundant current-core row from diagnostics
+- [`ccbe82f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ccbe82f) feat(settings): surface installed core versions and TUN in diagnostics
+- [`281d759`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/281d759) fix(ui): keep inline Escape edits from closing their sheet
+- [`5c80afc`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5c80afc) feat(ui): dismiss sheets and dialogs on Escape
+- [`adab839`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/adab839) feat(subscriptions): unify add entry points and enrich bulk import
+- [`a81e74d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a81e74d) feat(frontend): cross-platform Material select dropdown
+- [`0044ee2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0044ee2) docs(readme): match portable zip names to the unified scheme
+- [`99949cd`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/99949cd) feat(ui): animate search field expand and FAB entrance
+- [`4834ea7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4834ea7) feat(ui): pop ping/speed results in when a test finishes
+- [`a7415f2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a7415f2) fix(ui): keep the select-box arrow visible on focus
+- [`9973558`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9973558) feat(ui): show toasts as a dismissible queue
+- [`31102c4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/31102c4) fix(ui): animate the toast on dismiss instead of vanishing
+
 ## v0.4.1 — 2026-06-22
 
 ### Changes

@@ -8,7 +8,7 @@ XRAY_VERSION="${XRAY_VERSION:-v26.3.27}"
 TUN2SOCKS_VERSION="${TUN2SOCKS_VERSION:-v2.6.0}"
 # sing-box runs Hysteria2/TUIC profiles (second core). Pin a 1.13.x line whose
 # config schema matches singbox_config.rs (mixed inbound, tls/utls, hysteria2/tuic).
-SINGBOX_VERSION="${SINGBOX_VERSION:-v1.13.13}"
+SINGBOX_VERSION="${SINGBOX_VERSION:-v1.13.14}"
 # geodat2srs converts geoip/geosite .dat → sing-box .srs rule-sets. Unlike the
 # cores above it ships NO release artifacts — it is built from source at this rev
 # (CGO off, static): scripts/fetch-binaries.sh builds it for both the Android module
