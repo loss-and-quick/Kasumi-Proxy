@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    flake-parts.url = "github:hercules-ci/flake-parts";
     crane.url = "github:ipetkov/crane";
     crane-tauri.url = "github:JPHutchins/crane-tauri";
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
@@ -25,69 +25,44 @@
   };
 
   # The logic lives in nix/ (one file per concern); this flake just wires it up.
-  outputs =
-    {
-      self,
-      nixpkgs,
-      flake-utils,
-      crane,
-      crane-tauri,
-      bun2nix,
-      rust-overlay,
-    }:
-    # Per-system outputs (packages/checks/devShells/apps) merged with the
-    # system-independent NixOS module: modules aren't per-system, so it must sit
-    # beside the eachDefaultSystem set, not inside it.
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-          config.allowUnfree = true;
-          config.android_sdk.accept_license = true;
-          # bun2nix → `bun2nix` (hook / fetchBunDeps); rust-overlay → `rust-bin`
-          # (a toolchain carrying the android std targets for the daemon
-          # cross-build). Neither overrides `pkgs.rustc`/`pkgs.cargo`, so crane's
-          # host build is unaffected.
-          overlays = [
-            bun2nix.overlays.default
-            rust-overlay.overlays.default
-          ];
-        };
-        root = ./.;
+  #
+  # perSystem → system-dependent outputs (packages/checks/devShells/apps/formatter).
+  # flake     → system-independent outputs (NixOS module).
+  outputs = { self, nixpkgs, flake-parts, crane, crane-tauri, bun2nix, rust-overlay, ... }@inputs:
+    let
+      # Create pkgs per-system with overlays and config
+      mkPkgs = system: import inputs.nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+        config.android_sdk.accept_license = true;
+        overlays = [
+          inputs.bun2nix.overlays.default
+          inputs.rust-overlay.overlays.default
+        ];
+      };
 
-        toolchain = import ./nix/toolchain.nix { inherit pkgs crane; };
-        version = import ./nix/version.nix { inherit pkgs root; };
-        binaries = import ./nix/binaries.nix { inherit pkgs root version; };
-        desktop = import ./nix/desktop.nix {
-          inherit
-            pkgs
-            root
-            crane-tauri
-            toolchain
-            version
-            binaries
-            ;
-        };
-      in
-      {
-        # Reproducible desktop build: `nix build .#kasumi-desktop` (GTK-wrapped,
-        # binaries bundled).
-        packages = {
-          inherit (desktop) frontend kasumi-desktop;
-          default = desktop.kasumi-desktop;
-          tauri-unwrapped = desktop.tauri.app;
+      flakeOutputs = flake-parts.lib.mkFlake { inherit inputs; } {
+        systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+
+        _module.args = {
+          inherit self;
+          inherit mkPkgs;
+          crane-tauri = inputs.crane-tauri;
         };
 
-        checks.clippy = desktop.clippy;
+        imports = [
+          ./nix/desktop.nix
+          ./nix/shells.nix
+          ./nix/apps.nix
+        ];
 
-        devShells = import ./nix/shells.nix { inherit pkgs toolchain; };
+        flake = {
+          # `programs.kasumi-proxy.enable = true;` — see nix/nixos-module.nix.
+          nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+        };
+      };
 
-        apps = import ./nix/apps.nix { inherit pkgs self toolchain; };
-      }
-    )
-    // {
-      # `programs.kasumi-proxy.enable = true;` — see nix/nixos-module.nix.
-      nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
-    };
+      # Provide formatter output explicitly to satisfy flake schema
+    in
+    flakeOutputs;
 }
