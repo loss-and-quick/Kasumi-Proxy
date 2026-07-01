@@ -147,24 +147,37 @@ jobs:
           name: kasumi-proxy
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      # ── Cache the cargo registry + workspace build artifacts. The compile of
-      #    clippy --all-targets + test + codegen (hundreds of crates: tauri, specta,
-      #    webkit bindings) is the bulk of this job; an empty target means a full
-      #    rebuild every run. Keyed on the toolchain pin (flake.lock) + the locked
-      #    deps (Cargo.lock); restore-keys give the previous target on a lock bump so
-      #    only the changed crates recompile. The devshell sets no CARGO_HOME /
-      #    CARGO_TARGET_DIR, so cargo uses ~/.cargo and ./target on the host. ──
-      - name: Cache cargo + build
+      # ── Cargo registry — dependency sources only, no compiled artifacts, so it's
+      #    portable across toolchain bumps and keyed on Cargo.lock alone. ──
+      - name: Cache cargo registry
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            cargo-${{ runner.os }}-
+            cargo-registry-${{ runner.os }}-
+
+      # ── Workspace build artifacts (./target). The compile of clippy --all-targets +
+      #    test + codegen (hundreds of crates: tauri, specta, webkit bindings) is the
+      #    bulk of this job; an empty target means a full rebuild every run. But the
+      #    build-script binaries under target are linked against the devshell's glibc,
+      #    so a target restored from a different flake.lock points its ELF interpreter
+      #    at a /nix/store loader that's no longer there and fails to exec ("No such
+      #    file or directory"). So the key AND the restore fallback are both bound to
+      #    flake.lock: a Cargo.lock-only bump still reuses target (only the changed
+      #    crates recompile), but a flake.lock/toolchain bump starts clean instead of
+      #    restoring a poisoned target. The devshell sets no CARGO_HOME /
+      #    CARGO_TARGET_DIR, so cargo uses ~/.cargo and ./target on the host. ──
+      - name: Cache cargo build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: target
+          key: cargo-target-${{ runner.os }}-${{ hashFiles('flake.lock') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-target-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
 
       - name: Stub the libcronet bundle resource (clippy/codegen build the app)
         run: |
