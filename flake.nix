@@ -2,7 +2,7 @@
   description = "Kasumi Proxy — transparent proxy (Xray-core / sing-box) — Rust backend + Tauri 2 app + React UI, shipped as a KSU/Magisk/APatch module";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable-small";
     flake-parts.url = "github:hercules-ci/flake-parts";
     crane.url = "github:ipetkov/crane";
     crane-tauri.url = "github:JPHutchins/crane-tauri";
