@@ -289,7 +289,14 @@ async fn start_inner(
         apply_strict_carveouts().await;
     }
 
-    // Shield local proxy ports from bypass-mode apps (both engines).
+    if !verify_core_alive(core_pid, bin, 6, Duration::from_millis(250)).await {
+        return fail(&format!("core exited on startup — see {log}")).await;
+    }
+
+    // Shield local proxy ports from bypass-mode apps (both engines). Deferred until
+    // the core is up so our iptables don't contend with sing-box's system-stack
+    // `auto_redirect`, which installs its own iptables during startup and shells
+    // `iptables` without `-w` — a shared xtables.lock race would fail its start.
     protect_local_ports(
         Action::Add,
         &read_app_filter().await,
@@ -297,10 +304,6 @@ async fn start_inner(
         http_port().await,
     )
     .await;
-
-    if !verify_core_alive(core_pid, bin, 6, Duration::from_millis(250)).await {
-        return fail(&format!("core exited on startup — see {log}")).await;
-    }
     let _ = write_text(SERVICE_STARTED_FILE, &now_secs().to_string()).await;
     set_service_state("running").await;
     Ok(())
