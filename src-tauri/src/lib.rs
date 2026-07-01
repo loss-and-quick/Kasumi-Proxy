@@ -19,7 +19,7 @@ use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
 use kasumi_backend::platform::Platform;
 use kasumi_backend::{Command, Response, Service};
-use kasumi_core::contract::{PushFrame, ServiceStatus, SubAppliedEvent};
+use kasumi_core::contract::{PushFrame, RunState, ServiceStatus, SubAppliedEvent};
 
 pub mod defaults;
 pub mod desktop;
@@ -35,8 +35,9 @@ pub struct StatusChanged(pub ServiceStatus);
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct SubscriptionApplied(pub SubAppliedEvent);
 
-/// A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"` or
-/// `"activate:<id>"`. `show`/`quit` never reach here — they're handled in Rust directly.
+/// A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"`,
+/// `"activate:<id>"`, or `"routing:<mode>"`. `show`/`quit` never reach here — they're
+/// handled in Rust directly.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct TrayAction(pub String);
 
@@ -59,6 +60,11 @@ pub struct TrayLabels {
     pub stop: String,
     pub restart: String,
     pub recent: String,
+    /// "Routing mode" submenu title, then its three radio entries.
+    pub routing: String,
+    pub routing_global: String,
+    pub routing_custom: String,
+    pub routing_rules: String,
 }
 
 /// Rebuild the tray menu from the UI's current profiles + active selection. The UI
@@ -72,14 +78,43 @@ fn update_tray(
     labels: TrayLabels,
     running: bool,
     connected: bool,
+    routing_mode: String,
 ) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        rebuild_tray_menu(&app, &profiles, &labels, running, connected)
+        rebuild_tray_menu(&app, &profiles, &labels, running, connected, &routing_mode)
             .map_err(|e| e.to_string())?;
     }
     #[cfg(not(desktop))]
-    let _ = (app, profiles, labels, running, connected);
+    let _ = (app, profiles, labels, running, connected, routing_mode);
+    Ok(())
+}
+
+/// Update only the tray tooltip + state icon (not the menu). Called on every status
+/// tick, so it stays cheap: the menu is rebuilt separately via [`update_tray`] only
+/// when its own contents change. (Tooltips are honoured on Windows/macOS; the Linux
+/// app-indicator ignores them, but the state icon still updates there.)
+#[tauri::command]
+#[specta::specta]
+fn set_tray_status(app: tauri::AppHandle, tooltip: String, state: RunState) -> Result<(), String> {
+    #[cfg(desktop)]
+    if let Some(tray) = app.tray_by_id("main") {
+        // Tooltip is cheap, refresh it every tick (live traffic). The icon only
+        // changes on a state transition — swapping it each tick would needlessly
+        // rewrite the Linux app-indicator's temp icon file.
+        tray.set_tooltip(Some(&tooltip))
+            .map_err(|e| e.to_string())?;
+        use std::sync::atomic::{AtomicU8, Ordering};
+        static LAST_ICON: AtomicU8 = AtomicU8::new(u8::MAX);
+        let idx = state as u8;
+        if LAST_ICON.load(Ordering::Relaxed) != idx {
+            tray.set_icon(Some(tray_icon(state)))
+                .map_err(|e| e.to_string())?;
+            LAST_ICON.store(idx, Ordering::Relaxed);
+        }
+    }
+    #[cfg(not(desktop))]
+    let _ = (app, tooltip, state);
     Ok(())
 }
 
@@ -186,8 +221,9 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Replace the tray menu: Restart, the recent-profile quick-switch list (active one
-/// checked), then Show / Quit. Item ids drive [`setup_tray`]'s `on_menu_event`.
+/// Replace the tray menu: state action(s), the recent-profile quick-switch list
+/// (active one checked), the routing-mode radio (current one checked), then
+/// Show / Quit. Item ids drive [`setup_tray`]'s `on_menu_event`.
 #[cfg(desktop)]
 fn rebuild_tray_menu(
     app: &tauri::AppHandle,
@@ -195,6 +231,7 @@ fn rebuild_tray_menu(
     labels: &TrayLabels,
     running: bool,
     connected: bool,
+    routing_mode: &str,
 ) -> tauri::Result<()> {
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 
@@ -221,8 +258,9 @@ fn rebuild_tray_menu(
         menu.append(&start)?;
     }
 
+    // Quick-switch + routing group.
+    menu.append(&sep1)?;
     if !profiles.is_empty() {
-        menu.append(&sep1)?;
         // A submenu keeps the root tidy when there are many profiles.
         let recent = Submenu::with_id(app, "recent", &labels.recent, true)?;
         for p in profiles {
@@ -239,11 +277,80 @@ fn rebuild_tray_menu(
         menu.append(&recent)?;
     }
 
+    // Routing-mode radio: exactly the current mode is checked. Tauri has no native
+    // radio item, so — like v2rayN's tray — we use check marks; clicks come back as
+    // `routing:<mode>` TrayActions the webview applies to `settings.routingMode`.
+    let routing = Submenu::with_id(app, "routing", &labels.routing, true)?;
+    for (mode, label) in [
+        ("rules", &labels.routing_rules),
+        ("global", &labels.routing_global),
+        ("custom", &labels.routing_custom),
+    ] {
+        let item = CheckMenuItem::with_id(
+            app,
+            format!("routing:{mode}"),
+            label,
+            true,
+            routing_mode == mode,
+            None::<&str>,
+        )?;
+        routing.append(&item)?;
+    }
+    menu.append(&routing)?;
+
     menu.append(&sep2)?;
     menu.append(&show)?;
     menu.append(&quit)?;
     tray.set_menu(Some(menu))?;
     Ok(())
+}
+
+/// A tray icon for the current state, derived at runtime from the bundled app icon so
+/// we ship no extra art: full colour when connected, desaturated + dimmed when off,
+/// and a muted tone while connecting / no-internet. Each variant is decoded and
+/// converted once, then cached.
+#[cfg(desktop)]
+fn tray_icon(state: RunState) -> tauri::image::Image<'static> {
+    use std::sync::OnceLock;
+    use tauri::image::Image;
+
+    const BASE_PNG: &[u8] =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/icons/128x128.png"));
+
+    fn base() -> &'static Image<'static> {
+        static ICON: OnceLock<Image<'static>> = OnceLock::new();
+        ICON.get_or_init(|| Image::from_bytes(BASE_PNG).expect("decode tray icon"))
+    }
+    // Blend each pixel toward its luminance by `1 - sat` (0 = greyscale) and scale
+    // alpha by `alpha` (dim it). The bundled icon is always decoded to RGBA8.
+    fn recolour(sat: f32, alpha: f32) -> Image<'static> {
+        let src = base();
+        let (w, h) = (src.width(), src.height());
+        let mut rgba = src.rgba().to_vec();
+        for px in rgba.chunks_exact_mut(4) {
+            let (r, g, b) = (px[0] as f32, px[1] as f32, px[2] as f32);
+            let lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            px[0] = (r * sat + lum * (1.0 - sat)).round() as u8;
+            px[1] = (g * sat + lum * (1.0 - sat)).round() as u8;
+            px[2] = (b * sat + lum * (1.0 - sat)).round() as u8;
+            px[3] = (f32::from(px[3]) * alpha).round() as u8;
+        }
+        Image::new_owned(rgba, w, h)
+    }
+    fn off() -> &'static Image<'static> {
+        static ICON: OnceLock<Image<'static>> = OnceLock::new();
+        ICON.get_or_init(|| recolour(0.0, 0.55))
+    }
+    fn pending() -> &'static Image<'static> {
+        static ICON: OnceLock<Image<'static>> = OnceLock::new();
+        ICON.get_or_init(|| recolour(0.4, 0.9))
+    }
+
+    match state {
+        RunState::Connected => base().clone(),
+        RunState::Connecting | RunState::NoInternet => pending().clone(),
+        RunState::Stopped | RunState::Failed => off().clone(),
+    }
 }
 
 /// Build the desktop [`Service`] (boot init → probe cores → background loops). Run
@@ -306,7 +413,12 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
 /// export so the generated TS always matches what's mounted.
 fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
-        .commands(collect_commands![app_version, dispatch, update_tray])
+        .commands(collect_commands![
+            app_version,
+            dispatch,
+            update_tray,
+            set_tray_status
+        ])
         .events(collect_events![
             StatusChanged,
             SubscriptionApplied,
