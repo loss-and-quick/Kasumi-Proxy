@@ -1,6 +1,6 @@
 # Versions read from the single sources of truth: the product version from
 # module/module.prop, the pinned binary versions from scripts/binary-versions.sh.
-{ pkgs, root }:
+{ pkgs, self }:
 let
   lib = pkgs.lib;
 
@@ -9,7 +9,7 @@ let
   appVersion =
     let
       propLine = lib.findFirst (l: lib.hasPrefix "version=" l) "version=0.0.0" (
-        lib.splitString "\n" (builtins.readFile (root + "/module/module.prop"))
+        lib.splitString "\n" (builtins.readFile (self + "/module/module.prop"))
       );
     in
     lib.removePrefix "v" (lib.removePrefix "version=" propLine);
@@ -21,7 +21,7 @@ let
     name:
     let
       line = lib.findFirst (l: lib.hasPrefix "${name}=" l) "" (
-        lib.splitString "\n" (builtins.readFile (root + "/scripts/binary-versions.sh"))
+        lib.splitString "\n" (builtins.readFile (self + "/scripts/binary-versions.sh"))
       );
       m = builtins.match ".*:-([^}\"]+).*" line;
     in
