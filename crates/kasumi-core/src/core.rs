@@ -163,26 +163,31 @@ pub fn default_tun_for(core: CoreEngine) -> TunEngine {
 }
 
 /// Resolve the TUN engine for a resolved core: the per-core override, else the
-/// default. `SingboxTun` (sing-box's native tun) is only valid for the sing-box
-/// core; for any other core it resolves to that core's external default.
+/// default. Every `TunEngine` is valid for every core — `SingboxTun` on the sing-box
+/// core is its own native tun, and on any other core it's a sidecar sing-box
+/// bridging that core's SOCKS (see [`owns_native_tun`]).
 pub fn resolve_tun(core: CoreEngine, s: &AdvancedSettings) -> TunEngine {
-    let chosen = s
-        .tun_by_core
+    s.tun_by_core
         .get(&core)
         .copied()
-        .unwrap_or_else(|| default_tun_for(core));
-    if chosen == TunEngine::SingboxTun && core != CoreEngine::SingBox {
-        return default_tun_for(core);
-    }
-    chosen
+        .unwrap_or_else(|| default_tun_for(core))
+}
+
+/// Whether `(core, tun)` means the core owns its TUN natively — true only for the
+/// sing-box core running `SingboxTun` (it terminates the tun inside its own process).
+/// Every other pair fronts a socks-only core with an external tun helper: `Tun2socks`
+/// / `Hev`, or — for `SingboxTun` on a non-sing-box core — a *sidecar* sing-box in
+/// tun→socks bridge mode. This is the one place the native/external split is decided.
+pub fn owns_native_tun(core: CoreEngine, tun: TunEngine) -> bool {
+    core == CoreEngine::SingBox && tun == TunEngine::SingboxTun
 }
 
 /// Per-core TUN-engine options for the settings UI: for each core its default
 /// engine and the engines valid to pick. Derived from the very same
 /// [`default_tun_for`]/[`resolve_tun`] rules the data-path uses (a variant is valid
-/// for a core iff it survives `resolve_tun`'s clamp), so the UI never re-encodes the
-/// SingboxTun-is-sing-box-only rule or the per-core default — they are emitted to
-/// the frontend from here (see `defaults.rs` → `TUN_BY_CORE`).
+/// for a core iff `resolve_tun` keeps it — every engine is valid for every core
+/// today), so the UI never re-encodes the per-core default or validity; they are
+/// emitted to the frontend from here (see `defaults.rs` → `TUN_BY_CORE`).
 pub fn tun_by_core_options() -> Vec<TunCoreOptions> {
     use strum::IntoEnumIterator;
     CoreEngine::iter()
@@ -228,12 +233,24 @@ mod tests {
         let mut s = AdvancedSettings::default();
         assert_eq!(resolve_tun(SingBox, &s), TunEngine::SingboxTun);
         assert_eq!(resolve_tun(Xray, &s), TunEngine::Tun2socks);
-        // Per-core override wins where valid.
+        // Per-core override wins; every engine is valid for every core.
         s.tun_by_core.insert(SingBox, TunEngine::Tun2socks);
         assert_eq!(resolve_tun(SingBox, &s), TunEngine::Tun2socks);
-        // SingboxTun is sing-box-only: requesting it for xray resolves to tun2socks.
+        // SingboxTun on xray is kept — it means a sidecar sing-box bridge, not native.
         s.tun_by_core.insert(Xray, TunEngine::SingboxTun);
-        assert_eq!(resolve_tun(Xray, &s), TunEngine::Tun2socks);
+        assert_eq!(resolve_tun(Xray, &s), TunEngine::SingboxTun);
+    }
+
+    #[test]
+    fn native_tun_only_for_singbox_core() {
+        use CoreEngine::{SingBox, Xray};
+        // The sing-box core with its own SingboxTun is the only native pairing.
+        assert!(owns_native_tun(SingBox, TunEngine::SingboxTun));
+        // xray + SingboxTun is a sidecar (external), not native.
+        assert!(!owns_native_tun(Xray, TunEngine::SingboxTun));
+        // Any userspace helper is external on either core.
+        assert!(!owns_native_tun(SingBox, TunEngine::Tun2socks));
+        assert!(!owns_native_tun(Xray, TunEngine::Hev));
     }
 
     #[test]

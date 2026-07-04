@@ -217,7 +217,7 @@ impl DesktopPlatform {
             self.singbox_geo_prep(&cfg_text).await?;
         }
 
-        if !tun_engine::is_external(tun) {
+        if kasumi_core::core::owns_native_tun(engine, tun) {
             // Native sing-box tun: the core owns the tun; the server bypass is baked
             // into the config (route_exclude_address) by prepare_singbox_config.
             prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file).await?;
@@ -265,6 +265,7 @@ impl DesktopPlatform {
             socks_port,
             &helper_log,
             None,
+            self.os.singbox_stack(),
             tun_opts,
         )
         .await?;

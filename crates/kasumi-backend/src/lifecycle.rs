@@ -14,7 +14,10 @@ use tokio::process::Child;
 use kasumi_core::core::default_tun_for;
 use kasumi_core::enums::{CoreEngine, TunEngine, tun_from_marker};
 use kasumi_core::hev_config::build_hev_config;
+use kasumi_core::singbox_config::build_singbox_bridge_config;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
+// Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
+use kasumi_core::tun as tun_addr;
 use kasumi_core::tun::TunOptions;
 
 use crate::commands::{CommandError, build_profile_config};
@@ -99,28 +102,42 @@ pub fn engine_label(engine: CoreEngine) -> &'static str {
     }
 }
 
+/// Parse an [`engine_label`] back to its core, or `None` for an absent/unknown label.
+fn core_from_label(label: &str) -> Option<CoreEngine> {
+    match label.trim() {
+        "xray" => Some(CoreEngine::Xray),
+        "sing-box" => Some(CoreEngine::SingBox),
+        _ => None,
+    }
+}
+
 /// The external TUN engine a *running* data-path uses — so a shell can map it to the
 /// helper binary and decide whether a live helper is required — or `None` when the
-/// core owns its TUN natively (sing-box). This is the one place that reads that
-/// state, shared by the desktop helper and the Android daemon (which previously each
-/// reimplemented it and drifted).
+/// core owns its TUN natively. This is the one place that reads that state, shared by
+/// the desktop helper and the Android daemon (which previously each reimplemented it
+/// and drifted).
 ///
 /// The recorded tun-engine `marker` (its content, or `None` if absent) is
-/// authoritative. On an absent/legacy marker — e.g. a data-path started by a build
-/// from before the marker existed — it falls back to the running core's
-/// `engine_label`: a native sing-box owns its own TUN, while xray (or any other /
-/// unknown label) fronts an external one, so the fallback resolves to the universal
-/// default external engine. The caller supplies the label however it knows the
-/// running core (desktop from the live pid, the daemon from its engine file).
+/// authoritative for the *engine*; whether that engine is native depends on the core
+/// too (`SingboxTun` is native only under the sing-box core — under xray it's a
+/// sidecar sing-box helper, see [`crate`]'s callers / `core::owns_native_tun`). On an
+/// absent/legacy marker it falls back to the core `engine_label` alone: sing-box
+/// defaults to native, every other/unknown core to the universal default external
+/// engine. The caller supplies the label however it knows the running core (desktop
+/// from the live pid, the daemon from its engine file).
 pub fn running_external_engine(
     marker: Option<&str>,
     engine_label: Option<&str>,
 ) -> Option<TunEngine> {
+    let core = engine_label.and_then(core_from_label);
     if let Some(tun) = marker.map(str::trim).and_then(tun_from_marker) {
-        return (tun != TunEngine::SingboxTun).then_some(tun);
+        // Native only when we're sure it's the sing-box core with its own tun; an
+        // unknown core with a SingboxTun marker is treated as external (a sidecar),
+        // which is the safe guess — teardown then still reaps a helper if present.
+        let native = core == Some(CoreEngine::SingBox) && tun == TunEngine::SingboxTun;
+        return (!native).then_some(tun);
     }
-    (engine_label.map(str::trim) != Some(self::engine_label(CoreEngine::SingBox)))
-        .then(|| default_tun_for(CoreEngine::Xray))
+    (core != Some(CoreEngine::SingBox)).then(|| default_tun_for(CoreEngine::Xray))
 }
 
 // ---------- geo assets (geodat2srs) ----------
@@ -383,9 +400,10 @@ async fn spawn_tun2socks(s: &TunSpawn<'_>) -> std::io::Result<Child> {
 
 /// Everything needed to bring up one external TUN engine, gathered so adding an
 /// engine is a single match arm. `bin` is the engine binary (resolved per-platform);
-/// `cfg_path` is where a config-file engine (hev) writes its YAML; `ipv4`/`ipv6` are
-/// the addresses such an engine assigns to the tun it creates itself; `opts` carries
-/// the resolved tuning.
+/// `cfg_path` is where a config-file engine (hev / sidecar sing-box) writes its
+/// config; `ipv4`/`ipv6` are the host addresses such an engine assigns to the tun it
+/// creates itself; `stack` is the sing-box tun stack (only the sidecar sing-box reads
+/// it); `opts` carries the resolved tuning.
 pub struct TunSpawn<'a> {
     pub bin: &'a str,
     pub iface: &'a str,
@@ -395,26 +413,20 @@ pub struct TunSpawn<'a> {
     pub log_path: &'a Path,
     pub fwmark: Option<u32>,
     pub cfg_path: &'a Path,
+    pub stack: &'a str,
     pub opts: &'a TunOptions,
 }
 
 /// The single place that knows how to launch an external TUN engine. Every shell
 /// (desktop, root daemon) routes its bring-up through here, so adding a new engine
 /// is one more arm — nothing else in the orchestration learns engine specifics.
-/// `SingboxTun` has no external helper (the sing-box core owns the tun) and must
-/// not reach this.
+/// `SingboxTun` here is a *sidecar* sing-box fronting a non-sing-box core (the
+/// sing-box core owning its own tun is the native path and never reaches this).
 pub async fn spawn_tun_engine(tun: TunEngine, s: &TunSpawn<'_>) -> std::io::Result<Child> {
     match tun {
         TunEngine::Tun2socks => spawn_tun2socks(s).await,
         TunEngine::Hev => spawn_hev(s).await,
-        // Callers gate this on the engine being external; a `SingboxTun` reaching
-        // here means a corrupt/misresolved marker. Return an error rather than
-        // panic — this runs in the privileged data-path owner, whose crash would
-        // strand routing/tun state.
-        TunEngine::SingboxTun => Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "SingboxTun has no external helper to spawn",
-        )),
+        TunEngine::SingboxTun => spawn_singbox_bridge(s).await,
     }
 }
 
@@ -425,6 +437,40 @@ async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
     write_text(s.cfg_path, &yaml).await?;
     let argv = [s.bin.to_owned(), s.cfg_path.to_string_lossy().into_owned()];
     spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await
+}
+
+/// A sidecar sing-box in tun→socks bridge mode (`SingboxTun` on a non-sing-box core):
+/// render its config, write it, then run `<singbox_bin> run -c <cfg>`. Like tun2socks,
+/// it terminates a userspace tun and forwards to the core's SOCKS; the OS routing the
+/// shell installs drives traffic in. Uses sing-box's TUN stack, hence the `stack`.
+async fn spawn_singbox_bridge(s: &TunSpawn<'_>) -> std::io::Result<Child> {
+    // Host address → its CIDR (single-sourced in `kasumi_core::tun`). The shell hands
+    // us the force-proxy tun's address when bringing up the second tun.
+    let ipv4_cidr = if s.ipv4 == tun_addr::TUN2_IPV4 {
+        tun_addr::TUN2_IPV4_CIDR
+    } else {
+        tun_addr::TUN_IPV4_CIDR
+    };
+    let ipv6_cidr = s.ipv6.map(|v6| {
+        if v6 == tun_addr::TUN2_IPV6 {
+            tun_addr::TUN2_IPV6_CIDR
+        } else {
+            tun_addr::TUN_IPV6_CIDR
+        }
+    });
+    let cfg = build_singbox_bridge_config(
+        s.iface,
+        ipv4_cidr,
+        ipv6_cidr,
+        s.socks_port,
+        i64::from(s.opts.mtu),
+        s.stack,
+        &s.opts.log_level,
+    );
+    write_text(s.cfg_path, &cfg).await?;
+    // `sing-box run -c <cfg>`; the bridge config references no geo assets, so no env.
+    let argv = core_argv(s.bin, &s.cfg_path.to_string_lossy());
+    spawn_logged(&argv, &HashMap::new(), s.log_path, false).await
 }
 
 /// Confirm the core stayed up: a bad config makes it exit within ~1s.
@@ -448,11 +494,16 @@ mod tests {
     #[test]
     fn external_engine_resolution() {
         use kasumi_core::enums::{TunEngine, tun_marker};
-        // Marker is authoritative: native sing-box tun → no helper expected.
-        let native = tun_marker(TunEngine::SingboxTun);
+        // SingboxTun under the sing-box core is native → no helper expected.
+        let singbox_tun = tun_marker(TunEngine::SingboxTun);
         assert_eq!(
-            running_external_engine(Some(&native), Some("sing-box")),
+            running_external_engine(Some(&singbox_tun), Some("sing-box")),
             None
+        );
+        // SingboxTun under xray is a sidecar sing-box → an external helper.
+        assert_eq!(
+            running_external_engine(Some(&singbox_tun), Some("xray")),
+            Some(TunEngine::SingboxTun)
         );
         // Marker names an external engine → that engine (even behind sing-box).
         let hev = tun_marker(TunEngine::Hev);

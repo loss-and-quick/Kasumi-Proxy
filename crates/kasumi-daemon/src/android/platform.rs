@@ -32,9 +32,9 @@ use kasumi_core::tun::{TUN_IPV4, TUN_IPV6, TUN2_IPV4, TUN2_IPV6, TunOptions};
 use super::network::run_watcher;
 use super::paths::{
     CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG, HEV2_CONFIG, IP, PIDFILE,
-    RUN_DIR, SERVICE_STARTED_FILE, SERVICE_STATE_FILE, SINGBOX_BIN, SOCKS_PORT_FILE,
-    TUN_ENGINE_FILE, TUN_IFACE_FILE, TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE,
-    TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
+    RUN_DIR, SERVICE_STARTED_FILE, SERVICE_STATE_FILE, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG,
+    SINGBOX_BRIDGE2_CONFIG, SOCKS_PORT_FILE, TUN_ENGINE_FILE, TUN_IFACE_FILE, TUN2_IFACE_FILE,
+    TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
     Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_strict_carveouts,
@@ -72,14 +72,38 @@ fn core_bins() -> Vec<String> {
     CORE_BINS.iter().map(|s| s.to_string()).collect()
 }
 
-/// External-TUN helper binary for `tun`. `SingboxTun` is native and never reaches
-/// the external path, so it folds into the tun2socks default. The single place the
-/// daemon maps an engine to a binary.
+/// External-TUN helper binary for `tun`. `SingboxTun` here is a *sidecar* sing-box
+/// fronting a non-sing-box core (the native sing-box path never reaches the external
+/// bring-up), so its binary is sing-box itself. The single place the daemon maps an
+/// engine to a binary.
 fn tun_helper_bin(tun: TunEngine) -> &'static str {
     match tun {
         TunEngine::Hev => HEV_BIN,
-        _ => TUN2SOCKS_BIN,
+        TunEngine::SingboxTun => SINGBOX_BIN,
+        TunEngine::Tun2socks => TUN2SOCKS_BIN,
     }
+}
+
+/// The config file a config-driven external engine writes at bring-up: hev's YAML or
+/// the sidecar sing-box's JSON, per tun (the `2` variant is the force-proxy tun).
+/// tun2socks takes its args on the command line and ignores this.
+fn tun_cfg_path(tun: TunEngine, force: bool) -> &'static str {
+    match (tun, force) {
+        (TunEngine::SingboxTun, false) => SINGBOX_BRIDGE_CONFIG,
+        (TunEngine::SingboxTun, true) => SINGBOX_BRIDGE2_CONFIG,
+        (_, false) => HEV_CONFIG,
+        (_, true) => HEV2_CONFIG,
+    }
+}
+
+/// The sing-box tun stack wire value from settings (`"gvisor"`/`"system"`), for the
+/// sidecar sing-box bridge config. Defaults to gvisor — the root-binary path needs it.
+async fn singbox_stack() -> String {
+    read_settings()
+        .await
+        .and_then(|s| serde_json::to_value(s.singbox_stack).ok())
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "gvisor".into())
 }
 
 /// The external TUN engine the *running* data-path uses, or `None` for a native
@@ -215,6 +239,7 @@ async fn bring_up_tun_helper(
     cfg_path: &str,
     pidfile: &str,
     log_name: &str,
+    stack: &str,
     opts: &TunOptions,
 ) -> anyhow::Result<()> {
     let log = format!("{DATADIR}/{log_name}");
@@ -227,6 +252,7 @@ async fn bring_up_tun_helper(
         log_path: Path::new(&log),
         fwmark: Some(FWMARK),
         cfg_path: Path::new(cfg_path),
+        stack,
         opts,
     };
     let child = spawn_tun_engine(tun, &spawn)
@@ -256,6 +282,8 @@ async fn bring_up_external_tun(
 ) -> anyhow::Result<()> {
     let helper_bin = tun_helper_bin(tun);
     let filter = read_app_filter().await;
+    // The sidecar sing-box (SingboxTun engine) reads this; other engines ignore it.
+    let stack = singbox_stack().await;
     let tun_iface = match read_iface(TUN_IFACE_FILE).await {
         Some(x) => x,
         None => fresh_iface(TUN_IFACE_FILE).await,
@@ -270,9 +298,10 @@ async fn bring_up_external_tun(
             TUN_IPV4,
             Some(TUN_IPV6),
             socks_port,
-            HEV_CONFIG,
+            tun_cfg_path(tun, false),
             TUN2SOCKS_PIDFILE,
             "tun-engine.log",
+            &stack,
             opts,
         )
         .await?;
@@ -291,9 +320,10 @@ async fn bring_up_external_tun(
                 TUN2_IPV4,
                 Some(TUN2_IPV6),
                 socks_port + 2,
-                HEV2_CONFIG,
+                tun_cfg_path(tun, true),
                 TUN2SOCKS2_PIDFILE,
                 "tun-engine2.log",
+                &stack,
                 opts,
             )
             .await?;
