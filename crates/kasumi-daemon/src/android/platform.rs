@@ -13,8 +13,8 @@ use tokio::sync::mpsc;
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::read_json;
 use kasumi_backend::lifecycle::{
-    inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core, spawn_tun_engine,
-    sync_geo_asset, verify_core_alive,
+    TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core,
+    spawn_tun_engine, sync_geo_asset, verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -27,12 +27,14 @@ use kasumi_core::enums::{CoreEngine, TunEngine, tun_from_marker, tun_marker};
 use kasumi_core::state::{
     AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
+use kasumi_core::tun::TunOptions;
 
 use super::network::run_watcher;
 use super::paths::{
-    CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, IP, PIDFILE, RUN_DIR, SERVICE_STARTED_FILE,
-    SERVICE_STATE_FILE, SINGBOX_BIN, SOCKS_PORT_FILE, TUN_ENGINE_FILE, TUN_IFACE_FILE,
-    TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
+    CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG, HEV2_CONFIG, IP, PIDFILE,
+    RUN_DIR, SERVICE_STARTED_FILE, SERVICE_STATE_FILE, SINGBOX_BIN, SOCKS_PORT_FILE,
+    TUN_ENGINE_FILE, TUN_IFACE_FILE, TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE,
+    TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
     Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_strict_carveouts,
@@ -71,10 +73,13 @@ fn core_bins() -> Vec<String> {
 }
 
 /// External-TUN helper binary for `tun`. `SingboxTun` is native and never reaches
-/// the external path; the only external engine on Android today is tun2socks. New
-/// engines add an arm here — the single place the daemon maps an engine to a binary.
-fn tun_helper_bin(_tun: TunEngine) -> &'static str {
-    TUN2SOCKS_BIN
+/// the external path, so it folds into the tun2socks default. The single place the
+/// daemon maps an engine to a binary.
+fn tun_helper_bin(tun: TunEngine) -> &'static str {
+    match tun {
+        TunEngine::Hev => HEV_BIN,
+        _ => TUN2SOCKS_BIN,
+    }
 }
 
 /// Helper binary the *running* data-path uses, resolved from the tun-engine marker
@@ -206,29 +211,39 @@ async fn core_version(engine: CoreEngine) -> Option<String> {
 
 /// Spawn the external TUN helper for `iface`, persist its pid, wait for the iface
 /// to appear. Routes through the shared `spawn_tun_engine` so the daemon learns no
-/// engine specifics beyond the helper binary, resolved via [`tun_helper_bin`]. A
-/// spawn failure (e.g. the binary missing after a partial module update) or the tun
-/// device never appearing is surfaced as an error so the caller fails the start
-/// loudly, instead of routing into a bridge that never came up and black-holing the
-/// device until the watchdog happens to notice.
+/// engine specifics beyond the helper binary (via [`tun_helper_bin`]) and, for a
+/// self-addressing engine (hev), the YAML it writes at `cfg_path` and the
+/// `ipv4`/`ipv6` it assigns. A spawn failure (e.g. the binary missing after a partial
+/// module update) or the tun device never appearing is surfaced as an error so the
+/// caller fails the start loudly, instead of routing into a bridge that never came up
+/// and black-holing the device until the watchdog happens to notice.
+#[allow(clippy::too_many_arguments)]
 async fn bring_up_tun_helper(
     tun: TunEngine,
     iface: &str,
+    ipv4: &str,
+    ipv6: Option<&str>,
     socks_port: u16,
+    cfg_path: &str,
     pidfile: &str,
     log_name: &str,
+    opts: &TunOptions,
 ) -> anyhow::Result<()> {
     let log = format!("{DATADIR}/{log_name}");
-    let child = spawn_tun_engine(
-        tun,
-        tun_helper_bin(tun),
+    let spawn = TunSpawn {
+        bin: tun_helper_bin(tun),
         iface,
+        ipv4,
+        ipv6,
         socks_port,
-        Path::new(&log),
-        Some(FWMARK),
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("spawn tun helper: {e} — see {log}"))?;
+        log_path: Path::new(&log),
+        fwmark: Some(FWMARK),
+        cfg_path: Path::new(cfg_path),
+        opts,
+    };
+    let child = spawn_tun_engine(tun, &spawn)
+        .await
+        .map_err(|e| anyhow::anyhow!("spawn tun helper: {e} — see {log}"))?;
     let pid = child.id().unwrap_or(0);
     let _ = write_text(pidfile, &pid.to_string()).await;
     for _ in 0..10 {
@@ -246,7 +261,11 @@ async fn bring_up_tun_helper(
 /// External-tun data-path bring-up: a userspace tun bridged to the core's SOCKS via
 /// the chosen TUN engine, plus per-app routing (and a second tun for force-proxy
 /// apps). A native sing-box tun needs none of this — it auto_routes its own tun.
-async fn bring_up_external_tun(tun: TunEngine, socks_port: u16) -> anyhow::Result<()> {
+async fn bring_up_external_tun(
+    tun: TunEngine,
+    socks_port: u16,
+    opts: &TunOptions,
+) -> anyhow::Result<()> {
     let helper_bin = tun_helper_bin(tun);
     let filter = read_app_filter().await;
     let tun_iface = match read_iface(TUN_IFACE_FILE).await {
@@ -260,9 +279,13 @@ async fn bring_up_external_tun(tun: TunEngine, socks_port: u16) -> anyhow::Resul
         bring_up_tun_helper(
             tun,
             &tun_iface,
+            "198.18.0.1",
+            Some("fdfe:dcba:9876::1"),
             socks_port,
+            HEV_CONFIG,
             TUN2SOCKS_PIDFILE,
             "tun2socks.log",
+            opts,
         )
         .await?;
     }
@@ -277,9 +300,13 @@ async fn bring_up_external_tun(tun: TunEngine, socks_port: u16) -> anyhow::Resul
             bring_up_tun_helper(
                 tun,
                 &t,
+                "198.19.0.1",
+                Some("fdfe:dcba:9877::1"),
                 socks_port + 2,
+                HEV2_CONFIG,
                 TUN2SOCKS2_PIDFILE,
                 "tun2socks2.log",
+                opts,
             )
             .await?;
         }
@@ -315,6 +342,7 @@ async fn fail(reason: &str) -> anyhow::Result<()> {
 async fn start_inner(
     engine: CoreEngine,
     tun: TunEngine,
+    tun_opts: &TunOptions,
     bin: &str,
     cfg: &str,
     log: &str,
@@ -365,7 +393,7 @@ async fn start_inner(
     // An external tun engine needs a userspace tun + helper + manual routing;
     // a native sing-box auto_routes its own tun.
     if external {
-        bring_up_external_tun(tun, socks_port).await?;
+        bring_up_external_tun(tun, socks_port, tun_opts).await?;
     } else if read_app_filter().await.strict {
         // sing-box kill-switch carve-outs so the device stays reachable.
         apply_strict_carveouts().await;
@@ -470,6 +498,7 @@ impl Platform for AndroidPlatform {
         let StartDataPath {
             engine,
             tun,
+            tun_opts,
             socks_port,
         } = opts;
         set_service_state("connecting").await;
@@ -477,7 +506,7 @@ impl Platform for AndroidPlatform {
         ensure_tun_node().await;
 
         let (bin, cfg, log) = core_files(engine);
-        if let Err(e) = start_inner(engine, tun, bin, &cfg, &log, socks_port).await {
+        if let Err(e) = start_inner(engine, tun, &tun_opts, bin, &cfg, &log, socks_port).await {
             // Roll back the half-built data-path so a failed start leaves no orphans.
             let cur = read_text(SERVICE_STATE_FILE)
                 .await

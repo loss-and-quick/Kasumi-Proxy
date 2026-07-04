@@ -187,6 +187,7 @@ mod tests {
                 .call(PrivRequest::StartDataPath {
                     engine: CoreEngine::SingBox,
                     tun: kasumi_core::enums::TunEngine::SingboxTun,
+                    tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
                     socks_port: 1080,
                 })
                 .await

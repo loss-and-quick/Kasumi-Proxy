@@ -274,6 +274,16 @@ pub struct AdvancedSettings {
     pub tun_by_core: BTreeMap<CoreEngine, TunEngine>,
     /// MTU of the TUN interface (sing-box native tun; external engines too).
     pub tun_mtu: i64,
+    /// Connect timeout (ms) for external TUN engines (hev `misc.connect-timeout`).
+    pub tun_connect_timeout_ms: i64,
+    /// TCP read/write timeout (ms) (hev `misc.tcp-read-write-timeout`).
+    pub tun_tcp_rw_timeout_ms: i64,
+    /// UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`).
+    pub tun_udp_rw_timeout_ms: i64,
+    /// Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`).
+    pub tun_tcp_buffer_size: i64,
+    /// UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`).
+    pub tun_udp_recv_buffer_size: i64,
 }
 
 impl Default for AdvancedSettings {
@@ -320,6 +330,13 @@ impl Default for AdvancedSettings {
             allow_non_localhost: false,
             tun_by_core: BTreeMap::new(),
             tun_mtu: 9000,
+            // hev upstream defaults (mirror its built-in values, so an unedited
+            // config behaves exactly like stock hev).
+            tun_connect_timeout_ms: 10_000,
+            tun_tcp_rw_timeout_ms: 300_000,
+            tun_udp_rw_timeout_ms: 60_000,
+            tun_tcp_buffer_size: 65_536,
+            tun_udp_recv_buffer_size: 524_288,
         }
     }
 }
@@ -489,6 +506,8 @@ mod tests {
         assert_eq!(s.tun_by_core[&CoreEngine::Xray], TunEngine::Tun2socks);
         assert_eq!(s.tun_by_core[&CoreEngine::SingBox], TunEngine::SingboxTun);
         assert_eq!(s.tun_mtu, 1500);
+        // Unspecified tun tunables fall back to the stock-hev defaults.
+        assert_eq!(s.tun_connect_timeout_ms, 10_000);
         let v = serde_json::to_value(&s).unwrap();
         assert_eq!(v["tunByCore"]["xray"], "tun2socks");
     }

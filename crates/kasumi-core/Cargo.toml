@@ -16,6 +16,7 @@ percent-encoding = "2"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 strum = { version = "0.26", features = ["derive"] }
+yaml_serde = "0.10.4"
 
 [dev-dependencies]
 tempfile = "3"

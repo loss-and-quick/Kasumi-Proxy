@@ -242,12 +242,14 @@ jobs:
           mkdir -p "$out"
           cp "target/$t/release/kasumi-desktop.exe" "$out/"
           cp "target/$t/release/kasumi-helper.exe" "$out/"
-          for c in xray sing-box tun2socks; do
+          for c in xray sing-box tun2socks hev-socks5-tunnel; do
             cp "src-tauri/binaries/$c-$t.exe" "$out/$c.exe"
           done
           cp src-tauri/binaries/wintun.dll "$out/"
           # libcronet.dll must sit next to sing-box for its naive outbound to load.
           cp src-tauri/binaries/libcronet.dll "$out/"
+          # msys-2.0.dll must sit next to hev-socks5-tunnel (msys2 build) to load.
+          cp src-tauri/binaries/msys-2.0.dll "$out/"
           : > "$out/portable.dat"
           name=$(scripts/artifact-name.sh windows-portable)
           ( cd dist/portable && 7z a -tzip "../$name" Kasumi-Proxy >/dev/null )
@@ -265,7 +267,7 @@ jobs:
           mkdir -p "$out"
           cp "target/$t/release/kasumi-desktop" "$out/"
           cp "target/$t/release/kasumi-helper" "$out/"
-          for c in xray sing-box tun2socks; do
+          for c in xray sing-box tun2socks hev-socks5-tunnel; do
             cp "src-tauri/binaries/$c-$t" "$out/$c"
           done
           # libcronet.so must sit next to sing-box for its naive outbound to load.

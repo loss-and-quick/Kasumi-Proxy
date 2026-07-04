@@ -394,6 +394,12 @@ const pt = {
   "settings.fragmentLength": "Comprimento do fragmento",
   "settings.fragmentDelay": "Atraso de fragmentação",
   "settings.tunMtu": "MTU do TUN",
+  "settings.tunHevTuning": "Ajustes do hev",
+  "settings.tunConnectTimeout": "Tempo de conexão (ms)",
+  "settings.tunTcpRwTimeout": "Tempo de leitura/escrita TCP (ms)",
+  "settings.tunUdpRwTimeout": "Tempo de leitura/escrita UDP (ms)",
+  "settings.tunTcpBuffer": "Tamanho do buffer TCP (bytes)",
+  "settings.tunUdpRecvBuffer": "Buffer de recepção UDP (bytes)",
   "settings.tunEngine": "Motor TUN",
   "settings.tunEngineHint":
     "Qual motor conecta o dispositivo TUN a cada núcleo. O sing-box pode usar o próprio TUN nativo; o xray precisa de um externo.",

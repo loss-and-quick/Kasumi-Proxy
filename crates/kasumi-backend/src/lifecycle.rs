@@ -12,7 +12,9 @@ use regex::Regex;
 use tokio::process::Child;
 
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
+use kasumi_core::tun::TunOptions;
 
 use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
@@ -51,11 +53,12 @@ pub fn random_tun_iface() -> String {
 }
 
 /// Build the config for `profile_id` (else the active profile), write it and the
-/// engine marker, and return the engine + resolved TUN engine + local SOCKS port.
+/// engine marker, and return the engine + resolved TUN engine + external-engine
+/// tuning + local SOCKS port.
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
-) -> Result<(Engine, TunEngine, u16), CommandError> {
+) -> Result<(Engine, TunEngine, TunOptions, u16), CommandError> {
     let paths = platform.paths();
     let state = read_json::<AppState>(&paths.app_state).await;
     let id = profile_id
@@ -78,10 +81,12 @@ pub async fn resolve_and_write_config(
     write_text(&paths.engine_file, engine_label(engine))
         .await
         .map_err(|e| CommandError(e.to_string()))?;
-    let socks_port = state
-        .and_then(|s| s.settings.local_socks_port)
+    let settings = state.map(|s| s.settings).unwrap_or_default();
+    let socks_port = settings
+        .local_socks_port
         .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-    Ok((engine, tun, socks_port))
+    let tun_opts = settings.tun_options();
+    Ok((engine, tun, tun_opts, socks_port))
 }
 
 fn engine_label(engine: CoreEngine) -> &'static str {
@@ -326,60 +331,66 @@ pub async fn spawn_core(
     .await
 }
 
-/// Spawn tun2socks bridging `iface` to the SOCKS port, logging to `log_path`.
-/// `fwmark`, when set, marks tun2socks' own upstream socket so an `ip rule` can
-/// keep it out of the tunnel — that's a Linux SO_MARK feature. Windows has no
-/// fwmark (its server bypass is a host route), so it passes `None`.
-pub async fn spawn_tun2socks(
-    bin: &str,
-    iface: &str,
-    socks_port: u16,
-    log_path: &Path,
-    fwmark: Option<u32>,
-) -> std::io::Result<Child> {
-    spawn_logged(
-        &tun2socks_argv(bin, iface, socks_port, fwmark),
-        &HashMap::new(),
-        log_path,
-        false,
-    )
-    .await
-}
-
-/// tun2socks' argv. Split out (like [`core_argv`]) so a caller that supervises the
-/// spawn itself can reuse the exact command. tun2socks needs no special env.
-pub fn tun2socks_argv(bin: &str, iface: &str, socks_port: u16, fwmark: Option<u32>) -> Vec<String> {
+/// Spawn tun2socks bridging the tun to the local SOCKS port. `fwmark`, when set,
+/// marks tun2socks' own upstream socket so an `ip rule` can keep it out of the
+/// tunnel — a Linux SO_MARK feature. Windows has no fwmark (its server bypass is a
+/// host route), so it passes `None`.
+async fn spawn_tun2socks(s: &TunSpawn<'_>) -> std::io::Result<Child> {
     let mut argv = vec![
-        bin.to_owned(),
+        s.bin.to_owned(),
         "-device".into(),
-        format!("tun://{iface}"),
+        format!("tun://{}", s.iface),
         "-proxy".into(),
-        format!("socks5://127.0.0.1:{socks_port}"),
+        format!("socks5://127.0.0.1:{}", s.socks_port),
+        // The TUN MTU setting applies to every external engine; tun2socks creates
+        // its own tun, so it must be told the MTU here (hev takes it in its YAML).
+        "-mtu".into(),
+        s.opts.mtu.to_string(),
     ];
-    if let Some(mark) = fwmark {
+    if let Some(mark) = s.fwmark {
         argv.push("-fwmark".into());
         argv.push(mark.to_string());
     }
-    argv
+    spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await
+}
+
+/// Everything needed to bring up one external TUN engine, gathered so adding an
+/// engine is a single match arm. `bin` is the engine binary (resolved per-platform);
+/// `cfg_path` is where a config-file engine (hev) writes its YAML; `ipv4`/`ipv6` are
+/// the addresses such an engine assigns to the tun it creates itself; `opts` carries
+/// the resolved tuning.
+pub struct TunSpawn<'a> {
+    pub bin: &'a str,
+    pub iface: &'a str,
+    pub ipv4: &'a str,
+    pub ipv6: Option<&'a str>,
+    pub socks_port: u16,
+    pub log_path: &'a Path,
+    pub fwmark: Option<u32>,
+    pub cfg_path: &'a Path,
+    pub opts: &'a TunOptions,
 }
 
 /// The single place that knows how to launch an external TUN engine. Every shell
 /// (desktop, root daemon) routes its bring-up through here, so adding a new engine
 /// is one more arm — nothing else in the orchestration learns engine specifics.
-/// `bin` is the engine's binary (resolved per-platform). `SingboxTun` has no
-/// external helper (the sing-box core owns the tun) and must not reach this.
-pub async fn spawn_tun_engine(
-    tun: TunEngine,
-    bin: &str,
-    iface: &str,
-    socks_port: u16,
-    log_path: &Path,
-    fwmark: Option<u32>,
-) -> std::io::Result<Child> {
+/// `SingboxTun` has no external helper (the sing-box core owns the tun) and must
+/// not reach this.
+pub async fn spawn_tun_engine(tun: TunEngine, s: &TunSpawn<'_>) -> std::io::Result<Child> {
     match tun {
-        TunEngine::Tun2socks => spawn_tun2socks(bin, iface, socks_port, log_path, fwmark).await,
+        TunEngine::Tun2socks => spawn_tun2socks(s).await,
+        TunEngine::Hev => spawn_hev(s).await,
         TunEngine::SingboxTun => unreachable!("SingboxTun has no external helper to spawn"),
     }
+}
+
+/// hev creates and addresses its own tun from a YAML config: render it, write it
+/// next to the runtime state, then run `<hev_bin> <cfg>`.
+async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
+    let yaml = build_hev_config(s.iface, s.ipv4, s.ipv6, s.socks_port, s.fwmark, s.opts);
+    write_text(s.cfg_path, &yaml).await?;
+    let argv = [s.bin.to_owned(), s.cfg_path.to_string_lossy().into_owned()];
+    spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await
 }
 
 /// Confirm the core stayed up: a bad config makes it exit within ~1s.
@@ -448,7 +459,7 @@ mod tests {
             .unwrap();
 
         // No explicit id → uses active_id.
-        let (engine, tun, socks) = resolve_and_write_config(&p, None).await.unwrap();
+        let (engine, tun, _tun_opts, socks) = resolve_and_write_config(&p, None).await.unwrap();
         assert_eq!(engine, CoreEngine::Xray);
         assert_eq!(tun, TunEngine::Tun2socks);
         assert_eq!(socks, 11080);

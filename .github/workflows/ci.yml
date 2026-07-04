@@ -309,11 +309,13 @@ jobs:
         shell: bash
         run: |
           # tauri-build validates declared bundle.resources at compile time. The
-          # real wintun.dll / libcronet.dll are fetched only for the nightly/release
-          # bundle; placeholders satisfy the path check for this compile-only job.
+          # real wintun.dll / libcronet.dll / msys-2.0.dll are fetched only for the
+          # nightly/release bundle; placeholders satisfy the path check for this
+          # compile-only job.
           mkdir -p src-tauri/binaries
           : > src-tauri/binaries/wintun.dll
           : > src-tauri/binaries/libcronet.dll
+          : > src-tauri/binaries/msys-2.0.dll
 
       - name: Compile the Tauri app (no bundle)
         run: cargo build -p kasumi-desktop

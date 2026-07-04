@@ -31,6 +31,10 @@ pub const SERVICE_STARTED_FILE: &str = "/data/adb/kasumi-proxy/service-started";
 pub const XRAY_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/xray";
 pub const SINGBOX_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/sing-box";
 pub const TUN2SOCKS_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/tun2socks";
+pub const HEV_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/hev-socks5-tunnel";
+/// hev writes its generated YAML here (and a second one for the force-proxy tun).
+pub const HEV_CONFIG: &str = "/data/adb/kasumi-proxy/run/hev.yml";
+pub const HEV2_CONFIG: &str = "/data/adb/kasumi-proxy/run/hev2.yml";
 pub const GEODAT2SRS_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/geodat2srs";
 /// Core binaries a running pid may match.
 pub const CORE_BINS: [&str; 2] = [XRAY_BIN, SINGBOX_BIN];

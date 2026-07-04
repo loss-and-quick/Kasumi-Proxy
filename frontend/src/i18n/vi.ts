@@ -390,6 +390,12 @@ const vi = {
   "settings.fragmentLength": "Độ dài phân mảnh",
   "settings.fragmentDelay": "Độ trễ phân mảnh",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunHevTuning": "Tinh chỉnh hev",
+  "settings.tunConnectTimeout": "Thời gian chờ kết nối (ms)",
+  "settings.tunTcpRwTimeout": "Thời gian đọc/ghi TCP (ms)",
+  "settings.tunUdpRwTimeout": "Thời gian đọc/ghi UDP (ms)",
+  "settings.tunTcpBuffer": "Kích thước bộ đệm TCP (byte)",
+  "settings.tunUdpRecvBuffer": "Bộ đệm nhận UDP (byte)",
   "settings.tunEngine": "Công cụ TUN",
   "settings.tunEngineHint":
     "Công cụ kết nối thiết bị TUN với mỗi lõi. sing-box có thể dùng TUN gốc của nó; xray cần công cụ ngoài.",

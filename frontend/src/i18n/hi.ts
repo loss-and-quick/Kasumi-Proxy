@@ -386,6 +386,12 @@ const hi = {
   "settings.fragmentLength": "फ्रैगमेंट लंबाई",
   "settings.fragmentDelay": "फ्रैगमेंट विलंब",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunHevTuning": "hev ट्यूनिंग",
+  "settings.tunConnectTimeout": "कनेक्ट टाइमआउट (ms)",
+  "settings.tunTcpRwTimeout": "TCP रीड/राइट टाइमआउट (ms)",
+  "settings.tunUdpRwTimeout": "UDP रीड/राइट टाइमआउट (ms)",
+  "settings.tunTcpBuffer": "TCP बफ़र आकार (बाइट)",
+  "settings.tunUdpRecvBuffer": "UDP रिसीव बफ़र (बाइट)",
   "settings.tunEngine": "TUN इंजन",
   "settings.tunEngineHint":
     "कौन सा इंजन TUN डिवाइस को प्रत्येक कोर से जोड़ता है। sing-box अपना नेटिव TUN उपयोग कर सकता है; xray को बाहरी इंजन चाहिए।",
