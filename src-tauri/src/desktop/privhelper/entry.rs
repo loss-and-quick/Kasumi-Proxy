@@ -13,10 +13,10 @@ use std::time::Duration;
 use kasumi_backend::platform::{Platform, StopDataPath};
 
 use super::server;
+use crate::desktop::DesktopPlatform;
 use crate::desktop::paths::{
     ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
 };
-use crate::desktop::DesktopPlatform;
 
 struct Args {
     socket: String,
@@ -141,9 +141,16 @@ fn run() -> anyhow::Result<()> {
     }
 
     // Resolve paths to exactly what the GUI passed (pkexec scrubbed the env).
-    std::env::set_var(ENV_DATADIR, &args.datadir);
-    std::env::set_var(ENV_RUNDIR, &args.rundir);
-    std::env::set_var(ENV_BIN_DIR, &args.bin_dir);
+    // SAFETY: this is the privileged helper's entry point — the tokio runtime
+    // (and any worker thread that could read the environment) is only constructed
+    // on the next line, so the writes happen on a single thread with no
+    // concurrent reader. The env is the transport for these paths because
+    // `DesktopPaths::resolve` reads them, and the helper owns its process.
+    unsafe {
+        std::env::set_var(ENV_DATADIR, &args.datadir);
+        std::env::set_var(ENV_RUNDIR, &args.rundir);
+        std::env::set_var(ENV_BIN_DIR, &args.bin_dir);
+    }
 
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {

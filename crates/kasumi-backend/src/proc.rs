@@ -72,11 +72,11 @@ pub async fn run(argv: &[String], opts: RunOpts) -> std::io::Result<RunResult> {
     });
 
     let mut child = cmd.spawn()?;
-    if let Some(input) = &opts.stdin {
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(input.as_bytes()).await?;
-            stdin.shutdown().await?;
-        }
+    if let Some(input) = &opts.stdin
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        stdin.write_all(input.as_bytes()).await?;
+        stdin.shutdown().await?;
     }
     let out = child.wait_with_output().await?;
     Ok(RunResult {
@@ -306,8 +306,8 @@ mod imp {
 
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, TerminateProcess,
-        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+        QueryFullProcessImageNameW, TerminateProcess,
     };
 
     /// Full on-disk path of a running pid's executable image, or `None` if the

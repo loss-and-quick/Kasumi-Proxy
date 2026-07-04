@@ -115,10 +115,9 @@ pub async fn used_ports() -> HashSet<u16> {
                 .split_whitespace()
                 .nth(1)
                 .and_then(|a| a.split(':').nth(1))
+                && let Ok(port) = u16::from_str_radix(hex, 16)
             {
-                if let Ok(port) = u16::from_str_radix(hex, 16) {
-                    ports.insert(port);
-                }
+                ports.insert(port);
             }
         }
     }

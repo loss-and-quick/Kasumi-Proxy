@@ -26,10 +26,11 @@ fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {
         .into_iter()
         .flatten()
     {
-        if let Some(server) = ob.get("server").and_then(Value::as_str) {
-            if !server.is_empty() && !is_loopback(server) {
-                hosts.insert(server.to_string());
-            }
+        if let Some(server) = ob.get("server").and_then(Value::as_str)
+            && !server.is_empty()
+            && !is_loopback(server)
+        {
+            hosts.insert(server.to_string());
         }
     }
     for s in cfg
@@ -40,10 +41,10 @@ fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {
         .flatten()
     {
         // Only literal IPs here — domain DNS servers resolve through the proxy.
-        if let Some(addr) = s.get("server").and_then(Value::as_str) {
-            if is_literal_ip(addr) {
-                hosts.insert(addr.to_string());
-            }
+        if let Some(addr) = s.get("server").and_then(Value::as_str)
+            && is_literal_ip(addr)
+        {
+            hosts.insert(addr.to_string());
         }
     }
     hosts

@@ -25,18 +25,18 @@ use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, re
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{
-    force_socks_port, AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
+    AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
 
 use super::network::run_watcher;
 use super::paths::{
-    backend_paths, CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, IP, PIDFILE, RUN_DIR,
-    SERVICE_STARTED_FILE, SERVICE_STATE_FILE, SINGBOX_BIN, SOCKS_PORT_FILE, TUN2SOCKS2_PIDFILE,
-    TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE, TUN2_IFACE_FILE, TUN_IFACE_FILE, XRAY_BIN,
+    CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, IP, PIDFILE, RUN_DIR, SERVICE_STARTED_FILE,
+    SERVICE_STATE_FILE, SINGBOX_BIN, SOCKS_PORT_FILE, TUN_IFACE_FILE, TUN2_IFACE_FILE,
+    TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    apply_strict_carveouts, apply_xray_routing, clear_routing_rules, has_force_proxy,
-    protect_local_ports, reload_app_filter_rules, Action, AppFilter, RoutingState, FWMARK,
+    Action, AppFilter, FWMARK, RoutingState, apply_strict_carveouts, apply_xray_routing,
+    clear_routing_rules, has_force_proxy, protect_local_ports, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::{run_out, silent};
@@ -589,14 +589,14 @@ impl AppFilterCapability for AndroidPlatform {
             let mut toks = rest.split_whitespace();
             let pkg = toks.next();
             let uid = toks.find_map(|t| t.strip_prefix("uid:"));
-            if let (Some(pkg), Some(uid)) = (pkg, uid) {
-                if let Ok(uid) = uid.parse::<i32>() {
-                    apps.push(AppInfo {
-                        pkg: pkg.to_string(),
-                        uid,
-                        system: uid < 10000,
-                    });
-                }
+            if let (Some(pkg), Some(uid)) = (pkg, uid)
+                && let Ok(uid) = uid.parse::<i32>()
+            {
+                apps.push(AppInfo {
+                    pkg: pkg.to_string(),
+                    uid,
+                    system: uid < 10000,
+                });
             }
         }
         Ok(apps)

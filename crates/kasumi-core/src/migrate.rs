@@ -14,7 +14,7 @@
 //! `network` string, compound values stored as CSV/JSON strings — into the nested
 //! model with the transport tagged on `kind`.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// A single upgrade step, mutating the whole `AppState` value from one version to
 /// the next.
@@ -144,12 +144,13 @@ pub fn migrate_profile(v: &mut Value) {
     }
     // Already nested, but an intermediate build may have left the transport keyed
     // on `network` rather than tagged on `kind`; tag it if so.
-    if let Some(t) = v.get("transport") {
-        if t.is_object() && t.get("kind").is_none() && t.get("network").is_some() {
-            if let Some(Value::Object(map)) = v.get_mut("transport").map(Value::take) {
-                v["transport"] = nest_transport(&map);
-            }
-        }
+    if let Some(t) = v.get("transport")
+        && t.is_object()
+        && t.get("kind").is_none()
+        && t.get("network").is_some()
+        && let Some(Value::Object(map)) = v.get_mut("transport").map(Value::take)
+    {
+        v["transport"] = nest_transport(&map);
     }
 }
 
@@ -178,10 +179,10 @@ fn flatten_to_nested(v: &mut Value, protocol: &str) {
         obj.insert("tls".into(), Value::Object(tls));
     }
 
-    if protocol == "wireguard" {
-        if let Some(r) = obj.get_mut("reserved") {
-            *r = reserved_to_bytes(r);
-        }
+    if protocol == "wireguard"
+        && let Some(r) = obj.get_mut("reserved")
+    {
+        *r = reserved_to_bytes(r);
     }
 }
 

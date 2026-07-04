@@ -7,10 +7,10 @@ use std::sync::Arc;
 use kasumi_backend::fs::write_text;
 use kasumi_backend::platform::{Platform, StopDataPath};
 use kasumi_backend::proc::{kill_if_running, read_pidfile};
-use kasumi_backend::{dispatch, Command, Response, Service};
+use kasumi_backend::{Command, Response, Service, dispatch};
 
-use crate::android::paths::DAEMON_PIDFILE;
 use crate::android::AndroidPlatform;
+use crate::android::paths::DAEMON_PIDFILE;
 use crate::server;
 
 pub async fn run_entry() {
@@ -78,7 +78,7 @@ async fn run_stop(platform: Arc<dyn Platform>) {
 }
 
 async fn wait_for_signal() {
-    use tokio::signal::unix::{signal, SignalKind};
+    use tokio::signal::unix::{SignalKind, signal};
     let mut term = signal(SignalKind::terminate()).expect("SIGTERM handler");
     let mut intr = signal(SignalKind::interrupt()).expect("SIGINT handler");
     tokio::select! {

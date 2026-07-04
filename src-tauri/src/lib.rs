@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
-use tauri_specta::{collect_commands, collect_events, Builder, Event};
+use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
 use kasumi_backend::platform::Platform;
 use kasumi_backend::{Command, Response, Service};
@@ -485,8 +485,14 @@ mod tests {
     #[tokio::test]
     async fn service_over_desktop_platform_dispatches() {
         let dir = tempfile::tempdir().unwrap();
-        std::env::set_var("KASUMI_DATA_HOME", dir.path());
-        std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
+        // SAFETY: the tokio runtime's worker threads are not running yet —
+        // `boot_init`/`dispatch` below drive the first awaits — so this write and
+        // the matching `remove_var` at the end touch the env with no concurrent
+        // reader on this process's own threads.
+        unsafe {
+            std::env::set_var("KASUMI_DATA_HOME", dir.path());
+            std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
+        }
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new().unwrap());
         platform.boot_init().await.unwrap();
         let service = Service::new(platform).await;
@@ -495,7 +501,10 @@ mod tests {
         let resp = service.dispatch(Command::Capabilities).await.unwrap();
         assert!(matches!(resp, Response::Capabilities(_)));
 
-        std::env::remove_var("KASUMI_DATA_HOME");
-        std::env::remove_var("KASUMI_RUNTIME_DIR");
+        // SAFETY: see the matching `set_var` above — no worker thread is reading env.
+        unsafe {
+            std::env::remove_var("KASUMI_DATA_HOME");
+            std::env::remove_var("KASUMI_RUNTIME_DIR");
+        }
     }
 }

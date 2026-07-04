@@ -21,7 +21,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use strum::IntoEnumIterator;
 
 use kasumi_core::core_config::build_core_config;
@@ -47,8 +47,7 @@ const SS_KEY_16: &str = "MTIzNDU2Nzg5MGFiY2RlZg==";
 const SS_KEY_32: &str = "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=";
 // A valid base64 ECHConfigList (`sing-box generate ech-keypair example.com`),
 // the raw form share links carry in the `ech` parameter.
-const ECH_CONFIG_LIST_B64: &str =
-    "AEb+DQBCAAAgACAYjkLlzMEK3J2Dcv8wBSVwYDz4j8o9tRSTBPSr+m52FwAMAAEAAQABAAIAAQADAAtleGFtcGxlLmNvbQAA";
+const ECH_CONFIG_LIST_B64: &str = "AEb+DQBCAAAgACAYjkLlzMEK3J2Dcv8wBSVwYDz4j8o9tRSTBPSr+m52FwAMAAEAAQABAAIAAQADAAtleGFtcGxlLmNvbQAA";
 // A 64-char hex SHA-256 (xray `pinnedPeerCertSha256`) — cores syntax-check it.
 const PCS_HEX: &str = "aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd";
 

@@ -3,15 +3,16 @@
 //! core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted invariants
 //! (e.g. inbound/route shape) are covered by the unit tests below.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::config_shared::{parse_pem_chain, split_csv, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
-    force_socks_port, AdvancedSettings, AppFilterMode, DomainStrategy, RoutingMode, RoutingRule,
-    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+    AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
+    DEFAULT_REMOTE_DNS, DomainStrategy, FAKEIP_INET4_RANGE, RoutingMode, RoutingRule,
+    force_socks_port,
 };
 
 /// iproute2 table + rule-priority indices that native sing-box `auto_route`
@@ -156,10 +157,10 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
     if !tls.tls_curve_preferences.is_empty() {
         t["curve_preferences"] = tls.tls_curve_preferences.clone().into();
     }
-    if let Some(certs) = &certs {
-        if !certs.is_empty() {
-            t["certificate"] = json!(certs);
-        }
+    if let Some(certs) = &certs
+        && !certs.is_empty()
+    {
+        t["certificate"] = json!(certs);
     }
     if s.fragment {
         t["record_fragment"] = true.into();
@@ -622,12 +623,11 @@ fn split_dns_host_port(s: &str) -> (String, Option<u16>) {
         }
     }
     // A single colon means `host:port`; more than one is a bracketless IPv6 literal.
-    if s.matches(':').count() == 1 {
-        if let Some((h, p)) = s.split_once(':') {
-            if let Ok(port) = p.parse::<u16>() {
-                return (h.to_string(), Some(port));
-            }
-        }
+    if s.matches(':').count() == 1
+        && let Some((h, p)) = s.split_once(':')
+        && let Ok(port) = p.parse::<u16>()
+    {
+        return (h.to_string(), Some(port));
     }
     (s.to_string(), None)
 }
@@ -771,10 +771,10 @@ fn build_base_singbox_rule(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String)
     if let Some(net) = &rule.network {
         out["network"] = json!(split_csv(&wire(net)).unwrap_or_default());
     }
-    if let Some(proto) = &rule.protocol {
-        if !proto.is_empty() {
-            out["protocol"] = json!(proto);
-        }
+    if let Some(proto) = &rule.protocol
+        && !proto.is_empty()
+    {
+        out["protocol"] = json!(proto);
     }
     out
 }
@@ -886,38 +886,38 @@ fn build_structured_singbox_rules(
         let base = build_base_singbox_rule(item, resolve);
         let mut emitted = false;
 
-        if let Some(domain) = &item.domain {
-            if !domain.is_empty() {
-                let mut domain_rule = base.clone();
-                for d in domain {
-                    parse_singbox_domain(d, &mut domain_rule, &mut rule_set_tags);
-                }
-                if has_match_fields(
-                    &domain_rule,
-                    &[
-                        "rule_set",
-                        "domain",
-                        "domain_suffix",
-                        "domain_keyword",
-                        "domain_regex",
-                    ],
-                ) {
-                    rules.push(domain_rule);
-                    emitted = true;
-                }
+        if let Some(domain) = &item.domain
+            && !domain.is_empty()
+        {
+            let mut domain_rule = base.clone();
+            for d in domain {
+                parse_singbox_domain(d, &mut domain_rule, &mut rule_set_tags);
+            }
+            if has_match_fields(
+                &domain_rule,
+                &[
+                    "rule_set",
+                    "domain",
+                    "domain_suffix",
+                    "domain_keyword",
+                    "domain_regex",
+                ],
+            ) {
+                rules.push(domain_rule);
+                emitted = true;
             }
         }
-        if let Some(ip) = &item.ip {
-            if !ip.is_empty() {
-                let mut ip_rule = base.clone();
-                for addr in ip {
-                    parse_singbox_ip(addr, &mut ip_rule, &mut rule_set_tags);
-                }
-                if has_match_fields(&ip_rule, &["rule_set", "ip_cidr", "ip_is_private"]) {
-                    rules.push(ip_rule.clone());
-                    ip_rules.push(ip_rule);
-                    emitted = true;
-                }
+        if let Some(ip) = &item.ip
+            && !ip.is_empty()
+        {
+            let mut ip_rule = base.clone();
+            for addr in ip {
+                parse_singbox_ip(addr, &mut ip_rule, &mut rule_set_tags);
+            }
+            if has_match_fields(&ip_rule, &["rule_set", "ip_cidr", "ip_is_private"]) {
+                rules.push(ip_rule.clone());
+                ip_rules.push(ip_rule);
+                emitted = true;
             }
         }
         if !emitted && has_match_fields(&base, &["port", "port_range", "network", "protocol"]) {
@@ -1058,10 +1058,10 @@ fn build_singbox_route(
         "auto_detect_interface": true,
         "default_domain_resolver": { "server": "local" },
     });
-    if let Some(rs) = build_rule_set_objects(&rule_set_tags, srs_dir) {
-        if !rs.is_empty() {
-            route["rule_set"] = json!(rs);
-        }
+    if let Some(rs) = build_rule_set_objects(&rule_set_tags, srs_dir)
+        && !rs.is_empty()
+    {
+        route["rule_set"] = json!(rs);
     }
     route
 }

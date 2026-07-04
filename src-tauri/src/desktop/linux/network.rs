@@ -42,11 +42,11 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
                         tokio::time::sleep(Duration::from_millis(500)).await;
                         cur = active_uplink().await;
                     }
-                    if let Some(cur) = cur {
-                        if Some(&cur) != last.as_ref() {
-                            last = Some(cur);
-                            let _ = tx.send(()).await;
-                        }
+                    if let Some(cur) = cur
+                        && Some(&cur) != last.as_ref()
+                    {
+                        last = Some(cur);
+                        let _ = tx.send(()).await;
                     }
                 }
             }

@@ -12,7 +12,7 @@ use std::ptr;
 use tokio::sync::mpsc;
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::System::Power::{
-    PowerRegisterSuspendResumeNotification, DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS,
+    DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, PowerRegisterSuspendResumeNotification,
 };
 
 /// `recipient` is a pointer to a `DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS` callback block.

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::profile::Profile;
 use crate::state::{
-    AdvancedSettings, AppState, AssetFile, RoutingRule, Subscription, BASE_GROUP_ID,
+    AdvancedSettings, AppState, AssetFile, BASE_GROUP_ID, RoutingRule, Subscription,
 };
 use crate::sub_apply::{
     deduplicate_profiles_scoped, migrate_profiles_to_new_group, remove_profiles_by_sub_id,
@@ -409,7 +409,7 @@ fn move_item_by_index<T>(items: &mut [T], from: usize, to: usize) {
 mod tests {
     use super::*;
     use crate::share::parse_share_link;
-    use crate::state::{default_app_state, Group};
+    use crate::state::{Group, default_app_state};
 
     fn p(uri: &str) -> Profile {
         parse_share_link(uri, None).unwrap()

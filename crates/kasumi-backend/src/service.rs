@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 
 use kasumi_core::contract::{FetchMode, PushFrame, RunState, ServiceStatus, SubAppliedEvent};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL};
@@ -21,7 +21,7 @@ use crate::commands::{self, Command, CommandError, Response};
 use crate::fs::read_text;
 use crate::fsjson::read_json;
 use crate::lifecycle::resolve_and_write_config;
-use crate::net::{fetch_url, FetchUrlOptions};
+use crate::net::{FetchUrlOptions, fetch_url};
 use crate::platform::{Platform, StartDataPath, StopDataPath};
 use crate::sub_update::{self, LifecycleControl};
 
@@ -433,13 +433,12 @@ impl Service {
             let mut last = String::new();
             loop {
                 tokio::time::sleep(STATUS_INTERVAL).await;
-                if let Some(status) = this.current_status().await {
-                    if let Ok(json) = serde_json::to_string(&status) {
-                        if json != last {
-                            last = json;
-                            let _ = this.events.send(PushFrame::Status { value: status });
-                        }
-                    }
+                if let Some(status) = this.current_status().await
+                    && let Ok(json) = serde_json::to_string(&status)
+                    && json != last
+                {
+                    last = json;
+                    let _ = this.events.send(PushFrame::Status { value: status });
                 }
             }
         });
@@ -611,12 +610,14 @@ mod tests {
         seed_active(&platform).await;
         let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
         svc.dispatch(Command::Stop).await.unwrap();
-        assert!(platform
-            .calls
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|c| c == "stop:keep=false"));
+        assert!(
+            platform
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|c| c == "stop:keep=false")
+        );
     }
 
     #[tokio::test]

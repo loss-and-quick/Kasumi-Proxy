@@ -10,12 +10,12 @@ use futures_util::{SinkExt, StreamExt};
 use tempfile::TempDir;
 use tokio_tungstenite::tungstenite::Message;
 
+use kasumi_backend::Service;
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
     StopDataPath,
 };
-use kasumi_backend::Service;
 use kasumi_core::contract::{RunState, ServiceState, WsInfo};
 
 struct StubPlatform {
@@ -97,10 +97,10 @@ async fn start_server() -> (WsInfo, TempDir) {
     });
     // Wait for the listener to bind and write its wsInfo.
     for _ in 0..50 {
-        if let Ok(bytes) = std::fs::read(&ws_info_path) {
-            if let Ok(info) = serde_json::from_slice::<WsInfo>(&bytes) {
-                return (info, dir);
-            }
+        if let Ok(bytes) = std::fs::read(&ws_info_path)
+            && let Ok(info) = serde_json::from_slice::<WsInfo>(&bytes)
+        {
+            return (info, dir);
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }

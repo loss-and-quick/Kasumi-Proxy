@@ -17,12 +17,11 @@ pub async fn read_app_state(platform: &dyn Platform) -> Option<AppState> {
     // Profiles live in their own file; fold them into the one document the
     // migration ladder operates on. The legacy layout kept them inline in
     // app-state.json, so only override when profiles.json actually has some.
-    if let Some(profiles) = read_json::<Value>(&paths.profiles).await {
-        if profiles.as_array().is_some_and(|a| !a.is_empty()) {
-            if let Some(obj) = doc.as_object_mut() {
-                obj.insert("profiles".into(), profiles);
-            }
-        }
+    if let Some(profiles) = read_json::<Value>(&paths.profiles).await
+        && profiles.as_array().is_some_and(|a| !a.is_empty())
+        && let Some(obj) = doc.as_object_mut()
+    {
+        obj.insert("profiles".into(), profiles);
     }
     kasumi_core::migrate::migrate_app_state(&mut doc);
     let mut state: AppState = serde_json::from_value(doc).ok()?;
@@ -44,7 +43,7 @@ pub async fn write_app_state(platform: &dyn Platform, state: &AppState) -> std::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutil::{sample_vless, TestPlatform};
+    use crate::testutil::{TestPlatform, sample_vless};
     use kasumi_core::profile::Profile;
     use kasumi_core::state::default_app_state;
 
