@@ -32,7 +32,12 @@ unsafe extern "system" fn on_power_event(
     if (event_type == PBT_APMRESUMEAUTOMATIC || event_type == PBT_APMRESUMESUSPEND)
         && !context.is_null()
     {
-        let tx = &*(context as *const mpsc::Sender<()>);
+        // SAFETY: `context` is the `Context` pointer we registered — a `Box`ed
+        // `mpsc::Sender<()>` that `run_watcher` keeps alive for the process lifetime
+        // (it parks holding `tx` and never unregisters), so the reference is valid.
+        // Non-null checked above. Edition 2024 requires the explicit block even in an
+        // `unsafe fn`.
+        let tx = unsafe { &*(context as *const mpsc::Sender<()>) };
         let _ = tx.try_send(());
     }
     0 // NO_ERROR
