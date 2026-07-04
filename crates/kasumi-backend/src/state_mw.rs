@@ -150,7 +150,7 @@ mod tests {
                 "set-mtu"
             }
             fn apply(&self, _prev: &AppState, next: &mut AppState) {
-                next.settings.mtu = self.0;
+                next.settings.tun_mtu = self.0;
             }
         }
         let mut chain = WriteChain::new();
@@ -160,6 +160,6 @@ mod tests {
         let prev = default_app_state();
         let mut next = default_app_state();
         chain.run(&prev, &mut next);
-        assert_eq!(next.settings.mtu, 2222);
+        assert_eq!(next.settings.tun_mtu, 2222);
     }
 }

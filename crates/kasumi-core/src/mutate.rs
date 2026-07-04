@@ -769,14 +769,14 @@ mod tests {
         );
         assert_eq!(s.active_id.as_deref(), Some("x"));
         let mut settings = s.settings.clone();
-        settings.mtu = 1280;
+        settings.tun_mtu = 1280;
         apply_mutation(
             &mut s,
             &MutationIntent::SetSettings {
                 settings: Box::new(settings),
             },
         );
-        assert_eq!(s.settings.mtu, 1280);
+        assert_eq!(s.settings.tun_mtu, 1280);
     }
 
     #[test]

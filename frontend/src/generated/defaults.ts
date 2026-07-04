@@ -526,7 +526,6 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "fragment": false,
   "fragmentPackets": "tlshello",
   "logRotateMaxKb": 512,
-  "mtu": 1350,
   "mux": false,
   "muxConcurrency": 8,
   "pingConcurrency": 3,

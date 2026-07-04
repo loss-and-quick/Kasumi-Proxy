@@ -84,9 +84,9 @@ export function ConnectionSection({
         <div style={{ padding: "8px 4px 12px" }}>
           <Field
             label={t("settings.tunMtu")}
-            value={settings.mtu}
+            value={settings.tunMtu}
             type="number"
-            onChange={(value) => set("mtu", Number(value))}
+            onChange={(value) => set("tunMtu", Number(value))}
           />
         </div>
       </Card>
