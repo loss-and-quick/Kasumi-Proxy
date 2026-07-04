@@ -167,9 +167,18 @@ async fn core_version(engine: CoreEngine) -> Option<String> {
 }
 
 /// Spawn tun2socks for `iface`, persist its pid, wait for the iface to appear.
-async fn bring_up_tun2socks(iface: &str, socks_port: u16, pidfile: &str, log_name: &str) {
+/// A spawn failure (e.g. the binary is missing after a partial module update) is
+/// surfaced as an error so the caller fails the start loudly — otherwise the tun is
+/// routed to a bridge that never came up and the device black-holes until the
+/// watchdog happens to notice.
+async fn bring_up_tun2socks(
+    iface: &str,
+    socks_port: u16,
+    pidfile: &str,
+    log_name: &str,
+) -> anyhow::Result<()> {
     let log = format!("{DATADIR}/{log_name}");
-    if let Ok(child) = spawn_tun2socks(
+    let child = spawn_tun2socks(
         TUN2SOCKS_BIN,
         iface,
         socks_port,
@@ -177,22 +186,25 @@ async fn bring_up_tun2socks(iface: &str, socks_port: u16, pidfile: &str, log_nam
         Some(FWMARK),
     )
     .await
-    {
-        let pid = child.id().unwrap_or(0);
-        let _ = write_text(pidfile, &pid.to_string()).await;
-        for _ in 0..10 {
-            if silent(&[IP, "link", "show", iface]).await == 0 {
-                return;
-            }
-            tokio::time::sleep(Duration::from_millis(500)).await;
+    .map_err(|e| anyhow::anyhow!("spawn tun2socks: {e} — see {log}"))?;
+    let pid = child.id().unwrap_or(0);
+    let _ = write_text(pidfile, &pid.to_string()).await;
+    for _ in 0..10 {
+        if silent(&[IP, "link", "show", iface]).await == 0 {
+            return Ok(());
         }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
+    // The pid is live but the device never appeared (tun2socks exited post-spawn, or
+    // /dev/net/tun is unusable): treat as a failed bring-up rather than route into a
+    // non-existent tun.
+    anyhow::bail!("tun2socks tun {iface} never came up — see {log}")
 }
 
 /// xray data-path bring-up: a userspace tun bridged to xray's SOCKS via tun2socks,
 /// plus per-app routing (and a second tun/tun2socks for force-proxy apps). sing-box
 /// needs none of this — it auto_routes its own tun.
-async fn bring_up_xray_tun(socks_port: u16) {
+async fn bring_up_xray_tun(socks_port: u16) -> anyhow::Result<()> {
     let filter = read_app_filter().await;
     let tun_iface = match read_iface(TUN_IFACE_FILE).await {
         Some(x) => x,
@@ -202,7 +214,7 @@ async fn bring_up_xray_tun(socks_port: u16) {
 
     let t2 = read_pidfile(TUN2SOCKS_PIDFILE).await;
     if !(t2 > 0 && pid_matches_bin(t2, TUN2SOCKS_BIN).await) {
-        bring_up_tun2socks(&tun_iface, socks_port, TUN2SOCKS_PIDFILE, "tun2socks.log").await;
+        bring_up_tun2socks(&tun_iface, socks_port, TUN2SOCKS_PIDFILE, "tun2socks.log").await?;
     }
 
     if has_force_proxy(&filter) {
@@ -212,7 +224,7 @@ async fn bring_up_xray_tun(socks_port: u16) {
         };
         let t3 = read_pidfile(TUN2SOCKS2_PIDFILE).await;
         if !(t3 > 0 && pid_matches_bin(t3, TUN2SOCKS_BIN).await) {
-            bring_up_tun2socks(&t, socks_port + 2, TUN2SOCKS2_PIDFILE, "tun2socks2.log").await;
+            bring_up_tun2socks(&t, socks_port + 2, TUN2SOCKS2_PIDFILE, "tun2socks2.log").await?;
         }
         tun2_iface = Some(t);
     } else {
@@ -235,6 +247,7 @@ async fn bring_up_xray_tun(socks_port: u16) {
         http_port: http_port().await,
     };
     apply_xray_routing(&rs).await;
+    Ok(())
 }
 
 async fn fail(reason: &str) -> anyhow::Result<()> {
@@ -283,7 +296,7 @@ async fn start_inner(
 
     // xray needs a userspace tun + tun2socks + manual routing; sing-box auto_routes.
     if engine == CoreEngine::Xray {
-        bring_up_xray_tun(socks_port).await;
+        bring_up_xray_tun(socks_port).await?;
     } else if read_app_filter().await.strict {
         // sing-box kill-switch carve-outs so the device stays reachable.
         apply_strict_carveouts().await;
