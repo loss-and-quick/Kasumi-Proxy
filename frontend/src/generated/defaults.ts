@@ -558,6 +558,7 @@ export const PROTOCOL_OPTS: Protocol[] = ["vless","vmess","trojan","shadowsocks"
 export const CORE_ENGINE_OPTS: CoreEngine[] = ["xray","sing-box"];
 export const TUN_ENGINE_OPTS: string[] = ["singbox-tun","tun2socks","hev"];
 export const LOG_TARGET_OPTS: LogTarget[] = ["daemon","xray","singbox","tun-engine"];
+export const TUN_TUNING_ENGINES: TunEngine[] = ["hev"];
 export const NETWORK_OPTS: Transport["kind"][] = ["tcp","ws","grpc","httpupgrade","xhttp","h2","kcp","quic"];
 export const SECURITY_OPTS: Security[] = ["none","tls","reality"];
 export const HEADER_TYPE_OPTS: HeaderType[] = ["none","http","srtp","utp","wechat-video","dtls","wireguard","dns"];

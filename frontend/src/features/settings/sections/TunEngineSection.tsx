@@ -1,6 +1,6 @@
 import { Card, Field, SectionLabel, Select } from "../../../components";
 import type { CoreEngine, TunEngine } from "../../../generated/bindings";
-import { CORE_ENGINE_OPTS, TUN_BY_CORE } from "../../../generated/defaults";
+import { CORE_ENGINE_OPTS, TUN_BY_CORE, TUN_TUNING_ENGINES } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
@@ -28,9 +28,9 @@ export function TunEngineSection({
   const setTunFor = (core: CoreEngine, value: TunEngine) =>
     set("tunByCore", { ...(settings.tunByCore ?? {}), [core]: value });
 
-  // hev is the only engine that reads the tuning knobs below, so only surface them
-  // when at least one core uses it.
-  const usesHev = CORE_ENGINE_OPTS.some((core) => tunFor(core) === "hev");
+  // Which engines expose the tuning knobs below is a Rust fact (TUN_TUNING_ENGINES);
+  // only surface the block when at least one core uses such an engine.
+  const showTuning = CORE_ENGINE_OPTS.some((core) => TUN_TUNING_ENGINES.includes(tunFor(core)));
 
   return (
     <>
@@ -64,7 +64,7 @@ export function TunEngineSection({
           );
         })}
 
-        {usesHev && (
+        {showTuning && (
           <div
             style={{ marginTop: 12, borderTop: "1px solid var(--outline-faint)", paddingTop: 12 }}
           >

@@ -57,6 +57,17 @@ pub fn tun_from_marker(s: &str) -> Option<TunEngine> {
     serde_json::from_value(serde_json::Value::String(s.trim().to_owned())).ok()
 }
 
+/// Whether a TUN engine reads the userspace tuning knobs (connect / read-write
+/// timeouts, buffer sizes) the settings UI surfaces. Only the hev engine consumes
+/// them today; a new engine must opt in here (exhaustive match), so the UI can't
+/// silently hide a tunable engine's knobs — the single source for that decision.
+pub fn tun_has_tuning(tun: TunEngine) -> bool {
+    match tun {
+        TunEngine::Hev => true,
+        TunEngine::SingboxTun | TunEngine::Tun2socks => false,
+    }
+}
+
 /// Stream transport.
 #[derive(
     Debug,
@@ -313,6 +324,8 @@ fn wire_values<T: strum::IntoEnumIterator + Serialize>() -> Vec<String> {
 /// single source for the frontend's protocol/transport/security `<Select>`s
 /// (emitted to `frontend/src/generated/defaults.ts`).
 pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
+    use strum::IntoEnumIterator;
+
     use crate::contract::LogTarget;
     use crate::profile::Protocol;
     vec![
@@ -320,6 +333,13 @@ pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
         ("CORE_ENGINE_OPTS", wire_values::<CoreEngine>()),
         ("TUN_ENGINE_OPTS", wire_values::<TunEngine>()),
         ("LOG_TARGET_OPTS", wire_values::<LogTarget>()),
+        (
+            "TUN_TUNING_ENGINES",
+            TunEngine::iter()
+                .filter(|&t| tun_has_tuning(t))
+                .map(tun_marker)
+                .collect(),
+        ),
         ("NETWORK_OPTS", wire_values::<Network>()),
         ("SECURITY_OPTS", wire_values::<Security>()),
         ("HEADER_TYPE_OPTS", wire_values::<HeaderType>()),
@@ -366,6 +386,21 @@ mod tests {
         // Unknown/legacy labels don't resolve.
         assert_eq!(tun_from_marker("nope"), None);
         assert_eq!(tun_from_marker(""), None);
+    }
+
+    #[test]
+    fn tun_tuning_engines_is_hev_only() {
+        // Only hev reads the tuning knobs today.
+        assert!(tun_has_tuning(TunEngine::Hev));
+        assert!(!tun_has_tuning(TunEngine::Tun2socks));
+        assert!(!tun_has_tuning(TunEngine::SingboxTun));
+        // The generated list is derived from that predicate (single source).
+        let tuning: Vec<String> = editor_option_lists()
+            .into_iter()
+            .find(|(k, _)| *k == "TUN_TUNING_ENGINES")
+            .map(|(_, v)| v)
+            .unwrap();
+        assert_eq!(tuning, vec!["hev".to_string()]);
     }
 
     #[test]
