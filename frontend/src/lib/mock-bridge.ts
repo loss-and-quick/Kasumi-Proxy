@@ -239,7 +239,7 @@ export const mockBridge: Bridge = {
     return Promise.resolve(`[${new Date().toISOString()}] [MOCK:${target}] Service status: ${serviceState.state}
 [${new Date().toISOString()}] [MOCK:${target}] Active profile: ${state.activeId ?? "none"}
 [${new Date().toISOString()}] [MOCK:${target}] Xray 25.5.16 running (pid: ${Math.floor(Math.random() * 99999)})
-[${new Date().toISOString()}] [MOCK:${target}] tun2socks running (pid: ${Math.floor(Math.random() * 99999)})
+[${new Date().toISOString()}] [MOCK:${target}] TUN engine helper running (pid: ${Math.floor(Math.random() * 99999)})
 [${new Date().toISOString()}] [MOCK:${target}] Traffic: ↑ ${serviceState.uploadBytes} B · ↓ ${serviceState.downloadBytes} B
 -- Mock log lines above (${lines}) --`);
   },

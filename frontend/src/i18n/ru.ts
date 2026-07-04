@@ -469,7 +469,7 @@ const ru = {
   "settings.backup": "Резервная копия и восстановление",
   "settings.backupSub": "Экспорт или импорт вашей конфигурации",
   "settings.connectionLog": "Лог подключений",
-  "settings.connectionLogSub": "Просмотр вывода service / xray / tun2socks в реальном времени",
+  "settings.connectionLogSub": "Просмотр вывода service / xray / TUN engine в реальном времени",
   // logs
   "logs.title": "Лог подключений",
   "logs.target": "Цель",
@@ -540,7 +540,7 @@ const ru = {
   "logs.target.daemon": "daemon",
   "logs.target.xray": "xray",
   "logs.target.singbox": "singbox",
-  "logs.target.tun2socks": "tun2socks",
+  "logs.target.tunEngine": "TUN engine",
   // profiles extra
   "profiles.shareCopied": "Ссылка профиля скопирована",
   "profiles.shareCopiedMany": plural("count", {

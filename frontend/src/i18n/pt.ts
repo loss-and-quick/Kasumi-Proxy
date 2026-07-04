@@ -448,7 +448,7 @@ const pt = {
   "settings.backup": "Backup e restauração",
   "settings.backupSub": "Exporte ou importe sua configuração",
   "settings.connectionLog": "Log de conexão",
-  "settings.connectionLogSub": "Ver a saída ao vivo do service / xray / tun2socks",
+  "settings.connectionLogSub": "Ver a saída ao vivo do service / xray / TUN engine",
   // logs
   "logs.title": "Log de conexão",
   "logs.target": "Destino",
@@ -519,7 +519,7 @@ const pt = {
   "logs.target.daemon": "daemon",
   "logs.target.xray": "xray",
   "logs.target.singbox": "singbox",
-  "logs.target.tun2socks": "tun2socks",
+  "logs.target.tunEngine": "TUN engine",
   // profiles extra
   "profiles.shareCopied": "Link de compartilhamento copiado",
   "profiles.shareCopiedMany": plural("count", {

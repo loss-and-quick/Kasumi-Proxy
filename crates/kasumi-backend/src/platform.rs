@@ -87,7 +87,7 @@ impl BackendPaths {
             LogTarget::Daemon => "daemon",
             LogTarget::Xray => "xray",
             LogTarget::Singbox => "singbox",
-            LogTarget::Tun2socks => "tun2socks",
+            LogTarget::TunEngine => "tun-engine",
         };
         self.data_dir.join(format!("{name}.log"))
     }
@@ -266,8 +266,8 @@ mod tests {
             PathBuf::from("/data/singbox.log")
         );
         assert_eq!(
-            p.log(LogTarget::Tun2socks),
-            PathBuf::from("/data/tun2socks.log")
+            p.log(LogTarget::TunEngine),
+            PathBuf::from("/data/tun-engine.log")
         );
     }
 

@@ -441,7 +441,7 @@ const zh = {
   "settings.backup": "备份与恢复",
   "settings.backupSub": "导出或导入你的配置",
   "settings.connectionLog": "连接日志",
-  "settings.connectionLogSub": "查看 service / xray / tun2socks 的实时输出",
+  "settings.connectionLogSub": "查看 service / xray / TUN engine 的实时输出",
   // logs
   "logs.title": "连接日志",
   "logs.target": "目标",
@@ -511,7 +511,7 @@ const zh = {
   "logs.target.daemon": "daemon",
   "logs.target.xray": "xray",
   "logs.target.singbox": "singbox",
-  "logs.target.tun2socks": "tun2socks",
+  "logs.target.tunEngine": "TUN engine",
   // profiles extra
   "profiles.shareCopied": "分享链接已复制",
   "profiles.shareCopiedMany": plural("count", {

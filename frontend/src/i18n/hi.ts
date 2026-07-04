@@ -440,7 +440,7 @@ const hi = {
   "settings.backup": "बैकअप और पुनर्स्थापना",
   "settings.backupSub": "अपना कॉन्फ़िगरेशन निर्यात या आयात करें",
   "settings.connectionLog": "कनेक्शन लॉग",
-  "settings.connectionLogSub": "लाइव service / xray / tun2socks आउटपुट देखें",
+  "settings.connectionLogSub": "लाइव service / xray / TUN engine आउटपुट देखें",
   // logs
   "logs.title": "कनेक्शन लॉग",
   "logs.target": "लक्ष्य",
@@ -511,7 +511,7 @@ const hi = {
   "logs.target.daemon": "daemon",
   "logs.target.xray": "xray",
   "logs.target.singbox": "singbox",
-  "logs.target.tun2socks": "tun2socks",
+  "logs.target.tunEngine": "TUN engine",
   // profiles extra
   "profiles.shareCopied": "साझा लिंक कॉपी हो गया",
   "profiles.shareCopiedMany": plural("count", {
