@@ -959,9 +959,9 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     let stack = wire(&s.singbox_stack);
     let v6 = s.ipv6_enabled.unwrap_or(false);
     let main_addr = if v6 {
-        json!(["198.18.0.1/15", "fdfe:dcba:9876::1/64"])
+        json!([crate::tun::TUN_IPV4_CIDR, crate::tun::TUN_IPV6_CIDR])
     } else {
-        json!(["198.18.0.1/15"])
+        json!([crate::tun::TUN_IPV4_CIDR])
     };
     let mut exclude_uid = vec![0i64];
     exclude_uid.extend(bypass_uids.iter().copied());
@@ -976,9 +976,9 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     let mut inbounds = vec![main_tun];
     if !force_uids.is_empty() {
         let force_addr = if v6 {
-            json!(["198.19.0.1/16", "fdfe:dcba:9877::1/64"])
+            json!([crate::tun::TUN2_IPV4_CIDR, crate::tun::TUN2_IPV6_CIDR])
         } else {
-            json!(["198.19.0.1/16"])
+            json!([crate::tun::TUN2_IPV4_CIDR])
         };
         inbounds.push(json!({
             "type": "tun", "tag": "tun-force",

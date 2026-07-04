@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 use kasumi_core::state::{AppCaptureMode, AppFilterMode};
+use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_CIDR};
 
 use super::paths::{IP, IP6TABLES, IPTABLES};
 use super::{default_uplink, silent};
@@ -452,7 +453,7 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     };
     let tun2 = st.tun2_iface.as_deref();
 
-    silent(&[IP, "addr", "add", "198.18.0.1/15", "dev", tun]).await;
+    silent(&[IP, "addr", "add", TUN_IPV4_CIDR, "dev", tun]).await;
     silent(&[IP, "link", "set", "dev", tun, "up"]).await;
     silent(&[
         IP, "route", "replace", "default", "dev", tun, "table", TUN_TABLE,
@@ -473,7 +474,7 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     )
     .await;
     if let Some(tun2) = tun2 {
-        silent(&[IP, "addr", "add", "198.19.0.1/16", "dev", tun2]).await;
+        silent(&[IP, "addr", "add", TUN2_IPV4_CIDR, "dev", tun2]).await;
         silent(&[IP, "link", "set", "dev", tun2, "up"]).await;
         silent(&[
             IP,
@@ -610,7 +611,7 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     .await;
 
     // IPv6 addresses/routes + marking chain
-    silent(&[IP, "-6", "addr", "add", "fdfe:dcba:9876::1/64", "dev", tun]).await;
+    silent(&[IP, "-6", "addr", "add", TUN_IPV6_CIDR, "dev", tun]).await;
     silent(&[IP, "-6", "link", "set", "dev", tun, "up"]).await;
     silent(&[
         IP, "-6", "route", "replace", "default", "dev", tun, "table", TUN_TABLE,
@@ -631,7 +632,7 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     )
     .await;
     if let Some(tun2) = tun2 {
-        silent(&[IP, "-6", "addr", "add", "fdfe:dcba:9877::1/64", "dev", tun2]).await;
+        silent(&[IP, "-6", "addr", "add", TUN2_IPV6_CIDR, "dev", tun2]).await;
         silent(&[IP, "-6", "link", "set", "dev", tun2, "up"]).await;
         silent(&[
             IP,
