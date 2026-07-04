@@ -4,11 +4,21 @@
 // ============================================================
 import { useCallback, useEffect, useState } from "react";
 import { Btn, blurOnWheel, Dialog, Select, Sheet } from "../../components";
+import { LOG_TARGET_OPTS } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import type { LogTarget } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "../profiles/clipboard";
+
+/** Display label i18n key per target. Type-safe: a new `LogTarget` variant is a
+ *  compile error here, and the picker itself is driven by `LOG_TARGET_OPTS`. */
+const LOG_TARGET_LABEL = {
+  daemon: "logs.target.daemon",
+  xray: "logs.target.xray",
+  singbox: "logs.target.singbox",
+  "tun-engine": "logs.target.tunEngine",
+} as const satisfies Record<LogTarget, string>;
 
 export default function Logs({ onClose }: { onClose: () => void }) {
   const notify = useAppStore((s) => s.notify);
@@ -70,12 +80,7 @@ export default function Logs({ onClose }: { onClose: () => void }) {
             <Select
               value={target}
               onChange={(v) => setTarget(v as LogTarget)}
-              options={[
-                { value: "daemon", label: t("logs.target.daemon") },
-                { value: "xray", label: t("logs.target.xray") },
-                { value: "singbox", label: t("logs.target.singbox") },
-                { value: "tun-engine", label: t("logs.target.tunEngine") },
-              ]}
+              options={LOG_TARGET_OPTS.map((v) => ({ value: v, label: t(LOG_TARGET_LABEL[v]) }))}
             />
           </div>
           <div>

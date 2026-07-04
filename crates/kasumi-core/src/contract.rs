@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::enums::CoreEngine;
 
 /// Canonical log-file identifiers (backend log paths ↔ UI log picker).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumIter, specta::Type,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum LogTarget {
     Daemon,
