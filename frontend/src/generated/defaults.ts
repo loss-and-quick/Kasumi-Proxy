@@ -8,6 +8,7 @@ import type {
 	Flow,
 	HeaderType,
 	Hysteria2Obfs,
+	LogTarget,
 	PacketEncoding,
 	Profile,
 	Protocol,
@@ -556,6 +557,7 @@ export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=
 export const PROTOCOL_OPTS: Protocol[] = ["vless","vmess","trojan","shadowsocks","socks","http","wireguard","hysteria2","tuic","anytls","naive","shadowtls","custom"];
 export const CORE_ENGINE_OPTS: CoreEngine[] = ["xray","sing-box"];
 export const TUN_ENGINE_OPTS: string[] = ["singbox-tun","tun2socks","hev"];
+export const LOG_TARGET_OPTS: LogTarget[] = ["daemon","xray","singbox","tun-engine"];
 export const NETWORK_OPTS: Transport["kind"][] = ["tcp","ws","grpc","httpupgrade","xhttp","h2","kcp","quic"];
 export const SECURITY_OPTS: Security[] = ["none","tls","reality"];
 export const HEADER_TYPE_OPTS: HeaderType[] = ["none","http","srtp","utp","wechat-video","dtls","wireguard","dns"];

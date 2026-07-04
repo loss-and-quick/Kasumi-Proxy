@@ -313,11 +313,13 @@ fn wire_values<T: strum::IntoEnumIterator + Serialize>() -> Vec<String> {
 /// single source for the frontend's protocol/transport/security `<Select>`s
 /// (emitted to `frontend/src/generated/defaults.ts`).
 pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
+    use crate::contract::LogTarget;
     use crate::profile::Protocol;
     vec![
         ("PROTOCOL_OPTS", wire_values::<Protocol>()),
         ("CORE_ENGINE_OPTS", wire_values::<CoreEngine>()),
         ("TUN_ENGINE_OPTS", wire_values::<TunEngine>()),
+        ("LOG_TARGET_OPTS", wire_values::<LogTarget>()),
         ("NETWORK_OPTS", wire_values::<Network>()),
         ("SECURITY_OPTS", wire_values::<Security>()),
         ("HEADER_TYPE_OPTS", wire_values::<HeaderType>()),
