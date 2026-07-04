@@ -407,7 +407,14 @@ pub async fn spawn_tun_engine(tun: TunEngine, s: &TunSpawn<'_>) -> std::io::Resu
     match tun {
         TunEngine::Tun2socks => spawn_tun2socks(s).await,
         TunEngine::Hev => spawn_hev(s).await,
-        TunEngine::SingboxTun => unreachable!("SingboxTun has no external helper to spawn"),
+        // Callers gate this on the engine being external; a `SingboxTun` reaching
+        // here means a corrupt/misresolved marker. Return an error rather than
+        // panic — this runs in the privileged data-path owner, whose crash would
+        // strand routing/tun state.
+        TunEngine::SingboxTun => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "SingboxTun has no external helper to spawn",
+        )),
     }
 }
 

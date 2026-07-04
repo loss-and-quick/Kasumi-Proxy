@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn renders_expected_keys() {
         let opts = AdvancedSettings::default().tun_options();
-        let yaml = build_hev_config("kt0", "198.18.0.1", None, 10808, None, &opts);
+        let yaml = build_hev_config("kt0", crate::tun::TUN_IPV4, None, 10808, None, &opts);
         assert!(yaml.contains("name: kt0"));
         assert!(yaml.contains("mtu: 9000"));
         assert!(yaml.contains("ipv4: 198.18.0.1"));
@@ -129,8 +129,8 @@ mod tests {
         let opts = AdvancedSettings::default().tun_options();
         let yaml = build_hev_config(
             "kt0",
-            "198.18.0.1",
-            Some("fdfe:dcba:9876::1"),
+            crate::tun::TUN_IPV4,
+            Some(crate::tun::TUN_IPV6),
             10808,
             None,
             &opts,
@@ -143,7 +143,7 @@ mod tests {
         // Android passes a fwmark so hev's own sockets escape the tunnel like
         // tun2socks' `-fwmark`; desktop passes None (see `build_hev_config`).
         let opts = AdvancedSettings::default().tun_options();
-        let yaml = build_hev_config("kt0", "198.18.0.1", None, 10808, Some(255), &opts);
+        let yaml = build_hev_config("kt0", crate::tun::TUN_IPV4, None, 10808, Some(255), &opts);
         assert!(yaml.contains("mark: 255"));
     }
 }

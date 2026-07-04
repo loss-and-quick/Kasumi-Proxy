@@ -13,7 +13,8 @@ use crate::desktop::platform::DesktopOs;
 use crate::desktop::silent;
 
 /// The userspace tun's address; `/15` covers the CGNAT-ish 198.18/15 test net.
-pub(crate) const TUN_ADDR: &str = "198.18.0.1/15";
+/// Single-sourced from core so it can't drift from hev's self-assigned address.
+pub(crate) const TUN_ADDR: &str = kasumi_core::tun::TUN_IPV4_CIDR;
 
 /// The `ip` (iproute2) binary. Resolved via `PATH`: on distros it sits in the
 /// system path (and pkexec's own minimal PATH includes it for the helper); the Nix

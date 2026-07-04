@@ -19,7 +19,8 @@ use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
 
 /// The userspace tun's address + mask; `/15` covers the 198.18/15 test net.
-const TUN_ADDR: &str = "198.18.0.1";
+/// Address single-sourced from core so it can't drift from hev's / the routing's.
+const TUN_ADDR: &str = kasumi_core::tun::TUN_IPV4;
 const TUN_MASK: &str = "255.254.0.0";
 
 /// The two halves of a split-default route, as (dest, mask) pairs. Each overrides

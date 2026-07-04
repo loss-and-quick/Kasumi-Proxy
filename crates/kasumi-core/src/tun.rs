@@ -10,6 +10,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::{AdvancedSettings, LogLevel};
 
+// ── Split-tun addresses ──────────────────────────────────────────────────────
+// The addresses the desktop and Android data-paths give their userspace tun(s).
+// Three independent writers must agree on them: a self-addressing engine (hev)
+// assigns them from its YAML, the `ip addr add` routing assigns them for tun2socks,
+// and the sing-box native tun bakes them into its inbound. They live here once so a
+// renumber can't update some copies and black-hole the rest. The `_CIDR` forms carry
+// the interface prefix; `tun_cidrs_match_hosts` guards each host/CIDR pair.
+
+/// Primary tun IPv4 host address.
+pub const TUN_IPV4: &str = "198.18.0.1";
+/// Primary tun IPv4 address with its interface prefix.
+pub const TUN_IPV4_CIDR: &str = "198.18.0.1/15";
+/// Primary tun IPv6 host address.
+pub const TUN_IPV6: &str = "fdfe:dcba:9876::1";
+/// Primary tun IPv6 address with its interface prefix.
+pub const TUN_IPV6_CIDR: &str = "fdfe:dcba:9876::1/64";
+/// Force-proxy second tun IPv4 host (Android-only; desktop has a single tun).
+pub const TUN2_IPV4: &str = "198.19.0.1";
+/// Force-proxy second tun IPv4 with its interface prefix.
+pub const TUN2_IPV4_CIDR: &str = "198.19.0.1/16";
+/// Force-proxy second tun IPv6 host.
+pub const TUN2_IPV6: &str = "fdfe:dcba:9877::1";
+/// Force-proxy second tun IPv6 with its interface prefix.
+pub const TUN2_IPV6_CIDR: &str = "fdfe:dcba:9877::1/64";
+
 /// Resolved external-TUN tuning. Numbers are widened to `u32`/`u16` here so the
 /// config builders never re-validate the persisted `i64`s.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +90,23 @@ impl AdvancedSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tun_cidrs_match_hosts() {
+        // A `_CIDR` const must be its host address plus a prefix, so the two forms
+        // can't drift when someone renumbers the tun.
+        for (host, cidr) in [
+            (TUN_IPV4, TUN_IPV4_CIDR),
+            (TUN_IPV6, TUN_IPV6_CIDR),
+            (TUN2_IPV4, TUN2_IPV4_CIDR),
+            (TUN2_IPV6, TUN2_IPV6_CIDR),
+        ] {
+            assert!(
+                cidr.starts_with(&format!("{host}/")),
+                "{cidr} is not {host} + a prefix"
+            );
+        }
+    }
 
     #[test]
     fn options_from_defaults() {
