@@ -27,7 +27,7 @@ use kasumi_core::enums::{CoreEngine, TunEngine, tun_marker};
 use kasumi_core::state::{
     AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
-use kasumi_core::tun::TunOptions;
+use kasumi_core::tun::{TUN_IPV4, TUN_IPV6, TUN2_IPV4, TUN2_IPV6, TunOptions};
 
 use super::network::run_watcher;
 use super::paths::{
@@ -267,8 +267,8 @@ async fn bring_up_external_tun(
         bring_up_tun_helper(
             tun,
             &tun_iface,
-            "198.18.0.1",
-            Some("fdfe:dcba:9876::1"),
+            TUN_IPV4,
+            Some(TUN_IPV6),
             socks_port,
             HEV_CONFIG,
             TUN2SOCKS_PIDFILE,
@@ -288,8 +288,8 @@ async fn bring_up_external_tun(
             bring_up_tun_helper(
                 tun,
                 &t,
-                "198.19.0.1",
-                Some("fdfe:dcba:9877::1"),
+                TUN2_IPV4,
+                Some(TUN2_IPV6),
                 socks_port + 2,
                 HEV2_CONFIG,
                 TUN2SOCKS2_PIDFILE,

@@ -9,13 +9,11 @@ use tokio::process::Child;
 
 use kasumi_backend::lifecycle::{TunSpawn, spawn_tun_engine};
 use kasumi_core::enums::{TunEngine, tun_marker};
-use kasumi_core::tun::TunOptions;
+// TUN_IPV4 is the address a self-addressing engine (hev) assigns to the tun it
+// creates; sourced from core so it can't drift from what the routing layer assigns.
+use kasumi_core::tun::{TUN_IPV4, TunOptions};
 
 use super::paths::DesktopPaths;
-
-/// The IPv4 a self-addressing engine (hev) assigns to the tun it creates. Matches
-/// the desktop split-tun address the routing layer uses, so both agree.
-const TUN_IPV4: &str = "198.18.0.1";
 
 /// Wire label persisted to the tun-engine marker file (single-sourced from core's
 /// serde value via [`tun_marker`]).
