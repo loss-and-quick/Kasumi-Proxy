@@ -942,6 +942,28 @@ fn uid_of(key: &str) -> Option<i64> {
     key.split(':').nth(1).and_then(|x| x.parse::<i64>().ok())
 }
 
+/// The base sing-box `tun` inbound shared by the native tun ([`build_singbox_tun_inbounds`])
+/// and the sidecar bridge ([`build_singbox_bridge_config`]): the common
+/// `type`/`address`/`mtu`/`stack` shape. `interface_name` is pinned only when the
+/// caller names the device (the bridge; the native auto_route tun lets sing-box name
+/// it). `auto_route` and any per-uid / iproute2 fields are layered by the caller.
+fn singbox_tun_inbound(
+    tag: &str,
+    iface: Option<&str>,
+    address: Value,
+    mtu: i64,
+    stack: &str,
+) -> Value {
+    let mut ib = json!({
+        "type": "tun", "tag": tag,
+        "address": address, "mtu": mtu, "stack": stack,
+    });
+    if let Some(name) = iface {
+        ib["interface_name"] = json!(name);
+    }
+    ib
+}
+
 fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     let force_uids: Vec<i64> = s
         .app_filter
@@ -967,12 +989,10 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     exclude_uid.extend(bypass_uids.iter().copied());
     exclude_uid.extend(force_uids.iter().copied());
 
-    let main_tun = json!({
-        "type": "tun", "tag": "tun-in",
-        "address": main_addr, "mtu": s.tun_mtu, "auto_route": true,
-        "stack": stack, "strict_route": s.strict_route,
-        "exclude_uid": exclude_uid,
-    });
+    let mut main_tun = singbox_tun_inbound("tun-in", None, main_addr, s.tun_mtu, &stack);
+    main_tun["auto_route"] = json!(true);
+    main_tun["strict_route"] = json!(s.strict_route);
+    main_tun["exclude_uid"] = json!(exclude_uid);
     let mut inbounds = vec![main_tun];
     if !force_uids.is_empty() {
         let force_addr = if v6 {
@@ -980,20 +1000,63 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
         } else {
             json!([crate::tun::TUN2_IPV4_CIDR])
         };
-        inbounds.push(json!({
-            "type": "tun", "tag": "tun-force",
-            "address": force_addr, "mtu": s.tun_mtu, "auto_route": true,
-            // Both tuns auto_route, so the force tun MUST own a separate iproute2
-            // table + rule range — otherwise it tries to add the default route to
-            // tun-in's table (2022) and sing-box FATALs with "add route 0: file
-            // exists". The kernel filters packets into each tun by uid, then each
-            // tun's default route lives in its own table.
-            "iproute2_table_index": SINGBOX_FORCE_TABLE, "iproute2_rule_index": SINGBOX_FORCE_RULE_PRIO,
-            "stack": stack, "strict_route": s.strict_route,
-            "include_uid": force_uids,
-        }));
+        let mut force_tun = singbox_tun_inbound("tun-force", None, force_addr, s.tun_mtu, &stack);
+        force_tun["auto_route"] = json!(true);
+        // Both tuns auto_route, so the force tun MUST own a separate iproute2 table +
+        // rule range — otherwise it tries to add the default route to tun-in's table
+        // (2022) and sing-box FATALs with "add route 0: file exists". The kernel
+        // filters packets into each tun by uid, then each tun's default route lives in
+        // its own table.
+        force_tun["iproute2_table_index"] = json!(SINGBOX_FORCE_TABLE);
+        force_tun["iproute2_rule_index"] = json!(SINGBOX_FORCE_RULE_PRIO);
+        force_tun["strict_route"] = json!(s.strict_route);
+        force_tun["include_uid"] = json!(force_uids);
+        inbounds.push(force_tun);
     }
     inbounds
+}
+
+/// Build the config for a **sidecar sing-box** used as an external TUN engine in front
+/// of a non-sing-box core (the `SingboxTun` engine on e.g. xray). It gives the user
+/// sing-box's TUN stack without switching proxy cores: it terminates the tun and
+/// forwards everything to the core's local SOCKS, exactly like tun2socks/hev but with
+/// sing-box's implementation. Reuses [`singbox_tun_inbound`] so the tun shape is
+/// single-sourced with the native path.
+///
+/// `auto_route` is **off**: this is a plain userspace-tun helper, so the OS routing
+/// the desktop/daemon install around every external engine (split-default + server
+/// bypass) drives traffic into the tun, and the core's own uplink-bound outbounds
+/// escape it. `ipv6_cidr` is omitted on IPv4-only data-paths.
+pub fn build_singbox_bridge_config(
+    iface: &str,
+    ipv4_cidr: &str,
+    ipv6_cidr: Option<&str>,
+    socks_port: u16,
+    mtu: i64,
+    stack: &str,
+    log_level: &str,
+) -> String {
+    let mut address = vec![Value::String(ipv4_cidr.to_owned())];
+    if let Some(v6) = ipv6_cidr {
+        address.push(Value::String(v6.to_owned()));
+    }
+    let mut tun = singbox_tun_inbound("tun-in", Some(iface), Value::Array(address), mtu, stack);
+    tun["auto_route"] = json!(false);
+    let cfg = json!({
+        "log": { "level": log_level },
+        "inbounds": [tun],
+        // One outbound: the fronted core's local SOCKS. Everything captured goes there
+        // and the core (xray) does the real geo/rule/direct routing — exactly like
+        // tun2socks/hev. The sidecar makes no direct connections of its own (which the
+        // split-default could recapture), and its upstream to the SOCKS is loopback,
+        // never captured by the tun it terminates.
+        "outbounds": [
+            { "type": "socks", "tag": "proxy", "server": "127.0.0.1", "server_port": socks_port },
+        ],
+        "route": { "final": "proxy" },
+    });
+    // Infallible for this plain shape.
+    serde_json::to_string(&cfg).expect("sidecar sing-box config serializes")
 }
 
 // ---------- route ----------
@@ -1238,6 +1301,50 @@ pub fn build_singbox_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sidecar_bridge_forwards_to_socks_with_named_off_route_tun() {
+        let json = build_singbox_bridge_config(
+            "kt0",
+            crate::tun::TUN_IPV4_CIDR,
+            None,
+            10808,
+            9000,
+            "gvisor",
+            "warn",
+        );
+        let v: Value = serde_json::from_str(&json).unwrap();
+        let tun = &v["inbounds"][0];
+        assert_eq!(tun["type"], "tun");
+        assert_eq!(tun["interface_name"], "kt0");
+        // External helper: we route, so the sidecar must not auto_route.
+        assert_eq!(tun["auto_route"], false);
+        assert_eq!(tun["stack"], "gvisor");
+        assert_eq!(tun["mtu"], 9000);
+        assert_eq!(tun["address"][0], crate::tun::TUN_IPV4_CIDR);
+        assert!(tun["address"].get(1).is_none());
+        // Forwards to the fronted core's local SOCKS.
+        let proxy = &v["outbounds"][0];
+        assert_eq!(proxy["type"], "socks");
+        assert_eq!(proxy["server"], "127.0.0.1");
+        assert_eq!(proxy["server_port"], 10808);
+        assert_eq!(v["route"]["final"], "proxy");
+    }
+
+    #[test]
+    fn sidecar_bridge_includes_ipv6_when_present() {
+        let json = build_singbox_bridge_config(
+            "kt0",
+            crate::tun::TUN_IPV4_CIDR,
+            Some(crate::tun::TUN_IPV6_CIDR),
+            10808,
+            9000,
+            "system",
+            "warn",
+        );
+        let v: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["inbounds"][0]["address"][1], crate::tun::TUN_IPV6_CIDR);
+    }
 
     #[test]
     fn force_in_inbound_is_always_present_and_localhost_only() {

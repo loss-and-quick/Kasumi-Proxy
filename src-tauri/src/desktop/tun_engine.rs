@@ -21,25 +21,33 @@ pub fn marker(tun: TunEngine) -> String {
     tun_marker(tun)
 }
 
-/// Whether the engine runs as an external helper process in front of a socks-only
-/// core, vs the sing-box core owning its tun natively.
-pub fn is_external(tun: TunEngine) -> bool {
-    !matches!(tun, TunEngine::SingboxTun)
+/// The external helper binary a running `tun` engine uses. `SingboxTun` here means a
+/// *sidecar* sing-box fronting a non-sing-box core (the native sing-box path never
+/// reaches this — see `kasumi_core::core::owns_native_tun`), so its binary is
+/// sing-box itself. `None` only for a mapping error.
+pub fn helper_bin(tun: TunEngine, p: &DesktopPaths) -> Option<&str> {
+    Some(match tun {
+        TunEngine::Tun2socks => &p.tun2socks_bin,
+        TunEngine::Hev => &p.hev_bin,
+        TunEngine::SingboxTun => &p.singbox_bin,
+    })
 }
 
-/// The external helper binary for `tun`, or `None` when the core owns the tun
-/// (so teardown/the watchdog know which process, if any, to match).
-pub fn helper_bin(tun: TunEngine, p: &DesktopPaths) -> Option<&str> {
+/// The config file a config-driven engine writes at bring-up (hev YAML / sidecar
+/// sing-box JSON). tun2socks takes its args on the command line and ignores it.
+fn cfg_path(tun: TunEngine, p: &DesktopPaths) -> &str {
     match tun {
-        TunEngine::Tun2socks => Some(&p.tun2socks_bin),
-        TunEngine::Hev => Some(&p.hev_bin),
-        TunEngine::SingboxTun => None,
+        TunEngine::Hev => &p.hev_config,
+        TunEngine::SingboxTun => &p.singbox_bridge_config,
+        TunEngine::Tun2socks => &p.hev_config,
     }
 }
 
 /// Spawn the external helper for `tun`, bridging `iface` to the local SOCKS port.
-/// Only valid for external engines ([`is_external`]). The desktop external-tun path
-/// is IPv4-only, so no IPv6 is handed to a self-addressing engine.
+/// The desktop external-tun path is IPv4-only, so no IPv6 is handed to a
+/// self-addressing engine. `stack` is the sing-box tun stack (only the sidecar
+/// sing-box reads it).
+#[allow(clippy::too_many_arguments)]
 pub async fn spawn(
     tun: TunEngine,
     p: &DesktopPaths,
@@ -47,15 +55,13 @@ pub async fn spawn(
     socks_port: u16,
     log: &Path,
     fwmark: Option<u32>,
+    stack: &str,
     opts: &TunOptions,
 ) -> std::io::Result<Child> {
-    // A helper-less (native `SingboxTun`) engine shouldn't reach here — callers gate
-    // on `is_external` — but a corrupt marker could route it in. Error out rather
-    // than panic: this runs in the privileged helper, whose crash strands the tun.
     let bin = helper_bin(tun, p).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "spawn called for a helper-less (native) engine",
+            "no helper binary for the resolved tun engine",
         )
     })?;
     let spawn = TunSpawn {
@@ -66,7 +72,8 @@ pub async fn spawn(
         socks_port,
         log_path: log,
         fwmark,
-        cfg_path: Path::new(&p.hev_config),
+        cfg_path: Path::new(cfg_path(tun, p)),
+        stack,
         opts,
     };
     spawn_tun_engine(tun, &spawn).await

@@ -580,6 +580,7 @@ export const TUN_BY_CORE = {
   "xray": {
     "default": "tun2socks",
     "valid": [
+      "singbox-tun",
       "tun2socks",
       "hev"
     ]
