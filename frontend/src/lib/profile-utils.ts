@@ -130,7 +130,11 @@ export function forcedCore(p: Profile): CoreEngine | null {
     if (p.flow) return "xray";
   } else if (p.protocol === "shadowsocks") {
     const m = p.method;
-    if (m === "plain" || m === "chacha20-ietf-poly1305" || (m?.startsWith("2022-blake3-") ?? false))
+    // Ciphers only Xray implements (sing-box has no `plain` and only the IETF
+    // chacha variant), so these run on Xray despite the default-TLS rule below.
+    if (m === "plain" || m === "chacha20-poly1305" || m === "xchacha20-poly1305") return "xray";
+    // The IETF chacha variant and the 2022 AEAD ciphers route to sing-box.
+    if (m === "chacha20-ietf-poly1305" || (m?.startsWith("2022-blake3-") ?? false))
       return "sing-box";
     const sec = p.tls?.security ?? "none";
     const net = p.transport?.kind ?? "tcp";

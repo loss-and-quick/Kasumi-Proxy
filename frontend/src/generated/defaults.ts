@@ -589,3 +589,1464 @@ export const TUN_BY_CORE = {
     ]
   }
 } as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;
+
+/** Core-resolution parity fixtures (profile → the core Rust `resolve_core` picks). */
+export const CORE_RESOLUTION_FIXTURES = [
+  {
+    "expectedCore": "xray",
+    "name": "custom-forced-xray",
+    "profile": {
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "custom-forced-xray",
+        "remarks": "New profile",
+        "subId": null
+      },
+      "protocol": "custom",
+      "raw": ""
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "tuic-singbox-only",
+    "profile": {
+      "congestionControl": "bbr",
+      "endpoint": {
+        "address": "t.ex",
+        "port": 443
+      },
+      "heartbeat": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "tuic-singbox-only",
+        "remarks": "t.ex",
+        "subId": null
+      },
+      "password": "pw",
+      "protocol": "tuic",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "t.ex",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "udpOverStream": false,
+      "udpRelayMode": "",
+      "uuid": "u",
+      "zeroRtt": false
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "anytls-singbox-only",
+    "profile": {
+      "endpoint": {
+        "address": "a.ex",
+        "port": 443
+      },
+      "idleSessionCheckInterval": "",
+      "idleSessionTimeout": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "anytls-singbox-only",
+        "remarks": "a.ex",
+        "subId": null
+      },
+      "minIdleSession": 0,
+      "password": "pw",
+      "protocol": "anytls",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "a.ex",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "naive-singbox-only",
+    "profile": {
+      "congestionControl": "bbr",
+      "endpoint": {
+        "address": "",
+        "port": 443
+      },
+      "insecureConcurrency": 0,
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "naive-singbox-only",
+        "remarks": "New profile",
+        "subId": null
+      },
+      "naiveQuic": false,
+      "password": "",
+      "protocol": "naive",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "username": ""
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "shadowtls-singbox-only",
+    "profile": {
+      "endpoint": {
+        "address": "",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "shadowtls-singbox-only",
+        "remarks": "New profile",
+        "subId": null
+      },
+      "password": "",
+      "protocol": "shadowtls",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "version": 3
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "hysteria2-default-singbox",
+    "profile": {
+      "downMbps": 0,
+      "endpoint": {
+        "address": "h.ex",
+        "port": 443
+      },
+      "hopInterval": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "hysteria2-default-singbox",
+        "remarks": "h.ex",
+        "subId": null
+      },
+      "obfsPassword": "",
+      "obfsType": "",
+      "password": "pw",
+      "pinSha256": "",
+      "ports": "",
+      "protocol": "hysteria2",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "h.ex",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "upMbps": 0
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-tcp-tls-default-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-tcp-tls-default-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vmess-tcp-default-xray",
+    "profile": {
+      "alterId": 0,
+      "encryption": "auto",
+      "endpoint": {
+        "address": "",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vmess-tcp-default-xray",
+        "remarks": "New profile",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vmess",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "",
+      "vmessAuthenticatedLength": false,
+      "vmessGlobalPadding": false
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "trojan-tls-default-xray",
+    "profile": {
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "trojan-tls-default-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "trojan",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-vision-udp443-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "xtls-rprx-vision-udp443",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-vision-udp443-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-encryption-xray",
+    "profile": {
+      "encryption": "mlkem768",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-encryption-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "vless-h2-singbox",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-h2-singbox",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "host": "",
+        "idleTimeout": 0,
+        "kind": "h2",
+        "path": "",
+        "pingTimeout": 0
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "vless-quic-singbox",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-quic-singbox",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "kind": "quic"
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-kcp-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-kcp-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "none",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "cwndMultiplier": 0,
+        "downlink": 0,
+        "headerType": "none",
+        "kind": "kcp",
+        "maxSendingWindow": 0,
+        "mtu": 0,
+        "seed": "",
+        "tti": 0,
+        "uplink": 0
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-xhttp-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-xhttp-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "extra": "",
+        "host": "",
+        "kind": "xhttp",
+        "mode": "",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-grpc-slash-path-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-grpc-slash-path-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "authority": "",
+        "healthCheckTimeout": 0,
+        "idleTimeout": 0,
+        "initialWindowSize": 0,
+        "kind": "grpc",
+        "mode": "",
+        "permitWithoutStream": false,
+        "pingTimeout": 0,
+        "serviceName": "/svc",
+        "userAgent": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-ws-accept-proxy-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-ws-accept-proxy-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "acceptProxyProtocol": true,
+        "earlyData": 0,
+        "earlyDataHeader": "",
+        "headers": {},
+        "heartbeatPeriod": 0,
+        "host": "",
+        "kind": "ws",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "trojan-flow-xray",
+    "profile": {
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "xtls-rprx-vision",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "trojan-flow-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "trojan",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "ss-plain-xray",
+    "profile": {
+      "endpoint": {
+        "address": "h.ex",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "ss-plain-xray",
+        "remarks": "x",
+        "subId": null
+      },
+      "method": "plain",
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "shadowsocks",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "ss-ietf-chacha-singbox",
+    "profile": {
+      "endpoint": {
+        "address": "h.ex",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "ss-ietf-chacha-singbox",
+        "remarks": "x",
+        "subId": null
+      },
+      "method": "chacha20-ietf-poly1305",
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "shadowsocks",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "ss-2022-blake3-singbox",
+    "profile": {
+      "endpoint": {
+        "address": "h.ex",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "ss-2022-blake3-singbox",
+        "remarks": "x",
+        "subId": null
+      },
+      "method": "2022-blake3-aes-128-gcm",
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "shadowsocks",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "ss-aes-gcm-tcp-default-xray",
+    "profile": {
+      "endpoint": {
+        "address": "h.ex",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "ss-aes-gcm-tcp-default-xray",
+        "remarks": "x",
+        "subId": null
+      },
+      "method": "aes-256-gcm",
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "shadowsocks",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "ss-aes-gcm-tls-singbox",
+    "profile": {
+      "endpoint": {
+        "address": "h.ex",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "ss-aes-gcm-tls-singbox",
+        "remarks": "x",
+        "subId": null
+      },
+      "method": "aes-256-gcm",
+      "muxEnabled": false,
+      "password": "pw",
+      "protocol": "shadowsocks",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      }
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-reality-pqv-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-reality-pqv-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "Q",
+        "publicKey": "PK",
+        "rejectUnknownSni": false,
+        "security": "reality",
+        "shortId": "",
+        "sni": "s",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "vless-packetaddr-singbox",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-packetaddr-singbox",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "packetaddr",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "vmess-global-padding-singbox",
+    "profile": {
+      "alterId": 0,
+      "encryption": "auto",
+      "endpoint": {
+        "address": "",
+        "port": 443
+      },
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vmess-global-padding-singbox",
+        "remarks": "New profile",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vmess",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "",
+      "vmessAuthenticatedLength": false,
+      "vmessGlobalPadding": true
+    }
+  },
+  {
+    "expectedCore": "xray",
+    "name": "vless-ws-heartbeat-xray",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-ws-heartbeat-xray",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "acceptProxyProtocol": false,
+        "earlyData": 0,
+        "earlyDataHeader": "",
+        "headers": {},
+        "heartbeatPeriod": 5,
+        "host": "",
+        "kind": "ws",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "vless-grpc-ping-timeout-singbox",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": null,
+        "groupId": "g-main",
+        "id": "vless-grpc-ping-timeout-singbox",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "authority": "",
+        "healthCheckTimeout": 0,
+        "idleTimeout": 0,
+        "initialWindowSize": 0,
+        "kind": "grpc",
+        "mode": "",
+        "permitWithoutStream": false,
+        "pingTimeout": 10,
+        "serviceName": "svc",
+        "userAgent": ""
+      },
+      "uuid": "u"
+    }
+  },
+  {
+    "expectedCore": "sing-box",
+    "name": "vless-core-type-override-singbox",
+    "profile": {
+      "encryption": "none",
+      "endpoint": {
+        "address": "e.x",
+        "port": 443
+      },
+      "flow": "",
+      "meta": {
+        "coreType": "sing-box",
+        "groupId": "g-main",
+        "id": "vless-core-type-override-singbox",
+        "remarks": "e.x",
+        "subId": null
+      },
+      "muxEnabled": false,
+      "packetEncoding": "",
+      "protocol": "vless",
+      "tls": {
+        "allowInsecure": false,
+        "alpn": [],
+        "cert": "",
+        "disableSni": false,
+        "disableSystemRoot": false,
+        "ech": "",
+        "enableSessionResumption": false,
+        "fingerprint": "chrome",
+        "pcs": "",
+        "pqv": "",
+        "publicKey": "",
+        "rejectUnknownSni": false,
+        "security": "tls",
+        "shortId": "",
+        "sni": "",
+        "spiderX": "",
+        "tlsCipherSuites": [],
+        "tlsCurvePreferences": [],
+        "tlsMaxVersion": "",
+        "tlsMinVersion": "",
+        "vcn": ""
+      },
+      "transport": {
+        "headerType": "none",
+        "host": "",
+        "kind": "tcp",
+        "path": ""
+      },
+      "uuid": "u"
+    }
+  }
+] as unknown as { name: string; profile: Profile; expectedCore: CoreEngine }[];
