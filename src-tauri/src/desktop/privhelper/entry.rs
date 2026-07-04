@@ -13,10 +13,10 @@ use std::time::Duration;
 use kasumi_backend::platform::{Platform, StopDataPath};
 
 use super::server;
+use crate::desktop::DesktopPlatform;
 use crate::desktop::paths::{
     ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
 };
-use crate::desktop::DesktopPlatform;
 
 struct Args {
     socket: String,

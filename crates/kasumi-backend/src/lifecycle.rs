@@ -14,11 +14,11 @@ use tokio::process::Child;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
 
-use crate::commands::{build_profile_config, CommandError};
+use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
 use crate::fsjson::{read_json, write_text_atomic};
 use crate::platform::{Engine, Platform};
-use crate::proc::{pid_matches_bin, run, spawn_logged, RunOpts};
+use crate::proc::{RunOpts, pid_matches_bin, run, spawn_logged};
 
 /// Map a hex digit to a consonant so the interface name starts with a letter
 /// (kernel rejects names beginning with a digit).
@@ -377,7 +377,7 @@ pub async fn verify_core_alive(pid: i32, bin: &str, attempts: u32, delay: Durati
 mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
-    use crate::testutil::{sample_vless, TestPlatform};
+    use crate::testutil::{TestPlatform, sample_vless};
     use kasumi_core::state::default_app_state;
 
     #[test]

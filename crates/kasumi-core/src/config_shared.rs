@@ -60,11 +60,7 @@ pub fn split_csv(s: &str) -> Option<Vec<String>> {
         .filter(|x| !x.is_empty())
         .map(str::to_string)
         .collect();
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts)
-    }
+    if parts.is_empty() { None } else { Some(parts) }
 }
 
 /// Split on commas or newlines into trimmed non-empty parts, or a fallback list.
@@ -105,11 +101,7 @@ pub fn parse_pem_chain(pem: &str) -> Option<Vec<String>> {
     .into_iter()
     .filter(|s| !s.is_empty())
     .collect();
-    if certs.is_empty() {
-        None
-    } else {
-        Some(certs)
-    }
+    if certs.is_empty() { None } else { Some(certs) }
 }
 
 /// Re-attach `ed`/`eh` early-data params to a ws path (inverse of

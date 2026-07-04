@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
-use tauri_specta::{collect_commands, collect_events, Builder, Event};
+use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
 use kasumi_backend::platform::Platform;
 use kasumi_backend::{Command, Response, Service};

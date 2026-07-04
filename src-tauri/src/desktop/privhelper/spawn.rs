@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 
-use crate::desktop::paths::{path_args, DesktopPaths};
+use crate::desktop::paths::{DesktopPaths, path_args};
 
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};

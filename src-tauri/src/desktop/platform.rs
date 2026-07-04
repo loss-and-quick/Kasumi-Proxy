@@ -21,20 +21,20 @@ use kasumi_backend::lifecycle::{
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
-    spawn_local_test_core, BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities,
-    StartDataPath, StopDataPath, TestCore,
+    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
+    StopDataPath, TestCore, spawn_local_test_core,
 };
 use kasumi_backend::proc::spawn_logged;
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{
-    force_socks_port, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
+    AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
-use crate::desktop::{network, resume, routing, OsSeam};
+use crate::desktop::{OsSeam, network, resume, routing};
 
 /// The per-OS seam: only the parts of the data-path that genuinely differ between
 /// Linux and Windows. Everything else lives in the shared [`DesktopPlatform`].

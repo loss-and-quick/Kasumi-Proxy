@@ -44,7 +44,7 @@ pub async fn write_app_state(platform: &dyn Platform, state: &AppState) -> std::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutil::{sample_vless, TestPlatform};
+    use crate::testutil::{TestPlatform, sample_vless};
     use kasumi_core::profile::Profile;
     use kasumi_core::state::default_app_state;
 

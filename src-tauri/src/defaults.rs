@@ -6,7 +6,7 @@
 //! exactly like `bindings.ts` / `schemas.ts`.
 
 use kasumi_core::enums::editor_option_lists;
-use kasumi_core::profile::{empty_profile, Protocol};
+use kasumi_core::profile::{Protocol, empty_profile};
 use kasumi_core::state;
 use strum::IntoEnumIterator;
 

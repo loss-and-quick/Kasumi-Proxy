@@ -15,15 +15,15 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use kasumi_core::contract::{Capabilities, FetchMode, LogTarget, ServiceState, TestKind, WsInfo};
-use kasumi_core::core_config::{build_core_config, CoreConfig};
-use kasumi_core::mutate::{apply_mutation, MutationIntent};
+use kasumi_core::core_config::{CoreConfig, build_core_config};
+use kasumi_core::mutate::{MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
 use kasumi_core::share::{build_share_link, parse_share_links};
-use kasumi_core::state::{default_app_state, AppState, DEFAULT_LOG_ROTATE_KB};
+use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
 
 use crate::fs::{read_text, write_text};
 use crate::fsjson::{read_json, write_bytes_atomic};
-use crate::net::{fetch_url, used_ports, FetchUrlOptions};
+use crate::net::{FetchUrlOptions, fetch_url, used_ports};
 use crate::platform::{AppInfo, Platform};
 
 /// First port `freePorts` probes when the caller doesn't pin a start.
@@ -503,7 +503,7 @@ const LOG_TARGETS: [LogTarget; 4] = [
 mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
-    use crate::testutil::{sample_vless as vless, TestPlatform};
+    use crate::testutil::{TestPlatform, sample_vless as vless};
     use kasumi_core::contract::RunState;
 
     #[tokio::test]

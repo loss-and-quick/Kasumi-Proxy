@@ -25,7 +25,7 @@
 //! place — the [`default_chain`] constructor — so it is visible at a glance and
 //! not scattered across init sites.
 
-use kasumi_core::state::{fixup_active_id, AppState};
+use kasumi_core::state::{AppState, fixup_active_id};
 
 /// A single write-side rule. Pure: no I/O, deterministic, trivially unit-testable.
 ///

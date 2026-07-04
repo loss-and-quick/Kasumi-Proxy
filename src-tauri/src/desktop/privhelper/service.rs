@@ -14,7 +14,7 @@
 //! per-GUI pipe and exiting with the GUI — the exact mirror of the Linux pkexec
 //! helper, leaving nothing installed.
 
-use std::ffi::{c_void, OsStr, OsString};
+use std::ffi::{OsStr, OsString, c_void};
 use std::os::windows::ffi::OsStrExt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -32,11 +32,11 @@ use windows_service::{define_windows_service, service_dispatcher};
 
 use kasumi_backend::platform::{Platform, StopDataPath};
 
-use super::server::{serve_conn, Server};
+use super::server::{Server, serve_conn};
+use crate::desktop::DesktopPlatform;
 use crate::desktop::paths::{
     ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
 };
-use crate::desktop::DesktopPlatform;
 
 /// SCM identifier; shared with the GUI client ([`super::connect`]).
 pub(crate) const SERVICE_NAME: &str = "KasumiProxyHelper";

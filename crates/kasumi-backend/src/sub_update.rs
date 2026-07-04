@@ -16,11 +16,11 @@ use kasumi_core::profile::Profile;
 use kasumi_core::share::parse_share_links;
 use kasumi_core::state::{AppState, Subscription};
 use kasumi_core::sub_apply::{
-    apply_subscription_profiles, deduplicate_profiles_scoped, map_fetched_subscription_profiles,
-    profile_filter_regex, ProfileFilter,
+    ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
+    map_fetched_subscription_profiles, profile_filter_regex,
 };
 
-use crate::net::{fetch_url, FetchUrlOptions};
+use crate::net::{FetchUrlOptions, fetch_url};
 use crate::platform::Platform;
 use crate::state::read_app_state;
 
@@ -339,7 +339,7 @@ async fn record_error(platform: &dyn Platform, sub_id: &str, message: &str) {
 mod tests {
     use super::*;
     use crate::state::write_app_state;
-    use crate::testutil::{sample_vless, TestPlatform};
+    use crate::testutil::{TestPlatform, sample_vless};
     use kasumi_core::state::default_app_state;
     use std::sync::Mutex as StdMutex;
 

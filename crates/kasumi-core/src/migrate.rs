@@ -14,7 +14,7 @@
 //! `network` string, compound values stored as CSV/JSON strings — into the nested
 //! model with the transport tagged on `kind`.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// A single upgrade step, mutating the whole `AppState` value from one version to
 /// the next.

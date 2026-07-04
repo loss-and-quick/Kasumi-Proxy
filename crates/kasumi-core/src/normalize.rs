@@ -12,7 +12,7 @@
 //! this module runs *after* deserialization on a typed [`AppState`] (valid-but-stale
 //! fixes). Pure and idempotent — running it twice equals running it once.
 
-use crate::state::{fixup_active_id, AppState, Group, BASE_GROUP_ID, BASE_GROUP_NAME};
+use crate::state::{AppState, BASE_GROUP_ID, BASE_GROUP_NAME, Group, fixup_active_id};
 
 /// Legacy locked asset ids that used to ship as built-in defaults; dropped on read.
 const LEGACY_DEFAULT_ASSET_IDS: [&str; 2] = ["asset-geoip", "asset-geosite"];
@@ -50,7 +50,7 @@ fn strip_legacy_default_assets(state: &mut AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{default_app_state, AssetFile, Group};
+    use crate::state::{AssetFile, Group, default_app_state};
 
     #[test]
     fn inserts_missing_base_group_at_front() {

@@ -385,9 +385,15 @@ mod tests {
         let trojan_pw = "s3cret-pw";
         let links = vec![
             // vless on :443 — reality / ws / xhttp / grpc differ only by transport + tls
-            format!("vless://{uid}@{host}:443?type=tcp&security=reality&pbk=PK0&sni=s0&sid=aa#vless-reality"),
-            format!("vless://{uid}@{host}:443?type=ws&security=tls&host={host}&path=%2Fws#vless-ws"),
-            format!("vless://{uid}@{host}:443?type=xhttp&security=tls&path=%2Fxh&mode=packet-up#vless-xhttp"),
+            format!(
+                "vless://{uid}@{host}:443?type=tcp&security=reality&pbk=PK0&sni=s0&sid=aa#vless-reality"
+            ),
+            format!(
+                "vless://{uid}@{host}:443?type=ws&security=tls&host={host}&path=%2Fws#vless-ws"
+            ),
+            format!(
+                "vless://{uid}@{host}:443?type=xhttp&security=tls&path=%2Fxh&mode=packet-up#vless-xhttp"
+            ),
             format!("vless://{uid}@{host}:443?type=grpc&security=tls&serviceName=%2Fg1#vless-grpc"),
             // vmess on :443 — grpc vs ws, same uuid
             vmess_link(host, uid, 443, "grpc", "/g2", "vmess-grpc"),
@@ -395,7 +401,9 @@ mod tests {
             // vmess on a distinct port — plain tcp
             vmess_link(host, uid, 26867, "tcp", "", "vmess-tcp"),
             // trojan on :443 — grpc vs ws, same password
-            format!("trojan://{trojan_pw}@{host}:443?type=grpc&security=tls&serviceName=%2Fg3#trojan-grpc"),
+            format!(
+                "trojan://{trojan_pw}@{host}:443?type=grpc&security=tls&serviceName=%2Fg3#trojan-grpc"
+            ),
             format!("trojan://{trojan_pw}@{host}:443?type=ws&security=tls&path=%2Ftw#trojan-ws"),
             // trojan on a distinct port — plain tcp, no tls
             format!("trojan://{trojan_pw}@{host}:26869?type=tcp&security=none#trojan-tcp"),
@@ -415,7 +423,7 @@ mod tests {
     /// Build a synthetic vmess `vmess://<base64-json>` link from parts, so the
     /// fixture does not carry a hand-encoded blob.
     fn vmess_link(host: &str, uid: &str, port: u16, net: &str, path: &str, ps: &str) -> String {
-        use base64::{engine::general_purpose::STANDARD, Engine};
+        use base64::{Engine, engine::general_purpose::STANDARD};
         let json = serde_json::json!({
             "v": "2", "ps": ps, "add": host, "port": port, "id": uid,
             "aid": 0, "net": net, "type": "none", "host": "", "path": path,

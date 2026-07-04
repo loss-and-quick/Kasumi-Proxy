@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::fs;
 
 /// Parse `path` into `T`, or `None` if it's missing or not valid JSON for `T`.
@@ -43,9 +43,11 @@ mod tests {
 
     #[tokio::test]
     async fn read_missing_or_garbage_is_none() {
-        assert!(read_json::<serde_json::Value>("/no/such/json")
-            .await
-            .is_none());
+        assert!(
+            read_json::<serde_json::Value>("/no/such/json")
+                .await
+                .is_none()
+        );
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("bad.json");
         write_text_atomic(&p, "{ not json").await.unwrap();

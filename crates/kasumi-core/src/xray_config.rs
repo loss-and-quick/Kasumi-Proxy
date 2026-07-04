@@ -3,15 +3,15 @@
 //! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
 //! invariants (e.g. inbound/routing shape) are covered by the unit tests below.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
-    force_socks_port, AdvancedSettings, RoutingRule, DEFAULT_LOCAL_HTTP_PORT,
-    DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+    AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS,
+    FAKEIP_INET4_RANGE, RoutingRule, force_socks_port,
 };
 
 fn parse_json_safe(s: &str) -> Option<Value> {

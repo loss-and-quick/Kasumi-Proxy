@@ -10,12 +10,12 @@ use futures_util::{SinkExt, StreamExt};
 use tempfile::TempDir;
 use tokio_tungstenite::tungstenite::Message;
 
+use kasumi_backend::Service;
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
     StopDataPath,
 };
-use kasumi_backend::Service;
 use kasumi_core::contract::{RunState, ServiceState, WsInfo};
 
 struct StubPlatform {

@@ -444,11 +444,7 @@ fn parse_vmess(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     // String field as Option, treating "" as absent (for enum coercers).
     let opt = |k: &str| -> Option<String> {
         let v = s(k);
-        if v.is_empty() {
-            None
-        } else {
-            Some(v)
-        }
+        if v.is_empty() { None } else { Some(v) }
     };
     let net = as_network(opt("net").as_deref());
     let raw_path = s("path");

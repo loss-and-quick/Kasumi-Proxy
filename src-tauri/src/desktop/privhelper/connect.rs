@@ -18,11 +18,11 @@ use anyhow::Context;
 use windows_service::service::{ServiceAccess, ServiceState};
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 
-use crate::desktop::paths::{path_args, DesktopPaths};
+use crate::desktop::paths::{DesktopPaths, path_args};
 
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};
-use super::service::{wide, PIPE_NAME, SERVICE_NAME};
+use super::service::{PIPE_NAME, SERVICE_NAME, wide};
 
 /// Path of the helper exe shipped beside the GUI (`KASUMI_HELPER_BIN` overrides for
 /// dev). It is both the service binary and the install/uninstall entry point.
