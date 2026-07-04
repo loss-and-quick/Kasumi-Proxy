@@ -272,7 +272,7 @@ async fn bring_up_external_tun(
             socks_port,
             HEV_CONFIG,
             TUN2SOCKS_PIDFILE,
-            "tun2socks.log",
+            "tun-engine.log",
             opts,
         )
         .await?;
@@ -293,7 +293,7 @@ async fn bring_up_external_tun(
                 socks_port + 2,
                 HEV2_CONFIG,
                 TUN2SOCKS2_PIDFILE,
-                "tun2socks2.log",
+                "tun-engine2.log",
                 opts,
             )
             .await?;

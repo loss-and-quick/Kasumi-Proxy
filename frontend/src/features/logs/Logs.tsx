@@ -74,7 +74,7 @@ export default function Logs({ onClose }: { onClose: () => void }) {
                 { value: "daemon", label: t("logs.target.daemon") },
                 { value: "xray", label: t("logs.target.xray") },
                 { value: "singbox", label: t("logs.target.singbox") },
-                { value: "tun2socks", label: t("logs.target.tun2socks") },
+                { value: "tun-engine", label: t("logs.target.tunEngine") },
               ]}
             />
           </div>

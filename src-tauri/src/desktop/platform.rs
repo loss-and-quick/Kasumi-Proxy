@@ -253,7 +253,7 @@ impl DesktopPlatform {
 
         let iface = random_tun_iface();
         let _ = write_text(&self.p.tun_iface_file, &iface).await;
-        let helper_log = self.p.backend.log(LogTarget::Tun2socks);
+        let helper_log = self.p.backend.log(LogTarget::TunEngine);
         // Desktop binds the core's own outbounds to the uplink (see above) to escape
         // the tun, so the helper needs no fwmark — its upstream is loopback (the
         // core's SOCKS) and never hits routing anyway. (Android still marks it; that

@@ -765,7 +765,7 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 export type MutationIntent_Serialize = z.infer<typeof MutationIntent_SerializeSchema>;
 
 
-export const LogTargetSchema = z.union([z.literal("daemon"), z.literal("singbox"), z.literal("tun2socks"), z.literal("xray")]);
+export const LogTargetSchema = z.union([z.literal("daemon"), z.literal("singbox"), z.literal("tun-engine"), z.literal("xray")]);
 export type LogTarget = z.infer<typeof LogTargetSchema>;
 
 

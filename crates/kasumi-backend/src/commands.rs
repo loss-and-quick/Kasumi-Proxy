@@ -496,7 +496,7 @@ const LOG_TARGETS: [LogTarget; 4] = [
     LogTarget::Daemon,
     LogTarget::Xray,
     LogTarget::Singbox,
-    LogTarget::Tun2socks,
+    LogTarget::TunEngine,
 ];
 
 #[cfg(test)]

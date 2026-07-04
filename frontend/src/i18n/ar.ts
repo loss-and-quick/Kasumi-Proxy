@@ -519,7 +519,7 @@ const ar = {
   "settings.backup": "نسخ احتياطي واستعادة",
   "settings.backupSub": "تصدير إعداداتك أو استيرادها",
   "settings.connectionLog": "سجل الاتصال",
-  "settings.connectionLogSub": "عرض مخرجات service / xray / tun2socks الحية",
+  "settings.connectionLogSub": "عرض مخرجات service / xray / TUN engine الحية",
   // logs
   "logs.title": "سجل الاتصال",
   "logs.target": "الهدف",
@@ -612,7 +612,7 @@ const ar = {
   "logs.target.daemon": "daemon",
   "logs.target.xray": "xray",
   "logs.target.singbox": "singbox",
-  "logs.target.tun2socks": "tun2socks",
+  "logs.target.tunEngine": "TUN engine",
   // profiles extra
   "profiles.shareCopied": "تم نسخ رابط المشاركة",
   "profiles.shareCopiedMany": plural("count", {

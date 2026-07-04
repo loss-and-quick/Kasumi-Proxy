@@ -13,7 +13,8 @@ pub enum LogTarget {
     Daemon,
     Xray,
     Singbox,
-    Tun2socks,
+    #[serde(rename = "tun-engine")]
+    TunEngine,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -215,8 +216,8 @@ mod tests {
             "\"singbox\""
         );
         assert_eq!(
-            serde_json::to_string(&LogTarget::Tun2socks).unwrap(),
-            "\"tun2socks\""
+            serde_json::to_string(&LogTarget::TunEngine).unwrap(),
+            "\"tun-engine\""
         );
     }
 

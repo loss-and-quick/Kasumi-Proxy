@@ -444,7 +444,7 @@ const vi = {
   "settings.backup": "Sao lưu và khôi phục",
   "settings.backupSub": "Xuất hoặc nhập cấu hình của bạn",
   "settings.connectionLog": "Nhật ký kết nối",
-  "settings.connectionLogSub": "Xem đầu ra trực tiếp của service / xray / tun2socks",
+  "settings.connectionLogSub": "Xem đầu ra trực tiếp của service / xray / TUN engine",
   // logs
   "logs.title": "Nhật ký kết nối",
   "logs.target": "Đích",
@@ -515,7 +515,7 @@ const vi = {
   "logs.target.daemon": "daemon",
   "logs.target.xray": "xray",
   "logs.target.singbox": "singbox",
-  "logs.target.tun2socks": "tun2socks",
+  "logs.target.tunEngine": "TUN engine",
   // profiles extra
   "profiles.shareCopied": "Đã sao chép liên kết chia sẻ",
   "profiles.shareCopiedMany": plural("count", {

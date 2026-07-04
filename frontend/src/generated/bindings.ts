@@ -409,7 +409,7 @@ export type KcpTransport = {
 export type LogLevel = "debug" | "info" | "warning" | "error" | "none";
 
 /**  Canonical log-file identifiers (backend log paths ↔ UI log picker). */
-export type LogTarget = "daemon" | "xray" | "singbox" | "tun2socks";
+export type LogTarget = "daemon" | "xray" | "singbox" | "tun-engine";
 
 /**  Identity / bookkeeping fields every profile carries (`metaShape`). */
 export type Meta = {
