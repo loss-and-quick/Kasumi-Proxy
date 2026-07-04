@@ -8,6 +8,7 @@
     crane-tauri.url = "github:JPHutchins/crane-tauri";
     bun2nix.url = "github:nix-community/bun2nix?ref=2.1.0";
     bun2nix.inputs.nixpkgs.follows = "nixpkgs";
+    treefmt-nix.url = "github:numtide/treefmt-nix";
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -63,6 +64,7 @@
           ./nix/desktop.nix
           ./nix/shells.nix
           ./nix/apps.nix
+          ./nix/treefmt.nix
         ];
 
         flake = {
