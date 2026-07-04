@@ -5,12 +5,36 @@ use serde::{Deserialize, Serialize};
 
 /// An actual proxy core. Wire values: `"xray"`, `"sing-box"`.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumIter, specta::Type,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    strum::EnumIter,
+    specta::Type,
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum CoreEngine {
     Xray,
     SingBox,
+}
+
+/// Which engine bridges the TUN device to the proxy core. `SingboxTun` means
+/// "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` is an
+/// external userspace tun→socks process in front of a socks-only core. Further
+/// engines plug in as new variants. Wire values: `"singbox-tun"`, `"tun2socks"`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::EnumIter, specta::Type,
+)]
+pub enum TunEngine {
+    #[serde(rename = "singbox-tun")]
+    SingboxTun,
+    #[serde(rename = "tun2socks")]
+    Tun2socks,
 }
 
 /// Stream transport.
@@ -273,6 +297,7 @@ pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
     vec![
         ("PROTOCOL_OPTS", wire_values::<Protocol>()),
         ("CORE_ENGINE_OPTS", wire_values::<CoreEngine>()),
+        ("TUN_ENGINE_OPTS", wire_values::<TunEngine>()),
         ("NETWORK_OPTS", wire_values::<Network>()),
         ("SECURITY_OPTS", wire_values::<Security>()),
         ("HEADER_TYPE_OPTS", wire_values::<HeaderType>()),
@@ -298,6 +323,12 @@ mod tests {
     fn engine_selection_values() {
         assert_eq!(wire(&CoreEngine::Xray), "\"xray\"");
         assert_eq!(wire(&CoreEngine::SingBox), "\"sing-box\"");
+    }
+
+    #[test]
+    fn tun_engine_values() {
+        assert_eq!(wire(&TunEngine::SingboxTun), "\"singbox-tun\"");
+        assert_eq!(wire(&TunEngine::Tun2socks), "\"tun2socks\"");
     }
 
     #[test]

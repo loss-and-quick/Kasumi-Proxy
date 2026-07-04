@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::contract::FetchMode;
-use crate::enums::CoreEngine;
+use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::{Profile, Protocol};
 
 // Default local inbound ports used when settings leave them unset.
@@ -269,6 +269,12 @@ pub struct AdvancedSettings {
     pub app_filter: BTreeMap<String, AppFilterMode>,
     pub dedup_on_update: bool,
     pub allow_non_localhost: bool,
+    // ---- TUN engine (per-core selection) ----
+    /// Which TUN engine each core uses; missing entries fall back to
+    /// [`crate::core::default_tun_for`] (sing-box→SingboxTun, xray→Tun2socks).
+    pub tun_by_core: BTreeMap<CoreEngine, TunEngine>,
+    /// MTU of the TUN interface (sing-box native tun; external engines too).
+    pub tun_mtu: i64,
 }
 
 impl Default for AdvancedSettings {
@@ -314,6 +320,8 @@ impl Default for AdvancedSettings {
             app_filter: BTreeMap::new(),
             dedup_on_update: false,
             allow_non_localhost: false,
+            tun_by_core: BTreeMap::new(),
+            tun_mtu: 9000,
         }
     }
 }
@@ -441,6 +449,9 @@ mod tests {
         assert_eq!(v["logRotateMaxKb"], 512);
         assert_eq!(v["appCaptureMode"], "all");
         assert!(v["coreByProtocol"].as_object().unwrap().is_empty());
+        // TUN engine settings: per-core map empty by default, MTU present.
+        assert!(v["tunByCore"].as_object().unwrap().is_empty());
+        assert_eq!(v["tunMtu"], 9000);
         // Optional fields omitted, not null.
         assert!(v.get("localSocksPort").is_none());
         assert!(v.get("logLevel").is_none());
@@ -470,6 +481,19 @@ mod tests {
         assert_eq!(s.app_filter["com.x"], AppFilterMode::ForceProxy);
         let v = serde_json::to_value(&s).unwrap();
         assert_eq!(v["appFilter"]["com.x"], "force-proxy");
+    }
+
+    #[test]
+    fn tun_by_core_map_round_trips() {
+        let s: AdvancedSettings = serde_json::from_str(
+            r#"{"tunByCore":{"xray":"tun2socks","sing-box":"singbox-tun"},"tunMtu":1500}"#,
+        )
+        .unwrap();
+        assert_eq!(s.tun_by_core[&CoreEngine::Xray], TunEngine::Tun2socks);
+        assert_eq!(s.tun_by_core[&CoreEngine::SingBox], TunEngine::SingboxTun);
+        assert_eq!(s.tun_mtu, 1500);
+        let v = serde_json::to_value(&s).unwrap();
+        assert_eq!(v["tunByCore"]["xray"], "tun2socks");
     }
 
     #[test]

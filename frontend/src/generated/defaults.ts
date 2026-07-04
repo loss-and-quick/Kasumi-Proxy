@@ -535,7 +535,9 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "routingMode": "global",
   "singboxStack": "gvisor",
   "speedConcurrency": 1,
-  "strictRoute": false
+  "strictRoute": false,
+  "tunByCore": {},
+  "tunMtu": 9000
 } as AdvancedSettings_Serialize;
 
 /* Backend constants (port-test windows, local ports, probe URLs, log rotation). */
@@ -548,6 +550,7 @@ export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=
 /* Editor dropdown option lists (wire values, in declaration order). */
 export const PROTOCOL_OPTS: Protocol[] = ["vless","vmess","trojan","shadowsocks","socks","http","wireguard","hysteria2","tuic","anytls","naive","shadowtls","custom"];
 export const CORE_ENGINE_OPTS: CoreEngine[] = ["xray","sing-box"];
+export const TUN_ENGINE_OPTS: string[] = ["singbox-tun","tun2socks"];
 export const NETWORK_OPTS: Transport["kind"][] = ["tcp","ws","grpc","httpupgrade","xhttp","h2","kcp","quic"];
 export const SECURITY_OPTS: Security[] = ["none","tls","reality"];
 export const HEADER_TYPE_OPTS: HeaderType[] = ["none","http","srtp","utp","wechat-video","dtls","wireguard","dns"];

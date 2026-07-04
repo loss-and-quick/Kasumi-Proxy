@@ -87,6 +87,13 @@ export type AdvancedSettings_Deserialize = {
 	appFilter?: { [key in string]: AppFilterMode },
 	dedupOnUpdate?: boolean,
 	allowNonLocalhost?: boolean,
+	/**
+	 *  Which TUN engine each core uses; missing entries fall back to
+	 *  [`crate::core::default_tun_for`] (sing-box→SingboxTun, xray→Tun2socks).
+	 */
+	tunByCore?: Partial<{ [key in CoreEngine]: TunEngine }>,
+	/**  MTU of the TUN interface (sing-box native tun; external engines too). */
+	tunMtu?: number,
 };
 
 /**
@@ -134,6 +141,13 @@ export type AdvancedSettings_Serialize = {
 	appFilter: { [key in string]: AppFilterMode },
 	dedupOnUpdate: boolean,
 	allowNonLocalhost: boolean,
+	/**
+	 *  Which TUN engine each core uses; missing entries fall back to
+	 *  [`crate::core::default_tun_for`] (sing-box→SingboxTun, xray→Tun2socks).
+	 */
+	tunByCore: Partial<{ [key in CoreEngine]: TunEngine }>,
+	/**  MTU of the TUN interface (sing-box native tun; external engines too). */
+	tunMtu: number,
 };
 
 export type Anytls = {
@@ -859,6 +873,14 @@ export type Tuic = {
 	udpOverStream?: boolean,
 	heartbeat?: string,
 };
+
+/**
+ *  Which engine bridges the TUN device to the proxy core. `SingboxTun` means
+ *  "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` is an
+ *  external userspace tun→socks process in front of a socks-only core. Further
+ *  engines plug in as new variants. Wire values: `"singbox-tun"`, `"tun2socks"`.
+ */
+export type TunEngine = "singbox-tun" | "tun2socks";
 
 export type Vless = {
 	meta: Meta,
