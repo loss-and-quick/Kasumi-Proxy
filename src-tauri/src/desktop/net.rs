@@ -17,10 +17,10 @@ pub async fn resolve_ips(host: &str) -> Vec<String> {
 
 /// Add a non-loopback string host to the set.
 fn add_host(hosts: &mut HashSet<String>, h: Option<&Value>) {
-    if let Some(s) = h.and_then(Value::as_str) {
-        if !is_loopback(s) {
-            hosts.insert(s.to_string());
-        }
+    if let Some(s) = h.and_then(Value::as_str)
+        && !is_loopback(s)
+    {
+        hosts.insert(s.to_string());
     }
 }
 
@@ -92,10 +92,11 @@ fn collect_xray_servers(cfg: &Value) -> HashSet<String> {
         let raw = sv
             .as_str()
             .or_else(|| sv.get("address").and_then(Value::as_str));
-        if let Some(addr) = raw {
-            if !is_loopback(addr) && is_literal_ip(addr) {
-                hosts.insert(addr.to_string());
-            }
+        if let Some(addr) = raw
+            && !is_loopback(addr)
+            && is_literal_ip(addr)
+        {
+            hosts.insert(addr.to_string());
         }
     }
     hosts

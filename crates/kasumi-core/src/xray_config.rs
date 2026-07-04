@@ -3,15 +3,15 @@
 //! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
 //! invariants (e.g. inbound/routing shape) are covered by the unit tests below.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
-    force_socks_port, AdvancedSettings, RoutingRule, DEFAULT_LOCAL_HTTP_PORT,
-    DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS, FAKEIP_INET4_RANGE,
+    AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS,
+    FAKEIP_INET4_RANGE, RoutingRule, force_socks_port,
 };
 
 fn parse_json_safe(s: &str) -> Option<Value> {
@@ -523,28 +523,28 @@ const SPECIAL_OUTBOUND_TAGS: [&str; 3] = ["proxy", "direct", "block"];
 fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
     let mut m = Map::new();
     m.insert("type".into(), "field".into());
-    if let Some(d) = &rule.domain {
-        if !d.is_empty() {
-            m.insert("domain".into(), json!(d));
-        }
+    if let Some(d) = &rule.domain
+        && !d.is_empty()
+    {
+        m.insert("domain".into(), json!(d));
     }
-    if let Some(ip) = &rule.ip {
-        if !ip.is_empty() {
-            m.insert("ip".into(), json!(ip));
-        }
+    if let Some(ip) = &rule.ip
+        && !ip.is_empty()
+    {
+        m.insert("ip".into(), json!(ip));
     }
-    if let Some(port) = &rule.port {
-        if !port.is_empty() {
-            m.insert("port".into(), port.clone().into());
-        }
+    if let Some(port) = &rule.port
+        && !port.is_empty()
+    {
+        m.insert("port".into(), port.clone().into());
     }
     if let Some(net) = &rule.network {
         m.insert("network".into(), wire(net).into());
     }
-    if let Some(proto) = &rule.protocol {
-        if !proto.is_empty() {
-            m.insert("protocol".into(), json!(proto));
-        }
+    if let Some(proto) = &rule.protocol
+        && !proto.is_empty()
+    {
+        m.insert("protocol".into(), json!(proto));
     }
     m.insert("outboundTag".into(), resolve(&rule.outbound_tag).into());
     Value::Object(m)
@@ -669,15 +669,14 @@ fn build_routing(
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
     }
 
-    if s.routing_mode == crate::state::RoutingMode::Custom {
-        if let Some(cr) = s.custom_routing.as_deref().filter(|x| !x.trim().is_empty()) {
-            if let Some(Value::Array(parsed)) = parse_json_safe(cr) {
-                let mut rules: Vec<Value> = vec![force_rule, dns_rule];
-                rules.extend(parsed);
-                rules.push(final_rule);
-                return json!({ "domainStrategy": domain_strategy, "rules": rules });
-            }
-        }
+    if s.routing_mode == crate::state::RoutingMode::Custom
+        && let Some(cr) = s.custom_routing.as_deref().filter(|x| !x.trim().is_empty())
+        && let Some(Value::Array(parsed)) = parse_json_safe(cr)
+    {
+        let mut rules: Vec<Value> = vec![force_rule, dns_rule];
+        rules.extend(parsed);
+        rules.push(final_rule);
+        return json!({ "domainStrategy": domain_strategy, "rules": rules });
     }
 
     let mut rules: Vec<Value> = vec![force_rule, dns_rule];

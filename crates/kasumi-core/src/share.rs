@@ -444,11 +444,7 @@ fn parse_vmess(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     // String field as Option, treating "" as absent (for enum coercers).
     let opt = |k: &str| -> Option<String> {
         let v = s(k);
-        if v.is_empty() {
-            None
-        } else {
-            Some(v)
-        }
+        if v.is_empty() { None } else { Some(v) }
     };
     let net = as_network(opt("net").as_deref());
     let raw_path = s("path");
@@ -589,10 +585,10 @@ fn parse_ss(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     if body.contains('@') {
         let (userinfo, hostport) = split_last(&body, '@');
         let mut creds = userinfo.clone();
-        if let Some(dec) = b64decode(&userinfo) {
-            if dec.contains(':') {
-                creds = dec;
-            }
+        if let Some(dec) = b64decode(&userinfo)
+            && dec.contains(':')
+        {
+            creds = dec;
         }
         let (m, p) = split_first(&creds, ':');
         method = m;
@@ -1020,10 +1016,10 @@ fn build_vmess(p: &Vmess) -> String {
     if accept_proxy {
         put("acceptProxyProtocol", true.into());
     }
-    if let Transport::Httpupgrade(h) = t {
-        if h.early_data != 0 {
-            put("ed", h.early_data.into());
-        }
+    if let Transport::Httpupgrade(h) = t
+        && h.early_data != 0
+    {
+        put("ed", h.early_data.into());
     }
     if p.vmess_global_padding {
         put("vmessGlobalPadding", true.into());
@@ -1533,10 +1529,10 @@ pub fn extract_uris(text: &str) -> Vec<String> {
                 if cand.is_empty() || !is_b64_candidate(cand) {
                     continue;
                 }
-                if let Some(dec) = b64decode(cand) {
-                    if URI_RE.is_match(&dec).unwrap_or(false) {
-                        go(&dec, depth + 1, out);
-                    }
+                if let Some(dec) = b64decode(cand)
+                    && URI_RE.is_match(&dec).unwrap_or(false)
+                {
+                    go(&dec, depth + 1, out);
                 }
             }
         }

@@ -7,7 +7,7 @@ use serde_json::Value;
 use crate::core::resolve_core;
 use crate::enums::CoreEngine;
 use crate::profile::Profile;
-use crate::singbox_config::{build_singbox_config, SingboxBuildOpts};
+use crate::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use crate::state::{AdvancedSettings, RoutingRule};
 use crate::xray_config::build_xray_config;
 

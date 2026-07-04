@@ -149,10 +149,10 @@ pub async fn clear_singbox_autoroute(tun_iface_file: &str, tun2_iface_file: &str
     // *our* tun devices; a foreign VPN's split-default must survive.
     let mut ours: Vec<String> = Vec::new();
     for f in [tun_iface_file, tun2_iface_file] {
-        if let Some(name) = read_text(f).await.map(|s| s.trim().to_owned()) {
-            if !name.is_empty() {
-                ours.push(name);
-            }
+        if let Some(name) = read_text(f).await.map(|s| s.trim().to_owned())
+            && !name.is_empty()
+        {
+            ours.push(name);
         }
     }
     for cidr in ["0.0.0.0/1", "128.0.0.0/1"] {

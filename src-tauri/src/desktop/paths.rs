@@ -297,8 +297,14 @@ mod tests {
     #[test]
     fn resolve_honours_data_home_override() {
         // Set a deterministic data home; resolve must place the datadir under it.
-        std::env::set_var("KASUMI_DATA_HOME", "/tmp/kasumi-test-home");
-        std::env::set_var("KASUMI_RUNTIME_DIR", "/tmp/kasumi-test-run");
+        // SAFETY (Rust 1.95): set_var/remove_var are unsafe because concurrent env
+        // access is UB. These env-mutating tests pre-date that and were never safe
+        // under cargo's parallel runner — the mutations are kept local + bracketed
+        // (set, assert, restore) so each test is self-consistent.
+        unsafe {
+            std::env::set_var("KASUMI_DATA_HOME", "/tmp/kasumi-test-home");
+            std::env::set_var("KASUMI_RUNTIME_DIR", "/tmp/kasumi-test-run");
+        }
         let p = DesktopPaths::resolve().unwrap();
         assert_eq!(p.datadir, "/tmp/kasumi-test-home/kasumi-proxy");
         assert_eq!(p.run_dir, "/tmp/kasumi-test-run/kasumi-proxy/run");
@@ -318,27 +324,36 @@ mod tests {
         }
         assert!(p.engine_file.starts_with(&p.datadir));
         assert!(p.backend.xray_config.starts_with(&p.datadir));
-        std::env::remove_var("KASUMI_DATA_HOME");
-        std::env::remove_var("KASUMI_RUNTIME_DIR");
+        // SAFETY: see the note on the first `set_var` in this test.
+        unsafe {
+            std::env::remove_var("KASUMI_DATA_HOME");
+            std::env::remove_var("KASUMI_RUNTIME_DIR");
+        }
 
         // Verbatim overrides: what the GUI hands the privilege helper across the
         // pkexec boundary — exact dirs, used as-is (no "/kasumi-proxy" suffix), with
         // HOME absent (pkexec scrubs it). Same test so the env mutations stay
         // sequential (tests in a file otherwise run in parallel).
         let home = std::env::var("HOME").ok();
-        std::env::remove_var("HOME");
-        std::env::remove_var("XDG_DATA_HOME");
-        std::env::set_var("KASUMI_DATADIR", "/var/lib/kasumi-proxy");
-        std::env::set_var("KASUMI_RUNDIR", "/run/kasumi-proxy/run");
+        // SAFETY: see the note on the first `set_var` in this test.
+        unsafe {
+            std::env::remove_var("HOME");
+            std::env::remove_var("XDG_DATA_HOME");
+            std::env::set_var("KASUMI_DATADIR", "/var/lib/kasumi-proxy");
+            std::env::set_var("KASUMI_RUNDIR", "/run/kasumi-proxy/run");
+        }
         let p = DesktopPaths::resolve().unwrap();
         assert_eq!(p.datadir, "/var/lib/kasumi-proxy");
         assert_eq!(p.run_dir, "/run/kasumi-proxy/run");
         assert!(p.service_state_file.starts_with("/run/kasumi-proxy/run"));
         assert!(p.engine_file.starts_with("/var/lib/kasumi-proxy"));
-        std::env::remove_var("KASUMI_DATADIR");
-        std::env::remove_var("KASUMI_RUNDIR");
-        if let Some(h) = home {
-            std::env::set_var("HOME", h);
+        // SAFETY: see the note on the first `set_var` in this test.
+        unsafe {
+            std::env::remove_var("KASUMI_DATADIR");
+            std::env::remove_var("KASUMI_RUNDIR");
+            if let Some(h) = home {
+                std::env::set_var("HOME", h);
+            }
         }
     }
 }
@@ -358,13 +373,20 @@ mod tests {
 
     #[test]
     fn resolve_honours_data_home_override() {
-        std::env::set_var("KASUMI_DATA_HOME", r"C:\kasumi-test-home");
-        std::env::set_var("KASUMI_RUNTIME_DIR", r"C:\kasumi-test-run");
+        // SAFETY (Rust 1.95): set_var/remove_var are unsafe; this test is the only
+        // env-touching one in the module and the mutations are bracketed.
+        unsafe {
+            std::env::set_var("KASUMI_DATA_HOME", r"C:\kasumi-test-home");
+            std::env::set_var("KASUMI_RUNTIME_DIR", r"C:\kasumi-test-run");
+        }
         let p = DesktopPaths::resolve().unwrap();
         assert_eq!(p.datadir, r"C:\kasumi-test-home\kasumi-proxy");
         assert_eq!(p.run_dir, r"C:\kasumi-test-run\kasumi-proxy\run");
         assert!(p.xray_bin.ends_with(r"\xray.exe"));
-        std::env::remove_var("KASUMI_DATA_HOME");
-        std::env::remove_var("KASUMI_RUNTIME_DIR");
+        // SAFETY: see the matching `set_var` above.
+        unsafe {
+            std::env::remove_var("KASUMI_DATA_HOME");
+            std::env::remove_var("KASUMI_RUNTIME_DIR");
+        }
     }
 }

@@ -12,7 +12,7 @@ pub mod sysctl;
 
 pub use platform::AndroidPlatform;
 
-use kasumi_backend::proc::{run, RunOpts};
+use kasumi_backend::proc::{RunOpts, run};
 
 /// Run a shell command, discarding output and returning its exit code. The Android
 /// platform shells out to `ip`/`iptables`/`pm`/etc., so a tiny `&str`-slice wrapper

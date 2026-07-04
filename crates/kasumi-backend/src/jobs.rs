@@ -11,17 +11,17 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::Semaphore;
 
-use kasumi_core::contract::{FetchMode, TestKind, TEST_PORT_BASE, TEST_PORT_SPAN};
+use kasumi_core::contract::{FetchMode, TEST_PORT_BASE, TEST_PORT_SPAN, TestKind};
 use kasumi_core::core::resolve_core;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Profile;
-use kasumi_core::singbox_config::{build_singbox_config, SingboxBuildOpts};
+use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL};
 use kasumi_core::xray_config::build_xray_config;
 
 use crate::fs::{exists, read_text, remove_file};
 use crate::fsjson::{read_json, write_text_atomic};
-use crate::net::{fetch_url, lease_ports, tcp_ping, FetchUrlOptions, ProxyStatus};
+use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
 
 struct Loaded {
@@ -443,7 +443,7 @@ pub async fn run_speed_test(
 mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
-    use crate::testutil::{vless_at, TestPlatform};
+    use crate::testutil::{TestPlatform, vless_at};
     use kasumi_core::state::default_app_state;
 
     #[tokio::test]

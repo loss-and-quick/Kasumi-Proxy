@@ -23,7 +23,7 @@ pub mod sub_update;
 #[cfg(test)]
 mod testutil;
 
-pub use commands::{dispatch, Command, CommandError, Response};
+pub use commands::{Command, CommandError, Response, dispatch};
 pub use platform::{AppInfo, BackendPaths, Engine, Platform, PlatformCapabilities};
 pub use service::Service;
 pub use sub_update::LifecycleControl;

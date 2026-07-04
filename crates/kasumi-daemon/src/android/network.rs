@@ -94,12 +94,12 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
                             tokio::time::sleep(Duration::from_secs(1)).await;
                             cur = active_interface().await;
                         }
-                        if let Some(cur) = cur {
-                            if Some(&cur) != last.as_ref() {
-                                last = Some(cur.clone());
-                                notify(&tx).await;
-                                apply_mark_rule(&cur).await;
-                            }
+                        if let Some(cur) = cur
+                            && Some(&cur) != last.as_ref()
+                        {
+                            last = Some(cur.clone());
+                            notify(&tx).await;
+                            apply_mark_rule(&cur).await;
                         }
                     }
                 }
@@ -111,12 +111,12 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
         // No busybox — poll every 5 s.
         loop {
             tokio::time::sleep(Duration::from_secs(5)).await;
-            if let Some(cur) = active_interface().await {
-                if Some(&cur) != last.as_ref() {
-                    last = Some(cur.clone());
-                    notify(&tx).await;
-                    apply_mark_rule(&cur).await;
-                }
+            if let Some(cur) = active_interface().await
+                && Some(&cur) != last.as_ref()
+            {
+                last = Some(cur.clone());
+                notify(&tx).await;
+                apply_mark_rule(&cur).await;
             }
         }
     }

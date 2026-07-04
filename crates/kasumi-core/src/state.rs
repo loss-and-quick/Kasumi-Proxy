@@ -369,10 +369,10 @@ pub fn default_app_state() -> AppState {
 /// a backup restore), clear `active_id` when it no longer points at a live profile.
 /// Pure; idempotent.
 pub fn fixup_active_id(state: &mut AppState) {
-    if let Some(id) = &state.active_id {
-        if !state.profiles.iter().any(|p| p.meta().id == *id) {
-            state.active_id = None;
-        }
+    if let Some(id) = &state.active_id
+        && !state.profiles.iter().any(|p| p.meta().id == *id)
+    {
+        state.active_id = None;
     }
 }
 

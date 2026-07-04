@@ -301,10 +301,10 @@ mod tests {
 
         // A ws heartbeat is an Xray-only feature.
         let mut wsf = p("vless://u@e.x:443?type=ws&security=tls");
-        if let Profile::Vless(x) = &mut wsf {
-            if let Transport::Ws(w) = &mut x.transport {
-                w.heartbeat_period = 5;
-            }
+        if let Profile::Vless(x) = &mut wsf
+            && let Transport::Ws(w) = &mut x.transport
+        {
+            w.heartbeat_period = 5;
         }
         assert_eq!(forced_core(&wsf), Some(Xray));
     }
