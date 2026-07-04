@@ -47,6 +47,7 @@ fn opts_type(name: &str) -> &'static str {
         "PROTOCOL_OPTS" => "Protocol",
         "CORE_ENGINE_OPTS" => "CoreEngine",
         "LOG_TARGET_OPTS" => "LogTarget",
+        "TUN_TUNING_ENGINES" => "TunEngine",
         "NETWORK_OPTS" => "Transport[\"kind\"]",
         "SECURITY_OPTS" => "Security",
         "HEADER_TYPE_OPTS" => "HeaderType",
