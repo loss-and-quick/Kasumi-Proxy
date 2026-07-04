@@ -13,8 +13,8 @@ use tokio::sync::mpsc;
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::read_json;
 use kasumi_backend::lifecycle::{
-    TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core,
-    spawn_tun_engine, sync_geo_asset, verify_core_alive,
+    TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, running_external_engine,
+    spawn_core, spawn_tun_engine, sync_geo_asset, verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -23,7 +23,7 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
-use kasumi_core::enums::{CoreEngine, TunEngine, tun_from_marker, tun_marker};
+use kasumi_core::enums::{CoreEngine, TunEngine, tun_marker};
 use kasumi_core::state::{
     AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
@@ -82,35 +82,23 @@ fn tun_helper_bin(tun: TunEngine) -> &'static str {
     }
 }
 
-/// Helper binary the *running* data-path uses, resolved from the tun-engine marker
-/// so teardown/the watchdog match the right process (defaults to tun2socks for an
-/// absent/legacy marker).
-async fn running_helper_bin() -> &'static str {
-    read_text(TUN_ENGINE_FILE)
-        .await
-        .as_deref()
-        .and_then(tun_from_marker)
-        .map(tun_helper_bin)
-        .unwrap_or(TUN2SOCKS_BIN)
+/// The external TUN engine the *running* data-path uses, or `None` for a native
+/// sing-box tun. The marker/engine-file decision is single-sourced in
+/// [`running_external_engine`] (shared with the desktop helper); the daemon only
+/// supplies the inputs and maps the result via [`tun_helper_bin`].
+async fn running_tun_engine() -> Option<TunEngine> {
+    let marker = read_text(TUN_ENGINE_FILE).await;
+    let engine = read_text(ENGINE_FILE).await;
+    running_external_engine(marker.as_deref(), engine.as_deref())
 }
 
-/// Whether the running data-path fronts the core with an external userspace tun (so
-/// a live helper is required for health) rather than a native sing-box tun. Resolved
-/// from the recorded tun-engine marker; on an absent/legacy marker it falls back to
-/// the core engine — xray always needs an external tun, sing-box owns its own.
-async fn external_tun_running() -> bool {
-    if let Some(tun) = read_text(TUN_ENGINE_FILE)
+/// Helper binary a teardown/watchdog match targets for the running data-path —
+/// tun2socks by default, a harmless guard for a native tun with no helper pid.
+async fn running_helper_bin() -> &'static str {
+    running_tun_engine()
         .await
-        .as_deref()
-        .and_then(tun_from_marker)
-    {
-        return tun != TunEngine::SingboxTun;
-    }
-    read_text(ENGINE_FILE)
-        .await
-        .map(|s| s.trim().to_string())
-        .as_deref()
-        != Some("sing-box")
+        .map(tun_helper_bin)
+        .unwrap_or(TUN2SOCKS_BIN)
 }
 
 fn app_state_path() -> String {
@@ -681,10 +669,11 @@ impl Platform for AndroidPlatform {
         // runs the tun itself. When the data-path is external, the helper pid must be
         // present AND alive — a missing pidfile (helper never spawned, e.g. its
         // binary absent) is unhealthy, not healthy, so the watchdog rebuilds it
-        // instead of leaving traffic black-holed in an unbridged tun.
-        if external_tun_running().await {
+        // instead of leaving traffic black-holed in an unbridged tun. (One marker
+        // read resolves both external-ness and the binary to match.)
+        if let Some(tun) = running_tun_engine().await {
             let t = read_pidfile(TUN2SOCKS_PIDFILE).await;
-            if !(t > 0 && pid_matches_bin(t, running_helper_bin().await).await) {
+            if !(t > 0 && pid_matches_bin(t, tun_helper_bin(tun)).await) {
                 return Some(false);
             }
         }

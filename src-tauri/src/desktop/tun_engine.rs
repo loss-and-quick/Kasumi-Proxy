@@ -8,7 +8,7 @@ use std::path::Path;
 use tokio::process::Child;
 
 use kasumi_backend::lifecycle::{TunSpawn, spawn_tun_engine};
-use kasumi_core::enums::{TunEngine, tun_from_marker, tun_marker};
+use kasumi_core::enums::{TunEngine, tun_marker};
 use kasumi_core::tun::TunOptions;
 
 use super::paths::DesktopPaths;
@@ -21,11 +21,6 @@ const TUN_IPV4: &str = "198.18.0.1";
 /// serde value via [`tun_marker`]).
 pub fn marker(tun: TunEngine) -> String {
     tun_marker(tun)
-}
-
-/// Parse a marker label back to its engine (`None` for unknown/legacy markers).
-pub fn from_marker(s: &str) -> Option<TunEngine> {
-    tun_from_marker(s)
 }
 
 /// Whether the engine runs as an external helper process in front of a socks-only

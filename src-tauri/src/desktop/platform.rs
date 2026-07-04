@@ -17,8 +17,8 @@ use tokio::sync::mpsc;
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::read_json;
 use kasumi_backend::lifecycle::{
-    missing_rule_sets, random_tun_iface, referenced_srs, spawn_core, sync_geo_asset,
-    verify_core_alive,
+    engine_label, missing_rule_sets, random_tun_iface, referenced_srs, running_external_engine,
+    spawn_core, sync_geo_asset, verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -136,26 +136,16 @@ impl DesktopPlatform {
     }
 
     /// The external tun helper binary the *running* data-path expects, or `None` when
-    /// the core owns its tun natively. The recorded tun-engine marker is authoritative
-    /// when present (resolved through [`tun_engine`], so adding an engine needs no
-    /// change here); on an absent/legacy marker (e.g. a data-path started by a
-    /// pre-upgrade version) it falls back to the running core — xray always fronts an
-    /// external tun, sing-box owns its own. Used by the watchdog to decide whether a
-    /// live helper is required.
+    /// the core owns its tun natively. The marker/engine decision is single-sourced in
+    /// [`running_external_engine`] (shared with the Android daemon); this shell only
+    /// supplies the inputs — the marker file and the live core — and maps the
+    /// resolved engine to its binary via [`tun_engine`]. Used by the watchdog and
+    /// teardown to decide whether a live helper is required.
     async fn expected_helper_bin(&self) -> Option<String> {
-        if let Some(marker) = read_text(&self.p.tun_engine_file)
-            .await
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-        {
-            return tun_engine::from_marker(&marker)
-                .and_then(|tun| tun_engine::helper_bin(tun, &self.p))
-                .map(str::to_owned);
-        }
-        match self.running_engine().await {
-            Some(CoreEngine::Xray) => Some(self.p.tun2socks_bin.clone()),
-            _ => None,
-        }
+        let marker = read_text(&self.p.tun_engine_file).await;
+        let engine = self.running_engine().await.map(engine_label);
+        let tun = running_external_engine(marker.as_deref(), engine)?;
+        tun_engine::helper_bin(tun, &self.p).map(str::to_owned)
     }
 
     /// Keep sing-box's geo `.srs` rule-sets in step with their `.dat` sources and
