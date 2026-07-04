@@ -19,6 +19,8 @@ pub mod paths;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod platform;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
+pub mod tun_engine;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub use platform::DesktopPlatform;
 
 #[cfg(target_os = "linux")]

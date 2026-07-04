@@ -21,6 +21,9 @@ pub const TUN2SOCKS2_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks2.pid"
 pub const SOCKS_PORT_FILE: &str = "/data/adb/kasumi-proxy/local-socks-port";
 pub const ENGINE_FILE: &str = "/data/adb/kasumi-proxy/engine";
 pub const TUN_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun-iface";
+/// Records the running data-path's TUN engine (its wire label) so teardown and the
+/// watchdog resolve the matching helper binary, mirroring the desktop marker.
+pub const TUN_ENGINE_FILE: &str = "/data/adb/kasumi-proxy/run/tun-engine";
 pub const TUN2_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun2-iface";
 pub const SERVICE_STATE_FILE: &str = "/data/adb/kasumi-proxy/service-state";
 pub const SERVICE_STARTED_FILE: &str = "/data/adb/kasumi-proxy/service-started";

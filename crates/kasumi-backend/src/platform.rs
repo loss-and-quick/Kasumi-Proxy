@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
-use kasumi_core::enums::CoreEngine;
+use kasumi_core::enums::{CoreEngine, TunEngine};
 
 use crate::lifecycle::spawn_core;
 use crate::net::ProxyStatus;
@@ -124,6 +124,9 @@ pub struct AppInfo {
 #[derive(Debug, Clone)]
 pub struct StartDataPath {
     pub engine: Engine,
+    /// The resolved TUN engine. `SingboxTun` uses the core's own tun (native for
+    /// sing-box); `Tun2socks` fronts a socks-only core with an external tun.
+    pub tun: TunEngine,
     pub socks_port: u16,
 }
 

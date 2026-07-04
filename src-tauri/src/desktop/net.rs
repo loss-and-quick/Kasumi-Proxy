@@ -102,13 +102,69 @@ fn collect_xray_servers(cfg: &Value) -> HashSet<String> {
     hosts
 }
 
-/// Resolve every proxy-server host in the xray config to bypass CIDRs, plus the
+/// Proxy-server hosts from a built sing-box config: each outbound's `server`,
+/// wireguard endpoint peers, plus literal `dns.servers` IPs. Used when a sing-box
+/// core runs socks-only behind an external tun engine (no native tun to carry
+/// `route_exclude_address`), so it must reproduce the same bypass set the native
+/// path bakes into the config.
+fn collect_singbox_servers(cfg: &Value) -> HashSet<String> {
+    let mut hosts = HashSet::new();
+    for ob in cfg
+        .get("outbounds")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        add_host(&mut hosts, ob.get("server"));
+    }
+    for ep in cfg
+        .get("endpoints")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        add_host(&mut hosts, ep.get("server"));
+        for peer in ep
+            .get("peers")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            add_host(&mut hosts, peer.get("address"));
+        }
+    }
+    // sing-box `dns.servers` literal IPs — the core's own upstream resolvers must be
+    // host-routed off the tun, else its DNS queries are captured by the split-default
+    // and loop back through the helper into the core. Mirrors the native path's
+    // `route_exclude_address` (see `singbox::collect_bypass_hosts`); domain DNS
+    // servers are skipped (they resolve through the proxy).
+    for s in cfg
+        .get("dns")
+        .and_then(|d| d.get("servers"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(addr) = s.get("server").and_then(Value::as_str)
+            && !is_loopback(addr)
+            && is_literal_ip(addr)
+        {
+            hosts.insert(addr.to_string());
+        }
+    }
+    hosts
+}
+
+/// Resolve every proxy-server host in the built config to bypass CIDRs, plus the
 /// `extra_hosts` the OS routing back-end supplies (its DNS resolvers, so name
-/// resolution keeps working while the tun is up).
-pub async fn resolve_bypass_cidrs(xray_cfg_text: &str, extra_hosts: &[String]) -> Vec<String> {
-    let cfg: Value = serde_json::from_str(xray_cfg_text).unwrap_or(Value::Null);
+/// resolution keeps working while the tun is up). Handles both the xray and the
+/// sing-box config shapes (their server keys are disjoint, so the union is safe).
+pub async fn resolve_bypass_cidrs(cfg_text: &str, extra_hosts: &[String]) -> Vec<String> {
+    let cfg: Value = serde_json::from_str(cfg_text).unwrap_or(Value::Null);
     let mut out = HashSet::new();
-    for host in collect_xray_servers(&cfg) {
+    let mut servers = collect_xray_servers(&cfg);
+    servers.extend(collect_singbox_servers(&cfg));
+    for host in servers {
         for ip in resolve_ips(&host).await {
             out.insert(cidr(&ip));
         }
@@ -188,6 +244,33 @@ mod tests {
         assert!(hosts.contains("b.example"));
         assert!(hosts.contains("c.example"));
         // Loopback is never bypass-routed.
+        assert!(!hosts.contains("127.0.0.1"));
+    }
+
+    #[test]
+    fn collects_singbox_outbound_and_endpoint_servers() {
+        let cfg = serde_json::json!({
+            "outbounds": [
+                { "type": "vless", "server": "sb.example" },
+                { "type": "direct" },
+                { "type": "socks", "server": "127.0.0.1" },
+            ],
+            "endpoints": [
+                { "type": "wireguard", "peers": [{ "address": "wg.example" }] },
+            ],
+            "dns": { "servers": [
+                { "type": "udp", "server": "8.8.8.8" },
+                { "type": "udp", "server": "dns.google" },
+                { "type": "udp", "server": "127.0.0.1" },
+            ] }
+        });
+        let hosts = collect_singbox_servers(&cfg);
+        assert!(hosts.contains("sb.example"));
+        assert!(hosts.contains("wg.example"));
+        // Literal DNS server IPs are bypassed (parity with the native tun path);
+        // domain and loopback DNS servers are not.
+        assert!(hosts.contains("8.8.8.8"));
+        assert!(!hosts.contains("dns.google"));
         assert!(!hosts.contains("127.0.0.1"));
     }
 

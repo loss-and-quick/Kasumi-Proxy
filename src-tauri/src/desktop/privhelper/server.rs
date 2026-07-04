@@ -56,9 +56,17 @@ impl Server {
         match req {
             PrivRequest::Ping => PrivReply::Pong,
             PrivRequest::BootInit => to_reply(self.platform.boot_init().await),
-            PrivRequest::StartDataPath { engine, socks_port } => to_reply(
+            PrivRequest::StartDataPath {
+                engine,
+                tun,
+                socks_port,
+            } => to_reply(
                 self.platform
-                    .start_data_path(StartDataPath { engine, socks_port })
+                    .start_data_path(StartDataPath {
+                        engine,
+                        tun,
+                        socks_port,
+                    })
                     .await,
             ),
             PrivRequest::StopDataPath { keep_service_state } => to_reply(

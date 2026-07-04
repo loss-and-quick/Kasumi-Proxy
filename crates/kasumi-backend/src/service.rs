@@ -149,11 +149,16 @@ impl Service {
                     })
                     .await
                     .map_err(|e| e.to_string())?;
-                let (engine, socks_port) = resolve_and_write_config(&*self.platform, id.as_deref())
-                    .await
-                    .map_err(|e| e.0)?;
+                let (engine, tun, socks_port) =
+                    resolve_and_write_config(&*self.platform, id.as_deref())
+                        .await
+                        .map_err(|e| e.0)?;
                 self.platform
-                    .start_data_path(StartDataPath { engine, socks_port })
+                    .start_data_path(StartDataPath {
+                        engine,
+                        tun,
+                        socks_port,
+                    })
                     .await
                     .map_err(|e| e.to_string())
             }
@@ -176,11 +181,15 @@ impl Service {
                         })
                         .await
                         .map_err(|e| e.to_string())?;
-                    let (engine, socks_port) = resolve_and_write_config(&*self.platform, None)
+                    let (engine, tun, socks_port) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
                     self.platform
-                        .start_data_path(StartDataPath { engine, socks_port })
+                        .start_data_path(StartDataPath {
+                            engine,
+                            tun,
+                            socks_port,
+                        })
                         .await
                         .map_err(|e| e.to_string())
                 } else if let Some(f) = self.platform.app_filter() {

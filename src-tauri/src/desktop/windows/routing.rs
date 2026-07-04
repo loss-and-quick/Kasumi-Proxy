@@ -1,6 +1,6 @@
-//! Windows desktop routing for the xray data-path. xray exposes a local SOCKS;
+//! Windows desktop routing for an external-tun data-path. The core exposes a local SOCKS;
 //! tun2socks bridges a wintun device to it. To put all traffic through the tun
-//! while keeping xray's own connection to the VPN server (and DNS bring-up) off it:
+//! while keeping the core's own connection to the VPN server (and DNS bring-up) off it:
 //!   - host-route the resolved server IPs (+ the active DNS servers) via the real
 //!     uplink gateway, and
 //!   - install a split-default (0.0.0.0/1 + 128.0.0.0/1) into the tun, which
@@ -99,11 +99,11 @@ pub async fn read_resolvers() -> Vec<String> {
         .collect()
 }
 
-/// Resolve every server host in the xray config to bypass CIDRs, plus the active
+/// Resolve every server host in the core config to bypass CIDRs, plus the active
 /// DNS servers. The config parsing + resolution is shared with Linux; only the
 /// resolver source is Windows-specific (WMI vs /etc/resolv.conf).
-pub async fn resolve_bypass_cidrs(xray_cfg_text: &str) -> Vec<String> {
-    crate::desktop::net::resolve_bypass_cidrs(xray_cfg_text, &read_resolvers().await).await
+pub async fn resolve_bypass_cidrs(cfg_text: &str) -> Vec<String> {
+    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await).await
 }
 
 /// `1.2.3.4/32` → `("1.2.3.4", true)`; `2001:db8::1/128` → `("2001:db8::1", false)`.
@@ -113,9 +113,9 @@ fn split_cidr(cidr: &str) -> (&str, bool) {
     (addr, !addr.contains(':'))
 }
 
-/// Bring up xray routing: host-route the bypass CIDRs via the uplink, address the
+/// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address the
 /// tun and split-default into it. Persists the installed set.
-pub async fn apply_xray_routing(
+pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
     route_state_file: &str,
@@ -191,8 +191,8 @@ pub async fn apply_xray_routing(
     Ok(())
 }
 
-/// Tear down everything `apply_xray_routing` installed. Idempotent.
-pub async fn clear_xray_routing(route_state_file: &str) {
+/// Tear down everything `apply_external_tun_routing` installed. Idempotent.
+pub async fn clear_external_tun_routing(route_state_file: &str) {
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };

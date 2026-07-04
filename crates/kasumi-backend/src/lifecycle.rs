@@ -11,7 +11,7 @@ use std::time::Duration;
 use regex::Regex;
 use tokio::process::Child;
 
-use kasumi_core::enums::CoreEngine;
+use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
 
 use crate::commands::{CommandError, build_profile_config};
@@ -51,11 +51,11 @@ pub fn random_tun_iface() -> String {
 }
 
 /// Build the config for `profile_id` (else the active profile), write it and the
-/// engine marker, and return the engine + local SOCKS port to bind.
+/// engine marker, and return the engine + resolved TUN engine + local SOCKS port.
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
-) -> Result<(Engine, u16), CommandError> {
+) -> Result<(Engine, TunEngine, u16), CommandError> {
     let paths = platform.paths();
     let state = read_json::<AppState>(&paths.app_state).await;
     let id = profile_id
@@ -65,6 +65,7 @@ pub async fn resolve_and_write_config(
         .unwrap_or_default();
     let built = build_profile_config(platform, &id).await?;
     let engine = built.engine;
+    let tun = built.tun;
     let cfg_path = match engine {
         CoreEngine::SingBox => &paths.singbox_config,
         CoreEngine::Xray => &paths.xray_config,
@@ -80,7 +81,7 @@ pub async fn resolve_and_write_config(
     let socks_port = state
         .and_then(|s| s.settings.local_socks_port)
         .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-    Ok((engine, socks_port))
+    Ok((engine, tun, socks_port))
 }
 
 fn engine_label(engine: CoreEngine) -> &'static str {
@@ -362,6 +363,25 @@ pub fn tun2socks_argv(bin: &str, iface: &str, socks_port: u16, fwmark: Option<u3
     argv
 }
 
+/// The single place that knows how to launch an external TUN engine. Every shell
+/// (desktop, root daemon) routes its bring-up through here, so adding a new engine
+/// is one more arm — nothing else in the orchestration learns engine specifics.
+/// `bin` is the engine's binary (resolved per-platform). `SingboxTun` has no
+/// external helper (the sing-box core owns the tun) and must not reach this.
+pub async fn spawn_tun_engine(
+    tun: TunEngine,
+    bin: &str,
+    iface: &str,
+    socks_port: u16,
+    log_path: &Path,
+    fwmark: Option<u32>,
+) -> std::io::Result<Child> {
+    match tun {
+        TunEngine::Tun2socks => spawn_tun2socks(bin, iface, socks_port, log_path, fwmark).await,
+        TunEngine::SingboxTun => unreachable!("SingboxTun has no external helper to spawn"),
+    }
+}
+
 /// Confirm the core stayed up: a bad config makes it exit within ~1s.
 pub async fn verify_core_alive(pid: i32, bin: &str, attempts: u32, delay: Duration) -> bool {
     for _ in 0..attempts {
@@ -428,8 +448,9 @@ mod tests {
             .unwrap();
 
         // No explicit id → uses active_id.
-        let (engine, socks) = resolve_and_write_config(&p, None).await.unwrap();
+        let (engine, tun, socks) = resolve_and_write_config(&p, None).await.unwrap();
         assert_eq!(engine, CoreEngine::Xray);
+        assert_eq!(tun, TunEngine::Tun2socks);
         assert_eq!(socks, 11080);
         assert_eq!(
             read_text(&p.paths().engine_file).await.as_deref(),

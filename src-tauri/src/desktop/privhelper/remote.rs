@@ -67,6 +67,7 @@ impl Platform for RemotePlatform {
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
         self.call(PrivRequest::StartDataPath {
             engine: opts.engine,
+            tun: opts.tun,
             socks_port: opts.socks_port,
         })
         .await?;

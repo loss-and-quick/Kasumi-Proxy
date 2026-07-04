@@ -1,6 +1,6 @@
-//! Linux desktop routing for the xray data-path. xray exposes a local SOCKS;
+//! Linux desktop routing for an external-tun data-path. The core exposes a local SOCKS;
 //! tun2socks bridges a userspace tun to it. To put all traffic through the tun
-//! while keeping xray's own connection to the VPN server (and DNS bring-up) off it:
+//! while keeping the core's own connection to the VPN server (and DNS bring-up) off it:
 //!   - host-route the resolved server IPs (+ /etc/resolv.conf nameservers) via the
 //!     real uplink gateway, and
 //!   - install a split-default (0.0.0.0/1 + 128.0.0.0/1) into the tun, which
@@ -69,16 +69,16 @@ async fn read_resolvers() -> Vec<String> {
     ips
 }
 
-/// Resolve every server host in the xray config to bypass CIDRs, plus the resolv.conf
+/// Resolve every server host in the core config to bypass CIDRs, plus the resolv.conf
 /// nameservers. The config parsing + resolution is shared; only the resolver source
 /// is Linux-specific.
-pub async fn resolve_bypass_cidrs(xray_cfg_text: &str) -> Vec<String> {
-    crate::desktop::net::resolve_bypass_cidrs(xray_cfg_text, &read_resolvers().await).await
+pub async fn resolve_bypass_cidrs(cfg_text: &str) -> Vec<String> {
+    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await).await
 }
 
-/// Bring up xray routing: host-route the bypass CIDRs via the uplink, address + up
+/// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address + up
 /// the tun, and split-default into it. Persists the installed set.
-pub async fn apply_xray_routing(
+pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
     route_state_file: &str,
@@ -91,7 +91,9 @@ pub async fn apply_xray_routing(
         silent(&[IP, "route", "replace", c, "via", &gw, "dev", &dev]).await;
     }
 
-    silent(&[IP, "addr", "add", TUN_ADDR, "dev", tun]).await;
+    // `replace` (not `add`) so re-runs are idempotent and a tun that already has
+    // its address (engines that self-assign) doesn't make this fail.
+    silent(&[IP, "addr", "replace", TUN_ADDR, "dev", tun]).await;
     silent(&[IP, "link", "set", tun, "up"]).await;
     silent(&[IP, "route", "replace", "0.0.0.0/1", "dev", tun]).await;
     silent(&[IP, "route", "replace", "128.0.0.0/1", "dev", tun]).await;
@@ -107,8 +109,8 @@ pub async fn apply_xray_routing(
     Ok(())
 }
 
-/// Tear down everything `apply_xray_routing` installed. Idempotent.
-pub async fn clear_xray_routing(route_state_file: &str) {
+/// Tear down everything `apply_external_tun_routing` installed. Idempotent.
+pub async fn clear_external_tun_routing(route_state_file: &str) {
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };
