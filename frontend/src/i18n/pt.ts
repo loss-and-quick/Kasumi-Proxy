@@ -394,6 +394,9 @@ const pt = {
   "settings.fragmentLength": "Comprimento do fragmento",
   "settings.fragmentDelay": "Atraso de fragmentação",
   "settings.tunMtu": "MTU do TUN",
+  "settings.tunEngine": "Motor TUN",
+  "settings.tunEngineHint":
+    "Qual motor conecta o dispositivo TUN a cada núcleo. O sing-box pode usar o próprio TUN nativo; o xray precisa de um externo.",
   "settings.security": "Segurança",
   "settings.pinnedCert": "Certificado fixado (SHA-256)",
   "settings.pinnedCertPh": "deixe vazio para desativar",

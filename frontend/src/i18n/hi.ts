@@ -386,6 +386,9 @@ const hi = {
   "settings.fragmentLength": "फ्रैगमेंट लंबाई",
   "settings.fragmentDelay": "फ्रैगमेंट विलंब",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunEngine": "TUN इंजन",
+  "settings.tunEngineHint":
+    "कौन सा इंजन TUN डिवाइस को प्रत्येक कोर से जोड़ता है। sing-box अपना नेटिव TUN उपयोग कर सकता है; xray को बाहरी इंजन चाहिए।",
   "settings.security": "सुरक्षा",
   "settings.pinnedCert": "पिन किया गया प्रमाणपत्र (SHA-256)",
   "settings.pinnedCertPh": "अक्षम करने के लिए खाली छोड़ें",

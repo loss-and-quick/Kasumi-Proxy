@@ -5,6 +5,7 @@
 //! the frontend never re-types a default. Emitted by `export_generated`,
 //! exactly like `bindings.ts` / `schemas.ts`.
 
+use kasumi_core::core::tun_by_core_options;
 use kasumi_core::enums::editor_option_lists;
 use kasumi_core::profile::{Protocol, empty_profile};
 use kasumi_core::state;
@@ -33,6 +34,7 @@ import type {
 \tSecurity,
 \tSsMethod,
 \tTransport,
+\tTunEngine,
 \tVmessEnc,
 } from \"./bindings\";
 
@@ -133,5 +135,32 @@ pub fn render() -> String {
         ));
     }
 
+    // Per-core TUN-engine options (default + valid engines), derived from the
+    // backend's own `resolve_tun`/`default_tun_for` so the settings UI never
+    // re-encodes the per-core default or the SingboxTun-is-sing-box-only rule.
+    let mut by_core = serde_json::Map::new();
+    for o in tun_by_core_options() {
+        by_core.insert(
+            wire(o.core),
+            serde_json::json!({ "default": wire(o.default), "valid": o.valid.into_iter().map(wire).collect::<Vec<_>>() }),
+        );
+    }
+    let by_core_json =
+        serde_json::to_string_pretty(&serde_json::Value::Object(by_core)).expect("pretty tun map");
+    out.push_str(
+        "\n/** Per-core TUN engine options (default + selectable), single-sourced from Rust `resolve_tun`. */\n",
+    );
+    out.push_str("export const TUN_BY_CORE = ");
+    out.push_str(&by_core_json);
+    out.push_str(" as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;\n");
+
     out
+}
+
+/// An enum value's serde wire string (single-sourced from its `Serialize`).
+fn wire<T: serde::Serialize>(v: T) -> String {
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|x| x.as_str().map(str::to_owned))
+        .unwrap_or_default()
 }

@@ -415,6 +415,9 @@ const ru = {
   "settings.fragmentLength": "Длина фрагмента",
   "settings.fragmentDelay": "Задержка фрагментации",
   "settings.tunMtu": "TUN MTU",
+  "settings.tunEngine": "Движок TUN",
+  "settings.tunEngineHint":
+    "Какой движок связывает TUN-устройство с каждым ядром. sing-box умеет собственный нативный TUN; xray требует внешний.",
   "settings.security": "Безопасность",
   "settings.pinnedCert": "Закреплённый сертификат (SHA-256)",
   "settings.pinnedCertPh": "оставьте пустым, чтобы отключить",

@@ -14,6 +14,7 @@ import type {
 	Security,
 	SsMethod,
 	Transport,
+	TunEngine,
 	VmessEnc,
 } from "./bindings";
 
@@ -560,3 +561,20 @@ export const FINGERPRINT_OPTS: Fingerprint[] = ["","chrome","firefox","safari","
 export const FLOW_OPTS: Flow[] = ["","xtls-rprx-vision","xtls-rprx-vision-udp443"];
 export const PACKET_ENCODING_OPTS: PacketEncoding[] = ["","xudp","packetaddr"];
 export const HYSTERIA2_OBFS_OPTS: Hysteria2Obfs[] = ["","salamander"];
+
+/** Per-core TUN engine options (default + selectable), single-sourced from Rust `resolve_tun`. */
+export const TUN_BY_CORE = {
+  "sing-box": {
+    "default": "singbox-tun",
+    "valid": [
+      "singbox-tun",
+      "tun2socks"
+    ]
+  },
+  "xray": {
+    "default": "tun2socks",
+    "valid": [
+      "tun2socks"
+    ]
+  }
+} as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;
