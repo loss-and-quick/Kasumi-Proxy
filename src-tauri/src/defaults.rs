@@ -5,7 +5,7 @@
 //! the frontend never re-types a default. Emitted by `export_generated`,
 //! exactly like `bindings.ts` / `schemas.ts`.
 
-use kasumi_core::core::tun_by_core_options;
+use kasumi_core::core::{core_resolution_fixtures, tun_by_core_options};
 use kasumi_core::enums::editor_option_lists;
 use kasumi_core::profile::{Protocol, empty_profile};
 use kasumi_core::state;
@@ -156,6 +156,34 @@ pub fn render() -> String {
     out.push_str("export const TUN_BY_CORE = ");
     out.push_str(&by_core_json);
     out.push_str(" as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;\n");
+
+    // Core-resolution parity fixtures: each profile paired with the core Rust's
+    // `resolve_core` picks. The frontend re-implements the matrix synchronously
+    // for its `EngineTag` (`profile-utils.ts::resolveCore`); a TS test asserts it
+    // matches these, so the two resolvers can't drift silently.
+    let mut fixtures = Vec::new();
+    for f in core_resolution_fixtures() {
+        let mut profile = serde_json::to_value(&f.profile).expect("serialize fixture profile");
+        // `empty_profile`/`parse_share_link` stamp a random `meta.id`; pin it to the
+        // fixture name so codegen is deterministic (the drift test compares bytes).
+        // `resolveCore` never reads the id, so this doesn't affect the assertion.
+        profile["meta"]["id"] = serde_json::Value::String(f.name.to_string());
+        fixtures.push(serde_json::json!({
+            "name": f.name,
+            "profile": profile,
+            "expectedCore": wire(f.expected),
+        }));
+    }
+    let fixtures_json =
+        serde_json::to_string_pretty(&serde_json::Value::Array(fixtures)).expect("pretty fixtures");
+    out.push_str(
+        "\n/** Core-resolution parity fixtures (profile → the core Rust `resolve_core` picks). */\n",
+    );
+    out.push_str("export const CORE_RESOLUTION_FIXTURES = ");
+    out.push_str(&fixtures_json);
+    out.push_str(
+        " as unknown as { name: string; profile: Profile; expectedCore: CoreEngine }[];\n",
+    );
 
     out
 }
