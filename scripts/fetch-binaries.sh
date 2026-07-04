@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 # scripts/fetch-binaries.sh
-# Download the proxy core binaries (xray, sing-box, tun2socks) for one platform
+# Download the proxy core binaries (xray, sing-box, tun2socks, hev-socks5-tunnel)
+# for one platform
 # and stage them where the build expects, plus the build's other binaries. Two modes:
 #
 #   fetch-binaries.sh android
@@ -10,8 +11,9 @@
 #   fetch-binaries.sh desktop [target-triple]         (default: host triple)
 #     → src-tauri/binaries/<binary>-<triple>[.exe]    (Tauri externalBin sidecars)
 #       plus the desktop-only extras next to the cores: libcronet (sing-box naive
-#       outbound), wintun.dll (Windows tun2socks), and geodat2srs (built from
-#       source at the pinned GEODAT2SRS_REV — it ships no release artifacts).
+#       outbound), wintun.dll (Windows tun2socks), msys-2.0.dll (Windows hev), and
+#       geodat2srs (built from source at the pinned GEODAT2SRS_REV — it ships no
+#       release artifacts).
 #
 # The prebuilt cores' release-asset layout is read from scripts/binaries.json (the
 # single source of truth, shared with nix/binaries.nix and update-binary-hashes.sh);
@@ -72,8 +74,10 @@ locate() { # <dir> <member-glob> <ext>
 }
 
 # Download + extract the core's archive for <arch> into $TMP/<core>-<arch>/, then
-# copy the located binary to <dest>. Echoes the extract dir (sing-box's holds
-# libcronet, which the desktop path stages too).
+# copy the located binary to <dest>. A 'raw' asset IS the binary — downloaded
+# straight to <dest>, nothing to extract. Echoes the extract dir (sing-box's holds
+# libcronet and hev's win64 zip holds msys-2.0.dll, which the desktop path stages
+# too).
 stage_core() { # <core> <arch> <dest> <ext>
 	local core="$1" arch="$2" dest="$3" ext="$4"
 	local repo vvar member file archive tag ver url dir
@@ -87,9 +91,13 @@ stage_core() { # <core> <arch> <dest> <ext>
 	file="${file//\{ver\}/$ver}"
 	url="https://github.com/$repo/releases/download/$tag/$file"
 	dir="$TMP/$core-$arch"
-	dl "$url" "$dir.ar"
-	extract "$dir.ar" "$archive" "$dir"
-	cp "$(locate "$dir" "$member" "$ext")" "$dest"
+	if [ "$archive" = "raw" ]; then
+		dl "$url" "$dest"
+	else
+		dl "$url" "$dir.ar"
+		extract "$dir.ar" "$archive" "$dir"
+		cp "$(locate "$dir" "$member" "$ext")" "$dest"
+	fi
 	printf '%s' "$dir"
 }
 
@@ -111,7 +119,7 @@ build_geodat2srs() { # <goos> <goarch> <dest>
 	(cd "$G2S_SRC" && CGO_ENABLED=0 GOOS="$1" GOARCH="$2" go build -trimpath -o "$3" .)
 }
 
-CORES="xray tun2socks sing-box"
+CORES="xray tun2socks sing-box hev-socks5-tunnel"
 
 fetch_android() {
 	local out="$ROOT/module/bin"
@@ -126,7 +134,8 @@ fetch_android() {
 			stage_core "$core" "$arch" "$out/$abi/$core" "" >/dev/null
 		done
 		build_geodat2srs linux "$goarch" "$out/$abi/geodat2srs"
-		chmod 755 "$out/$abi"/xray "$out/$abi"/tun2socks "$out/$abi"/sing-box "$out/$abi"/geodat2srs
+		chmod 755 "$out/$abi"/xray "$out/$abi"/tun2socks "$out/$abi"/sing-box \
+			"$out/$abi"/hev-socks5-tunnel "$out/$abi"/geodat2srs
 	done
 	echo "✅ module/bin/ populated:"
 	for abi in arm64-v8a x86_64; do
@@ -159,11 +168,12 @@ fetch_desktop() {
 	local out="$ROOT/src-tauri/binaries"
 	mkdir -p "$out"
 	echo "→ desktop binaries for $target"
-	local sbdir=""
+	local sbdir="" hevdir=""
 	for core in $CORES; do
 		local d
 		d=$(stage_core "$core" "$arch" "$out/$core-$target$ext" "$ext")
 		[ "$core" = "sing-box" ] && sbdir="$d"
+		[ "$core" = "hev-socks5-tunnel" ] && hevdir="$d"
 	done
 
 	# libcronet — sing-box dlopen()s it from its own dir for the naive outbound;
@@ -179,20 +189,26 @@ fetch_desktop() {
 		dl "https://www.wintun.net/builds/wintun-$WINTUN_VERSION.zip" "$TMP/wintun.zip"
 		extract "$TMP/wintun.zip" zip "$TMP/wintun"
 		cp "$(locate "$TMP/wintun/wintun/bin/amd64" "wintun.dll" "")" "$out/wintun.dll"
+		# msys-2.0.dll (Windows only) — the hev win64 build is msys2 and loads it
+		# from its own directory. Staged from hev's zip WITHOUT a target suffix:
+		# a Tauri bundle resource like wintun.dll. (hev's zip also carries its own
+		# wintun.dll; the official one above wins.)
+		cp "$(locate "$hevdir" "msys-2.0.dll" "")" "$out/msys-2.0.dll"
 	fi
 
-	[ -n "$ext" ] || chmod 755 "$out"/xray-"$target" "$out"/tun2socks-"$target" "$out"/sing-box-"$target" "$out"/geodat2srs-"$target"
+	[ -n "$ext" ] || chmod 755 "$out"/xray-"$target" "$out"/tun2socks-"$target" "$out"/sing-box-"$target" "$out"/hev-socks5-tunnel-"$target" "$out"/geodat2srs-"$target"
 
 	echo "✅ staged → src-tauri/binaries/ (suffix $target$ext):"
-	for c in xray sing-box tun2socks geodat2srs; do
+	for c in xray sing-box tun2socks hev-socks5-tunnel geodat2srs; do
 		local f="$out/$c-$target$ext"
 		[ -f "$f" ] && printf '   %-12s %s\n' "$c" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $c"
 	done
 	local f="$out/$cronet"
 	[ -f "$f" ] && printf '   %-12s %s\n' "$cronet" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: $cronet"
 	if [ "$wintun" = 1 ]; then
-		f="$out/wintun.dll"
-		[ -f "$f" ] && printf '   %-12s %s\n' "wintun.dll" "$(du -h "$f" | cut -f1)" || echo "   ⚠️  missing: wintun.dll"
+		for f in wintun.dll msys-2.0.dll; do
+			[ -f "$out/$f" ] && printf '   %-12s %s\n' "$f" "$(du -h "$out/$f" | cut -f1)" || echo "   ⚠️  missing: $f"
+		done
 	fi
 }
 
