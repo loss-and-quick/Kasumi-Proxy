@@ -179,16 +179,23 @@ jobs:
       #    config-validation harness against them. A rejected config fails the job
       #    before any version is bumped or tagged — so we never ship a release whose
       #    pinned core rejects the configs we generate. Only runs when cores moved. ──
-      - name: Setup Rust (core-compat gate)
+      - name: Install Nix (core-compat gate)
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
         with:
-          toolchain: stable
-          targets: x86_64-unknown-linux-gnu
+          extra-conf: |
+            accept-flake-config = true
+
+      - name: Cachix (core-compat gate)
+        if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: kasumi-proxy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Verify the new cores accept our generated configs
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
-        run: scripts/check-binary-compat.sh
+        run: nix develop --accept-flake-config --command scripts/check-binary-compat.sh
 
       - name: Bump version
         if: steps.changes.outputs.skip != 'true'
@@ -274,9 +281,9 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - name: Setup Rust (android targets)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.95.0
         with:
-          toolchain: stable
+          toolchain: 1.95.0
           targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Install cargo-ndk
@@ -347,9 +354,9 @@ jobs:
           ref: ${{ needs.prepare.outputs.version }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # 1.95.0
         with:
-          toolchain: stable
+          toolchain: 1.95.0
           targets: ${{ matrix.target }}
 
       - name: Setup Bun

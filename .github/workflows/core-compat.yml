@@ -36,11 +36,17 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
         with:
-          toolchain: stable
-          targets: x86_64-unknown-linux-gnu
+          extra-conf: |
+            accept-flake-config = true
+
+      - name: Cachix
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: kasumi-proxy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Resolve target core versions
         id: versions
@@ -78,7 +84,7 @@ jobs:
         env:
           XRAY_VERSION: ${{ steps.versions.outputs.xray }}
           SINGBOX_VERSION: ${{ steps.versions.outputs.singbox }}
-        run: scripts/check-binary-compat.sh
+        run: nix develop --accept-flake-config --command scripts/check-binary-compat.sh
 
       # ── Early-warning issue bookkeeping (schedule/dispatch only; on a PR the red
       #    check is the signal). One tracking issue at a time, deduped by a fixed
