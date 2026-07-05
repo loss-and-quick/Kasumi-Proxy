@@ -7,15 +7,12 @@
 }: let
   inherit (pkgs) lib;
 
-  # Pinned to a specific stable release for reproducibility — a floating
-  # `stable.latest` would silently jump the toolchain (and thus the build, the
-  # codegen-emitted frontend bindings, and the cached deps) whenever
-  # rust-overlay or nixpkgs advances. 1.95.0 is also the release where
-  # std::env::set_var / remove_var became `unsafe` (the call sites are wrapped
-  # in `unsafe {}` with SAFETY notes). Bump me deliberately; every consumer
-  # below (the host dev-shell tools, the android cross-build, the crane desktop
-  # build, `nix flake check`) derives from this single derivation.
-  rustToolchain = pkgs.rust-bin.stable."1.95.0".default;
+  # The pinned toolchain is single-sourced from //rust-toolchain.toml (also read by
+  # rustup for a bare `cargo`), so the version lives in exactly one place. Every
+  # consumer below — the host dev-shell tools, the android cross-build, the crane
+  # desktop build, `nix flake check` — derives from this single derivation; bump the
+  # file to move them all. See that file for why the release is pinned exactly.
+  rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
 
   # The pinned toolchain + the android std targets, for cargo-ndk daemon builds.
   rustAndroid = rustToolchain.override {
@@ -64,7 +61,7 @@
 
   # `rustToolchain` carries rustc/cargo/rustfmt/clippy for the host triple (the
   # default profile); cargo-tauri / cargo-ndk are separate cargo subcommands.
-  # Deriving from `rustToolchain` keeps the dev shell on the pinned 1.95.0.
+  # Deriving from `rustToolchain` keeps the dev shell on the pinned toolchain.
   rustTools = [
     rustToolchain
     pkgs.cargo-tauri

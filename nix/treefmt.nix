@@ -51,7 +51,18 @@
         alejandra.enable = true;
         statix.enable = true;
         shellcheck.enable = true;
-        rustfmt.enable = true;
+        rustfmt = {
+          enable = true;
+          # Format with the workspace's own edition rather than treefmt-nix's default,
+          # so the treefmt gate and `cargo fmt` (which reads Cargo.toml) can never
+          # diverge on an edition bump. Single-sourced from the root Cargo.toml.
+          edition =
+            (builtins.fromTOML
+              (builtins.readFile "${self}/Cargo.toml"))
+            .workspace
+            .package
+            .edition;
+        };
         biome = {
           enable = true;
           # Settings are loaded from the root biome.json (the authoritative source
