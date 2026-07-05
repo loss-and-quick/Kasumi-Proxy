@@ -146,6 +146,27 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// Trim the WebKitWebProcess's resident set. The web view loads one local SPA and
+/// never navigates back/forward, so WebKit's page cache — which keeps prior pages
+/// resident for instant back/forward — is dead weight here. Reached through
+/// `with_webview().inner()`, which on Linux is the raw `webkit2gtk::WebView`.
+#[cfg(target_os = "linux")]
+fn tune_webkit(app: &tauri::App) {
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    let result = win.with_webview(|webview| {
+        use webkit2gtk::{SettingsExt, WebViewExt};
+        let wv = webview.inner();
+        if let Some(settings) = WebViewExt::settings(&wv) {
+            settings.set_enable_page_cache(false);
+        }
+    });
+    if let Err(e) = result {
+        log::warn!("webkit page-cache tuning skipped: {e}");
+    }
+}
+
 /// A system tray with show/quit, so closing the window only hides it — the
 /// data-path daemon has to keep running in the background.
 #[cfg(desktop)]
@@ -400,6 +421,9 @@ pub fn run() {
 
             #[cfg(desktop)]
             setup_tray(app)?;
+
+            #[cfg(target_os = "linux")]
+            tune_webkit(app);
 
             // Publish the Service through a watch channel and bring it up off-thread:
             // `setup` must not block on the privileged data-path (UAC + helper), or the
