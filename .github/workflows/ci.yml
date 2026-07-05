@@ -17,7 +17,6 @@ jobs:
       frontend: ${{ steps.detect.outputs.frontend }}
       rust: ${{ steps.detect.outputs.rust }}
       desktop: ${{ steps.detect.outputs.desktop }}
-      shell: ${{ steps.detect.outputs.shell }}
       nix: ${{ steps.detect.outputs.nix }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -40,7 +39,6 @@ jobs:
               echo "frontend=true"
               echo "rust=true"
               echo "desktop=true"
-              echo "shell=true"
               echo "nix=true"
             } >> "$GITHUB_OUTPUT"
             exit 0
@@ -52,21 +50,20 @@ jobs:
           # PR diff semantics.
           files=$(git diff --name-only "$base...$head")
           match() { printf '%s\n' "$files" | grep -Eq "$1"; }
-          fe=false; rs=false; dk=false; sh=false; nx=false
+          fe=false; rs=false; dk=false; nx=false
           match '^(frontend/|package\.json|bun\.lock|biome\.json)' && fe=true
           match '^(crates/|src-tauri/|Cargo\.(toml|lock)|flake\.(nix|lock))' && rs=true
           match '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))' && dk=true
-          match '^(module/|scripts/)' && sh=true
           match '^(nix/|flake\.(nix|lock))' && nx=true
           {
             echo "frontend=$fe"
             echo "rust=$rs"
             echo "desktop=$dk"
-            echo "shell=$sh"
             echo "nix=$nx"
           } >> "$GITHUB_OUTPUT"
 
-  # ── Frontend: bun workspace (lockfile at the repo root), biome, build, tests ──
+  # ── Frontend: bun workspace (lockfile at the repo root), build, tests, i18n.
+  #    Formatting/lint (biome) is covered by the `treefmt` job, not here. ──
   frontend:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
@@ -86,9 +83,6 @@ jobs:
         # frontend member and its deps resolve against the single bun.lock.
         run: bun install --frozen-lockfile
 
-      - name: Biome check (format + lint)
-        run: bunx biome check
-
       - name: Build (tsc + vite)
         working-directory: frontend
         run: bun run build
@@ -100,26 +94,7 @@ jobs:
       - name: i18n dictionaries
         run: bun run frontend/scripts/check-i18n.ts
 
-  # ── ShellCheck the module + build/release scripts. Split out from the frontend
-  #    job so a scripts-only / module-only change runs just this (seconds) instead
-  #    of the whole bun install + build + vitest. shellcheck ships on the runner. ──
-  shellcheck:
-    needs: changes
-    if: needs.changes.outputs.shell == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: ShellCheck
-        run: |
-          # The module is a thin launcher over the Rust daemon. All module scripts
-          # run under Android sh (mksh) — the installer sources customize.sh in
-          # busybox sh too, not bash — so lint every one as sh, matching AGENTS.md.
-          shellcheck -s sh module/service.sh module/action.sh module/uninstall.sh module/customize.sh
-          # Build/release helpers are #!/usr/bin/env bash — lint as bash.
-          shellcheck -s bash scripts/*.sh
-
-  # ── Rust workspace: fmt, clippy, tests, and generated-bindings drift, all in
+  # ── Rust workspace: clippy, tests, and generated-bindings drift, all in
   #    the flake devshell (carries the rust toolchain + webkit for src-tauri). ──
   rust:
     needs: changes
@@ -187,10 +162,9 @@ jobs:
           mkdir -p src-tauri/binaries
           : > src-tauri/binaries/libcronet.so
 
-      - name: fmt + clippy + test + codegen drift
+      - name: clippy + test + codegen drift
         run: |
           nix develop --command bash -euo pipefail -c '
-            cargo fmt --all --check
             cargo clippy --workspace --all-targets -- -D warnings
             cargo test --workspace
             # The generated frontend bindings/schemas/defaults must match the Rust
@@ -226,16 +200,15 @@ jobs:
       - name: Build the desktop package
         run: nix build .#kasumi-desktop --accept-flake-config --print-build-logs
 
-  # ── Formatting gate for the nix expressions. The rust (`cargo fmt`), frontend
-  #    (`biome`), and shell (`shellcheck`) jobs each cover their own tree, but nothing
-  #    checked the `.nix` files — so alejandra/statix/deadnix drift (see #206, which
-  #    reformatted every expression) could land unnoticed. This realises the flake's
-  #    own treefmt check derivation: the exact `nix fmt` config, no duplicated
-  #    formatter list. treefmt runs all its formatters, but the nix ones are the only
-  #    CI gap it closes, so it's path-gated on the nix expressions like nix-build. ──
-  nix-fmt:
-    needs: changes
-    if: needs.changes.outputs.nix == 'true'
+  # ── The formatting gate for the whole tree — the single source of truth. This
+  #    realises the flake's own treefmt check derivation (the exact `nix fmt` config,
+  #    no duplicated formatter list), which runs rustfmt, biome (format + lint),
+  #    shellcheck, and the nix formatters (alejandra/statix/deadnix) over every tracked
+  #    file. Because it covers all of them, the per-area jobs no longer re-run
+  #    `cargo fmt` / `biome` / `shellcheck`. Ungated on purpose: it runs on every PR so
+  #    no area can slip an unformatted file past a path filter (a Rust-only or
+  #    scripts-only change used to skip the comprehensive check entirely). ──
+  treefmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -356,7 +329,7 @@ jobs:
   #    failure or cancellation fails CI. Point branch protection at THIS context so
   #    path-skipped jobs never block a merge. ──
   ci:
-    needs: [changes, frontend, shellcheck, rust, nix-build, nix-fmt, desktop-linux, desktop-windows]
+    needs: [changes, frontend, rust, nix-build, treefmt, desktop-linux, desktop-windows]
     if: always()
     runs-on: ubuntu-latest
     steps:
