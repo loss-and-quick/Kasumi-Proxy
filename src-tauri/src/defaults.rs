@@ -5,7 +5,7 @@
 //! the frontend never re-types a default. Emitted by `export_generated`,
 //! exactly like `bindings.ts` / `schemas.ts`.
 
-use kasumi_core::core::{core_resolution_fixtures, tun_by_core_options};
+use kasumi_core::core::{default_core_for, tun_by_core_options};
 use kasumi_core::enums::editor_option_lists;
 use kasumi_core::profile::{Protocol, empty_profile};
 use kasumi_core::state;
@@ -157,33 +157,25 @@ pub fn render() -> String {
     out.push_str(&by_core_json);
     out.push_str(" as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;\n");
 
-    // Core-resolution parity fixtures: each profile paired with the core Rust's
-    // `resolve_core` picks. The frontend re-implements the matrix synchronously
-    // for its `EngineTag` (`profile-utils.ts::resolveCore`); a TS test asserts it
-    // matches these, so the two resolvers can't drift silently.
-    let mut fixtures = Vec::new();
-    for f in core_resolution_fixtures() {
-        let mut profile = serde_json::to_value(&f.profile).expect("serialize fixture profile");
-        // `empty_profile`/`parse_share_link` stamp a random `meta.id`; pin it to the
-        // fixture name so codegen is deterministic (the drift test compares bytes).
-        // `resolveCore` never reads the id, so this doesn't affect the assertion.
-        profile["meta"]["id"] = serde_json::Value::String(f.name.to_string());
-        fixtures.push(serde_json::json!({
-            "name": f.name,
-            "profile": profile,
-            "expectedCore": wire(f.expected),
-        }));
+    // Per-protocol default core (single-sourced from Rust `default_core_for`): the
+    // settings screen's per-protocol core table falls back to it, and the dev mock
+    // bridge stubs `resolveCores` with it. Full per-profile resolution (capability
+    // forces included) goes through the `resolveCores` command instead.
+    let mut by_proto = serde_json::Map::new();
+    for proto in Protocol::iter() {
+        by_proto.insert(
+            wire(proto),
+            serde_json::Value::String(wire(default_core_for(proto))),
+        );
     }
-    let fixtures_json =
-        serde_json::to_string_pretty(&serde_json::Value::Array(fixtures)).expect("pretty fixtures");
+    let by_proto_json = serde_json::to_string_pretty(&serde_json::Value::Object(by_proto))
+        .expect("pretty core map");
     out.push_str(
-        "\n/** Core-resolution parity fixtures (profile → the core Rust `resolve_core` picks). */\n",
+        "\n/** Per-protocol default core (Rust `default_core_for`; full resolution = `resolveCores`). */\n",
     );
-    out.push_str("export const CORE_RESOLUTION_FIXTURES = ");
-    out.push_str(&fixtures_json);
-    out.push_str(
-        " as unknown as { name: string; profile: Profile; expectedCore: CoreEngine }[];\n",
-    );
+    out.push_str("export const DEFAULT_CORE_BY_PROTOCOL = ");
+    out.push_str(&by_proto_json);
+    out.push_str(" as Record<Protocol, CoreEngine>;\n");
 
     out
 }

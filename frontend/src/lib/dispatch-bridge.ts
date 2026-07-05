@@ -269,6 +269,11 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return okResult(() => dispatch({ cmd: "reloadAppFilter" } as Command));
     },
 
+    async resolveCores(profiles) {
+      const r = await dispatch({ cmd: "resolveCores", profiles } as Command);
+      return r.kind === "coreResolutions" ? r.value : wrongKind(r, "coreResolutions");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text } as Command);
       return asProfiles(r);

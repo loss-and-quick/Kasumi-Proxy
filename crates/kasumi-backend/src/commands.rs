@@ -14,7 +14,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use kasumi_core::contract::{Capabilities, FetchMode, LogTarget, ServiceState, TestKind, WsInfo};
+use kasumi_core::contract::{
+    Capabilities, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind, WsInfo,
+};
+use kasumi_core::core::{forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::mutate::{MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
@@ -118,6 +121,12 @@ pub enum Command {
     BuildShareLink {
         profile: Box<Profile>,
     },
+    /// Resolve which core each profile runs on (`core::resolve_core` under the
+    /// persisted settings) plus its capability force, so the UI never re-implements
+    /// the resolution matrix. Batch: one call covers a whole profile list.
+    ResolveCores {
+        profiles: Vec<Profile>,
+    },
     #[serde(rename_all = "camelCase")]
     Ping {
         profile_id: String,
@@ -170,6 +179,8 @@ pub enum Response {
     Apps(Vec<AppInfo>),
     Status(ServiceState),
     WsInfo(Option<WsInfo>),
+    /// Per-profile core resolutions, in the request's profile order.
+    CoreResolutions(Vec<CoreResolution>),
     /// Latency in ms (tcp-ping and real-ping); `null` when there is no result.
     Ping(Option<i64>),
     /// Throughput in bytes/sec; `null` when there is no result.
@@ -427,6 +438,22 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         ))),
 
         Command::BuildShareLink { profile } => Ok(Response::Text(build_share_link(&profile))),
+
+        Command::ResolveCores { profiles } => {
+            let settings = read_json::<AppState>(&paths.app_state)
+                .await
+                .map(|s| s.settings)
+                .unwrap_or_default();
+            Ok(Response::CoreResolutions(
+                profiles
+                    .iter()
+                    .map(|p| CoreResolution {
+                        resolved: resolve_core(p, &settings),
+                        forced: forced_core(p),
+                    })
+                    .collect(),
+            ))
+        }
 
         Command::Ping { profile_id } => Ok(Response::Ping(
             crate::jobs::run_ping(platform, &profile_id).await,
@@ -755,6 +782,68 @@ mod tests {
             panic!()
         };
         assert!(link.starts_with("vless://"));
+    }
+
+    #[tokio::test]
+    async fn resolve_cores_returns_resolution_per_profile() {
+        use kasumi_core::enums::CoreEngine;
+        use kasumi_core::share::parse_share_link;
+
+        let (p, _d) = TestPlatform::new();
+        // No app-state on disk: default settings apply.
+        let profiles = vec![
+            // tuic is sing-box-only → forced.
+            parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap(),
+            // plain vless tcp+tls is selectable → default table (xray), no force.
+            parse_share_link("vless://u@e.x:443?type=tcp&security=tls", None).unwrap(),
+            // reality+pqv is an xray-only capability → forced.
+            parse_share_link(
+                "vless://u@e.x:443?type=tcp&security=reality&pbk=PK&sni=s&pqv=Q",
+                None,
+            )
+            .unwrap(),
+        ];
+        let Response::CoreResolutions(rs) = dispatch(&p, Command::ResolveCores { profiles })
+            .await
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(rs.len(), 3);
+        assert_eq!(rs[0].resolved, CoreEngine::SingBox);
+        assert_eq!(rs[0].forced, Some(CoreEngine::SingBox));
+        assert_eq!(rs[1].resolved, CoreEngine::Xray);
+        assert_eq!(rs[1].forced, None);
+        assert_eq!(rs[2].resolved, CoreEngine::Xray);
+        assert_eq!(rs[2].forced, Some(CoreEngine::Xray));
+    }
+
+    #[tokio::test]
+    async fn resolve_cores_honours_persisted_core_table() {
+        use kasumi_core::enums::CoreEngine;
+        use kasumi_core::profile::Protocol;
+        use kasumi_core::share::parse_share_link;
+
+        let (p, _d) = TestPlatform::new();
+        let mut state = default_app_state();
+        state
+            .settings
+            .core_by_protocol
+            .insert(Protocol::Vless, CoreEngine::SingBox);
+        write_json_atomic(&p.paths().app_state, &state)
+            .await
+            .unwrap();
+        let profiles =
+            vec![parse_share_link("vless://u@e.x:443?type=tcp&security=tls", None).unwrap()];
+        let Response::CoreResolutions(rs) = dispatch(&p, Command::ResolveCores { profiles })
+            .await
+            .unwrap()
+        else {
+            panic!()
+        };
+        // Selectable profile follows the persisted coreByProtocol table.
+        assert_eq!(rs[0].resolved, CoreEngine::SingBox);
+        assert_eq!(rs[0].forced, None);
     }
 
     #[tokio::test]

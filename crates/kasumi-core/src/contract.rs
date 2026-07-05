@@ -19,6 +19,17 @@ pub enum LogTarget {
     TunEngine,
 }
 
+/// One profile's core resolution (the `resolveCores` reply): the engine the
+/// backend will actually run it on, and the engine a capability pins it to
+/// (`None` when the profile is freely selectable). The UI renders these instead
+/// of re-implementing the resolution matrix (`core::resolve_core`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CoreResolution {
+    pub resolved: CoreEngine,
+    pub forced: Option<CoreEngine>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum TestKind {

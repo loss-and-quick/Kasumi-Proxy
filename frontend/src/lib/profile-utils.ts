@@ -9,14 +9,7 @@
 // ============================================================
 
 import { z } from "zod";
-import type {
-  AdvancedSettings,
-  CoreEngine,
-  Profile,
-  Protocol,
-  Security,
-  Transport,
-} from "../generated/bindings";
+import type { Profile, Protocol, Security, Transport } from "../generated/bindings";
 import { EMPTY_PROFILES } from "../generated/defaults";
 import {
   AnytlsSchema,
@@ -102,95 +95,6 @@ export function profileSearchText(p: Profile): string {
     parts.push(p.tls.security ?? "", p.tls.sni ?? "");
   }
   return parts.filter(Boolean).join(" ").toLowerCase();
-}
-
-/* ---------- core-engine resolution (mirrors `kasumi-core::core`) ---------- */
-
-const isSingboxOnly = (proto: Protocol): boolean =>
-  proto === "tuic" || proto === "anytls" || proto === "naive" || proto === "shadowtls";
-
-/** Engine a protocol uses when nothing overrides it. */
-export const defaultCoreFor = (proto: Protocol): CoreEngine =>
-  proto === "hysteria2" || isSingboxOnly(proto) ? "sing-box" : "xray";
-
-/** Engine the profile MUST run on (protocol or transport capability), null if selectable. */
-export function forcedCore(p: Profile): CoreEngine | null {
-  if (p.protocol === "custom") return "xray";
-  if (isSingboxOnly(p.protocol)) return "sing-box";
-
-  // ── Protocol-level differences ──
-  if (p.protocol === "vless") {
-    if (p.flow === "xtls-rprx-vision-udp443") return "xray";
-    if (p.encryption && p.encryption !== "none") return "xray";
-    if (p.packetEncoding === "packetaddr") return "sing-box";
-  } else if (p.protocol === "vmess") {
-    if (p.packetEncoding === "packetaddr") return "sing-box";
-    if (p.vmessGlobalPadding || p.vmessAuthenticatedLength) return "sing-box";
-  } else if (p.protocol === "trojan") {
-    if (p.flow) return "xray";
-  } else if (p.protocol === "shadowsocks") {
-    const m = p.method;
-    // Ciphers only Xray implements (sing-box has no `plain` and only the IETF
-    // chacha variant), so these run on Xray despite the default-TLS rule below.
-    if (m === "plain" || m === "chacha20-poly1305" || m === "xchacha20-poly1305") return "xray";
-    // The IETF chacha variant and the 2022 AEAD ciphers route to sing-box.
-    if (m === "chacha20-ietf-poly1305" || (m?.startsWith("2022-blake3-") ?? false))
-      return "sing-box";
-    const sec = p.tls?.security ?? "none";
-    const net = p.transport?.kind ?? "tcp";
-    const header = p.transport?.kind === "tcp" ? p.transport.headerType : undefined;
-    if (sec === "tls" || net !== "tcp" || header === "http") return "sing-box";
-  }
-
-  // ── Transport-level differences ──
-  const t = "transport" in p ? p.transport : undefined;
-  if (t) {
-    switch (t.kind) {
-      case "h2":
-      case "quic":
-        return "sing-box";
-      case "kcp":
-      case "xhttp":
-        return "xray";
-      case "httpupgrade":
-        if (t.acceptProxyProtocol || (t.earlyData ?? 0) > 0) return "xray";
-        break;
-      case "ws":
-        if ((t.heartbeatPeriod ?? 0) > 0 || t.acceptProxyProtocol) return "xray";
-        break;
-      case "grpc": {
-        if ((t.serviceName ?? "").startsWith("/")) return "xray";
-        if ((t.pingTimeout ?? 0) > 0) return "sing-box";
-        if (
-          (t.authority ?? "") !== "" ||
-          t.mode === "multi" ||
-          (t.healthCheckTimeout ?? 0) > 0 ||
-          (t.initialWindowSize ?? 0) > 0 ||
-          (t.userAgent ?? "") !== ""
-        )
-          return "xray";
-        break;
-      }
-    }
-  }
-
-  // ── TLS / Reality-level differences (Xray-only fields) ──
-  const tls = "tls" in p ? p.tls : undefined;
-  if (tls) {
-    if (tls.rejectUnknownSni || tls.enableSessionResumption || (tls.vcn ?? "") !== "")
-      return "xray";
-    if ((tls.security ?? "none") === "reality" && (tls.pqv ?? "") !== "") return "xray";
-  }
-
-  return null;
-}
-
-/** Resolve the actual core for a profile (capabilities > override > table > fallback). */
-export function resolveCore(p: Profile, s: AdvancedSettings): CoreEngine {
-  const forced = forcedCore(p);
-  if (forced) return forced;
-  if (p.meta.coreType) return p.meta.coreType;
-  return s.coreByProtocol?.[p.protocol] ?? defaultCoreFor(p.protocol);
 }
 
 /* ---------- form schema (per-protocol, with cross-field refinement) ---------- */
