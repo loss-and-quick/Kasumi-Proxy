@@ -6,11 +6,11 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { AppBar } from "../../components";
 import type { AssetFile, CoreEngine, Protocol, RoutingRule } from "../../generated/bindings";
+import { DEFAULT_CORE_BY_PROTOCOL } from "../../generated/defaults";
 import { useLang, useT } from "../../i18n";
 import type { ResourceUpdateMode } from "../../lib/bridge";
 import { isServiceUp } from "../../lib/bridge";
 import { getRuntimeBridgeMode } from "../../lib/ksu-webui";
-import { defaultCoreFor } from "../../lib/profile-utils";
 import { uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { AboutSection } from "./sections/AboutSection";
@@ -76,7 +76,7 @@ export default function Settings({
   const [rulesIOOpen, setRulesIOOpen] = useState(false);
 
   const coreFor = (protocol: Protocol): CoreEngine =>
-    settings.coreByProtocol?.[protocol] ?? defaultCoreFor(protocol);
+    settings.coreByProtocol?.[protocol] ?? DEFAULT_CORE_BY_PROTOCOL[protocol];
   const setCoreFor = (protocol: Protocol, value: CoreEngine) =>
     setSetting("coreByProtocol", { ...(settings.coreByProtocol ?? {}), [protocol]: value });
 

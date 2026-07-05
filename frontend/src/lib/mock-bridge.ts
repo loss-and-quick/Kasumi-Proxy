@@ -8,6 +8,7 @@
 // ============================================================
 
 import type { Endpoint, Meta, Profile, Protocol, Tls, Transport } from "../generated/bindings";
+import { DEFAULT_CORE_BY_PROTOCOL } from "../generated/defaults";
 import { AppStateSchema } from "../generated/schemas";
 import { applyMutation } from "./apply-mutation";
 import type { AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
@@ -331,6 +332,15 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
 
   async reloadAppFilter() {
     return { ok: true };
+  },
+
+  // Dev stub: the generated per-protocol default table (no capability matrix — the
+  // real answer lives behind the backend's `resolveCores`).
+  async resolveCores(profiles: Profile[]) {
+    return profiles.map((p) => ({
+      resolved: p.meta.coreType ?? DEFAULT_CORE_BY_PROTOCOL[p.protocol],
+      forced: null,
+    }));
   },
 
   // Dev stub: emit one nested placeholder profile per non-empty line.

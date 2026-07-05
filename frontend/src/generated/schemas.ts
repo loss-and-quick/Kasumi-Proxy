@@ -824,6 +824,9 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("reloadAppFilter"),
 }), z.object({
+	cmd: z.literal("resolveCores"),
+	profiles: z.array(ProfileSchema),
+}), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable(),
 }), z.object({
@@ -984,6 +987,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("reloadAppFilter"),
 }), z.object({
+	cmd: z.literal("resolveCores"),
+	profiles: z.array(ProfileSchema),
+}), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable().optional(),
 }), z.object({
@@ -1011,6 +1017,13 @@ export type Command_Deserialize = z.infer<typeof Command_DeserializeSchema>;
 
 export const CommandSchema = z.union([Command_DeserializeSchema, Command_SerializeSchema]);
 export type Command = z.infer<typeof CommandSchema>;
+
+
+export const CoreResolutionSchema = z.object({
+	resolved: CoreEngineSchema,
+	forced: CoreEngineSchema.nullable(),
+});
+export type CoreResolution = z.infer<typeof CoreResolutionSchema>;
 
 
 export const GroupSchema = z.union([Group_DeserializeSchema, Group_SerializeSchema]);
@@ -1052,6 +1065,9 @@ export const Response_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("capabilities"),
 	value: CapabilitiesSchema,
+}), z.object({
+	kind: z.literal("coreResolutions"),
+	value: z.array(CoreResolutionSchema),
 }), z.object({
 	kind: z.literal("ok"),
 }), z.object({
@@ -1102,6 +1118,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("capabilities"),
 	value: CapabilitiesSchema,
+}), z.object({
+	kind: z.literal("coreResolutions"),
+	value: z.array(CoreResolutionSchema),
 }), z.object({
 	kind: z.literal("ok"),
 }), z.object({

@@ -155,6 +155,9 @@ function createBridgeMock(): BridgeMock {
       }),
     ),
     listAssets: vi.fn(async () => []),
+    resolveCores: vi.fn(async (profiles: Profile[]) =>
+      profiles.map(() => ({ resolved: "xray" as const, forced: null })),
+    ),
     parseShareLinks: vi.fn(async (_text: string) => []),
     buildShareLink: vi.fn(async (_profile: Profile) => ""),
     exportBackup: vi.fn(async () => new Blob()),

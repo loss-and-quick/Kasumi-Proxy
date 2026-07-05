@@ -135,6 +135,9 @@ export const bridge: Bridge = {
   async reloadAppFilter() {
     return (await loadBridge()).reloadAppFilter();
   },
+  async resolveCores(profiles) {
+    return (await loadBridge()).resolveCores(profiles);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

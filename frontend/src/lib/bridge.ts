@@ -8,6 +8,7 @@
 // ============================================================
 import type {
   Capabilities,
+  CoreResolution,
   FetchMode,
   LogTarget,
   Profile,
@@ -24,6 +25,7 @@ export type {
   AdvancedSettings_Serialize as AdvancedSettings,
   AssetFile,
   Capabilities,
+  CoreResolution,
   Group,
   LogTarget,
   MutationIntent_Serialize as MutationIntent,
@@ -127,6 +129,11 @@ export interface Bridge {
   listAssets(): Promise<string[]>;
   listApps(): Promise<AppEntry[]>;
   reloadAppFilter(): Promise<{ ok: boolean; error?: string }>;
+
+  // Which core each profile runs on (and its capability force), resolved by the
+  // backend's `core::resolve_core` — the UI renders the answer instead of
+  // re-implementing the resolution matrix. Batch: one call per profile list.
+  resolveCores(profiles: Profile[]): Promise<CoreResolution[]>;
 
   // import / export / backup
   parseShareLinks(text: string): Promise<Profile[]>; // vless:// vmess:// trojan://

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Command, Response } from "../../generated/bindings";
+import type { Command, Profile, Response } from "../../generated/bindings";
 import type { AppState } from "../bridge";
 import { createBridge, type Dispatch, type PushStreams } from "../dispatch-bridge";
 
@@ -92,5 +92,31 @@ describe("dispatch-bridge batch diagnostics", () => {
     expect(readStateCalls).toBe(1); // fresh read, once — not re-read per profile
     expect(pinged.sort()).toEqual(["a", "b"]);
     expect(results).toEqual({ a: 7, b: 7 });
+  });
+});
+
+describe("dispatch-bridge core resolution", () => {
+  it("resolveCores ships the profiles and unwraps the typed reply", async () => {
+    const profiles = [endpointProfile("a"), endpointProfile("b")];
+    const dispatch: Dispatch = vi.fn(async (cmd: Command) => {
+      if (cmd.cmd === "resolveCores") {
+        expect(cmd.profiles).toHaveLength(2);
+        return {
+          kind: "coreResolutions",
+          value: [
+            { resolved: "xray", forced: null },
+            { resolved: "sing-box", forced: "sing-box" },
+          ],
+        } as Response;
+      }
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, noPush);
+
+    const out = await bridge.resolveCores(profiles as unknown as Profile[]);
+    expect(out).toEqual([
+      { resolved: "xray", forced: null },
+      { resolved: "sing-box", forced: "sing-box" },
+    ]);
   });
 });

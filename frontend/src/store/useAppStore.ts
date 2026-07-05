@@ -13,6 +13,7 @@ import type {
   AppState,
   AssetFile,
   Capabilities,
+  CoreResolution,
   MutationIntent,
   ResourceUpdateMode,
   RoutingRule,
@@ -57,6 +58,10 @@ interface Store extends AppState {
   pinging: Set<string>; // profile ids currently being pinged
   speedTesting: Set<string>; // profile ids currently being speed-tested
   testResults: Record<string, ProfileTest>; // last ping/speed per profile id (ephemeral)
+  // Which core each profile runs on, resolved by the backend (`resolveCores`) and
+  // keyed by profile id. Refreshed whenever profiles/settings change; the UI reads
+  // it instead of re-implementing the resolution matrix.
+  coreResolutions: Record<string, CoreResolution>;
   toasts: ToastItem[];
   recentActivity: ActivityEvent[];
   recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
@@ -133,9 +138,22 @@ export const useAppStore = create<Store>((set, get) => {
     ...s.testResults,
     [id]: { ...(s.testResults[id] ?? { ping: null, speed: null }), ...patch },
   });
+  // Re-resolve every profile's core through the backend and adopt the answer.
+  // Fire-and-forget: the engine tags render/refresh once the reply lands.
+  const refreshCoreResolutions = (profiles: Profile[]) => {
+    bridge
+      .resolveCores(profiles)
+      .then((rs) =>
+        set({
+          coreResolutions: Object.fromEntries(profiles.map((p, i) => [p.meta.id, rs[i]])),
+        }),
+      )
+      .catch(() => {});
+  };
   // Adopt the canonical persisted-state slice the backend returned (the rest of
   // the store — service status, toasts, etc. — is UI-only and left untouched).
-  const applyState = (next: AppState) =>
+  const applyState = (next: AppState) => {
+    refreshCoreResolutions(next.profiles);
     set((s) => {
       // testResults is keyed by id and lives only here; drop entries for profiles
       // that no longer exist so the map can't grow without bound (cheap no-op when
@@ -157,6 +175,7 @@ export const useAppStore = create<Store>((set, get) => {
         testResults,
       };
     });
+  };
   // The single write path: dispatch one domain intent and render the canonical
   // AppState the backend returns. No local invariant logic, no full-state shipping.
   const mutate = (intent: MutationIntent) => bridge.mutate(intent).then(applyState);
@@ -205,6 +224,7 @@ export const useAppStore = create<Store>((set, get) => {
         settings: mergeSettings(state.settings),
         activeId: state.activeId,
       });
+      refreshCoreResolutions(state.profiles);
     } catch {
       return;
     }
@@ -258,6 +278,7 @@ export const useAppStore = create<Store>((set, get) => {
     pinging: new Set<string>(),
     speedTesting: new Set<string>(),
     testResults: {},
+    coreResolutions: {},
     toasts: [],
     recentActivity: [],
     recentProfileIds: [],
@@ -293,6 +314,7 @@ export const useAppStore = create<Store>((set, get) => {
         hydrated: true,
         recentProfileIds: state.activeId ? [state.activeId] : [],
       });
+      refreshCoreResolutions(state.profiles);
       // Status/caps first — fast and needed for UI responsiveness.
       bridge.onStatus((service) => syncService(service));
       try {

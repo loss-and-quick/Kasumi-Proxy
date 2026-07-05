@@ -2,12 +2,7 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { Card, EngineTag, Icon, Ping, ProtoTag, Speed, Spinner } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
-import {
-  profileEndpointLabel,
-  profileNetwork,
-  profileSecurity,
-  resolveCore,
-} from "../../lib/profile-utils";
+import { profileEndpointLabel, profileNetwork, profileSecurity } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 
 export function ProfileRow({
@@ -31,7 +26,6 @@ export function ProfileRow({
   onMore: () => void;
   onShowTestLog: (kind: TestKind) => void;
 }) {
-  const settings = useAppStore((s) => s.settings);
   const isPinging = useAppStore((s) => s.pinging.has(profile.meta.id));
   const isSpeedTesting = useAppStore((s) => s.speedTesting.has(profile.meta.id));
   const test = useAppStore((s) => s.testResults[profile.meta.id]);
@@ -45,7 +39,9 @@ export function ProfileRow({
     wasPinging.current = isPinging;
     wasSpeedTesting.current = isSpeedTesting;
   });
-  const engine = resolveCore(profile, settings);
+  // Backend-resolved core (the `resolveCores` reply cached in the store);
+  // undefined until the first resolution lands, which just hides the tag.
+  const engine = useAppStore((s) => s.coreResolutions[profile.meta.id]?.resolved);
   const t = useT();
 
   return (

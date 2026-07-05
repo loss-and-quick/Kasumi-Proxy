@@ -8,10 +8,18 @@
 
 import { useEffect, useState } from "react";
 import { Btn, Sheet } from "../../components";
-import type { Endpoint, Meta, Profile, Protocol, Tls, Transport } from "../../generated/bindings";
+import type {
+  CoreResolution,
+  Endpoint,
+  Meta,
+  Profile,
+  Protocol,
+  Tls,
+  Transport,
+} from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
-import { emptyProfile, forcedCore, resolveCore, schemaFor } from "../../lib/profile-utils";
+import { emptyProfile, schemaFor } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
@@ -29,7 +37,6 @@ export default function Editor({
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
-  const settings = useAppStore((s) => s.settings);
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
   const t = useT();
@@ -91,6 +98,21 @@ export default function Editor({
     };
   }, [draft]);
 
+  // The core-resolution matrix lives in Rust too; resolve the draft's engine
+  // through the bridge on every edit (same pattern as the share preview). `null`
+  // until the first reply lands, which just hides the engine hint.
+  const [coreResolution, setCoreResolution] = useState<CoreResolution | null>(null);
+  useEffect(() => {
+    let alive = true;
+    bridge
+      .resolveCores([draft])
+      .then((rs) => alive && setCoreResolution(rs[0] ?? null))
+      .catch(() => alive && setCoreResolution(null));
+    return () => {
+      alive = false;
+    };
+  }, [draft]);
+
   const save = () => {
     const result = schemaFor(draft.protocol).safeParse(draft);
     if (!result.success) {
@@ -114,11 +136,12 @@ export default function Editor({
   const isQuic = proto === "hysteria2" || proto === "tuic";
   const network = "transport" in draft && draft.transport ? draft.transport.kind : "tcp";
   const needsHostPath = ["ws", "grpc", "httpupgrade", "xhttp", "h2"].includes(network);
-  const engineForced = forcedCore(draft);
-  const engineResolved = resolveCore(draft, settings);
+  const engineForced = coreResolution?.forced ?? null;
   const engineHint = engineForced
     ? t("editor.engineForced", { core: engineForced })
-    : t("editor.engineResolved", { core: engineResolved });
+    : coreResolution
+      ? t("editor.engineResolved", { core: coreResolution.resolved })
+      : "";
   const mux = "muxEnabled" in draft ? !!draft.muxEnabled : false;
 
   return (

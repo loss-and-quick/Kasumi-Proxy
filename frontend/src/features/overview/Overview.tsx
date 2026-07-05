@@ -18,7 +18,7 @@ import {
 import { useT } from "../../i18n";
 import { isServiceUp } from "../../lib/bridge";
 import { formatRate, formatUptime } from "../../lib/format";
-import { profileEndpointLabel, resolveCore } from "../../lib/profile-utils";
+import { profileEndpointLabel } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { PingActionsSheet } from "../profiles/PingActionsSheet";
 
@@ -71,7 +71,10 @@ export default function Overview({
     settings.routingMode !== "global" && !assetFiles.some((a) => a.lastUpdated != null);
 
   const active = profiles.find((p) => p.meta.id === activeId);
-  const resolvedCore = active ? resolveCore(active, settings) : null;
+  // Backend-resolved core of the active profile (`resolveCores` cache in the store).
+  const resolvedCore = useAppStore((s) =>
+    activeId ? (s.coreResolutions[activeId]?.resolved ?? null) : null,
+  );
   const enabledSubs = subs.filter((s) => s.enabled).length;
   const connected = service.state === "connected";
   const noInternet = service.state === "noInternet";
