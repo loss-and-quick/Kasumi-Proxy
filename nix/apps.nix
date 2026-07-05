@@ -1,11 +1,12 @@
 {self, ...}: {
   perSystem = {
     pkgs,
+    lib,
     toolchain,
     ...
   }: let
+    inherit (lib) getExe makeBinPath;
     inherit (toolchain) rustAndroid ndkRoot;
-    binPath = pkgs.lib.makeBinPath;
   in {
     apps = {
       # Cross-build the Rust daemon (kasumi-proxy) into module/bin/<abi>/. Needs the
@@ -15,7 +16,7 @@
         program = toString (
           pkgs.writeShellScript "build-daemon-android" ''
             export PATH=${
-              binPath [
+              makeBinPath [
                 rustAndroid
                 pkgs.cargo-ndk
                 pkgs.coreutils
@@ -23,7 +24,7 @@
             }:$PATH
             export NDK_ROOT="${ndkRoot}"
             export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-            exec ${pkgs.bash}/bin/bash "${self}/scripts/build-daemon-android.sh" "$@"
+            exec ${getExe pkgs.bash} "${self}/scripts/build-daemon-android.sh" "$@"
           ''
         );
       };
@@ -35,7 +36,7 @@
         program = toString (
           pkgs.writeShellScript "fetch-binaries" ''
             export PATH=${
-              binPath [
+              makeBinPath [
                 pkgs.curl
                 pkgs.jq
                 pkgs.unzip
@@ -46,7 +47,7 @@
               ]
             }:$PATH
             export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-            exec ${pkgs.bash}/bin/bash "${self}/scripts/fetch-binaries.sh" "$@"
+            exec ${getExe pkgs.bash} "${self}/scripts/fetch-binaries.sh" "$@"
           ''
         );
       };
@@ -57,13 +58,13 @@
         program = toString (
           pkgs.writeShellScript "build-webroot" ''
             export PATH=${
-              binPath [
+              makeBinPath [
                 pkgs.bun
                 pkgs.coreutils
               ]
             }:$PATH
             export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-            exec ${pkgs.bash}/bin/bash "${self}/scripts/build-webroot.sh" "$@"
+            exec ${getExe pkgs.bash} "${self}/scripts/build-webroot.sh" "$@"
           ''
         );
       };
@@ -76,7 +77,7 @@
         program = toString (
           pkgs.writeShellScript "package-release" ''
             export PATH=${
-              binPath [
+              makeBinPath [
                 rustAndroid
                 pkgs.cargo-ndk
                 pkgs.go
@@ -92,7 +93,7 @@
             }:$PATH
             export NDK_ROOT="${ndkRoot}"
             export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
-            exec ${pkgs.bash}/bin/bash "${self}/scripts/package-release.sh" "$@"
+            exec ${getExe pkgs.bash} "${self}/scripts/package-release.sh" "$@"
           ''
         );
       };

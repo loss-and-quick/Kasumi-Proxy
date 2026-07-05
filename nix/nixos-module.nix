@@ -13,18 +13,20 @@
   ...
 }: let
   cfg = config.programs.kasumi-proxy;
+  inherit (lib) mkEnableOption mkIf mkOption literalExpression getExe';
+  inherit (lib.types) package;
 in {
   options.programs.kasumi-proxy = {
-    enable = lib.mkEnableOption "Kasumi Proxy, the transparent-proxy desktop app";
+    enable = mkEnableOption "Kasumi Proxy, the transparent-proxy desktop app";
 
-    package = lib.mkOption {
-      type = lib.types.package;
+    package = mkOption {
+      type = package;
       default = self.packages.${pkgs.stdenv.hostPlatform.system}.kasumi-desktop;
-      defaultText = lib.literalExpression "kasumi-proxy.packages.\${system}.kasumi-desktop";
+      defaultText = literalExpression "kasumi-proxy.packages.\${system}.kasumi-desktop";
       description = "The kasumi-desktop package to install.";
     };
 
-    helperSetuid = lib.mkEnableOption ''
+    helperSetuid = mkEnableOption ''
       a setuid-root helper wrapper instead of the default setcap one. Less secure —
       the whole helper runs as root, not just its network ops — but a fallback for
       setups where setcap doesn't take. Mirrors throne's `tunMode.setuid`
@@ -42,11 +44,11 @@ in {
     # the helper's in-code keep-set (see capabilities.rs); `+ep` = effective+permitted.
     # setuid is the fallback for setups where setcap doesn't take.
     security.wrappers.kasumi-helper = {
-      source = "${cfg.package}/bin/kasumi-helper";
+      source = "${getExe' cfg.package "kasumi-helper"}";
       owner = "root";
       group = "root";
-      setuid = lib.mkIf cfg.helperSetuid true;
-      capabilities = lib.mkIf (!cfg.helperSetuid) "cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep";
+      setuid = mkIf cfg.helperSetuid true;
+      capabilities = mkIf (!cfg.helperSetuid) "cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep";
     };
   };
 }
