@@ -6,6 +6,7 @@
   crane,
 }: let
   inherit (pkgs) lib;
+  inherit (lib) getExe;
 
   # Pinned to a specific stable release for reproducibility — a floating
   # `stable.latest` would silently jump the toolchain (and thus the build, the
@@ -105,6 +106,7 @@
   baseHook = ''
     export XDG_DATA_DIRS="${pkgs.gtk3}/share:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:''${XDG_DATA_DIRS:-/usr/share}"
     export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
+    exec ${getExe pkgs.zsh}
   '';
 in {
   inherit
