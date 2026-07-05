@@ -10,23 +10,20 @@
   pkgs,
   self,
   version,
-}:
-let
-  lib = pkgs.lib;
+}: let
+  inherit (pkgs) lib;
   catalog = builtins.fromJSON (builtins.readFile (self + "/scripts/binaries.json"));
   binaryHashes = builtins.fromJSON (builtins.readFile (self + "/scripts/binary-hashes.json"));
 
   # The desktop nix build targets linux-amd64; pull that arch's asset from the
   # catalog and compose the standard GitHub release URL.
   arch = "linux-amd64";
-  coreSrc =
-    name:
-    let
-      c = catalog.${name};
-      tag = version.pinnedVersion c.version_var;
-      ver = lib.removePrefix "v" tag;
-      file = builtins.replaceStrings [ "{ver}" ] [ ver ] c.assets.${arch}.file;
-    in
+  coreSrc = name: let
+    c = catalog.${name};
+    tag = version.pinnedVersion c.version_var;
+    ver = lib.removePrefix "v" tag;
+    file = builtins.replaceStrings ["{ver}"] [ver] c.assets.${arch}.file;
+  in
     pkgs.fetchurl {
       url = "https://github.com/${c.repo}/releases/download/${tag}/${file}";
       hash = binaryHashes.${name};
@@ -54,32 +51,31 @@ let
     version = builtins.substring 0 7 version.geodat2srsRev;
     src = geodat2srsSrc;
     vendorHash = binaryHashes."geodat2srs-vendor";
-    subPackages = [ "." ];
+    subPackages = ["."];
     doCheck = false;
     env.CGO_ENABLED = "0";
   };
-in
-{
+in {
   # Assemble the binaries under plain names — the desktop Platform looks for
   # `{KASUMI_BIN_DIR}/{xray,sing-box,tun2socks,hev-socks5-tunnel,geodat2srs}`
   # (src-tauri/src/desktop/paths.rs).
   desktopBinaries =
     pkgs.runCommand "kasumi-desktop-binaries-${version.appVersion}"
-      {
-        nativeBuildInputs = [
-          pkgs.unzip
-          pkgs.gnutar
-        ];
-      }
-      ''
-        mkdir -p $out/bin tmp && cd tmp
-        unzip -j ${xraySrc} xray -d $out/bin
-        unzip -j ${tun2socksSrc} -d t2s
-        install -m755 "$(find t2s -type f -name 'tun2socks*' | head -1)" $out/bin/tun2socks
-        tar xzf ${singboxSrc}
-        install -m755 "$(find . -type f -name sing-box | head -1)" $out/bin/sing-box
-        install -m755 ${hevSrc} $out/bin/hev-socks5-tunnel
-        install -m755 ${geodat2srsDesktop}/bin/geodat2srs $out/bin/geodat2srs
-        chmod +x $out/bin/*
-      '';
+    {
+      nativeBuildInputs = [
+        pkgs.unzip
+        pkgs.gnutar
+      ];
+    }
+    ''
+      mkdir -p $out/bin tmp && cd tmp
+      unzip -j ${xraySrc} xray -d $out/bin
+      unzip -j ${tun2socksSrc} -d t2s
+      install -m755 "$(find t2s -type f -name 'tun2socks*' | head -1)" $out/bin/tun2socks
+      tar xzf ${singboxSrc}
+      install -m755 "$(find . -type f -name sing-box | head -1)" $out/bin/sing-box
+      install -m755 ${hevSrc} $out/bin/hev-socks5-tunnel
+      install -m755 ${geodat2srsDesktop}/bin/geodat2srs $out/bin/geodat2srs
+      chmod +x $out/bin/*
+    '';
 }

@@ -1,9 +1,11 @@
 # Shared toolchains + library sets derived from `pkgs` (rust-overlay + bun2nix
 # overlays applied in flake.nix). Returned attrset is threaded into the other
 # nix/ modules.
-{ pkgs, crane }:
-let
-  lib = pkgs.lib;
+{
+  pkgs,
+  crane,
+}: let
+  inherit (pkgs) lib;
 
   # Pinned to a specific stable release for reproducibility — a floating
   # `stable.latest` would silently jump the toolchain (and thus the build, the
@@ -27,15 +29,18 @@ let
   # geodat2srs into the module, and (later) the Tauri Android target.
   androidComposition = pkgs.androidenv.composeAndroidPackages {
     includeNDK = true;
-    ndkVersions = [ "28.0.13004108" ];
-    platformVersions = [ "35" ];
+    ndkVersions = ["28.0.13004108"];
+    platformVersions = ["35"];
     cmdLineToolsVersion = "12.0";
     platformToolsVersion = "36.0.2";
-    buildToolsVersions = [ "35.0.0" ];
+    buildToolsVersions = ["35.0.0"];
   };
   androidSdk = androidComposition.androidsdk;
   ndkRoot = "${androidSdk}/libexec/android-sdk/ndk/28.0.13004108";
-  ndkHost = if pkgs.stdenv.isAarch64 then "linux-aarch64" else "linux-x86_64";
+  ndkHost =
+    if pkgs.stdenv.isAarch64
+    then "linux-aarch64"
+    else "linux-x86_64";
 
   # System libraries a Tauri 2 app links against on Linux (webkit2gtk-4.1).
   # libayatana-appindicator is dlopen'd at runtime by the tray icon (the
@@ -101,8 +106,7 @@ let
     export XDG_DATA_DIRS="${pkgs.gtk3}/share:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:''${XDG_DATA_DIRS:-/usr/share}"
     export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
   '';
-in
-{
+in {
   inherit
     lib
     rustAndroid

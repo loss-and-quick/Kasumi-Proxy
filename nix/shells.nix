@@ -1,18 +1,19 @@
-{
-  ...
-}: {
-  perSystem = { pkgs, toolchain, ... }:
-    let
-      inherit
-        (toolchain)
-        baseNative
-        baseHook
-        tauriLibs
-        rustAndroid
-        androidSdk
-        ndkRoot
-        ;
-    in {
+_: {
+  perSystem = {
+    pkgs,
+    toolchain,
+    ...
+  }: let
+    inherit
+      (toolchain)
+      baseNative
+      baseHook
+      tauriLibs
+      rustAndroid
+      androidSdk
+      ndkRoot
+      ;
+  in {
     # `nix develop` — rust + Tauri + node, no Android SDK (use `.#android`).
     devShells = {
       default = pkgs.mkShell {

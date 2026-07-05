@@ -19,7 +19,7 @@
   # others can opt in prompt-free with `cachix use kasumi-proxy`. Pulls only — pushing
   # is done by the cachix-action in CI under an auth token.
   nixConfig = {
-    extra-substituters = [ "https://kasumi-proxy.cachix.org" ];
+    extra-substituters = ["https://kasumi-proxy.cachix.org"];
     extra-trusted-public-keys = [
       "kasumi-proxy.cachix.org-1:V22nNqK4m1rSZRfuak86S1aY1eLlGhty05m8VtK25gM="
     ];
@@ -29,51 +29,54 @@
   #
   # perSystem → system-dependent outputs (packages/checks/devShells/apps/formatter).
   # flake     → system-independent outputs (NixOS module).
-  outputs = { self, nixpkgs, flake-parts, crane, crane-tauri, bun2nix, rust-overlay, ... }@inputs:
-    let
-      flakeOutputs = flake-parts.lib.mkFlake { inherit inputs; } {
-        systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+  outputs = {
+    self,
+    flake-parts,
+    ...
+  } @ inputs: let
+    flakeOutputs = flake-parts.lib.mkFlake {inherit inputs;} {
+      systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
 
-        _module.args = {
-          inherit self;
-          crane-tauri = inputs.crane-tauri;
+      _module.args = {
+        inherit self;
+        inherit (inputs) crane-tauri;
+      };
+
+      perSystem = {system, ...}: let
+        pkgs = import inputs.nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+          config.android_sdk.accept_license = true;
+          overlays = [
+            inputs.bun2nix.overlays.default
+            inputs.rust-overlay.overlays.default
+          ];
         };
-
-        perSystem = { system, ... }:
-          let
-            pkgs = import inputs.nixpkgs {
-              inherit system;
-              config.allowUnfree = true;
-              config.android_sdk.accept_license = true;
-              overlays = [
-                inputs.bun2nix.overlays.default
-                inputs.rust-overlay.overlays.default
-              ];
-            };
-            toolchain = import ./nix/toolchain.nix { inherit pkgs; crane = inputs.crane; };
-            version = import ./nix/version.nix { inherit pkgs self; };
-          in
-          {
-            _module.args = {
-              inherit pkgs toolchain version;
-              binaries = import ./nix/binaries.nix { inherit pkgs self version; };
-            };
-          };
-
-        imports = [
-          ./nix/desktop.nix
-          ./nix/shells.nix
-          ./nix/apps.nix
-          ./nix/treefmt.nix
-        ];
-
-        flake = {
-          # `programs.kasumi-proxy.enable = true;` — see nix/nixos-module.nix.
-          nixosModules.default = import ./nix/nixos-module.nix { inherit self; };
+        toolchain = import ./nix/toolchain.nix {
+          inherit pkgs;
+          inherit (inputs) crane;
+        };
+        version = import ./nix/version.nix {inherit pkgs self;};
+      in {
+        _module.args = {
+          inherit pkgs toolchain version;
+          binaries = import ./nix/binaries.nix {inherit pkgs self version;};
         };
       };
 
-      # Provide formatter output explicitly to satisfy flake schema
-    in
+      imports = [
+        ./nix/desktop.nix
+        ./nix/shells.nix
+        ./nix/apps.nix
+        ./nix/treefmt.nix
+      ];
+
+      flake = {
+        # `programs.kasumi-proxy.enable = true;` — see nix/nixos-module.nix.
+        nixosModules.default = import ./nix/nixos-module.nix {inherit self;};
+      };
+    };
+    # Provide formatter output explicitly to satisfy flake schema
+  in
     flakeOutputs;
 }

@@ -1,55 +1,57 @@
-{ self, crane-tauri, ... }:
 {
+  self,
+  crane-tauri,
+  ...
+}: {
   perSystem = {
     pkgs,
     toolchain,
     version,
     binaries,
     ...
-  }:
-    let
-      inherit (toolchain) lib craneLib tauriLibs baseNative;
-      frontend = pkgs.stdenv.mkDerivation {
-        pname = "kasumi-frontend";
-        version = version.appVersion;
-        src = ../.;
-        nativeBuildInputs = with pkgs; [
-          bun2nix.hook
-          nodejs_22
-        ];
-        bunDeps = pkgs.bun2nix.fetchBunDeps {
-          bunNix = self + "/bun.nix";
-        };
-        buildPhase = ''
-          ( cd frontend && bun run build )
-        '';
-        installPhase = ''
-          cp -R frontend/dist $out
-        '';
-        dontFixup = true;
+  }: let
+    inherit (toolchain) lib craneLib tauriLibs baseNative;
+    frontend = pkgs.stdenv.mkDerivation {
+      pname = "kasumi-frontend";
+      version = version.appVersion;
+      src = ../.;
+      nativeBuildInputs = with pkgs; [
+        bun2nix.hook
+        nodejs_22
+      ];
+      bunDeps = pkgs.bun2nix.fetchBunDeps {
+        bunNix = self + "/bun.nix";
       };
-      tauriDrv = crane-tauri.lib.buildTauriApp { inherit pkgs craneLib; } {
-        pname = "kasumi-proxy";
+      buildPhase = ''
+        ( cd frontend && bun run build )
+      '';
+      installPhase = ''
+        cp -R frontend/dist $out
+      '';
+      dontFixup = true;
+    };
+    tauriDrv = crane-tauri.lib.buildTauriApp {inherit pkgs craneLib;} {
+      pname = "kasumi-proxy";
+      version = version.appVersion;
+      src = ../.;
+      cargoRoot = ../.;
+      binaryName = "kasumi-desktop";
+      inherit frontend;
+      # src-tauri/tauri.conf.json pins version to a "0.0.0" placeholder; override
+      # it with the real appVersion so the built app reports the right version.
+      extraTauriConfig = {
         version = version.appVersion;
-        src = ../.;
-        cargoRoot = ../.;
-        binaryName = "kasumi-desktop";
-        inherit frontend;
-        # src-tauri/tauri.conf.json pins version to a "0.0.0" placeholder; override
-        # it with the real appVersion so the built app reports the right version.
-        extraTauriConfig = {
-          version = version.appVersion;
-        };
       };
-      clippyArtifacts = craneLib.buildDepsOnly {
-        pname = "kasumi-proxy-deps";
-        version = version.appVersion;
-        src = ../.;
-        cargoRoot = ../.;
-        nativeBuildInputs = baseNative;
-        buildInputs = tauriLibs;
-      };
-    in {
+    };
+    clippyArtifacts = craneLib.buildDepsOnly {
+      pname = "kasumi-proxy-deps";
+      version = version.appVersion;
+      src = ../.;
+      cargoRoot = ../.;
+      nativeBuildInputs = baseNative;
+      buildInputs = tauriLibs;
+    };
+  in {
     packages = rec {
       # The React UI built into static assets. bun2nix reconstructs node_modules from
       # the generated bun.nix (one fixed-output fetch per package, no opaque tree
@@ -74,7 +76,7 @@
         tauriDrv.commonArgs
         // {
           pname = "kasumi-helper";
-          cargoArtifacts = tauriDrv.cargoArtifacts;
+          inherit (tauriDrv) cargoArtifacts;
           cargoExtraArgs = "--bin kasumi-helper";
           TAURI_CONFIG = tauriDrv.tauriConfig;
           doCheck = false;
@@ -82,14 +84,14 @@
       );
       helper =
         pkgs.runCommand "kasumi-helper"
-          {
-            nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
-          }
-          ''
-            mkdir -p $out/bin
-            makeWrapper ${helper-unwrapped}/bin/kasumi-helper $out/bin/kasumi-helper \
-              --prefix PATH : ${lib.makeBinPath [ pkgs.iproute2 ]}
-          '';
+        {
+          nativeBuildInputs = [pkgs.makeBinaryWrapper];
+        }
+        ''
+          mkdir -p $out/bin
+          makeWrapper ${helper-unwrapped}/bin/kasumi-helper $out/bin/kasumi-helper \
+            --prefix PATH : ${lib.makeBinPath [pkgs.iproute2]}
+        '';
 
       # crane-tauri leaves GTK/WebKit wrapping to the consumer (wrapping in the shared
       # inputs would perturb PKG_CONFIG_PATH and bust -sys fingerprints). webkit2gtk-4.1
@@ -111,7 +113,7 @@
         # for the uplink watch, and on NixOS there is no /usr/sbin/ip.
         preFixup = ''
           gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${binaries.desktopBinaries}/bin")
-          gappsWrapperArgs+=(--prefix PATH : "${lib.makeBinPath [ pkgs.iproute2 ]}")
+          gappsWrapperArgs+=(--prefix PATH : "${lib.makeBinPath [pkgs.iproute2]}")
         '';
         installPhase = ''
           runHook preInstall
@@ -145,7 +147,7 @@
             exec = "kasumi-desktop";
             icon = "kasumi-proxy";
             comment = "Transparent proxy (Xray-core / sing-box) with a native TUN and a React UI";
-            categories = [ "Network" ];
+            categories = ["Network"];
             terminal = false;
           })
         ];
@@ -157,7 +159,7 @@
         # (appindicator is dlopen'd, not a DT_NEEDED). wrapGAppsHook has by now renamed
         # the real ELF to .kasumi-desktop-wrapped.
         postFixup = ''
-          patchelf --add-rpath ${lib.makeLibraryPath [ pkgs.libayatana-appindicator ]} \
+          patchelf --add-rpath ${lib.makeLibraryPath [pkgs.libayatana-appindicator]} \
             $out/bin/.kasumi-desktop-wrapped
         '';
         meta = {
@@ -165,8 +167,8 @@
           homepage = "https://github.com/loss-and-quick/Kasumi-Proxy";
           license = lib.licenses.gpl3Plus;
           mainProgram = "kasumi-desktop";
-          platforms = [ "x86_64-linux" ];
-          maintainers = [ ];
+          platforms = ["x86_64-linux"];
+          maintainers = [];
         };
       };
     };

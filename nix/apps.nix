@@ -1,10 +1,12 @@
-{ self, ... }:
-{
-  perSystem = { pkgs, toolchain, ... }:
-    let
-      inherit (toolchain) rustAndroid ndkRoot;
-      binPath = pkgs.lib.makeBinPath;
-    in {
+{self, ...}: {
+  perSystem = {
+    pkgs,
+    toolchain,
+    ...
+  }: let
+    inherit (toolchain) rustAndroid ndkRoot;
+    binPath = pkgs.lib.makeBinPath;
+  in {
     apps = {
       # Cross-build the Rust daemon (kasumi-proxy) into module/bin/<abi>/. Needs the
       # android-target toolchain (rustAndroid) + cargo-ndk + NDK_ROOT.
