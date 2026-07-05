@@ -1,4 +1,8 @@
-{inputs, self, ...}: {
+{
+  inputs,
+  self,
+  ...
+}: {
   imports = [
     inputs.treefmt-nix.flakeModule
   ];
@@ -46,9 +50,10 @@
           # Settings are loaded from the root biome.json (the authoritative source
           # for IDE and CLI integration). Fields that are incompatible with treefmt's
           # evaluation context ($schema, vcs) are stripped before passing them on.
-          settings = removeAttrs
+          settings =
+            removeAttrs
             (builtins.fromJSON (builtins.readFile "${self}/biome.json"))
-            [ "$schema" "vcs" ];
+            ["$schema" "vcs"];
         };
       };
     };

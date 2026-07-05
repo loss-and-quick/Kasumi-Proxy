@@ -6,17 +6,14 @@
 #
 # `self` is threaded in from the flake so `package` can default to this repo's own
 # build without the module having to know a system.
-{ self }:
-{
+{self}: {
   config,
   lib,
   pkgs,
   ...
-}:
-let
+}: let
   cfg = config.programs.kasumi-proxy;
-in
-{
+in {
   options.programs.kasumi-proxy = {
     enable = lib.mkEnableOption "Kasumi Proxy, the transparent-proxy desktop app";
 
@@ -35,7 +32,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [ cfg.package ];
+    environment.systemPackages = [cfg.package];
 
     # The data-path helper needs CAP_NET_ADMIN (tun + `ip` routing + tun2socks
     # fwmark), CAP_NET_RAW (the test-core uplink bind), and CHOWN + DAC_OVERRIDE
@@ -49,9 +46,7 @@ in
       owner = "root";
       group = "root";
       setuid = lib.mkIf cfg.helperSetuid true;
-      capabilities = lib.mkIf (
-        !cfg.helperSetuid
-      ) "cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep";
+      capabilities = lib.mkIf (!cfg.helperSetuid) "cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep";
     };
   };
 }
