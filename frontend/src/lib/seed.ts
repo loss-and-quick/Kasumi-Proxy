@@ -31,14 +31,13 @@ function mk<P extends Protocol>(
     root?: Record<string, unknown>;
   } = {},
 ): ProfileOf<P> {
-  const base = emptyProfile(protocol) as unknown as Record<string, unknown>;
-  base.meta = { ...(base.meta as object), id: uid(), ...o.meta };
-  if (o.endpoint && "endpoint" in base)
-    base.endpoint = { ...(base.endpoint as object), ...o.endpoint };
-  if (o.tls && "tls" in base) base.tls = { ...(base.tls as object), ...o.tls };
-  if (o.transport) base.transport = o.transport;
+  const base = emptyProfile(protocol) as ProfileOf<P>;
+  base.meta = { ...base.meta, id: uid(), ...o.meta };
+  if (o.endpoint && "endpoint" in base) base.endpoint = { ...base.endpoint, ...o.endpoint };
+  if (o.tls && "tls" in base) base.tls = { ...base.tls, ...o.tls };
+  if (o.transport && "transport" in base) base.transport = o.transport;
   if (o.root) Object.assign(base, o.root);
-  return base as unknown as ProfileOf<P>;
+  return base;
 }
 
 export const GROUPS_SEED = [

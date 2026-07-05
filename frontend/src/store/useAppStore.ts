@@ -6,7 +6,7 @@
 // ============================================================
 
 import { create } from "zustand";
-import type { Profile, TestKind } from "../generated/bindings";
+import type { AppState_Serialize, Profile, TestKind } from "../generated/bindings";
 import { translateCurrent } from "../i18n";
 import type {
   AdvancedSettings,
@@ -348,8 +348,16 @@ export const useAppStore = create<Store>((set, get) => {
         // bulk replace intent (the only non-granular write path).
         await mutate({
           kind: "replaceState",
-          state: { ...state, subscriptions, assetFiles, settings, version: __MODULE_VERSION__ },
-        } as unknown as MutationIntent);
+          // The UI doesn't carry `schemaVersion` (backend-owned); assert the all-fields
+          // phase the intent wants, which the backend re-stamps on write.
+          state: {
+            ...state,
+            subscriptions,
+            assetFiles,
+            settings,
+            version: __MODULE_VERSION__,
+          } as AppState_Serialize,
+        });
       }
       // The daemon fetches & applies subscriptions headlessly; reload the
       // persisted state whenever it pushes a subApplied event.
@@ -813,7 +821,9 @@ export const useAppStore = create<Store>((set, get) => {
         get().notify(translateCurrent("store.backup.invalidStructure"));
         return;
       }
-      const incoming = parsed.data as unknown as AppState;
+      // `safeParse` yields the `Serialize | Deserialize` union; narrow to the
+      // all-fields phase the importBackup intent carries.
+      const incoming = parsed.data as AppState_Serialize;
       // AppStateSchema silently drops invalid profiles (logged with reasons via
       // console.warn). Surface how many were skipped so a partial import is visible.
       const rawProfiles = (parsedJson as { profiles?: unknown }).profiles;
@@ -823,9 +833,7 @@ export const useAppStore = create<Store>((set, get) => {
       if (mode === "replace" && isServiceUp(get().service.state)) {
         await stopServiceIfRunning(translateCurrent("store.service.stoppedBeforeBackupRestore"));
       }
-      // `incoming` is a Zod-parsed AppState; it carries schemaVersion at runtime
-      // even though the UI's AppState type omits it (the backend owns it).
-      await mutate({ kind: "importBackup", incoming, mode } as unknown as MutationIntent);
+      await mutate({ kind: "importBackup", incoming, mode });
       pushActivity("backup", translateCurrent("activity.backupRestored"));
       get().notify(
         skipped > 0

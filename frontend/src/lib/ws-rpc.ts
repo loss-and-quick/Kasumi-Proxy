@@ -8,14 +8,14 @@
 // token query when the daemon serves the page itself (browser via action.sh).
 // ============================================================
 
-import type { Command, Response, WsInfo } from "../generated/bindings";
+import type { Command_Deserialize, Response_Serialize, WsInfo } from "../generated/bindings";
 import { execNative, getModuleId, hasKsuNativeApi } from "./ksu-webui";
 
 /** A daemon → client frame: an id-correlated reply or an event-tagged push. */
 interface ReplyFrame {
   id?: number;
   ok?: boolean;
-  value?: Response;
+  value?: Response_Serialize;
   error?: string;
   event?: string;
 }
@@ -25,7 +25,10 @@ const RPC_TIMEOUT_MS = 90_000;
 let socket: WebSocket | null = null;
 let connecting: Promise<WebSocket> | null = null;
 let nextId = 1;
-const pending = new Map<number, { resolve: (v: Response) => void; reject: (e: Error) => void }>();
+const pending = new Map<
+  number,
+  { resolve: (v: Response_Serialize) => void; reject: (e: Error) => void }
+>();
 const statusCbs = new Set<(status: unknown) => void>();
 const subAppliedCbs = new Set<(info: unknown) => void>();
 
@@ -106,10 +109,10 @@ async function ensureSocket(): Promise<WebSocket> {
 }
 
 /** Send one typed command and await its typed reply (or reject on a daemon error). */
-export async function wsDispatch(cmd: Command): Promise<Response> {
+export async function wsDispatch(cmd: Command_Deserialize): Promise<Response_Serialize> {
   const ws = await ensureSocket();
   const id = nextId++;
-  return new Promise<Response>((resolve, reject) => {
+  return new Promise<Response_Serialize>((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error(`rpc ${(cmd as { cmd: string }).cmd} timed out`));

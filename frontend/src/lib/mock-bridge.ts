@@ -7,7 +7,15 @@
 // profiles so the UI renders.
 // ============================================================
 
-import type { Endpoint, Meta, Profile, Protocol, Tls, Transport } from "../generated/bindings";
+import type {
+  AppState_Serialize,
+  Endpoint,
+  Meta,
+  Profile,
+  Protocol,
+  Tls,
+  Transport,
+} from "../generated/bindings";
 import { DEFAULT_CORE_BY_PROTOCOL } from "../generated/defaults";
 import { AppStateSchema } from "../generated/schemas";
 import { applyMutation } from "./apply-mutation";
@@ -27,14 +35,13 @@ function mk<P extends Protocol>(
     root?: Record<string, unknown>;
   } = {},
 ): ProfileOf<P> {
-  const base = emptyProfile(protocol) as unknown as Record<string, unknown>;
-  base.meta = { ...(base.meta as object), id: uid(), ...o.meta };
-  if (o.endpoint && "endpoint" in base)
-    base.endpoint = { ...(base.endpoint as object), ...o.endpoint };
-  if (o.tls && "tls" in base) base.tls = { ...(base.tls as object), ...o.tls };
-  if (o.transport) base.transport = o.transport;
+  const base = emptyProfile(protocol) as ProfileOf<P>;
+  base.meta = { ...base.meta, id: uid(), ...o.meta };
+  if (o.endpoint && "endpoint" in base) base.endpoint = { ...base.endpoint, ...o.endpoint };
+  if (o.tls && "tls" in base) base.tls = { ...base.tls, ...o.tls };
+  if (o.transport && "transport" in base) base.transport = o.transport;
   if (o.root) Object.assign(base, o.root);
-  return base as unknown as ProfileOf<P>;
+  return base;
 }
 
 const safeRegex = (source: string): RegExp | null => {
@@ -372,7 +379,9 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
 
   async importBackup(file: Blob, mode: "merge" | "replace") {
     const text = await file.text();
-    const incoming = AppStateSchema.parse(JSON.parse(text)) as unknown as AppState;
+    // `parse` yields the `Serialize | Deserialize` union; narrow to the all-fields
+    // phase (assignable to the UI `AppState`, which only omits `schemaVersion`).
+    const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
     if (mode === "replace") {
       // Keep current profiles — backups no longer include them
       state = { ...incoming, profiles: state.profiles };
