@@ -6,6 +6,7 @@
   crane,
 }: let
   inherit (pkgs) lib;
+  inherit (lib) getExe;
 
   # The pinned toolchain is single-sourced from //rust-toolchain.toml (also read by
   # rustup for a bare `cargo`), so the version lives in exactly one place. Every
@@ -102,6 +103,7 @@
   baseHook = ''
     export XDG_DATA_DIRS="${pkgs.gtk3}/share:${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:''${XDG_DATA_DIRS:-/usr/share}"
     export PROJECT_ROOT="''${PROJECT_ROOT:-$PWD}"
+    exec ${getExe pkgs.zsh}
   '';
 in {
   inherit
