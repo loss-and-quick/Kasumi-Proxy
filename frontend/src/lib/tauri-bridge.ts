@@ -6,17 +6,17 @@
 // (src/generated/bindings.ts); the shared dispatch-bridge does the rest.
 // ============================================================
 
-import type { Command, Response } from "../generated/bindings";
 import { commands, events } from "../generated/bindings";
 import type { Bridge } from "./bridge";
 import { createBridge, type Dispatch, type PushStreams } from "./dispatch-bridge";
 
-const dispatch: Dispatch = async (cmd: Command): Promise<Response> => {
-  // The generated command typed-wraps its arg as the deserialize shape; the values
-  // we build satisfy it structurally.
-  const res = await commands.dispatch(cmd as Parameters<typeof commands.dispatch>[0]);
+// `commands.dispatch` already speaks the phases `Dispatch` uses
+// (`Command_Deserialize` in, `Response_Serialize` out), so the command and reply
+// pass through untouched.
+const dispatch: Dispatch = async (cmd) => {
+  const res = await commands.dispatch(cmd);
   if (res.status === "error") throw new Error(res.error);
-  return res.data as Response;
+  return res.data;
 };
 
 /** Bridge a tauri-specta event's promise-returning `listen` to a sync unsubscribe. */

@@ -16,11 +16,11 @@ import type { AppState, MutationIntent } from "./bridge";
 const BASE_GROUP_ID = "g-main";
 
 function dedupKey(p: Profile): string {
-  const secret =
-    (p as unknown as { uuid?: string }).uuid ??
-    (p as unknown as { password?: string }).password ??
-    "";
-  const ep = (p as unknown as { endpoint?: { address?: string; port?: number } }).endpoint;
+  // Narrow across the protocol union by key presence (mirrors profile-utils'
+  // accessors) instead of casting the shape open: uuid protocols first, then the
+  // password ones, else no secret.
+  const secret = "uuid" in p ? p.uuid : "password" in p ? (p.password ?? "") : "";
+  const ep = "endpoint" in p ? p.endpoint : undefined;
   return `${p.protocol}|${ep?.address ?? ""}|${ep?.port ?? "null"}|${secret}`;
 }
 
@@ -190,7 +190,7 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       return { ...state, activeId: intent.id ?? null };
 
     case "importBackup": {
-      const incoming = intent.incoming as unknown as AppState;
+      const incoming = intent.incoming;
       if (intent.mode === "replace") {
         return {
           ...incoming,
@@ -209,7 +209,7 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       };
     }
     case "replaceState":
-      return intent.state as unknown as AppState;
+      return intent.state;
     default:
       return state;
   }

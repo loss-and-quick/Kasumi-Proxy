@@ -8,20 +8,23 @@
 // transport only provides `dispatch(cmd)` plus the two push subscriptions.
 // ============================================================
 
-import type { Command, Profile, Response } from "../generated/bindings";
 import type {
-  AppEntry,
-  AppState,
-  Bridge,
-  MutationIntent,
-  ResourceUpdateMode,
-  ServiceStatus,
-} from "./bridge";
+  AppState_Serialize,
+  Command_Deserialize,
+  Profile,
+  Response_Serialize,
+} from "../generated/bindings";
+import type { AppEntry, AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
 import { parseCapabilities, parseServiceStatus } from "./bridge";
 import { profileAddress, profilePort } from "./profile-utils";
 
+// The transport speaks the two concrete serde phases, not the `Serialize |
+// Deserialize` union aliases: a command is what the backend *deserializes*
+// (`Command_Deserialize`), a reply is what it *serializes* (`Response_Serialize`).
+// Pinning both ends to the phase the wire actually carries lets the typed command
+// literals and reply unwrapping check structurally, with no `as unknown` bridging.
 /** Run one typed command and resolve its typed reply (or reject on a backend error). */
-export type Dispatch = (cmd: Command) => Promise<Response>;
+export type Dispatch = (cmd: Command_Deserialize) => Promise<Response_Serialize>;
 
 /** Push streams a transport exposes. Each callback gets the raw payload object. */
 export interface PushStreams {
@@ -31,22 +34,24 @@ export interface PushStreams {
 
 // ---- typed Response unwrapping ----
 
-function wrongKind(r: Response, want: string): never {
+function wrongKind(r: Response_Serialize, want: string): never {
   throw new Error(`expected ${want} reply, got "${r.kind}"`);
 }
-const asState = (r: Response): AppState =>
-  r.kind === "state" ? (r.value as unknown as AppState) : wrongKind(r, "state");
-const asProfiles = (r: Response): Profile[] =>
-  r.kind === "profiles" ? (r.value as unknown as Profile[]) : wrongKind(r, "profiles");
-const asText = (r: Response): string =>
+// `state` carries `AppState_Serialize`; the UI's `AppState` is that minus the
+// backend-owned `schemaVersion`, so the reply is assignable as-is.
+const asState = (r: Response_Serialize): AppState =>
+  r.kind === "state" ? r.value : wrongKind(r, "state");
+const asProfiles = (r: Response_Serialize): Profile[] =>
+  r.kind === "profiles" ? r.value : wrongKind(r, "profiles");
+const asText = (r: Response_Serialize): string =>
   r.kind === "text" ? r.value : r.kind === "ok" ? "" : wrongKind(r, "text");
-const asAssets = (r: Response): string[] =>
+const asAssets = (r: Response_Serialize): string[] =>
   r.kind === "assets" ? r.value : wrongKind(r, "assets");
 // The wire carries `null` for "no result"; the Bridge contract still uses the
 // `-1` sentinel (collapsed at the frontend boundary until the store migrates).
-const asPing = (r: Response): number =>
+const asPing = (r: Response_Serialize): number =>
   r.kind === "ping" ? (r.value ?? -1) : wrongKind(r, "ping");
-const asSpeed = (r: Response): number =>
+const asSpeed = (r: Response_Serialize): number =>
   r.kind === "speed" ? (r.value ?? -1) : wrongKind(r, "speed");
 
 /** Build a Bridge over a dispatcher + push streams. The on-disk split (state file
@@ -73,19 +78,19 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
 
   const bridge: Bridge = {
     async start(profileId) {
-      await dispatch({ cmd: "start", profileId } as Command);
+      await dispatch({ cmd: "start", profileId });
       return this.status();
     },
     async stop() {
-      await dispatch({ cmd: "stop" } as Command);
+      await dispatch({ cmd: "stop" });
       return this.status();
     },
     async restart() {
-      await dispatch({ cmd: "restart" } as Command);
+      await dispatch({ cmd: "restart" });
       return this.status();
     },
     async status() {
-      const r = await dispatch({ cmd: "status" } as Command);
+      const r = await dispatch({ cmd: "status" });
       if (r.kind !== "status") wrongKind(r, "status");
       return composeStatus(r.value);
     },
@@ -97,7 +102,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       });
     },
     async capabilities() {
-      const r = await dispatch({ cmd: "capabilities" } as Command);
+      const r = await dispatch({ cmd: "capabilities" });
       if (r.kind !== "capabilities") wrongKind(r, "capabilities");
       return parseCapabilities(r.value);
     },
@@ -108,7 +113,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       const state = await this.readState();
       const p = state.profiles.find((x) => x.meta.id === profileId);
       if (!p || !profileAddress(p) || profilePort(p) == null) return 0;
-      return asPing(await dispatch({ cmd: "ping", profileId } as Command));
+      return asPing(await dispatch({ cmd: "ping", profileId }));
     },
     async pingAll(ids, onResult) {
       // TCP-ping needs each profile's address/port, so read fresh state rather than
@@ -130,7 +135,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
             // We already read fresh state above and filtered to profiles with a
             // valid address/port, so dispatch the ping command directly instead of
             // going through this.ping() (which would re-read state per profile).
-            ms = asPing(await dispatch({ cmd: "ping", profileId: p.meta.id } as Command));
+            ms = asPing(await dispatch({ cmd: "ping", profileId: p.meta.id }));
           } catch {
             /* failure → 0 */
           }
@@ -143,7 +148,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     },
 
     async realPing(profileId) {
-      return asPing(await dispatch({ cmd: "realPing", profileId } as Command));
+      return asPing(await dispatch({ cmd: "realPing", profileId }));
     },
     async realPingAll(ids, onResult) {
       const out: Record<string, number> = {};
@@ -169,7 +174,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     },
 
     async speedTest(profileId) {
-      return asSpeed(await dispatch({ cmd: "speedTest", profileId } as Command));
+      return asSpeed(await dispatch({ cmd: "speedTest", profileId }));
     },
     async speedTestAll(ids, onResult) {
       const out: Record<string, number> = {};
@@ -197,14 +202,14 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
           cmd: "log",
           target: input?.target ?? "daemon",
           lines: input?.lines ?? 300,
-        } as Command),
+        }),
       );
     },
     async testLog(profileId, kind) {
-      return asText(await dispatch({ cmd: "testLog", profileId, kind } as Command));
+      return asText(await dispatch({ cmd: "testLog", profileId, kind }));
     },
     async clearLogs() {
-      return okResult(() => dispatch({ cmd: "clearLogs" } as Command));
+      return okResult(() => dispatch({ cmd: "clearLogs" }));
     },
 
     async readState() {
@@ -212,12 +217,12 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       // schema-migrated and normalized (base group ensured, legacy assets dropped,
       // dangling active_id nulled). The UI renders it as-is; no client-side merge,
       // ensure, or persist (the read counterpart of the single Mutate write path).
-      const state = asState(await dispatch({ cmd: "readState" } as Command));
+      const state = asState(await dispatch({ cmd: "readState" }));
       lastState = state;
       return state;
     },
     async mutate(intent) {
-      const next = asState(await dispatch({ cmd: "mutate", intent } as unknown as Command));
+      const next = asState(await dispatch({ cmd: "mutate", intent }));
       lastState = next;
       return next;
     },
@@ -229,14 +234,14 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
         mode: opts?.mode ?? "auto",
         userAgent: opts?.userAgent ?? null,
         allowInsecure: opts?.allowInsecure ?? false,
-      } as Command);
+      });
       return asProfiles(profiles);
     },
     async applySubscription(subId) {
       // Returns the canonical state — refresh the cache like readState/mutate do, so
       // the next cache reader (e.g. ping's address/port lookup) can't drift after a
       // subscription apply swaps the profile set out from under it.
-      const next = asState(await dispatch({ cmd: "applySubscription", subId } as Command));
+      const next = asState(await dispatch({ cmd: "applySubscription", subId }));
       lastState = next;
       return next;
     },
@@ -253,33 +258,33 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       });
     },
     async downloadAsset(filename, url, mode: ResourceUpdateMode = "auto") {
-      return okResult(() => dispatch({ cmd: "downloadAsset", filename, url, mode } as Command));
+      return okResult(() => dispatch({ cmd: "downloadAsset", filename, url, mode }));
     },
     async listAssets() {
-      return asAssets(await dispatch({ cmd: "listAssets" } as Command));
+      return asAssets(await dispatch({ cmd: "listAssets" }));
     },
     async listApps(): Promise<AppEntry[]> {
-      const r = await dispatch({ cmd: "listApps" } as Command);
+      const r = await dispatch({ cmd: "listApps" });
       if (r.kind !== "apps") return [];
       return r.value.filter(
         (x): x is AppEntry => !!x && typeof x.pkg === "string" && typeof x.uid === "number",
       );
     },
     async reloadAppFilter() {
-      return okResult(() => dispatch({ cmd: "reloadAppFilter" } as Command));
+      return okResult(() => dispatch({ cmd: "reloadAppFilter" }));
     },
 
     async resolveCores(profiles) {
-      const r = await dispatch({ cmd: "resolveCores", profiles } as Command);
+      const r = await dispatch({ cmd: "resolveCores", profiles });
       return r.kind === "coreResolutions" ? r.value : wrongKind(r, "coreResolutions");
     },
 
     async parseShareLinks(text) {
-      const r = await dispatch({ cmd: "parseShareLinks", text } as Command);
+      const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);
     },
     async buildShareLink(p) {
-      return asText(await dispatch({ cmd: "buildShareLink", profile: p } as unknown as Command));
+      return asText(await dispatch({ cmd: "buildShareLink", profile: p }));
     },
     async exportBackup() {
       const state = await this.readState();
@@ -288,10 +293,10 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     async importBackup(file, mode) {
       const text = await file.text();
       const { AppStateSchema } = await import("../generated/schemas");
-      const incoming = AppStateSchema.parse(JSON.parse(text)) as unknown as AppState;
-      // Let the backend own the merge + invariants; ship the parsed backup as an
-      // importBackup intent.
-      await this.mutate({ kind: "importBackup", incoming, mode } as unknown as MutationIntent);
+      // `parse` returns the `Serialize | Deserialize` union; narrow to the all-fields
+      // phase the intent carries (the backend re-validates and owns the merge).
+      const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
+      await this.mutate({ kind: "importBackup", incoming, mode });
     },
   };
   return bridge;

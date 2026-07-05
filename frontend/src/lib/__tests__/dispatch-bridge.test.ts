@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Command, Profile, Response } from "../../generated/bindings";
+import type { Profile, Response_Serialize } from "../../generated/bindings";
 import type { AppState } from "../bridge";
 import { createBridge, type Dispatch, type PushStreams } from "../dispatch-bridge";
 
@@ -26,10 +26,10 @@ describe("dispatch-bridge batch diagnostics", () => {
 
   it("realPingAll probes every requested id even with an empty state cache", async () => {
     const seen: string[] = [];
-    const dispatch: Dispatch = vi.fn(async (cmd: Command) => {
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
       if (cmd.cmd === "realPing") {
         seen.push(cmd.profileId);
-        return { kind: "ping", value: 42 } as Response;
+        return { kind: "ping", value: 42 } as Response_Serialize;
       }
       throw new Error(`unexpected command ${cmd.cmd}`);
     });
@@ -47,10 +47,10 @@ describe("dispatch-bridge batch diagnostics", () => {
 
   it("speedTestAll probes every requested id even with an empty state cache", async () => {
     const seen: string[] = [];
-    const dispatch: Dispatch = vi.fn(async (cmd: Command) => {
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
       if (cmd.cmd === "speedTest") {
         seen.push(cmd.profileId);
-        return { kind: "speed", value: 1000 } as Response;
+        return { kind: "speed", value: 1000 } as Response_Serialize;
       }
       throw new Error(`unexpected command ${cmd.cmd}`);
     });
@@ -68,17 +68,17 @@ describe("dispatch-bridge batch diagnostics", () => {
   it("pingAll reads fresh state so a stale cache can't drop the requested ids", async () => {
     let readStateCalls = 0;
     const pinged: string[] = [];
-    const dispatch: Dispatch = vi.fn(async (cmd: Command) => {
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
       if (cmd.cmd === "readState") {
         readStateCalls++;
         return {
           kind: "state",
           value: stateWith([endpointProfile("a"), endpointProfile("b")]),
-        } as Response;
+        } as Response_Serialize;
       }
       if (cmd.cmd === "ping") {
         pinged.push(cmd.profileId);
-        return { kind: "ping", value: 7 } as Response;
+        return { kind: "ping", value: 7 } as Response_Serialize;
       }
       throw new Error(`unexpected command ${cmd.cmd}`);
     });
@@ -98,7 +98,7 @@ describe("dispatch-bridge batch diagnostics", () => {
 describe("dispatch-bridge core resolution", () => {
   it("resolveCores ships the profiles and unwraps the typed reply", async () => {
     const profiles = [endpointProfile("a"), endpointProfile("b")];
-    const dispatch: Dispatch = vi.fn(async (cmd: Command) => {
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
       if (cmd.cmd === "resolveCores") {
         expect(cmd.profiles).toHaveLength(2);
         return {
@@ -107,7 +107,7 @@ describe("dispatch-bridge core resolution", () => {
             { resolved: "xray", forced: null },
             { resolved: "sing-box", forced: "sing-box" },
           ],
-        } as Response;
+        } as Response_Serialize;
       }
       throw new Error(`unexpected command ${cmd.cmd}`);
     });
