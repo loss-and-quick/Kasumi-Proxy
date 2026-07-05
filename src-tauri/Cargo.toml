@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Kasumi Proxy — Tauri 2 desktop (and future mobile) app over the neutral Rust backend."
-rust-version = "1.95.0"
 # This crate has a second bin (`codegen`). Without default-run, `cargo tauri build`
 # picks the alphabetically-first binary (`codegen` < `kasumi-desktop`) as the app
 # and bundles THAT — shipping a binary that just runs codegen and crashes on launch

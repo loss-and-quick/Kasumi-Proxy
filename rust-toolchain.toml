@@ -1,0 +1,8 @@
+# Single source of truth for the pinned Rust toolchain. Read by nix/toolchain.nix
+# (rust-bin.fromRustupToolchainFile — the dev shell, the android cross-build, the
+# crane desktop build, and `nix flake check`) and by rustup for a bare `cargo`
+# outside the dev shell. This is the sole place the Rust version is declared — bump it
+# here and every consumer above follows.
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
