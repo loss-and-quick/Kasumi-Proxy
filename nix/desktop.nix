@@ -8,9 +8,11 @@
     toolchain,
     version,
     binaries,
+    lib,
     ...
   }: let
-    inherit (toolchain) lib craneLib tauriLibs baseNative;
+    inherit (lib) makeBinPath makeLibraryPath;
+    inherit (toolchain) craneLib tauriLibs baseNative;
     frontend = pkgs.stdenv.mkDerivation {
       pname = "kasumi-frontend";
       version = version.appVersion;
@@ -20,7 +22,7 @@
         nodejs_22
       ];
       bunDeps = pkgs.bun2nix.fetchBunDeps {
-        bunNix = self + "/bun.nix";
+        bunNix = "${self}/bun.nix";
       };
       buildPhase = ''
         ( cd frontend && bun run build )
@@ -85,12 +87,12 @@
       helper =
         pkgs.runCommand "kasumi-helper"
         {
-          nativeBuildInputs = [pkgs.makeBinaryWrapper];
+          nativeBuildInputs = with pkgs; [makeBinaryWrapper];
         }
         ''
           mkdir -p $out/bin
           makeWrapper ${helper-unwrapped}/bin/kasumi-helper $out/bin/kasumi-helper \
-            --prefix PATH : ${lib.makeBinPath [pkgs.iproute2]}
+            --prefix PATH : ${makeBinPath [pkgs.iproute2]}
         '';
 
       # crane-tauri leaves GTK/WebKit wrapping to the consumer (wrapping in the shared
@@ -113,7 +115,7 @@
         # for the uplink watch, and on NixOS there is no /usr/sbin/ip.
         preFixup = ''
           gappsWrapperArgs+=(--set-default KASUMI_BIN_DIR "${binaries.desktopBinaries}/bin")
-          gappsWrapperArgs+=(--prefix PATH : "${lib.makeBinPath [pkgs.iproute2]}")
+          gappsWrapperArgs+=(--prefix PATH : "${makeBinPath [pkgs.iproute2]}")
         '';
         installPhase = ''
           runHook preInstall
@@ -124,16 +126,16 @@
           # GUI execs directly; off NixOS it is granted caps via setcap or run via pkexec.
           cp ${helper}/bin/kasumi-helper $out/bin/kasumi-helper
           # Launcher icon (the file basenames already encode their pixel size).
-          install -Dm644 ${self + "/src-tauri/icons/32x32.png"} \
+          install -Dm644 "${self}/src-tauri/icons/32x32.png" \
             $out/share/icons/hicolor/32x32/apps/kasumi-proxy.png
-          install -Dm644 ${self + "/src-tauri/icons/128x128.png"} \
+          install -Dm644 "${self}/src-tauri/icons/128x128.png" \
             $out/share/icons/hicolor/128x128/apps/kasumi-proxy.png
           install -Dm644 ${
             # The `@` in the source basename is illegal in a Nix path literal, so
             # keep this one as a string-like flake path and rename it as it's imported.
             builtins.path {
               name = "kasumi-proxy-256.png";
-              path = self + "/src-tauri/icons/128x128@2x.png";
+              path = "${self}/src-tauri/icons/128x128@2x.png";
             }
           } \
             $out/share/icons/hicolor/256x256/apps/kasumi-proxy.png
@@ -159,7 +161,7 @@
         # (appindicator is dlopen'd, not a DT_NEEDED). wrapGAppsHook has by now renamed
         # the real ELF to .kasumi-desktop-wrapped.
         postFixup = ''
-          patchelf --add-rpath ${lib.makeLibraryPath [pkgs.libayatana-appindicator]} \
+          patchelf --add-rpath ${makeLibraryPath [pkgs.libayatana-appindicator]} \
             $out/bin/.kasumi-desktop-wrapped
         '';
         meta = {

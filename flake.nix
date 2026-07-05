@@ -60,7 +60,10 @@
       in {
         _module.args = {
           inherit pkgs toolchain version;
-          binaries = import ./nix/binaries.nix {inherit pkgs self version;};
+          binaries = import ./nix/binaries.nix {
+            inherit pkgs self version;
+            inherit (pkgs) lib;
+          };
         };
       };
 

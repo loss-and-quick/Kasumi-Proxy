@@ -10,10 +10,11 @@
   pkgs,
   self,
   version,
+  lib,
 }: let
-  inherit (pkgs) lib;
-  catalog = builtins.fromJSON (builtins.readFile (self + "/scripts/binaries.json"));
-  binaryHashes = builtins.fromJSON (builtins.readFile (self + "/scripts/binary-hashes.json"));
+  inherit (lib) removePrefix;
+  catalog = builtins.fromJSON (builtins.readFile "${self}/scripts/binaries.json");
+  binaryHashes = builtins.fromJSON (builtins.readFile "${self}/scripts/binary-hashes.json");
 
   # The desktop nix build targets linux-amd64; pull that arch's asset from the
   # catalog and compose the standard GitHub release URL.
@@ -21,7 +22,7 @@
   coreSrc = name: let
     c = catalog.${name};
     tag = version.pinnedVersion c.version_var;
-    ver = lib.removePrefix "v" tag;
+    ver = removePrefix "v" tag;
     file = builtins.replaceStrings ["{ver}"] [ver] c.assets.${arch}.file;
   in
     pkgs.fetchurl {
@@ -62,9 +63,9 @@ in {
   desktopBinaries =
     pkgs.runCommand "kasumi-desktop-binaries-${version.appVersion}"
     {
-      nativeBuildInputs = [
-        pkgs.unzip
-        pkgs.gnutar
+      nativeBuildInputs = with pkgs; [
+        unzip
+        gnutar
       ];
     }
     ''
