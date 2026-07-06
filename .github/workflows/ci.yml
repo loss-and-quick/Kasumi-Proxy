@@ -244,38 +244,30 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
         with:
-          toolchain: stable
-          targets: x86_64-unknown-linux-gnu
+          extra-conf: |
+            accept-flake-config = true
 
-      - name: Linux desktop deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
-            libayatana-appindicator3-dev patchelf
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Cachix
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
         with:
-          bun-version: latest
-
-      - name: Build the UI (generate_context embeds frontendDist)
-        run: |
-          bun install --frozen-lockfile
-          ( cd frontend && bun run build )
+          name: kasumi-proxy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Stub the libcronet bundle resource (compile-smoke doesn't bundle)
         run: |
-          # tauri-build validates tauri.linux.conf.json's libcronet.so resource at
-          # compile time; the real lib is fetched only for the bundle. Placeholder.
           mkdir -p src-tauri/binaries
           : > src-tauri/binaries/libcronet.so
 
       - name: Compile the Tauri app (no bundle)
-        run: cargo build -p kasumi-desktop
+        run: |
+          nix develop --command bash -euo pipefail -c '
+            bun install --frozen-lockfile
+            ( cd frontend && bun run build )
+            cargo build -p kasumi-desktop
+          '
 
   # ── Windows desktop compile smoke. Mirrors desktop-linux: the `rust` job runs on
   #    Linux and never compiles the #[cfg(windows)] Platform + Win32 code, so this is
