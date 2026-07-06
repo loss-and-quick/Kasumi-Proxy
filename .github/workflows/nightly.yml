@@ -80,66 +80,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
         with:
-          bun-version: latest
+          extra-conf: |
+            accept-flake-config = true
 
-      - name: Cache Bun dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - name: Cachix
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
         with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-          restore-keys: bun-${{ runner.os }}-
+          name: kasumi-proxy
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Setup Rust (android targets)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          toolchain: stable
-          targets: aarch64-linux-android,x86_64-linux-android
-
-      - name: Install cargo-ndk
-        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
-        with:
-          tool: cargo-ndk
-
-      - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.26'
-          cache: false
-
-      - name: Cache Go build & modules
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-geodat2srs
-          restore-keys: go-${{ runner.os }}-
-
-      - name: Setup NDK
-        id: setup-ndk
-        uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1
-        with:
-          ndk-version: r28
-
-      - name: Install UI dependencies
-        # bun workspace rooted at the repo — install from root against the single bun.lock.
-        run: bun install --frozen-lockfile
-
-      - name: Lint & test
+      - name: Install, lint & test
         run: |
-          bunx biome check
-          bun run frontend/scripts/check-i18n.ts
-          ( cd frontend && bunx vitest run )
+          nix develop .#android --command bash -euo pipefail -c '
+            bun install --frozen-lockfile
+            bunx biome check
+            bun run frontend/scripts/check-i18n.ts
+            ( cd frontend && bunx vitest run )
+          '
 
       - name: Build debug zip
-        env:
-          NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-        # package-release.sh names the zip itself (artifact-name.sh); the run's
-        # commit is carried by the upload artifact name below.
-        run: scripts/package-release.sh
+        run: nix develop .#android --command bash -euo pipefail -c 'scripts/package-release.sh'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
