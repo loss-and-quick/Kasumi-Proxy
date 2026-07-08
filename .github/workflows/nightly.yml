@@ -4,9 +4,15 @@ on:
   schedule:
     - cron: "0 2 * * *"  # every day at 02:00 UTC
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force a build even when change detection finds nothing'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  actions: read  # `gh run list` reads this workflow's own run history (see the gate)
 
 # Per-ref: a newer run on the same branch supersedes the older one, but nightly
 # runs on different branches don't fight over one global slot (a static group
@@ -30,7 +36,17 @@ jobs:
 
       - name: Check whether a nightly build is warranted
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Manual dispatch with force=true always builds, bypassing the gate below
+          # (`inputs.force` is empty on the schedule, so this only fires on a
+          # deliberate workflow_dispatch).
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           # Paths whose changes actually affect a shipped artifact — the Android
           # module or the desktop installers (docs/ci/chore commits must not trigger
           # a nightly). Kept in sync with release.yml's change detection.
@@ -48,21 +64,35 @@ jobs:
             'scripts/package-release.sh'
           )
 
-          # Code commits in the last 24h — keeps the nightly tied to recent work.
-          recent=$(git log --oneline --since="24 hours ago" -- "${paths[@]}" 2>/dev/null | wc -l)
+          # New code since the *previous nightly run*, not a rigid 24h window. The
+          # daily cron anchors the diff to the last time the nightly looked, so a
+          # commit 25h old still counts (the old window silently dropped it) and an
+          # unchanged tree never rebuilds. The previous run's head SHA is read from
+          # this workflow's own run history (built or skipped — a run always records
+          # the HEAD it saw, so the baseline never drifts). No prior run to compare
+          # against (first run under this logic, or history pruned) ⇒ build.
+          prev=$(gh run list --workflow nightly.yml -L 30 \
+            --json databaseId,headSha,createdAt \
+            --jq "map(select(.databaseId != ${GITHUB_RUN_ID})) | sort_by(.createdAt) | last | .headSha // empty")
+          if [ -z "$prev" ] || ! git cat-file -e "$prev^{commit}" 2>/dev/null; then
+            since_nightly=1
+          else
+            since_nightly=$(git log --oneline "$prev"..HEAD -- "${paths[@]}" 2>/dev/null | wc -l)
+          fi
 
           # Code commits since the last release tag. Without this a build still
-          # fires when commits landed during the day *and* a release was cut after
-          # them: those commits are within 24h, but the release already shipped
-          # everything, so last_tag..HEAD has nothing new to build.
+          # fires right after a release: the release-bump commit touches an artifact
+          # path (binary-versions.sh), so it counts as new since the last nightly,
+          # yet the release already shipped everything — last_tag..HEAD has nothing
+          # new to build.
           last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$last_tag" ]; then
-            since_release=$recent
+            since_release=$since_nightly
           else
             since_release=$(git log "$last_tag"..HEAD --oneline -- "${paths[@]}" 2>/dev/null | wc -l)
           fi
 
-          if [ "$recent" -gt 0 ] && [ "$since_release" -gt 0 ]; then
+          if [ "$since_nightly" -gt 0 ] && [ "$since_release" -gt 0 ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
           else
             echo "skip=true" >> "$GITHUB_OUTPUT"
