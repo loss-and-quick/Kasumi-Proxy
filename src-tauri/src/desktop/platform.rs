@@ -228,6 +228,12 @@ impl DesktopPlatform {
             // clears nothing on a clean start.
             routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
 
+            // The escape rule must exist before the core dials anything: its very
+            // first connections (DNS bring-up, the server uplink) already carry the
+            // egress mark. Everything unmarked — any uid, root included — stays
+            // captured by the tun.
+            routing::apply_singbox_escape_rule().await;
+
             self.spawn_core_verify(&core_bin, &cfg, &log).await?;
             return Ok(());
         }

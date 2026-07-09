@@ -10,8 +10,10 @@
 //!     tun-engine-agnostic; the escape is on the core's socket, so swapping the tun
 //!     engine changes nothing here.
 //!   - **self-managed** (sing-box `auto_route`): the core owns the tun and escapes
-//!     via its own `auto_detect_interface` — do *not* call this there, an explicit
-//!     `bind_interface` would defeat the auto-detection and pin a stale interface.
+//!     via the egress fwmark (`route.default_mark` + the desktop's escape ip-rule;
+//!     see `SINGBOX_ESCAPE_MARK`) and its own `auto_detect_interface` — do *not*
+//!     call this there, an explicit `bind_interface` would defeat the
+//!     auto-detection and pin a stale interface.
 //!   - **Android**: a per-uid policy-routing model excludes root from marking, so the
 //!     core (run as root) escapes without an explicit bind. It doesn't call this
 //!     today, but the helper is shared so it can if a future need arises.

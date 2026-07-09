@@ -122,6 +122,56 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
+/// Install the fwmark escape rule for a native sing-box tun. The core stamps its
+/// own egress sockets with `SINGBOX_ESCAPE_MARK` (`route.default_mark`, injected by
+/// `prepare_singbox_config`); this rule — evaluated ahead of every `auto_route`
+/// rule — jumps marked traffic straight to the system's main-table rule (32766),
+/// so the core's uplink and geo-`direct` dials leave via the physical default
+/// route while everything unmarked (any uid, root included) is captured by the
+/// tun. `goto 32766` rather than `lookup main`: were the main lookup to fail
+/// (uplink flap), evaluation must not fall through into the auto_route rules
+/// below and loop the marked traffic. A host may lack the 32766 main rule
+/// altogether (some VPNs delete it), which leaves the `goto` unresolved and the
+/// kernel skips it — the `unreachable` backstop right behind then hard-fails
+/// marked traffic instead of letting it loop. Idempotent — sweeps the
+/// priorities first.
+pub async fn apply_singbox_escape_rule() {
+    use kasumi_core::singbox_config::{
+        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_MARK, SINGBOX_ESCAPE_RULE_PRIO,
+    };
+
+    let prio = SINGBOX_ESCAPE_RULE_PRIO.to_string();
+    let backstop = SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO.to_string();
+    let mark = format!("{SINGBOX_ESCAPE_MARK:#x}");
+    for v6 in [false, true] {
+        let mut base = vec![IP];
+        if v6 {
+            base.push("-6");
+        }
+        for p in [&prio, &backstop] {
+            let mut del = base.clone();
+            del.extend(["rule", "del", "priority", p]);
+            while silent(&del).await == 0 {}
+        }
+        let mut add = base.clone();
+        add.extend([
+            "rule", "add", "priority", &prio, "fwmark", &mark, "goto", "32766",
+        ]);
+        silent(&add).await;
+        let mut add = base;
+        add.extend([
+            "rule",
+            "add",
+            "priority",
+            &backstop,
+            "fwmark",
+            &mark,
+            "unreachable",
+        ]);
+        silent(&add).await;
+    }
+}
+
 /// Tear down orphaned native-sing-box `auto_route` artifacts (policy ip-rules, route
 /// tables, split-default) that a core left behind when it didn't exit cleanly — a
 /// crash or a SIGKILL after the graceful window. sing-box removes these itself on a
@@ -134,8 +184,18 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
 /// untouched. Safe to call in xray mode (no rules at these priorities exist there).
 pub async fn clear_singbox_autoroute(tun_iface_file: &str, tun2_iface_file: &str) {
     use kasumi_core::singbox_config::{
-        SINGBOX_FORCE_RULE_PRIO, SINGBOX_FORCE_TABLE, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
+        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_RULE_PRIO, SINGBOX_FORCE_RULE_PRIO,
+        SINGBOX_FORCE_TABLE, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
     };
+
+    // The fwmark escape rules (goto + unreachable backstop) are ours, not
+    // sing-box's, but they orphan the same way when the data-path dies uncleanly
+    // (both families; v6 exists when installed).
+    for prio in [SINGBOX_ESCAPE_RULE_PRIO, SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO] {
+        let p = prio.to_string();
+        while silent(&[IP, "rule", "del", "priority", &p]).await == 0 {}
+        while silent(&[IP, "-6", "rule", "del", "priority", &p]).await == 0 {}
+    }
 
     // Policy ip-rules: a single priority can carry more than one rule, so loop on
     // `del` until it reports there's nothing left at that priority.
