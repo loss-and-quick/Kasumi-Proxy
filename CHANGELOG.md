@@ -1,3 +1,30 @@
+## v0.4.3 — 2026-07-13
+
+### Core updates
+
+- tun2socks: `v2.6.0` → `v2.7.0`
+
+### Changes
+
+- [`a735813`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a735813) Revert "feat(nix): Force use zsh in devshell"
+- [`d68ee13`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d68ee13) build(nix): single-source rustfmt's edition from Cargo.toml
+- [`cd8824e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/cd8824e) build(nix): single-source the Rust toolchain via rust-toolchain.toml
+- [`d215fc4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d215fc4) fix(nix): exclude generated bun.nix from treefmt
+- [`8d8d3cf`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8d8d3cf) feat(nix): Force use zsh in devshell
+- [`4c96f90`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4c96f90) test(core): guard TS<->Rust core-resolution parity with generated fixtures
+- [`5e0c423`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5e0c423) fix(profiles): route plain/(x)chacha20-poly1305 shadowsocks to the xray tag
+- [`38c4050`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/38c4050) feat(tun): sing-box as an external TUN engine for xray (sidecar bridge)
+- [`11767e3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/11767e3) feat(settings): hev TUN engine option + tuning controls
+- [`45dd592`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/45dd592) build(binaries): fetch hev-socks5-tunnel for desktop and android
+- [`b988269`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b988269) feat(backend,desktop,daemon): launch the hev TUN engine
+- [`518c9a7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/518c9a7) feat(core): hev-socks5-tunnel config builder + external-tun tuning
+- [`db8c066`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/db8c066) fix(desktop): wrap raw-pointer deref in unsafe block (edition 2024)
+- [`b51760a`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b51760a) feat(settings): TUN engine settings section
+- [`7ee2f5d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7ee2f5d) feat(core,desktop,daemon): wire TUN engine into the data path
+- [`cdf3078`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/cdf3078) fix(android): surface tun2socks spawn failure instead of swallowing it
+- [`2401db9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2401db9) feat(core): per-core TUN engine selection (abstraction)
+- [`c8c43f2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c8c43f2) fix(android): defer local-port guard until core is up
+
 ## v0.4.2 — 2026-06-29
 
 ### Core updates
