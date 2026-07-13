@@ -16,6 +16,10 @@ export const RoutingMode_SerializeSchema = z.union([z.literal("custom"), z.liter
 export type RoutingMode_Serialize = z.infer<typeof RoutingMode_SerializeSchema>;
 
 
+export const ProxyModeSchema = z.union([z.literal("pac"), z.literal("proxy-only"), z.literal("system"), z.literal("tun")]);
+export type ProxyMode = z.infer<typeof ProxyModeSchema>;
+
+
 export const ProtocolSchema = z.union([z.literal("anytls"), z.literal("custom"), z.literal("http"), z.literal("hysteria2"), z.literal("naive"), z.literal("shadowsocks"), z.literal("shadowtls"), z.literal("socks"), z.literal("trojan"), z.literal("tuic"), z.literal("vless"), z.literal("vmess"), z.literal("wireguard")]);
 export type Protocol = z.infer<typeof ProtocolSchema>;
 
@@ -46,6 +50,7 @@ export type AppCaptureMode = z.infer<typeof AppCaptureModeSchema>;
 
 export const AdvancedSettings_SerializeSchema = z.object({
 	routingMode: RoutingMode_SerializeSchema,
+	proxyMode: ProxyModeSchema,
 	domainSniffing: z.boolean(),
 	routeOnly: z.boolean(),
 	domainStrategy: DomainStrategySchema,
@@ -101,6 +106,7 @@ export type RoutingMode_Deserialize = z.infer<typeof RoutingMode_DeserializeSche
 
 export const AdvancedSettings_DeserializeSchema = z.object({
 	routingMode: RoutingMode_DeserializeSchema.optional(),
+	proxyMode: ProxyModeSchema.optional(),
 	domainSniffing: z.boolean().optional(),
 	routeOnly: z.boolean().optional(),
 	domainStrategy: DomainStrategySchema.optional(),
