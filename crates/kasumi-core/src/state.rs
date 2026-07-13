@@ -278,9 +278,11 @@ pub struct AdvancedSettings {
     pub tun_connect_timeout_ms: i64,
     /// TCP read/write timeout (ms) (hev `misc.tcp-read-write-timeout`).
     pub tun_tcp_rw_timeout_ms: i64,
-    /// UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`).
+    /// UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`, tun2socks
+    /// `udp-timeout`).
     pub tun_udp_rw_timeout_ms: i64,
-    /// Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`).
+    /// Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`, tun2socks
+    /// `tcp-send/receive-buffer-size`).
     pub tun_tcp_buffer_size: i64,
     /// UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`).
     pub tun_udp_recv_buffer_size: i64,

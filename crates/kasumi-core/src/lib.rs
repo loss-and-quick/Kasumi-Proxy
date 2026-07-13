@@ -35,5 +35,6 @@ pub mod singbox_config;
 pub mod state;
 pub mod sub_apply;
 pub mod tun;
+pub mod tun2socks_config;
 pub mod uid;
 pub mod xray_config;

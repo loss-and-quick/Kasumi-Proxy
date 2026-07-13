@@ -35,7 +35,7 @@ struct Socks5 {
     /// UDP-in-TCP framing, which needs a hev-socks5-server upstream.
     udp: &'static str,
     /// SO_MARK stamped on hev's own upstream sockets so an `ip rule` keeps them out
-    /// of the tunnel — load-bearing on Android (mirrors tun2socks' `-fwmark`), unused
+    /// of the tunnel — load-bearing on Android (mirrors tun2socks' `fwmark`), unused
     /// on desktop (the core binds to the uplink instead), so omitted when `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
     mark: Option<u32>,
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn mark_emitted_when_fwmark_set() {
         // Android passes a fwmark so hev's own sockets escape the tunnel like
-        // tun2socks' `-fwmark`; desktop passes None (see `build_hev_config`).
+        // tun2socks' `fwmark`; desktop passes None (see `build_hev_config`).
         let opts = AdvancedSettings::default().tun_options();
         let yaml = build_hev_config("kt0", crate::tun::TUN_IPV4, None, 10808, Some(255), &opts);
         assert!(yaml.contains("mark: 255"));

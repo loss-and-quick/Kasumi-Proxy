@@ -97,9 +97,15 @@ export type AdvancedSettings_Deserialize = {
 	tunConnectTimeoutMs?: number,
 	/**  TCP read/write timeout (ms) (hev `misc.tcp-read-write-timeout`). */
 	tunTcpRwTimeoutMs?: number,
-	/**  UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`). */
+	/**
+	 *  UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`, tun2socks
+	 *  `udp-timeout`).
+	 */
 	tunUdpRwTimeoutMs?: number,
-	/**  Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`). */
+	/**
+	 *  Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`, tun2socks
+	 *  `tcp-send/receive-buffer-size`).
+	 */
 	tunTcpBufferSize?: number,
 	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
 	tunUdpRecvBufferSize?: number,
@@ -160,9 +166,15 @@ export type AdvancedSettings_Serialize = {
 	tunConnectTimeoutMs: number,
 	/**  TCP read/write timeout (ms) (hev `misc.tcp-read-write-timeout`). */
 	tunTcpRwTimeoutMs: number,
-	/**  UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`). */
+	/**
+	 *  UDP read/write timeout (ms) (hev `misc.udp-read-write-timeout`, tun2socks
+	 *  `udp-timeout`).
+	 */
 	tunUdpRwTimeoutMs: number,
-	/**  Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`). */
+	/**
+	 *  Per-session TCP buffer size in bytes (hev `misc.tcp-buffer-size`, tun2socks
+	 *  `tcp-send/receive-buffer-size`).
+	 */
 	tunTcpBufferSize: number,
 	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
 	tunUdpRecvBufferSize: number,

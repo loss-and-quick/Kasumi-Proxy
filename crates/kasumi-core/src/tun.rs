@@ -1,7 +1,7 @@
 //! Runtime tuning for an external TUN engine, resolved from [`AdvancedSettings`].
 //!
 //! This is the small, transport-shaped subset of the settings an external engine
-//! (hev today) needs to spawn. It is resolved once where the data-path is started
+//! (hev, tun2socks) needs to spawn. It is resolved once where the data-path is started
 //! and travels with the start request — on desktop that means across the privilege
 //! boundary inside `StartDataPath` — so neither the root helper nor the Android
 //! daemon has to re-read the settings schema to build the engine config.
@@ -60,8 +60,9 @@ fn knob(value: i64, default: u32) -> u32 {
     }
 }
 
-/// Map the app log level to hev's vocabulary. hev has no "none"; the quietest it
-/// offers is `error`. An unset app level uses hev's own default, `warn`.
+/// Map the app log level to the engine vocabulary hev and tun2socks share. hev has
+/// no "none"; the quietest both offer is `error`. An unset app level uses `warn`,
+/// hev's own default.
 fn hev_log_level(level: Option<LogLevel>) -> &'static str {
     match level {
         Some(LogLevel::Debug) => "debug",

@@ -16,6 +16,7 @@ use kasumi_core::enums::{CoreEngine, TunEngine, tun_from_marker};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
+use kasumi_core::tun2socks_config::build_tun2socks_config;
 // Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
 use kasumi_core::tun as tun_addr;
 use kasumi_core::tun::TunOptions;
@@ -375,33 +376,27 @@ pub async fn spawn_core(
     .await
 }
 
-/// Spawn tun2socks bridging the tun to the local SOCKS port. `fwmark`, when set,
-/// marks tun2socks' own upstream socket so an `ip rule` can keep it out of the
-/// tunnel — a Linux SO_MARK feature. Windows has no fwmark (its server bypass is a
-/// host route), so it passes `None`.
+/// Spawn tun2socks bridging the tun to the local SOCKS port: render its YAML
+/// config (device/proxy/tuning — see `build_tun2socks_config`), write it next to
+/// the runtime state, then run `<bin> --config <cfg>`. `fwmark`, when set, marks
+/// tun2socks' own upstream socket so an `ip rule` can keep it out of the tunnel —
+/// a Linux SO_MARK feature. Windows has no fwmark (its server bypass is a host
+/// route), so it passes `None`.
 async fn spawn_tun2socks(s: &TunSpawn<'_>) -> std::io::Result<Child> {
-    let mut argv = vec![
+    let yaml = build_tun2socks_config(s.iface, s.socks_port, s.fwmark, s.opts);
+    write_text(s.cfg_path, &yaml).await?;
+    let argv = [
         s.bin.to_owned(),
-        "-device".into(),
-        format!("tun://{}", s.iface),
-        "-proxy".into(),
-        format!("socks5://127.0.0.1:{}", s.socks_port),
-        // The TUN MTU setting applies to every external engine; tun2socks creates
-        // its own tun, so it must be told the MTU here (hev takes it in its YAML).
-        "-mtu".into(),
-        s.opts.mtu.to_string(),
+        "--config".into(),
+        s.cfg_path.to_string_lossy().into_owned(),
     ];
-    if let Some(mark) = s.fwmark {
-        argv.push("-fwmark".into());
-        argv.push(mark.to_string());
-    }
     spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await
 }
 
 /// Everything needed to bring up one external TUN engine, gathered so adding an
 /// engine is a single match arm. `bin` is the engine binary (resolved per-platform);
-/// `cfg_path` is where a config-file engine (hev / sidecar sing-box) writes its
-/// config; `ipv4`/`ipv6` are the host addresses such an engine assigns to the tun it
+/// `cfg_path` is where the engine's rendered config is written; `ipv4`/`ipv6` are
+/// the host addresses a self-addressing engine assigns to the tun it
 /// creates itself; `stack` is the sing-box tun stack (only the sidecar sing-box reads
 /// it); `opts` carries the resolved tuning.
 pub struct TunSpawn<'a> {
