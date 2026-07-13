@@ -76,13 +76,17 @@ futures-util = "0.3"
 # + the named-pipe security descriptor and the one-time install elevation
 # (ShellExecuteW runas) — see desktop/privhelper/{service,connect}.rs, elevate.rs.
 # Win32_System_Power: resume notification callback (desktop/windows/resume.rs).
+# Win32_System_Registry + Win32_Networking_WinInet: the system/pac proxy modes
+# (WinINET registry + refresh) — see desktop/sysproxy.rs.
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.7"
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
+  "Win32_Networking_WinInet",
   "Win32_Security",
   "Win32_Security_Authorization",
   "Win32_System_Power",
+  "Win32_System_Registry",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }

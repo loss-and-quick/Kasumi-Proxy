@@ -352,6 +352,21 @@ impl Platform for DesktopPlatform {
         true
     }
 
+    async fn set_os_proxy(&self, mode: ProxyMode, engine: CoreEngine, socks_port: u16) {
+        // sing-box's mixed inbound serves http on the socks port; xray has a
+        // separate http inbound on the configured http port.
+        let http = if engine == CoreEngine::SingBox {
+            socks_port
+        } else {
+            self.http_port().await
+        };
+        crate::desktop::apply_os_proxy(mode, socks_port, http).await;
+    }
+
+    async fn clear_os_proxy(&self) {
+        crate::desktop::clear_os_proxy().await;
+    }
+
     async fn boot_init(&self) -> anyhow::Result<()> {
         // Unlike Android (RUN_DIR ⊂ DATADIR), the desktop runtime dir may live under
         // a different base (XDG_RUNTIME_DIR / %LOCALAPPDATA%), so both must be created

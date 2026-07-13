@@ -464,8 +464,19 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // On real process exit (the tray's Quit, not a window close), clear any
+            // OS proxy we set so the system isn't left pointing at a dead local
+            // port. Idempotent + a no-op outside `system`/`pac` mode.
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
+            if let tauri::RunEvent::Exit = event {
+                tauri::async_runtime::block_on(desktop::clear_os_proxy());
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+            let _ = event;
+        });
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@
 
 pub mod net;
 pub mod singbox;
+pub mod sysproxy;
 
 // Linux capability handling for the least-privilege data-path helper (drop the
 // bounding set to the caps the data-path needs; raise an ambient CAP_NET_ADMIN so
@@ -39,6 +40,24 @@ mod windows;
 pub(crate) use windows::{WindowsOs as OsSeam, network, resume, routing};
 
 use kasumi_backend::proc::{RunOpts, run};
+use kasumi_core::state::ProxyMode;
+
+/// Align the OS-level proxy with the active `mode`: `system` points the OS proxy at
+/// the core's local inbound; every other mode clears any previously-set one, so a
+/// mode switch can't leave a stale OS proxy behind. Runs in the GUI process (the
+/// logged-in user's session — see [`sysproxy`]), never in the privileged helper.
+pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16) {
+    match mode {
+        ProxyMode::System => sysproxy::set_system_proxy(socks_port, http_port).await,
+        ProxyMode::Tun | ProxyMode::ProxyOnly | ProxyMode::Pac => clear_os_proxy().await,
+    }
+}
+
+/// Undo [`apply_os_proxy`]: clear the OS proxy. Idempotent — safe whatever mode was
+/// (or wasn't) active.
+pub async fn clear_os_proxy() {
+    sysproxy::clear_system_proxy().await;
+}
 
 /// Run a command, discarding output and returning its exit code. The desktop path
 /// shells out to the OS routing tools (`ip` on Linux, `route`/`netsh` on Windows),

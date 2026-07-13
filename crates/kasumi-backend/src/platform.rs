@@ -183,6 +183,19 @@ pub trait Platform: Send + Sync {
     /// Stop the core/helpers and remove all routing. Idempotent.
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()>;
 
+    /// Align the OS-level proxy with `mode` after a successful data-path start:
+    /// point the OS at the core's local inbound where the mode asks for it
+    /// (`system`/`pac`), clear any previously-set one otherwise — so a mode switch
+    /// can't leave a stale OS proxy behind. Runs in the client process (GUI /
+    /// daemon), never the privileged helper: the OS proxy lives in the logged-in
+    /// user's session (gsettings / D-Bus / HKCU), which the helper's isn't.
+    /// Default: no-op for platforms without an OS-proxy integration.
+    async fn set_os_proxy(&self, _mode: ProxyMode, _engine: Engine, _socks_port: u16) {}
+
+    /// Clear any OS-level proxy [`Platform::set_os_proxy`] may have set. Idempotent;
+    /// called on every data-path stop whatever the mode. Default: no-op.
+    async fn clear_os_proxy(&self) {}
+
     /// Current data-path status (liveness + traffic counters).
     async fn service_state(&self) -> anyhow::Result<ServiceState>;
 

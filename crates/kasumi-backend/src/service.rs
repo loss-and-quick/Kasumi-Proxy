@@ -152,16 +152,26 @@ impl Service {
                 let opts = resolve_and_write_config(&*self.platform, id.as_deref())
                     .await
                     .map_err(|e| e.0)?;
+                let (mode, engine, socks_port) = (opts.mode, opts.engine, opts.socks_port);
+                if let Err(e) = self.platform.start_data_path(opts).await {
+                    // A failed bring-up must not leave a previously-set OS proxy
+                    // pointing at a dead port.
+                    self.platform.clear_os_proxy().await;
+                    return Err(e.to_string());
+                }
+                // With the data-path up, align the OS proxy with the mode (set for
+                // system/pac, cleared otherwise — covers mode switches).
+                self.platform.set_os_proxy(mode, engine, socks_port).await;
+                Ok(())
+            }
+            LifecycleCmd::Stop => {
+                // A stopped core must never leave the OS pointed at a dead port.
+                self.platform.clear_os_proxy().await;
                 self.platform
-                    .start_data_path(opts)
+                    .stop_data_path(StopDataPath::default())
                     .await
                     .map_err(|e| e.to_string())
             }
-            LifecycleCmd::Stop => self
-                .platform
-                .stop_data_path(StopDataPath::default())
-                .await
-                .map_err(|e| e.to_string()),
             LifecycleCmd::ReloadAppFilter => {
                 // xray reloads per-uid rules live; sing-box bakes them into the
                 // config and needs a full restart.
