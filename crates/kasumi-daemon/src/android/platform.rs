@@ -34,7 +34,8 @@ use super::paths::{
     CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG, HEV2_CONFIG, IP, PIDFILE,
     RUN_DIR, SERVICE_STARTED_FILE, SERVICE_STATE_FILE, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG,
     SINGBOX_BRIDGE2_CONFIG, SOCKS_PORT_FILE, TUN_ENGINE_FILE, TUN_IFACE_FILE, TUN2_IFACE_FILE,
-    TUN2SOCKS_BIN, TUN2SOCKS_PIDFILE, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
+    TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE, TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE,
+    XRAY_BIN, backend_paths,
 };
 use super::routing::{
     Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_strict_carveouts,
@@ -84,15 +85,16 @@ fn tun_helper_bin(tun: TunEngine) -> &'static str {
     }
 }
 
-/// The config file a config-driven external engine writes at bring-up: hev's YAML or
+/// The config file an external engine writes at bring-up: tun2socks'/hev's YAML or
 /// the sidecar sing-box's JSON, per tun (the `2` variant is the force-proxy tun).
-/// tun2socks takes its args on the command line and ignores this.
 fn tun_cfg_path(tun: TunEngine, force: bool) -> &'static str {
     match (tun, force) {
         (TunEngine::SingboxTun, false) => SINGBOX_BRIDGE_CONFIG,
         (TunEngine::SingboxTun, true) => SINGBOX_BRIDGE2_CONFIG,
-        (_, false) => HEV_CONFIG,
-        (_, true) => HEV2_CONFIG,
+        (TunEngine::Tun2socks, false) => TUN2SOCKS_CONFIG,
+        (TunEngine::Tun2socks, true) => TUN2SOCKS2_CONFIG,
+        (TunEngine::Hev, false) => HEV_CONFIG,
+        (TunEngine::Hev, true) => HEV2_CONFIG,
     }
 }
 

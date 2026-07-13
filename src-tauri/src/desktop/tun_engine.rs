@@ -33,13 +33,13 @@ pub fn helper_bin(tun: TunEngine, p: &DesktopPaths) -> Option<&str> {
     })
 }
 
-/// The config file a config-driven engine writes at bring-up (hev YAML / sidecar
-/// sing-box JSON). tun2socks takes its args on the command line and ignores it.
+/// The config file the engine writes at bring-up (tun2socks/hev YAML, sidecar
+/// sing-box JSON).
 fn cfg_path(tun: TunEngine, p: &DesktopPaths) -> &str {
     match tun {
         TunEngine::Hev => &p.hev_config,
         TunEngine::SingboxTun => &p.singbox_bridge_config,
-        TunEngine::Tun2socks => &p.hev_config,
+        TunEngine::Tun2socks => &p.tun2socks_config,
     }
 }
 

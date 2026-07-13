@@ -35,6 +35,9 @@ pub const HEV_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/hev-socks5-tunnel"
 /// hev writes its generated YAML here (and a second one for the force-proxy tun).
 pub const HEV_CONFIG: &str = "/data/adb/kasumi-proxy/run/hev.yml";
 pub const HEV2_CONFIG: &str = "/data/adb/kasumi-proxy/run/hev2.yml";
+/// tun2socks writes its generated YAML here (and a second one for the force-proxy tun).
+pub const TUN2SOCKS_CONFIG: &str = "/data/adb/kasumi-proxy/run/tun2socks.yml";
+pub const TUN2SOCKS2_CONFIG: &str = "/data/adb/kasumi-proxy/run/tun2socks2.yml";
 /// The sidecar sing-box (SingboxTun engine on a non-sing-box core) writes its
 /// generated bridge JSON here (and a second one for the force-proxy tun).
 pub const SINGBOX_BRIDGE_CONFIG: &str = "/data/adb/kasumi-proxy/run/singbox-bridge.json";

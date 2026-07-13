@@ -73,6 +73,8 @@ pub struct DesktopPaths {
     pub hev_bin: String,
     /// Where hev's generated YAML config is written at bring-up (run_dir).
     pub hev_config: String,
+    /// Where tun2socks' generated YAML config is written at bring-up (run_dir).
+    pub tun2socks_config: String,
     /// Where the sidecar sing-box (SingboxTun engine on a non-sing-box core) writes
     /// its generated bridge config at bring-up (run_dir).
     pub singbox_bridge_config: String,
@@ -216,6 +218,7 @@ impl DesktopPaths {
             tun2socks_bin: format!("{bin}/tun2socks"),
             hev_bin: format!("{bin}/hev-socks5-tunnel"),
             hev_config: format!("{run_dir}/hev.yml"),
+            tun2socks_config: format!("{run_dir}/tun2socks.yml"),
             singbox_bridge_config: format!("{run_dir}/singbox-bridge.json"),
             geodat2srs_bin: format!("{bin}/geodat2srs"),
             backend,
@@ -308,6 +311,7 @@ impl DesktopPaths {
             tun2socks_bin: format!(r"{bin}\tun2socks.exe"),
             hev_bin: format!(r"{bin}\hev-socks5-tunnel.exe"),
             hev_config: format!(r"{run_dir}\hev.yml"),
+            tun2socks_config: format!(r"{run_dir}\tun2socks.yml"),
             singbox_bridge_config: format!(r"{run_dir}\singbox-bridge.json"),
             geodat2srs_bin: format!(r"{bin}\geodat2srs.exe"),
             wintun_dll: format!(r"{bin}\wintun.dll"),
