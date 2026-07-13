@@ -1,5 +1,6 @@
-//! OS system-proxy integration for the `system` proxy mode: point the OS proxy at
-//! the core's local inbound and clear it again.
+//! OS system-proxy integration for the `system` and `pac` proxy modes: point the
+//! OS proxy (or PAC auto-config URL) at the core's local inbound and clear it
+//! again.
 //!
 //! Linux has no single system-proxy store, so the apply/clear pipeline is *layered*
 //! and the layers are NOT mutually exclusive — each reaches a disjoint set of apps:
@@ -21,12 +22,12 @@
 //! (gsettings/D-Bus/HKCU), which root's session isn't.
 
 #[cfg(target_os = "linux")]
-pub use linux::{clear_system_proxy, set_system_proxy};
+pub use linux::{clear_system_proxy, set_pac, set_system_proxy};
 #[cfg(target_os = "windows")]
-pub use windows::{clear_system_proxy, set_system_proxy};
+pub use windows::{clear_system_proxy, set_pac, set_system_proxy};
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-pub use other::{clear_system_proxy, set_system_proxy};
+pub use other::{clear_system_proxy, set_pac, set_system_proxy};
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -61,6 +62,14 @@ mod linux {
         gsettings_manual(socks_port, http_port).await;
         kde_manual(socks_port, http_port).await;
         env_apply(socks_port, http_port).await;
+    }
+
+    /// Point the OS at a PAC auto-config URL (`pac` mode). Env vars can't express a
+    /// PAC, so the env layer is cleared rather than set.
+    pub async fn set_pac(pac_url: &str) {
+        gsettings_auto(pac_url).await;
+        kde_pac(pac_url).await;
+        env_clear().await;
     }
 
     /// Disable every layer. Idempotent — safe whatever was (or wasn't) set.
@@ -104,6 +113,14 @@ mod linux {
         gsettings(&["org.gnome.system.proxy", "ignore-hosts", IGNORE_GNOME]).await;
     }
 
+    async fn gsettings_auto(pac_url: &str) {
+        if !gnome_schema_present().await {
+            return;
+        }
+        gsettings(&["org.gnome.system.proxy", "mode", "auto"]).await;
+        gsettings(&["org.gnome.system.proxy", "autoconfig-url", pac_url]).await;
+    }
+
     async fn gsettings_none() {
         if !gnome_schema_present().await {
             return;
@@ -144,6 +161,15 @@ mod linux {
         kde(w, "httpsProxy", &format!("http://{HOST} {http_port}")).await;
         kde(w, "socksProxy", &format!("socks://{HOST} {socks_port}")).await;
         kde(w, "NoProxyFor", IGNORE_KDE).await;
+        kde_reparse().await;
+    }
+
+    async fn kde_pac(pac_url: &str) {
+        let Some(w) = (is_kde().then(kde_writer)).flatten() else {
+            return;
+        };
+        kde(w, "ProxyType", "2").await;
+        kde(w, "Proxy Config Script", pac_url).await;
         kde_reparse().await;
     }
 
@@ -316,6 +342,12 @@ mod windows {
         refresh();
     }
 
+    pub async fn set_pac(pac_url: &str) {
+        set_dword("ProxyEnable", 0);
+        set_sz("AutoConfigURL", pac_url);
+        refresh();
+    }
+
     pub async fn clear_system_proxy() {
         set_dword("ProxyEnable", 0);
         set_sz("AutoConfigURL", "");
@@ -326,5 +358,6 @@ mod windows {
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 mod other {
     pub async fn set_system_proxy(_socks_port: u16, _http_port: u16) {}
+    pub async fn set_pac(_pac_url: &str) {}
     pub async fn clear_system_proxy() {}
 }
