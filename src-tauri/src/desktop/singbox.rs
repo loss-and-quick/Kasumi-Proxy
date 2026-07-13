@@ -6,6 +6,13 @@
 //! captured by the tun and loops, causing timeouts. The fix is `route_exclude_address`
 //! on the tun inbound with the resolved server IPs (and literal DNS server IPs),
 //! which excludes them at the OS routing level regardless of fwmark.
+//!
+//! On Linux the core's `direct` outbound additionally dials arbitrary
+//! geo-`direct` hosts whose IPs can't be pre-resolved into that exclude list, so
+//! every egress socket is stamped with `route.default_mark` and a fwmark ip-rule
+//! installed above the `auto_route` rules diverts it to the main table (see
+//! `routing::apply_singbox_escape_rule`). Everything unmarked — any uid, root
+//! included — stays captured by the tun.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -50,8 +57,30 @@ fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {
     hosts
 }
 
-/// Inject tun interface names (persisted for traffic counters) and the proxy-server
-/// bypass into the on-disk sing-box config. Returns the main tun iface name.
+/// Stamp every egress socket of the core with the escape fwmark (Linux only; the
+/// option is rejected by sing-box elsewhere, and Windows needs no mark — its tun
+/// escape is route-based). The matching ip-rule is installed by
+/// `routing::apply_singbox_escape_rule`.
+#[cfg(target_os = "linux")]
+fn inject_escape_mark(cfg: &mut Value) -> bool {
+    let Some(route) = cfg.get_mut("route").and_then(Value::as_object_mut) else {
+        return false;
+    };
+    route.insert(
+        "default_mark".into(),
+        kasumi_core::singbox_config::SINGBOX_ESCAPE_MARK.into(),
+    );
+    true
+}
+
+#[cfg(not(target_os = "linux"))]
+fn inject_escape_mark(_cfg: &mut Value) -> bool {
+    false
+}
+
+/// Inject tun interface names (persisted for traffic counters), the proxy-server
+/// bypass and the egress fwmark into the on-disk sing-box config. Returns the main
+/// tun iface name.
 pub async fn prepare_singbox_config(
     cfg_path: &str,
     tun_iface_file: &str,
@@ -67,6 +96,8 @@ pub async fn prepare_singbox_config(
     let raw = read_text(cfg_path).await.unwrap_or_default();
     let mut cfg: Value = serde_json::from_str(&raw).unwrap_or(Value::Null);
 
+    let mut changed = inject_escape_mark(&mut cfg);
+
     let mut excludes = HashSet::new();
     for host in collect_bypass_hosts(&cfg) {
         for ip in resolve_ips(&host).await {
@@ -80,9 +111,12 @@ pub async fn prepare_singbox_config(
             for ib in inbounds {
                 if ib.get("type").and_then(Value::as_str) == Some("tun") {
                     ib["route_exclude_address"] = serde_json::to_value(&list)?;
+                    changed = true;
                 }
             }
         }
+    }
+    if changed {
         write_text(cfg_path, &serde_json::to_string_pretty(&cfg)?).await?;
     }
     Ok(tun)
@@ -110,5 +144,19 @@ mod tests {
         // Loopback and domain DNS servers are excluded from the bypass set.
         assert!(!hosts.contains("127.0.0.1"));
         assert!(!hosts.contains("dns.google"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn escape_mark_lands_in_route_on_linux() {
+        let mut cfg = serde_json::json!({ "route": { "auto_detect_interface": true } });
+        assert!(inject_escape_mark(&mut cfg));
+        assert_eq!(
+            cfg["route"]["default_mark"],
+            kasumi_core::singbox_config::SINGBOX_ESCAPE_MARK
+        );
+        // A config without a route section (not ours) is left alone.
+        let mut cfg = serde_json::json!({ "inbounds": [] });
+        assert!(!inject_escape_mark(&mut cfg));
     }
 }

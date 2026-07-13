@@ -25,6 +25,21 @@ pub const SINGBOX_MAIN_RULE_PRIO: u32 = 9000;
 pub const SINGBOX_FORCE_TABLE: u32 = 2023;
 pub const SINGBOX_FORCE_RULE_PRIO: u32 = 9010;
 
+/// fwmark the desktop native-tun core stamps on its own egress sockets
+/// (`route.default_mark`), and the ip-rule priority that diverts marked traffic to
+/// the system's main table ahead of every `auto_route` rule above — so the core's
+/// uplink and geo-`direct` dials escape the tun while unmarked traffic (any uid,
+/// root included) is captured. Distinct from sing-tun's own auto-redirect marks
+/// (0x2023–0x2025); the rule priority sits below `SINGBOX_MAIN_RULE_PRIO` so it is
+/// evaluated first. The escape rule is a `goto` to the main-table rule (32766);
+/// the backstop priority right behind it carries an `unreachable` rule for the
+/// same mark, catching hosts where 32766 was deleted (the kernel then skips the
+/// unresolved `goto`) so marked traffic hard-fails instead of falling through
+/// into the `auto_route` rules and looping.
+pub const SINGBOX_ESCAPE_MARK: u32 = 0x4b53;
+pub const SINGBOX_ESCAPE_RULE_PRIO: u32 = 8990;
+pub const SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO: u32 = 8991;
+
 fn wire<T: serde::Serialize>(v: &T) -> String {
     serde_json::to_value(v)
         .ok()
@@ -985,14 +1000,20 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     } else {
         json!([crate::tun::TUN_IPV4_CIDR])
     };
-    let mut exclude_uid = vec![0i64];
-    exclude_uid.extend(bypass_uids.iter().copied());
+    // Per-app bypass/force uids only (the Android app filter; empty elsewhere).
+    // Whether uid 0 also skips the tun is a platform decision, not the builder's:
+    // Android's root-binary model adds it in `tune_config` (the daemon and core run
+    // as root and must not be captured), while desktop tunnels root like any other
+    // uid and escapes the core's own traffic by fwmark (`SINGBOX_ESCAPE_MARK`).
+    let mut exclude_uid = bypass_uids;
     exclude_uid.extend(force_uids.iter().copied());
 
     let mut main_tun = singbox_tun_inbound("tun-in", None, main_addr, s.tun_mtu, &stack);
     main_tun["auto_route"] = json!(true);
     main_tun["strict_route"] = json!(s.strict_route);
-    main_tun["exclude_uid"] = json!(exclude_uid);
+    if !exclude_uid.is_empty() {
+        main_tun["exclude_uid"] = json!(exclude_uid);
+    }
     let mut inbounds = vec![main_tun];
     if !force_uids.is_empty() {
         let force_addr = if v6 {
@@ -1381,6 +1402,55 @@ mod tests {
             force_idx < direct_idx,
             "force-in rule must precede direct rules"
         );
+    }
+
+    #[test]
+    fn tun_uid_exclusion_is_app_filter_only() {
+        let p = crate::share::parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        // No app filter → no uid exclusion baked in; whether uid 0 skips the tun
+        // is layered per-platform (Android's tune_config), not builder policy.
+        let cfg = build_singbox_config(
+            &p,
+            &AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let tun = cfg["inbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["tag"] == "tun-in")
+            .expect("tun-in inbound present");
+        assert!(tun.get("exclude_uid").is_none());
+
+        // Bypass + force uids land in exclude_uid; force uids also get their own tun.
+        let mut s = AdvancedSettings::default();
+        s.app_filter
+            .insert("com.a:10001".into(), AppFilterMode::Bypass);
+        s.app_filter
+            .insert("com.b:10002".into(), AppFilterMode::ForceProxy);
+        let cfg = build_singbox_config(
+            &p,
+            &s,
+            &[],
+            std::slice::from_ref(&p),
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let inbounds = cfg["inbounds"].as_array().unwrap();
+        let tun = inbounds.iter().find(|i| i["tag"] == "tun-in").unwrap();
+        let ex: Vec<i64> = tun["exclude_uid"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_i64().unwrap())
+            .collect();
+        assert!(ex.contains(&10001) && ex.contains(&10002));
+        assert!(!ex.contains(&0));
+        let force = inbounds.iter().find(|i| i["tag"] == "tun-force").unwrap();
+        assert_eq!(force["include_uid"][0], 10002);
     }
 
     #[test]

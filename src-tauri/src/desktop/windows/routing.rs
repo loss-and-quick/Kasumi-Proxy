@@ -219,6 +219,11 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
 /// matches the Linux seam so `platform.rs` can call it unconditionally.
 pub async fn clear_singbox_autoroute(_tun_iface_file: &str, _tun2_iface_file: &str) {}
 
+/// No-op on Windows: fwmark is a Linux concept and `route.default_mark` is never
+/// injected off-Linux — the core's escape here is route-based
+/// (`route_exclude_address` + wintun's own binding). Linux-seam signature match.
+pub async fn apply_singbox_escape_rule() {}
+
 /// The physical uplink adapter name of the current default route — what a
 /// helper-spawned test core binds its outbound to (`bind_interface` /
 /// `sockopt.interface`) so it escapes an active tun. `None` when offline.

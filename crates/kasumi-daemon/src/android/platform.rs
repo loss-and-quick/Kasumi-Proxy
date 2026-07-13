@@ -670,17 +670,35 @@ impl Platform for AndroidPlatform {
         if engine != CoreEngine::SingBox {
             return;
         }
-        // The sing-box "system" stack can't grab tun connections in this root-binary
-        // data-path without sing-box's own nftables output redirect, which only
-        // catches network-bound sockets when strict_route is on. An Android specific,
-        // so it lives here, not the neutral builder. (gvisor needs neither.)
+        // Android specifics the neutral builder must not assume, so they live here:
+        // - The sing-box "system" stack can't grab tun connections in this
+        //   root-binary data-path without sing-box's own nftables output redirect,
+        //   which only catches network-bound sockets when strict_route is on.
+        //   (gvisor needs neither.)
+        // - Root (uid 0) must bypass the tun: the daemon and the core itself run as
+        //   root, and this per-uid policy model spares root instead of marking
+        //   sockets. Prepended to every capture-all tun (one with an `include_uid`
+        //   allowlist can't capture root in the first place). Idempotent — a
+        //   config that already excludes root is left as-is.
         if let Some(inbounds) = config.get_mut("inbounds").and_then(|v| v.as_array_mut()) {
             for ib in inbounds {
-                let is_system_tun = ib.get("type").and_then(Value::as_str) == Some("tun")
-                    && ib.get("stack").and_then(Value::as_str) == Some("system");
-                if is_system_tun {
+                if ib.get("type").and_then(Value::as_str) != Some("tun") {
+                    continue;
+                }
+                if ib.get("stack").and_then(Value::as_str) == Some("system") {
                     ib["auto_redirect"] = Value::Bool(true);
                     ib["strict_route"] = Value::Bool(true);
+                }
+                if ib.get("include_uid").is_none() {
+                    let mut uids = ib
+                        .get("exclude_uid")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    if !uids.iter().any(|v| v.as_i64() == Some(0)) {
+                        uids.insert(0, Value::from(0i64));
+                        ib["exclude_uid"] = Value::Array(uids);
+                    }
                 }
             }
         }
@@ -786,5 +804,55 @@ mod tests {
         let (bin, cfg, _) = core_files(CoreEngine::SingBox);
         assert_eq!(bin, SINGBOX_BIN);
         assert!(cfg.ends_with("singbox.json"));
+    }
+
+    #[test]
+    fn tune_config_excludes_root_from_capture_all_tuns() {
+        let platform = AndroidPlatform::new();
+        // A neutral build: gvisor main tun with app-filter bypass uids, plus a
+        // force tun with an include_uid allowlist.
+        let mut cfg = serde_json::json!({ "inbounds": [
+            { "type": "tun", "tag": "tun-in", "stack": "gvisor",
+              "exclude_uid": [10001] },
+            { "type": "tun", "tag": "tun-force", "stack": "gvisor",
+              "include_uid": [10002] },
+            { "type": "mixed", "tag": "socks-in" },
+        ] });
+        platform.tune_config(CoreEngine::SingBox, &mut cfg);
+        // Root heads the exclusion of the capture-all tun (the daemon and core run
+        // as root); the allowlisted force tun and non-tun inbounds are untouched.
+        assert_eq!(
+            cfg["inbounds"][0]["exclude_uid"],
+            serde_json::json!([0, 10001])
+        );
+        assert!(cfg["inbounds"][1].get("exclude_uid").is_none());
+        assert!(cfg["inbounds"][2].get("exclude_uid").is_none());
+        // Tuning is idempotent: a second pass doesn't duplicate the root exclusion.
+        platform.tune_config(CoreEngine::SingBox, &mut cfg);
+        assert_eq!(
+            cfg["inbounds"][0]["exclude_uid"],
+            serde_json::json!([0, 10001])
+        );
+
+        // A capture-all tun without any app filter still gets the root exclusion.
+        let mut cfg = serde_json::json!({ "inbounds": [
+            { "type": "tun", "tag": "tun-in", "stack": "gvisor" },
+        ] });
+        platform.tune_config(CoreEngine::SingBox, &mut cfg);
+        assert_eq!(cfg["inbounds"][0]["exclude_uid"], serde_json::json!([0]));
+
+        // The system stack additionally needs sing-box's own output redirect.
+        let mut cfg = serde_json::json!({ "inbounds": [
+            { "type": "tun", "tag": "tun-in", "stack": "system" },
+        ] });
+        platform.tune_config(CoreEngine::SingBox, &mut cfg);
+        assert_eq!(cfg["inbounds"][0]["auto_redirect"], true);
+        assert_eq!(cfg["inbounds"][0]["strict_route"], true);
+        assert_eq!(cfg["inbounds"][0]["exclude_uid"], serde_json::json!([0]));
+
+        // Xray configs pass through untouched.
+        let mut cfg = serde_json::json!({ "inbounds": [{ "type": "tun" }] });
+        platform.tune_config(CoreEngine::Xray, &mut cfg);
+        assert!(cfg["inbounds"][0].get("exclude_uid").is_none());
     }
 }
