@@ -363,6 +363,13 @@ const ru = {
     "Ядро по умолчанию для каждого протокола. Переопределение в профиле имеет приоритет.",
   "settings.coreLockedSingbox": "только sing-box",
   "settings.routing": "Маршрутизация",
+  "settings.proxyMode": "Режим прокси",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "Только прокси",
+  "settings.proxyModeSystem": "Системный прокси",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "TUN заворачивает весь трафик системы. Остальные режимы поднимают только локальный прокси: «только прокси» открывает локальный порт, «системный прокси» задаёт прокси ОС, PAC отдаёт автонастройку.",
   "settings.routingMode": "Режим маршрутизации",
   "settings.routingGlobal": "Глобальный (через прокси всё)",
   "settings.routingCustom": "Кастомные правила",

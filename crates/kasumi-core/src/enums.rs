@@ -57,6 +57,13 @@ pub fn tun_from_marker(s: &str) -> Option<TunEngine> {
     serde_json::from_value(serde_json::Value::String(s.trim().to_owned())).ok()
 }
 
+/// Marker label recorded when the data-path runs with no tun at all (the
+/// proxy-only/system/pac modes) — deliberately not a [`TunEngine`] variant, since
+/// no engine is involved and no helper process is expected. Watchdog/teardown
+/// readers must treat it as "no helper" rather than falling back to an engine
+/// default.
+pub const NO_TUN_MARKER: &str = "no-tun";
+
 /// Whether a TUN engine reads the userspace tuning knobs (connect / read-write
 /// timeouts, buffer sizes) the settings UI surfaces. Only the hev engine consumes
 /// them today; a new engine must opt in here (exhaustive match), so the UI can't

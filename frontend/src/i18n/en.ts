@@ -350,6 +350,13 @@ const en = {
   "settings.coresHint": "Default core per protocol. Per-profile override takes precedence.",
   "settings.coreLockedSingbox": "sing-box only",
   "settings.routing": "Routing",
+  "settings.proxyMode": "Proxy mode",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "Proxy only",
+  "settings.proxyModeSystem": "System proxy",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "TUN captures all traffic system-wide. The other modes run just a local proxy: proxy only exposes a local port, system proxy sets the OS proxy to it, PAC serves an auto-config script.",
   "settings.routingMode": "Routing mode",
   "settings.routingGlobal": "Global (proxy all)",
   "settings.routingCustom": "Custom rules",

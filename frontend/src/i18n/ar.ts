@@ -414,6 +414,13 @@ const ar = {
     "المحرك الافتراضي لكل بروتوكول. يتقدّم تجاوز الإعداد داخل الملف التعريفي على هذا الخيار.",
   "settings.coreLockedSingbox": "sing-box فقط",
   "settings.routing": "التوجيه",
+  "settings.proxyMode": "وضع الوكيل",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "وكيل فقط",
+  "settings.proxyModeSystem": "وكيل النظام",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "يلتقط TUN كل حركة مرور النظام. تشغّل الأوضاع الأخرى وكيلاً محلياً فقط: «وكيل فقط» يفتح منفذاً محلياً، و«وكيل النظام» يضبط وكيل نظام التشغيل، وPAC يقدّم إعداداً تلقائياً.",
   "settings.routingMode": "وضع التوجيه",
   "settings.routingGlobal": "عام (تمرير كل شيء عبر الوكيل)",
   "settings.routingCustom": "قواعد مخصصة",

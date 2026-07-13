@@ -22,7 +22,7 @@ use crate::fs::read_text;
 use crate::fsjson::read_json;
 use crate::lifecycle::resolve_and_write_config;
 use crate::net::{FetchUrlOptions, fetch_url};
-use crate::platform::{Platform, StartDataPath, StopDataPath};
+use crate::platform::{Platform, StopDataPath};
 use crate::sub_update::{self, LifecycleControl};
 
 /// Result of the latest end-to-end connectivity probe (a fetch through the active
@@ -149,17 +149,11 @@ impl Service {
                     })
                     .await
                     .map_err(|e| e.to_string())?;
-                let (engine, tun, tun_opts, socks_port) =
-                    resolve_and_write_config(&*self.platform, id.as_deref())
-                        .await
-                        .map_err(|e| e.0)?;
+                let opts = resolve_and_write_config(&*self.platform, id.as_deref())
+                    .await
+                    .map_err(|e| e.0)?;
                 self.platform
-                    .start_data_path(StartDataPath {
-                        engine,
-                        tun,
-                        tun_opts,
-                        socks_port,
-                    })
+                    .start_data_path(opts)
                     .await
                     .map_err(|e| e.to_string())
             }
@@ -182,17 +176,11 @@ impl Service {
                         })
                         .await
                         .map_err(|e| e.to_string())?;
-                    let (engine, tun, tun_opts, socks_port) =
-                        resolve_and_write_config(&*self.platform, None)
-                            .await
-                            .map_err(|e| e.0)?;
+                    let opts = resolve_and_write_config(&*self.platform, None)
+                        .await
+                        .map_err(|e| e.0)?;
                     self.platform
-                        .start_data_path(StartDataPath {
-                            engine,
-                            tun,
-                            tun_opts,
-                            socks_port,
-                        })
+                        .start_data_path(opts)
                         .await
                         .map_err(|e| e.to_string())
                 } else if let Some(f) = self.platform.app_filter() {

@@ -344,6 +344,13 @@ const es = {
     "Core predeterminado por protocolo. La anulación por perfil tiene prioridad.",
   "settings.coreLockedSingbox": "solo sing-box",
   "settings.routing": "Enrutamiento",
+  "settings.proxyMode": "Modo de proxy",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "Solo proxy",
+  "settings.proxyModeSystem": "Proxy del sistema",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "TUN captura todo el tráfico del sistema. Los demás modos ejecutan solo un proxy local: solo proxy abre un puerto local, proxy del sistema configura el proxy del SO y PAC sirve una autoconfiguración.",
   "settings.routingMode": "Modo de enrutamiento",
   "settings.routingGlobal": "Global (proxificar todo)",
   "settings.routingCustom": "Reglas personalizadas",

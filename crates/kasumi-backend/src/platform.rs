@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::state::ProxyMode;
 use kasumi_core::tun::TunOptions;
 
 use crate::lifecycle::spawn_core;
@@ -127,12 +128,17 @@ pub struct StartDataPath {
     pub engine: Engine,
     /// The resolved TUN engine. `SingboxTun` uses the core's own tun (native for
     /// sing-box); `Tun2socks`/`Hev` front a socks-only core with an external tun.
+    /// Ignored when `mode` runs no tun.
     pub tun: TunEngine,
     /// External-engine tuning (mtu, buffers, timeouts, …), resolved once from the
     /// settings so the data-path owner (incl. the desktop root helper, across the
     /// privilege boundary) needn't re-read the settings schema.
     pub tun_opts: TunOptions,
     pub socks_port: u16,
+    /// How to capture traffic: `tun` brings up the tun device + routing; the other
+    /// modes run the core on its local socks/http inbound alone. Already
+    /// normalized to `Tun` for platforms without proxy-mode support.
+    pub mode: ProxyMode,
 }
 
 /// Options for [`Platform::stop_data_path`].
@@ -160,6 +166,14 @@ pub trait Platform: Send + Sync {
     /// One-time boot setup before any command is served (sysctl locks, `/dev/net/tun`…).
     async fn boot_init(&self) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    /// Whether this platform honours the non-tun proxy modes (proxy-only / system /
+    /// pac). Where it doesn't (the Android root module), config build and start
+    /// normalize `proxyMode` to `tun` — so e.g. a restored desktop backup carrying
+    /// a non-tun mode can't strip the tun inbound out from under the data path.
+    fn supports_proxy_modes(&self) -> bool {
+        false
     }
 
     /// Spawn the core for `engine` from the on-disk config and route traffic through

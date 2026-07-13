@@ -55,6 +55,10 @@ impl Platform for RemotePlatform {
         self.local.paths()
     }
 
+    fn supports_proxy_modes(&self) -> bool {
+        self.local.supports_proxy_modes()
+    }
+
     async fn boot_init(&self) -> anyhow::Result<()> {
         // The GUI owns datadir (profiles, built configs); create it before the
         // Service writes there. The helper's BootInit creates run_dir + seeds the
@@ -70,6 +74,7 @@ impl Platform for RemotePlatform {
             tun: opts.tun,
             tun_opts: opts.tun_opts,
             socks_port: opts.socks_port,
+            mode: opts.mode,
         })
         .await?;
         Ok(())

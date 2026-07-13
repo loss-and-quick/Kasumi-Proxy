@@ -126,8 +126,10 @@ mod tests {
         // Any non-tun mode drops the native tun inbound even for SingboxTun; the
         // local mixed inbound stays as the whole data path.
         for mode in [ProxyMode::ProxyOnly, ProxyMode::System, ProxyMode::Pac] {
-            let mut s = AdvancedSettings::default();
-            s.proxy_mode = mode;
+            let s = AdvancedSettings {
+                proxy_mode: mode,
+                ..Default::default()
+            };
             let c = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
             assert_eq!(c.tun, TunEngine::SingboxTun);
             let inbounds = c.config["inbounds"].as_array().unwrap();
