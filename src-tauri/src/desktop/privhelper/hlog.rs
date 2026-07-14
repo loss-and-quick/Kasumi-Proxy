@@ -34,7 +34,7 @@ pub fn init(run_dir: &Path) {
             ))
         })
         .chain(std::io::stderr());
-    let dispatch = match fern::log_file(run_dir.join("kasumi-helper.log")) {
+    let dispatch = match fern::log_file(run_dir.join(crate::desktop::paths::HELPER_LOG_FILE)) {
         Ok(file) => dispatch.chain(file),
         Err(_) => dispatch,
     };
