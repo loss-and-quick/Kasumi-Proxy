@@ -15,10 +15,10 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
-use kasumi_backend::fsjson::read_json;
+use kasumi_backend::fsjson::{read_data_path_state, read_json, write_data_path_state};
 use kasumi_backend::lifecycle::{
-    engine_label, missing_rule_sets, random_tun_iface, referenced_srs, running_external_engine,
-    spawn_core, sync_geo_asset, verify_core_alive,
+    missing_rule_sets, random_tun_iface, referenced_srs, spawn_core, sync_geo_asset,
+    verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -27,7 +27,8 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
-use kasumi_core::enums::{CoreEngine, NO_TUN_MARKER, TunEngine};
+use kasumi_core::data_path_state::{DataPathState, TunSelection};
+use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::state::{
     AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
     force_socks_port,
@@ -113,13 +114,27 @@ impl DesktopPlatform {
         }
     }
 
-    async fn set_service_state(&self, value: &str) {
-        let _ = write_text(&self.p.service_state_file, value).await;
+    async fn read_state(&self) -> Option<DataPathState> {
+        read_data_path_state(&self.p.data_path_state_file).await
+    }
+
+    async fn write_state(&self, state: &DataPathState) {
+        let _ = write_data_path_state(&self.p.data_path_state_file, state).await;
+    }
+
+    /// Mark the running data-path failed, keeping the engine/tun it recorded so
+    /// teardown still reaps the right helper. No bail (the caller decides).
+    async fn set_failed(&self, reason: &str) {
+        let mut state = self.read_state().await.unwrap_or_default();
+        state.run = RunState::Failed;
+        state.failure_reason = Some(reason.to_owned());
+        state.started_at = None;
+        self.write_state(&state).await;
     }
 
     async fn fail(&self, reason: &str) -> anyhow::Result<()> {
         log::error!("data-path start failed: {reason}");
-        self.set_service_state(&format!("failed:{reason}")).await;
+        self.set_failed(reason).await;
         anyhow::bail!("{reason}")
     }
 
@@ -168,15 +183,12 @@ impl DesktopPlatform {
     }
 
     /// The external tun helper binary the *running* data-path expects, or `None` when
-    /// the core owns its tun natively. The marker/engine decision is single-sourced in
-    /// [`running_external_engine`] (shared with the Android daemon); this shell only
-    /// supplies the inputs — the marker file and the live core — and maps the
-    /// resolved engine to its binary via [`tun_engine`]. Used by the watchdog and
-    /// teardown to decide whether a live helper is required.
+    /// the core owns its tun natively (or no document is recorded — nothing is up).
+    /// The tun/engine → helper decision is a lookup on the recorded document
+    /// ([`DataPathState::external_tun`]); this shell only maps the resolved engine to
+    /// its binary via [`tun_engine`]. Used by the watchdog and teardown.
     async fn expected_helper_bin(&self) -> Option<String> {
-        let marker = read_text(&self.p.tun_engine_file).await;
-        let engine = self.running_engine().await.map(engine_label);
-        let tun = running_external_engine(marker.as_deref(), engine)?;
+        let tun = self.read_state().await?.external_tun()?;
         tun_engine::helper_bin(tun, &self.p).map(str::to_owned)
     }
 
@@ -243,14 +255,6 @@ impl DesktopPlatform {
         if !exists(&cfg).await {
             return self.fail("config missing").await;
         }
-        // Record which TUN engine this data-path runs (teardown/watchdog read it);
-        // a no-tun mode records the dedicated marker so no helper is expected.
-        let marker = if mode == ProxyMode::Tun {
-            tun_engine::marker(tun)
-        } else {
-            NO_TUN_MARKER.to_owned()
-        };
-        let _ = write_text(&self.p.tun_engine_file, &marker).await;
 
         let cfg_text = read_text(&cfg).await.unwrap_or_default();
         if is_singbox {
@@ -405,10 +409,10 @@ impl Platform for DesktopPlatform {
         // explicitly.
         let _ = tokio::fs::create_dir_all(&self.p.datadir).await;
         let _ = tokio::fs::create_dir_all(&self.p.run_dir).await;
-        // Fresh start: seed the lifecycle state so a stale value can't make status
-        // lie before the first command.
-        self.set_service_state("stopped").await;
-        remove_file(&self.p.service_started_file).await;
+        // Fresh start: seed a stopped document so a stale value can't make status lie
+        // before the first command. Drop the pre-document `service-started` marker.
+        self.write_state(&DataPathState::default()).await;
+        remove_file(&format!("{}/service-started", self.p.run_dir)).await;
         Ok(())
     }
 
@@ -433,26 +437,44 @@ impl Platform for DesktopPlatform {
                 .fail("tun mode needs an app restart (the privileged helper is not running)")
                 .await;
         }
-        self.set_service_state("connecting").await;
-        let _ = write_text(&self.p.socks_port_file, &socks_port.to_string()).await;
+        // Record the bring-up (no started_at yet) so teardown/status know the engine +
+        // tun before the core is even up. A no-tun mode records `NoTun`, so no helper
+        // is ever expected.
+        let tun_sel = if mode == ProxyMode::Tun {
+            TunSelection::Engine(tun)
+        } else {
+            TunSelection::NoTun
+        };
+        self.write_state(&DataPathState {
+            run: RunState::Connecting,
+            engine: Some(engine),
+            tun: tun_sel,
+            socks_port,
+            ..Default::default()
+        })
+        .await;
         let result = self
             .start_proxy(engine, tun, &tun_opts, socks_port, mode)
             .await;
         match result {
             Ok(()) => {
-                let _ = write_text(&self.p.service_started_file, &now_secs().to_string()).await;
-                self.set_service_state("running").await;
+                let mut state = self.read_state().await.unwrap_or_default();
+                // Process-up: `started_at` marks it (vs the bring-up `connecting`) and
+                // drives uptime; the wire state stays Connecting until the Service's
+                // connectivity probe refines it to Connected / NoInternet.
+                state.started_at = Some(now_secs());
+                self.write_state(&state).await;
                 log::info!("data-path running ({engine:?})");
                 Ok(())
             }
             Err(e) => {
-                // Roll back a half-built data-path; keep any "failed:<reason>" label.
-                let cur = read_text(&self.p.service_state_file)
+                // Roll back a half-built data-path; keep any recorded failure reason.
+                let already_failed = self
+                    .read_state()
                     .await
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_default();
-                if !cur.starts_with("failed") {
-                    self.set_service_state(&format!("failed:{e}")).await;
+                    .is_some_and(|s| s.run == RunState::Failed);
+                if !already_failed {
+                    self.set_failed(&e.to_string()).await;
                 }
                 let _ = self
                     .stop_data_path(StopDataPath {
@@ -499,45 +521,33 @@ impl Platform for DesktopPlatform {
         } else {
             remove_file(&self.p.tun2socks_pidfile).await;
         }
-        remove_file(&self.p.tun_engine_file).await;
+        // Drop the pre-document `tun-engine` marker if an old version left one.
+        remove_file(&format!("{}/tun-engine", self.p.run_dir)).await;
         remove_file(&self.p.tun_iface_file).await;
         remove_file(&self.p.tun2_iface_file).await;
         if !opts.keep_service_state {
-            self.set_service_state("stopped").await;
+            self.write_state(&DataPathState::default()).await;
         }
         Ok(())
     }
 
     async fn service_state(&self) -> anyhow::Result<ServiceState> {
-        let raw = read_text(&self.p.service_state_file)
-            .await
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|| "stopped".into());
-        let mut state = RunState::Stopped;
-        let mut error = None;
-        if raw.starts_with("failed") {
-            state = RunState::Failed;
-            let reason = raw
-                .find(':')
-                .map(|i| raw[i + 1..].to_string())
-                .unwrap_or_default();
-            error = (!reason.is_empty()).then_some(reason);
-        } else if raw == "connecting" || raw == "running" {
-            // "running" = process up; the Service's connectivity probe refines this
-            // to Connected / NoInternet.
-            state = RunState::Connecting;
-        }
+        // The recorded document is authoritative for the base state; the Service's
+        // connectivity probe later refines a running Connecting → Connected / NoInternet.
+        let doc = self.read_state().await;
+        let state = doc.as_ref().map(|d| d.run).unwrap_or(RunState::Stopped);
+        let error = doc.as_ref().and_then(|d| d.failure_reason.clone());
         let tun = read_text(&self.p.tun_iface_file)
             .await
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
         let (rx, tx) = self.os.iface_traffic(tun.as_deref()).await;
-        let started = read_pidfile(&self.p.service_started_file).await;
-        let uptime_sec = if raw == "running" && started > 0 {
-            now_secs().saturating_sub(started as u64)
-        } else {
-            0
-        };
+        // `started_at` is set only once the core is up, so uptime counts from there.
+        let uptime_sec = doc
+            .as_ref()
+            .and_then(|d| d.started_at)
+            .map(|s| now_secs().saturating_sub(s))
+            .unwrap_or(0);
         Ok(ServiceState {
             state,
             error,
@@ -563,11 +573,11 @@ impl Platform for DesktopPlatform {
     }
 
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus> {
-        let port = read_text(&self.p.socks_port_file)
+        let port = self
+            .read_state()
             .await
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
-            .and_then(|s| s.parse().ok())
+            .map(|d| d.socks_port)
+            .filter(|&p| p != 0)
             .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
         let pid = read_pidfile(&self.p.pidfile).await;
         let running = pid > 0 && pid_matches_any(pid, &self.p.core_bins()).await;

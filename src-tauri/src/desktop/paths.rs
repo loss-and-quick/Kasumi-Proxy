@@ -61,16 +61,13 @@ pub struct DesktopPaths {
     /// Records the routes we installed (server bypass + split-default) so teardown
     /// is exact and idempotent.
     pub route_state_file: String,
-    pub socks_port_file: String,
     pub engine_file: String,
-    /// Records the resolved TUN engine of the running data-path (its wire label),
-    /// so teardown + the watchdog know which helper (if any) to expect.
-    pub tun_engine_file: String,
+    /// The single persisted record of the running data-path (run state, engine, TUN
+    /// selection, socks port, start time), written helper-side in run_dir.
+    pub data_path_state_file: String,
     pub tun_iface_file: String,
     /// No force-proxy tun on desktop, but `inject_singbox_ifaces` still wants a path.
     pub tun2_iface_file: String,
-    pub service_state_file: String,
-    pub service_started_file: String,
     pub xray_bin: String,
     pub singbox_bin: String,
     pub tun2socks_bin: String,
@@ -128,12 +125,9 @@ impl DesktopPaths {
             PathBuf::from(&self.pidfile),
             PathBuf::from(&self.tun2socks_pidfile),
             PathBuf::from(&self.route_state_file),
-            PathBuf::from(&self.socks_port_file),
-            PathBuf::from(&self.tun_engine_file),
+            PathBuf::from(&self.data_path_state_file),
             PathBuf::from(&self.tun_iface_file),
             PathBuf::from(&self.tun2_iface_file),
-            PathBuf::from(&self.service_state_file),
-            PathBuf::from(&self.service_started_file),
             PathBuf::from(&self.hev_config),
             PathBuf::from(&self.tun2socks_config),
             PathBuf::from(&self.singbox_bridge_config),
@@ -273,13 +267,10 @@ impl DesktopPaths {
             // not the user's datadir, so it never lands as root-owned files there and
             // resets between sessions. `engine_file` and the configs stay in datadir:
             // the unprivileged GUI builds them, the helper only reads them.
-            socks_port_file: format!("{run_dir}/local-socks-port"),
+            data_path_state_file: format!("{run_dir}/data-path.json"),
             engine_file: format!("{datadir}/engine"),
-            tun_engine_file: format!("{run_dir}/tun-engine"),
             tun_iface_file: format!("{run_dir}/tun-iface"),
             tun2_iface_file: format!("{run_dir}/tun2-iface"),
-            service_state_file: format!("{run_dir}/service-state"),
-            service_started_file: format!("{run_dir}/service-started"),
             xray_bin: format!("{bin}/xray"),
             singbox_bin: format!("{bin}/sing-box"),
             tun2socks_bin: format!("{bin}/tun2socks"),
@@ -378,13 +369,10 @@ impl DesktopPaths {
             route_state_file: format!(r"{run_dir}\desktop-route.json"),
             // Ephemeral data-path runtime state lives in run_dir (see the Linux
             // resolve for the rationale); engine_file + configs stay in datadir.
-            socks_port_file: format!(r"{run_dir}\local-socks-port"),
+            data_path_state_file: format!(r"{run_dir}\data-path.json"),
             engine_file: format!(r"{datadir}\engine"),
-            tun_engine_file: format!(r"{run_dir}\tun-engine"),
             tun_iface_file: format!(r"{run_dir}\tun-iface"),
             tun2_iface_file: format!(r"{run_dir}\tun2-iface"),
-            service_state_file: format!(r"{run_dir}\service-state"),
-            service_started_file: format!(r"{run_dir}\service-started"),
             xray_bin: format!(r"{bin}\xray.exe"),
             singbox_bin: format!(r"{bin}\sing-box.exe"),
             tun2socks_bin: format!(r"{bin}\tun2socks.exe"),
@@ -427,9 +415,7 @@ mod tests {
         // Privilege-domain split: ephemeral data-path state (helper-written) under
         // run_dir; GUI-written inputs (engine + configs) under datadir.
         for f in [
-            &p.socks_port_file,
-            &p.service_state_file,
-            &p.service_started_file,
+            &p.data_path_state_file,
             &p.tun_iface_file,
             &p.tun2_iface_file,
             &p.route_state_file,
@@ -458,12 +444,9 @@ mod tests {
             "core.pid",
             "tun2socks.pid",
             "desktop-route.json",
-            "local-socks-port",
-            "tun-engine",
+            "data-path.json",
             "tun-iface",
             "tun2-iface",
-            "service-state",
-            "service-started",
             "hev.yml",
             "tun2socks.yml",
             "singbox-bridge.json",
@@ -515,7 +498,7 @@ mod tests {
         let p = DesktopPaths::resolve().unwrap();
         assert_eq!(p.datadir, "/var/lib/kasumi-proxy");
         assert_eq!(p.run_dir, "/run/kasumi-proxy/run");
-        assert!(p.service_state_file.starts_with("/run/kasumi-proxy/run"));
+        assert!(p.data_path_state_file.starts_with("/run/kasumi-proxy/run"));
         assert!(p.engine_file.starts_with("/var/lib/kasumi-proxy"));
         // SAFETY: see the note on the first `set_var` in this test.
         unsafe {

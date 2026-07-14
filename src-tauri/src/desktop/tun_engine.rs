@@ -8,18 +8,12 @@ use std::path::Path;
 use tokio::process::Child;
 
 use kasumi_backend::lifecycle::{TunSpawn, spawn_tun_engine};
-use kasumi_core::enums::{TunEngine, tun_marker};
+use kasumi_core::enums::TunEngine;
 // TUN_IPV4 is the address a self-addressing engine (hev) assigns to the tun it
 // creates; sourced from core so it can't drift from what the routing layer assigns.
 use kasumi_core::tun::{TUN_IPV4, TunOptions};
 
 use super::paths::DesktopPaths;
-
-/// Wire label persisted to the tun-engine marker file (single-sourced from core's
-/// serde value via [`tun_marker`]).
-pub fn marker(tun: TunEngine) -> String {
-    tun_marker(tun)
-}
 
 /// The external helper binary a running `tun` engine uses. `SingboxTun` here means a
 /// *sidecar* sing-box fronting a non-sing-box core (the native sing-box path never
