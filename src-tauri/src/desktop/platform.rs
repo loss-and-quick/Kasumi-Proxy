@@ -93,8 +93,14 @@ impl DesktopPlatform {
     }
 
     fn build(gated_unprivileged: bool) -> anyhow::Result<Self> {
+        Self::with_paths(DesktopPaths::resolve()?, gated_unprivileged)
+    }
+
+    /// Construct over prebuilt paths, bypassing the env/exe reads in
+    /// [`DesktopPaths::resolve`] (tests inject a tempdir layout).
+    pub(crate) fn with_paths(p: DesktopPaths, gated_unprivileged: bool) -> anyhow::Result<Self> {
         Ok(Self {
-            p: DesktopPaths::resolve()?,
+            p,
             os: OsSeam::new()?,
             gated_unprivileged,
         })
