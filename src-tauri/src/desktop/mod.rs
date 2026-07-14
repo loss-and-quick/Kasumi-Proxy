@@ -48,6 +48,9 @@ use kasumi_core::state::ProxyMode;
 /// every other mode clears any previously-set one, so a mode switch can't leave a
 /// stale OS proxy behind. Runs in the GUI process (the logged-in user's session —
 /// see [`sysproxy`]), never in the privileged helper.
+///
+/// The first apply snapshots the pre-existing OS proxy into an ownership record so a
+/// later clear restores it rather than blanking a proxy the user set by hand.
 pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16) {
     match mode {
         ProxyMode::System => {
@@ -68,8 +71,9 @@ pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16) {
     }
 }
 
-/// Undo [`apply_os_proxy`]: stop the PAC server and clear the OS proxy / PAC
-/// pointer. Idempotent — safe whatever mode was (or wasn't) active.
+/// Undo [`apply_os_proxy`]: stop the PAC server, then restore the OS proxy from the
+/// ownership record and drop it. With no record the current OS proxy isn't ours and
+/// is left untouched. Idempotent — safe whatever mode was (or wasn't) active.
 pub async fn clear_os_proxy() {
     pac::stop().await;
     sysproxy::clear_system_proxy().await;
