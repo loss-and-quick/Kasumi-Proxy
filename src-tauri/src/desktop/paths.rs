@@ -412,12 +412,10 @@ mod tests {
 
     #[test]
     fn resolve_honours_data_home_override() {
-        let _env = crate::env_test_guard();
-        // Set a deterministic data home; resolve must place the datadir under it.
-        // SAFETY (Rust 1.95): set_var/remove_var are unsafe because concurrent env
-        // access is UB. These env-mutating tests pre-date that and were never safe
-        // under cargo's parallel runner — the mutations are kept local + bracketed
-        // (set, assert, restore) so each test is self-consistent.
+        // SAFETY: set_var/remove_var are unsafe under concurrent env access. This is
+        // the only test in the binary that touches env (all path-dependent tests now
+        // inject paths via `from_bases`), so there is no concurrent access; the
+        // mutations are bracketed (set, assert, restore).
         unsafe {
             std::env::set_var("KASUMI_DATA_HOME", "/tmp/kasumi-test-home");
             std::env::set_var("KASUMI_RUNTIME_DIR", "/tmp/kasumi-test-run");
@@ -545,9 +543,8 @@ mod tests {
 
     #[test]
     fn resolve_honours_data_home_override() {
-        let _env = crate::env_test_guard();
-        // SAFETY (Rust 1.95): set_var/remove_var are unsafe; this test is the only
-        // env-touching one in the module and the mutations are bracketed.
+        // SAFETY: this is the only test in the binary that touches env, so there is
+        // no concurrent access; the mutations are bracketed.
         unsafe {
             std::env::set_var("KASUMI_DATA_HOME", r"C:\kasumi-test-home");
             std::env::set_var("KASUMI_RUNTIME_DIR", r"C:\kasumi-test-run");
