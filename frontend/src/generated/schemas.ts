@@ -1178,6 +1178,7 @@ export type ServiceState = z.infer<typeof ServiceStateSchema>;
 export const ServiceStatus_SerializeSchema = z.object({
 	activeId: z.string().nullable(),
 	core: z.string(),
+	pendingRestart: z.boolean(),
 }).and(ServiceState_SerializeSchema);
 export type ServiceStatus_Serialize = z.infer<typeof ServiceStatus_SerializeSchema>;
 
@@ -1185,6 +1186,7 @@ export type ServiceStatus_Serialize = z.infer<typeof ServiceStatus_SerializeSche
 export const ServiceStatus_DeserializeSchema = z.object({
 	activeId: z.string().nullable(),
 	core: z.string(),
+	pendingRestart: z.boolean().optional(),
 }).and(ServiceState_DeserializeSchema);
 export type ServiceStatus_Deserialize = z.infer<typeof ServiceStatus_DeserializeSchema>;
 

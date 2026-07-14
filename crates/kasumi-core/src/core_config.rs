@@ -66,6 +66,38 @@ pub fn active_config_changed(prev: &CoreConfig, next: &CoreConfig) -> bool {
     prev.engine != next.engine || prev.tun != next.tun || prev.config != next.config
 }
 
+/// What a settings mutation means for a running data path, decided against the
+/// build + proxy mode it was started with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MutationEffect {
+    /// The core config is unchanged and the mode moved within the non-tun family
+    /// (proxy-only ↔ system ↔ pac): re-point the OS proxy live, no restart.
+    LiveModeSwitch(ProxyMode),
+    /// Whether the running data path still matches the saved settings — i.e. a
+    /// restart is (`true`) or is no longer (`false`) needed to apply them.
+    SetPending(bool),
+}
+
+/// Compare the running data path's build + mode against the ones the saved
+/// settings now produce. Entering or leaving tun mode always needs a restart
+/// (the tun device and routing are start-time constructs), as does any change
+/// to the resolved core config; a mode move within the non-tun family is the
+/// one live-applicable case.
+pub fn mutation_effect(
+    running: &CoreConfig,
+    running_mode: ProxyMode,
+    next: &CoreConfig,
+    next_mode: ProxyMode,
+) -> MutationEffect {
+    let config_changed = active_config_changed(running, next);
+    let tunness_changed = (running_mode == ProxyMode::Tun) != (next_mode == ProxyMode::Tun);
+    if !config_changed && !tunness_changed && next_mode != running_mode {
+        MutationEffect::LiveModeSwitch(next_mode)
+    } else {
+        MutationEffect::SetPending(config_changed || tunness_changed)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,6 +182,54 @@ mod tests {
         s2.fragment = true; // changes the built config
         let c = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
         assert!(active_config_changed(&a, &c));
+    }
+
+    #[test]
+    fn mutation_effect_decides_live_apply_vs_pending() {
+        let s = AdvancedSettings::default();
+        let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let cfg = build_core_config(&p, &s, &[], std::slice::from_ref(&p), "").unwrap();
+
+        // Identical build + mode: nothing is stale.
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::Tun, &cfg, ProxyMode::Tun),
+            MutationEffect::SetPending(false)
+        );
+
+        // A changed build needs a restart whatever the mode.
+        let mut s2 = s.clone();
+        s2.fragment = true;
+        let changed = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::Tun, &changed, ProxyMode::Tun),
+            MutationEffect::SetPending(true)
+        );
+
+        // Entering/leaving tun mode needs a restart even with an identical build.
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::Tun, &cfg, ProxyMode::System),
+            MutationEffect::SetPending(true)
+        );
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::ProxyOnly, &cfg, ProxyMode::Tun),
+            MutationEffect::SetPending(true)
+        );
+
+        // Same build, mode moved within the non-tun family: live apply.
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::ProxyOnly, &cfg, ProxyMode::System),
+            MutationEffect::LiveModeSwitch(ProxyMode::System)
+        );
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::System, &cfg, ProxyMode::Pac),
+            MutationEffect::LiveModeSwitch(ProxyMode::Pac)
+        );
+
+        // Config change + non-tun mode move: the restart wins over the live apply.
+        assert_eq!(
+            mutation_effect(&cfg, ProxyMode::ProxyOnly, &changed, ProxyMode::System),
+            MutationEffect::SetPending(true)
+        );
     }
 
     #[test]

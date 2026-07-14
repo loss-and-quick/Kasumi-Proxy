@@ -234,6 +234,7 @@ impl Service {
             service,
             active_id,
             core,
+            pending_restart: false,
         })
     }
 

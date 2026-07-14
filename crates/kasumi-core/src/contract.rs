@@ -88,6 +88,10 @@ pub struct ServiceStatus {
     pub active_id: Option<String>,
     /// e.g. `"Xray 25.5.16"`.
     pub core: String,
+    /// The running data path was started from settings that have since changed;
+    /// one restart applies them all. Always `false` while nothing is running.
+    #[serde(default)]
+    pub pending_restart: bool,
 }
 
 /// Reply to the `capabilities` RPC.
@@ -178,6 +182,7 @@ mod tests {
             },
             active_id: Some("p1".into()),
             core: "Xray 25.5.16".into(),
+            pending_restart: true,
         };
         let v: serde_json::Value = serde_json::to_value(&status).unwrap();
         // Flattened ServiceState fields + camelCase keys, error omitted when None.
@@ -188,9 +193,26 @@ mod tests {
         assert_eq!(v["engine"], "xray");
         assert_eq!(v["activeId"], "p1");
         assert_eq!(v["core"], "Xray 25.5.16");
+        assert_eq!(v["pendingRestart"], true);
         assert!(v.get("error").is_none());
         // Round-trips.
         assert_eq!(serde_json::from_value::<ServiceStatus>(v).unwrap(), status);
+    }
+
+    #[test]
+    fn pending_restart_defaults_false_when_absent() {
+        // Frames from senders that predate the field must still parse.
+        let v = serde_json::json!({
+            "state": "connected",
+            "uploadBytes": 0,
+            "downloadBytes": 0,
+            "uptimeSec": 0,
+            "engine": "xray",
+            "activeId": null,
+            "core": "",
+        });
+        let status = serde_json::from_value::<ServiceStatus>(v).unwrap();
+        assert!(!status.pending_restart);
     }
 
     #[test]
