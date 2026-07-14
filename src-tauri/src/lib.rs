@@ -264,9 +264,22 @@ async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     use desktop::privhelper::RemotePlatform;
+    use kasumi_core::state::ProxyMode;
     if std::env::var_os("KASUMI_SKIP_ELEVATION").is_some() {
         log::info!("KASUMI_SKIP_ELEVATION set; running the data-path in-process");
         return Ok(Arc::new(DesktopPlatform::new()?));
+    }
+    // Only tun mode needs the privileged data-path. When the saved mode is a non-tun
+    // one, run the data-path in-process and unprivileged — no helper spawn, no elevation
+    // prompt, no service install/connect. A later live switch to tun is refused with a
+    // restart-required error (the gated platform can't bring a tun up). An unreadable
+    // saved mode defaults to tun, keeping the privileged path.
+    let mode = desktop::saved_proxy_mode();
+    if mode != ProxyMode::Tun {
+        log::info!(
+            "saved proxy mode {mode:?} needs no privileges; running the data-path in-process"
+        );
+        return Ok(Arc::new(DesktopPlatform::new_gated()?));
     }
     let paths = desktop::paths::DesktopPaths::resolve()?;
     log::info!(
@@ -484,6 +497,18 @@ pub fn run() {
         });
 }
 
+/// Serialize the tests that mutate process-global env (`KASUMI_*` overrides): they
+/// share one interpreter, so a concurrent test flipping the same vars — or removing
+/// `HOME` — could make another's path resolution race. Every env-touching test holds
+/// this guard across its set/resolve/remove window. Recovers a poisoned lock (a prior
+/// test panicked mid-section) so one failure doesn't cascade.
+#[cfg(test)]
+pub(crate) fn env_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -501,26 +526,92 @@ mod tests {
     #[tokio::test]
     async fn service_over_desktop_platform_dispatches() {
         let dir = tempfile::tempdir().unwrap();
-        // SAFETY: the tokio runtime's worker threads are not running yet —
-        // `boot_init`/`dispatch` below drive the first awaits — so this write and
-        // the matching `remove_var` at the end touch the env with no concurrent
-        // reader on this process's own threads.
-        unsafe {
-            std::env::set_var("KASUMI_DATA_HOME", dir.path());
-            std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
-        }
-        let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new().unwrap());
+        // The platform captures its paths from env at construction, so the env window
+        // is bracketed under the shared guard and closed before any await — the later
+        // async steps run off the platform's stored paths, not the env.
+        let platform: Arc<dyn Platform> = {
+            let _env = env_test_guard();
+            // SAFETY (Rust 1.95): set_var/remove_var are unsafe; the guard serializes
+            // this against every other env-touching test, and no worker thread reads
+            // env inside this synchronous section.
+            unsafe {
+                std::env::set_var("KASUMI_DATA_HOME", dir.path());
+                std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
+            }
+            let platform = Arc::new(DesktopPlatform::new().unwrap());
+            unsafe {
+                std::env::remove_var("KASUMI_DATA_HOME");
+                std::env::remove_var("KASUMI_RUNTIME_DIR");
+            }
+            platform
+        };
         platform.boot_init().await.unwrap();
         let service = Service::new(platform).await;
 
         // Capabilities is stateless and always answers; the cores just aren't installed.
         let resp = service.dispatch(Command::Capabilities).await.unwrap();
         assert!(matches!(resp, Response::Capabilities(_)));
+    }
 
-        // SAFETY: see the matching `set_var` above — no worker thread is reading env.
-        unsafe {
-            std::env::remove_var("KASUMI_DATA_HOME");
-            std::env::remove_var("KASUMI_RUNTIME_DIR");
-        }
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[tokio::test]
+    async fn gated_platform_refuses_tun_but_admits_non_tun() {
+        use kasumi_backend::platform::StartDataPath;
+        use kasumi_core::contract::RunState;
+        use kasumi_core::enums::{CoreEngine, TunEngine};
+        use kasumi_core::state::{AdvancedSettings, ProxyMode};
+
+        const RESTART: &str =
+            "tun mode needs an app restart (the privileged helper is not running)";
+
+        let dir = tempfile::tempdir().unwrap();
+        // The gated platform captures its paths from env at construction, so the env
+        // window is bracketed under the shared guard and closed before any await — the
+        // later async steps run off the platform's stored paths, not the env.
+        let platform = {
+            let _env = env_test_guard();
+            // SAFETY (Rust 1.95): set_var/remove_var are unsafe; the guard serializes
+            // this against every other env-touching test, and no worker thread reads
+            // env inside this synchronous section.
+            unsafe {
+                std::env::set_var("KASUMI_DATA_HOME", dir.path());
+                std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
+            }
+            let platform = DesktopPlatform::new_gated().unwrap();
+            unsafe {
+                std::env::remove_var("KASUMI_DATA_HOME");
+                std::env::remove_var("KASUMI_RUNTIME_DIR");
+            }
+            platform
+        };
+        platform.boot_init().await.unwrap();
+
+        let start = |mode| StartDataPath {
+            engine: CoreEngine::Xray,
+            tun: TunEngine::Tun2socks,
+            tun_opts: AdvancedSettings::default().tun_options(),
+            socks_port: 10800,
+            mode,
+        };
+
+        // Tun is refused at the gate with the restart-required reason, and the failure
+        // is recorded in the service state.
+        let err = platform
+            .start_data_path(start(ProxyMode::Tun))
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), RESTART);
+        let state = platform.service_state().await.unwrap();
+        assert_eq!(state.state, RunState::Failed);
+        assert_eq!(state.error.as_deref(), Some(RESTART));
+
+        // A non-tun mode passes the gate; with no core binary installed it fails later
+        // with a different reason, proving the gate is mode-selective.
+        let err = platform
+            .start_data_path(start(ProxyMode::ProxyOnly))
+            .await
+            .unwrap_err();
+        assert_ne!(err.to_string(), RESTART);
+        assert_eq!(err.to_string(), "core binary missing");
     }
 }

@@ -71,6 +71,36 @@ pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16, pa
     }
 }
 
+/// The persisted proxy mode, read as a bare field from `<datadir>/app-state.json`,
+/// defaulting to [`ProxyMode::Tun`] on any failure (unresolvable paths, missing file,
+/// parse error, absent key). Deliberately a bare-field read — not the full [`AppState`]
+/// schema/migration — so a legacy or foreign document still answers sanely; the safe
+/// default matches the always-privileged behaviour, so a bad read never silently drops
+/// the helper for a tun user.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub fn saved_proxy_mode() -> ProxyMode {
+    let Ok(paths) = paths::DesktopPaths::resolve() else {
+        return ProxyMode::Tun;
+    };
+    let Ok(text) = std::fs::read_to_string(&paths.backend.app_state) else {
+        return ProxyMode::Tun;
+    };
+    proxy_mode_from_state(&text)
+}
+
+/// Pull `settings.proxyMode` out of a raw `app-state.json` document, falling back to
+/// [`ProxyMode::Tun`] when the JSON is unparseable, the key is absent, or the value
+/// isn't one of the four modes.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn proxy_mode_from_state(text: &str) -> ProxyMode {
+    let extract = || -> Option<ProxyMode> {
+        let doc: serde_json::Value = serde_json::from_str(text).ok()?;
+        let field = doc.get("settings")?.get("proxyMode")?.clone();
+        serde_json::from_value::<ProxyMode>(field).ok()
+    };
+    extract().unwrap_or(ProxyMode::Tun)
+}
+
 /// Undo [`apply_os_proxy`]: stop the PAC server, then restore the OS proxy from the
 /// ownership record and drop it. With no record the current OS proxy isn't ours and
 /// is left untouched. Idempotent — safe whatever mode was (or wasn't) active.
@@ -104,5 +134,40 @@ pub(crate) async fn run_out(args: &[&str]) -> (i32, String) {
             log::debug!("command failed to run ({e}): {}", argv.join(" "));
             (-1, String::new())
         }
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "windows")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proxy_mode_reads_each_value() {
+        for (wire, expected) in [
+            ("tun", ProxyMode::Tun),
+            ("proxy-only", ProxyMode::ProxyOnly),
+            ("system", ProxyMode::System),
+            ("pac", ProxyMode::Pac),
+        ] {
+            let doc = format!(r#"{{"settings":{{"proxyMode":"{wire}"}}}}"#);
+            assert_eq!(proxy_mode_from_state(&doc), expected, "for {wire}");
+        }
+    }
+
+    #[test]
+    fn proxy_mode_defaults_to_tun_on_bad_input() {
+        // Corrupt JSON, absent key, wrong-typed value and an unknown mode all fall
+        // back to the safe always-privileged default.
+        assert_eq!(proxy_mode_from_state("{ not json"), ProxyMode::Tun);
+        assert_eq!(proxy_mode_from_state("{}"), ProxyMode::Tun);
+        assert_eq!(proxy_mode_from_state(r#"{"settings":{}}"#), ProxyMode::Tun);
+        assert_eq!(
+            proxy_mode_from_state(r#"{"settings":{"proxyMode":42}}"#),
+            ProxyMode::Tun
+        );
+        assert_eq!(
+            proxy_mode_from_state(r#"{"settings":{"proxyMode":"bogus"}}"#),
+            ProxyMode::Tun
+        );
     }
 }
