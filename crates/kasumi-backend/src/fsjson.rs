@@ -3,9 +3,26 @@
 
 use std::path::Path;
 
+use kasumi_core::data_path_state::DataPathState;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio::fs;
+
+/// Read the persisted [`DataPathState`], or `None` when it is missing, corrupt or of
+/// another version — all of which mean "no data-path known".
+pub async fn read_data_path_state(path: impl AsRef<Path>) -> Option<DataPathState> {
+    DataPathState::from_json(&fs::read(path).await.ok()?)
+}
+
+/// Write the [`DataPathState`] atomically. The document lives in the run dir and is
+/// written by the privileged owner, so a rename-based write is fine (the ownership
+/// sweep re-chowns it after every start/stop request).
+pub async fn write_data_path_state(
+    path: impl AsRef<Path>,
+    state: &DataPathState,
+) -> std::io::Result<()> {
+    write_text_atomic(path, &state.to_json()).await
+}
 
 /// Parse `path` into `T`, or `None` if it's missing or not valid JSON for `T`.
 pub async fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> Option<T> {

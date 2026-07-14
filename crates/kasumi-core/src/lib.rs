@@ -22,6 +22,7 @@ pub mod config_shared;
 pub mod contract;
 pub mod core;
 pub mod core_config;
+pub mod data_path_state;
 pub mod enums;
 pub mod hev_config;
 pub mod migrate;
