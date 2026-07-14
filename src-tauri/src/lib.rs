@@ -497,18 +497,6 @@ pub fn run() {
         });
 }
 
-/// Serialize the tests that mutate process-global env (`KASUMI_*` overrides): they
-/// share one interpreter, so a concurrent test flipping the same vars — or removing
-/// `HOME` — could make another's path resolution race. Every env-touching test holds
-/// this guard across its set/resolve/remove window. Recovers a poisoned lock (a prior
-/// test panicked mid-section) so one failure doesn't cascade.
-#[cfg(test)]
-pub(crate) fn env_test_guard() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    LOCK.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,28 +511,29 @@ mod tests {
         super::export_generated();
     }
 
+    fn tempdir_paths(dir: &std::path::Path) -> desktop::paths::DesktopPaths {
+        let join = |name: &str| dir.join(name).to_string_lossy().into_owned();
+        let (data, run) = (join("data"), join("run"));
+        // privhelper's serve() toggles the process-global umask while binding its
+        // socket; pin our dirs to 0700 with an explicit chmod so a concurrent test's
+        // window can't strip the exec bit and make boot_init's mkdir EACCES.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+            for d in [&data, &run] {
+                let _ = std::fs::create_dir_all(d);
+                let _ = std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o700));
+            }
+        }
+        desktop::paths::DesktopPaths::from_bases(data, run, &join("bin"), false, None)
+    }
+
     #[tokio::test]
     async fn service_over_desktop_platform_dispatches() {
         let dir = tempfile::tempdir().unwrap();
-        // The platform captures its paths from env at construction, so the env window
-        // is bracketed under the shared guard and closed before any await — the later
-        // async steps run off the platform's stored paths, not the env.
-        let platform: Arc<dyn Platform> = {
-            let _env = env_test_guard();
-            // SAFETY (Rust 1.95): set_var/remove_var are unsafe; the guard serializes
-            // this against every other env-touching test, and no worker thread reads
-            // env inside this synchronous section.
-            unsafe {
-                std::env::set_var("KASUMI_DATA_HOME", dir.path());
-                std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
-            }
-            let platform = Arc::new(DesktopPlatform::new().unwrap());
-            unsafe {
-                std::env::remove_var("KASUMI_DATA_HOME");
-                std::env::remove_var("KASUMI_RUNTIME_DIR");
-            }
-            platform
-        };
+        let platform: Arc<dyn Platform> =
+            Arc::new(DesktopPlatform::with_paths(tempdir_paths(dir.path()), false).unwrap());
         platform.boot_init().await.unwrap();
         let service = Service::new(platform).await;
 
@@ -565,25 +554,7 @@ mod tests {
             "tun mode needs an app restart (the privileged helper is not running)";
 
         let dir = tempfile::tempdir().unwrap();
-        // The gated platform captures its paths from env at construction, so the env
-        // window is bracketed under the shared guard and closed before any await — the
-        // later async steps run off the platform's stored paths, not the env.
-        let platform = {
-            let _env = env_test_guard();
-            // SAFETY (Rust 1.95): set_var/remove_var are unsafe; the guard serializes
-            // this against every other env-touching test, and no worker thread reads
-            // env inside this synchronous section.
-            unsafe {
-                std::env::set_var("KASUMI_DATA_HOME", dir.path());
-                std::env::set_var("KASUMI_RUNTIME_DIR", dir.path());
-            }
-            let platform = DesktopPlatform::new_gated().unwrap();
-            unsafe {
-                std::env::remove_var("KASUMI_DATA_HOME");
-                std::env::remove_var("KASUMI_RUNTIME_DIR");
-            }
-            platform
-        };
+        let platform = DesktopPlatform::with_paths(tempdir_paths(dir.path()), true).unwrap();
         platform.boot_init().await.unwrap();
 
         let start = |mode| StartDataPath {
