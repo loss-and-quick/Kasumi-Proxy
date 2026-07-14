@@ -1,4 +1,5 @@
 use super::*;
+use crate::fs::read_text;
 use crate::platform::{
     BackendPaths, Engine, InstalledCores, PlatformCapabilities, StartDataPath, StopDataPath,
 };
@@ -8,6 +9,7 @@ use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::default_app_state;
 use std::path::PathBuf;
 use std::sync::Mutex as StdMutex;
+use std::sync::atomic::Ordering;
 use tempfile::TempDir;
 
 /// Records lifecycle calls and reports a running state on demand.

@@ -12,8 +12,9 @@ use crate::fsjson::read_json;
 use crate::platform::StopDataPath;
 use crate::sub_update;
 
+use super::Service;
+use super::lifecycle::LifecycleCmd;
 use super::status::Connectivity;
-use super::{LifecycleCmd, Service};
 
 const WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
