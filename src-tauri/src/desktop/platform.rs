@@ -27,9 +27,9 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
-use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::enums::{CoreEngine, NO_TUN_MARKER, TunEngine};
 use kasumi_core::state::{
-    AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
+    AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, force_socks_port,
 };
 use kasumi_core::tun::TunOptions;
 
@@ -179,17 +179,19 @@ impl DesktopPlatform {
         Ok(())
     }
 
-    /// Bring up the data-path for a `(core, tun engine)` pair. The shared steps
-    /// (binary/config checks, geo prep, core spawn) live here; the two genuinely
-    /// different shapes are the native sing-box tun (the core owns it) and an
-    /// external userspace tun (a helper fronts a socks-only core). Engine-specific
-    /// spawn details live solely in [`super::tun_engine`].
+    /// Bring up the data-path for a `(core, tun engine, proxy mode)` triple. The
+    /// shared steps (binary/config checks, geo prep, core spawn) live here; the
+    /// genuinely different shapes are the native sing-box tun (the core owns it),
+    /// an external userspace tun (a helper fronts a socks-only core), and the
+    /// no-tun modes (the core's local inbound is the whole data path).
+    /// Engine-specific spawn details live solely in [`super::tun_engine`].
     async fn start_proxy(
         &self,
         engine: CoreEngine,
         tun: TunEngine,
         tun_opts: &TunOptions,
         socks_port: u16,
+        mode: ProxyMode,
     ) -> anyhow::Result<()> {
         let is_singbox = engine == CoreEngine::SingBox;
         let core_bin = self.core_bin(engine).to_owned();
@@ -209,12 +211,26 @@ impl DesktopPlatform {
         if !exists(&cfg).await {
             return self.fail("config missing").await;
         }
-        // Record which TUN engine this data-path runs (teardown/watchdog read it).
-        let _ = write_text(&self.p.tun_engine_file, &tun_engine::marker(tun)).await;
+        // Record which TUN engine this data-path runs (teardown/watchdog read it);
+        // a no-tun mode records the dedicated marker so no helper is expected.
+        let marker = if mode == ProxyMode::Tun {
+            tun_engine::marker(tun)
+        } else {
+            NO_TUN_MARKER.to_owned()
+        };
+        let _ = write_text(&self.p.tun_engine_file, &marker).await;
 
         let cfg_text = read_text(&cfg).await.unwrap_or_default();
         if is_singbox {
             self.singbox_geo_prep(&cfg_text).await?;
+        }
+
+        if mode != ProxyMode::Tun {
+            // proxy-only/system/pac: the core's local socks/http inbound is the
+            // whole data path — no tun device, no routing rewrite, and nothing to
+            // escape (the core's own egress rides the physical default route).
+            self.spawn_core_verify(&core_bin, &cfg, &log).await?;
+            return Ok(());
         }
 
         if kasumi_core::core::owns_native_tun(engine, tun) {
@@ -332,6 +348,25 @@ impl Platform for DesktopPlatform {
         &self.p.backend
     }
 
+    fn supports_proxy_modes(&self) -> bool {
+        true
+    }
+
+    async fn set_os_proxy(&self, mode: ProxyMode, engine: CoreEngine, socks_port: u16) {
+        // sing-box's mixed inbound serves http on the socks port; xray has a
+        // separate http inbound on the configured http port.
+        let http = if engine == CoreEngine::SingBox {
+            socks_port
+        } else {
+            self.http_port().await
+        };
+        crate::desktop::apply_os_proxy(mode, socks_port, http).await;
+    }
+
+    async fn clear_os_proxy(&self) {
+        crate::desktop::clear_os_proxy().await;
+    }
+
     async fn boot_init(&self) -> anyhow::Result<()> {
         // Unlike Android (RUN_DIR ⊂ DATADIR), the desktop runtime dir may live under
         // a different base (XDG_RUNTIME_DIR / %LOCALAPPDATA%), so both must be created
@@ -351,11 +386,16 @@ impl Platform for DesktopPlatform {
             tun,
             tun_opts,
             socks_port,
+            mode,
         } = opts;
-        log::info!("starting data-path: engine={engine:?} tun={tun:?} socks_port={socks_port}");
+        log::info!(
+            "starting data-path: engine={engine:?} tun={tun:?} socks_port={socks_port} mode={mode:?}"
+        );
         self.set_service_state("connecting").await;
         let _ = write_text(&self.p.socks_port_file, &socks_port.to_string()).await;
-        let result = self.start_proxy(engine, tun, &tun_opts, socks_port).await;
+        let result = self
+            .start_proxy(engine, tun, &tun_opts, socks_port, mode)
+            .await;
         match result {
             Ok(()) => {
                 let _ = write_text(&self.p.service_started_file, &now_secs().to_string()).await;

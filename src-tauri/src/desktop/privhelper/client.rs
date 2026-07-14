@@ -189,6 +189,7 @@ mod tests {
                     tun: kasumi_core::enums::TunEngine::SingboxTun,
                     tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
                     socks_port: 1080,
+                    mode: kasumi_core::state::ProxyMode::Tun,
                 })
                 .await
                 .unwrap(),

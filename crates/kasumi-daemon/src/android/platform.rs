@@ -515,11 +515,14 @@ impl Platform for AndroidPlatform {
     }
 
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
+        // `mode` is ignored: this platform reports no proxy-mode support, so it is
+        // always normalized to tun upstream.
         let StartDataPath {
             engine,
             tun,
             tun_opts,
             socks_port,
+            ..
         } = opts;
         set_service_state("connecting").await;
         let _ = write_text(SOCKS_PORT_FILE, &socks_port.to_string()).await;

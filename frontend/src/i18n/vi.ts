@@ -340,6 +340,13 @@ const vi = {
     "Nhân lõi mặc định cho từng giao thức. Thiết lập ghi đè theo hồ sơ sẽ được ưu tiên.",
   "settings.coreLockedSingbox": "chỉ sing-box",
   "settings.routing": "Định tuyến",
+  "settings.proxyMode": "Chế độ proxy",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "Chỉ proxy",
+  "settings.proxyModeSystem": "Proxy hệ thống",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "TUN tiếp quản toàn bộ lưu lượng hệ thống. Các chế độ khác chỉ chạy proxy cục bộ: chỉ proxy mở một cổng cục bộ, proxy hệ thống đặt proxy của HĐH, PAC cung cấp tệp tự cấu hình.",
   "settings.routingMode": "Chế độ định tuyến",
   "settings.routingGlobal": "Toàn cục (proxy tất cả)",
   "settings.routingCustom": "Quy tắc tùy chỉnh",

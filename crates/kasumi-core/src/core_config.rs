@@ -8,7 +8,7 @@ use crate::core::{resolve_core, resolve_tun};
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::Profile;
 use crate::singbox_config::{SingboxBuildOpts, build_singbox_config};
-use crate::state::{AdvancedSettings, RoutingRule};
+use crate::state::{AdvancedSettings, ProxyMode, RoutingRule};
 use crate::xray_config::build_xray_config;
 
 /// Engine + TUN engine + config JSON for a profile, mirroring what the core is
@@ -42,9 +42,11 @@ pub fn build_core_config(
             routing_rules,
             profiles,
             SingboxBuildOpts {
-                // An external tun engine fronts sing-box → build it socks-only
-                // (no native tun inbound). SingboxTun keeps the native tun.
-                no_tun: tun != TunEngine::SingboxTun,
+                // Socks-only (no native tun inbound) when an external tun engine
+                // fronts sing-box, or when the proxy mode runs no tun at all
+                // (proxy-only/system/pac). SingboxTun in tun mode keeps the native
+                // tun. Xray is already inbound-only either way.
+                no_tun: settings.proxy_mode != ProxyMode::Tun || tun != TunEngine::SingboxTun,
                 srs_dir,
             },
         )?,
@@ -116,6 +118,24 @@ mod tests {
                 .iter()
                 .any(|i| i["type"] == "mixed")
         );
+    }
+
+    #[test]
+    fn non_tun_proxy_mode_is_socks_only() {
+        let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        // Any non-tun mode drops the native tun inbound even for SingboxTun; the
+        // local mixed inbound stays as the whole data path.
+        for mode in [ProxyMode::ProxyOnly, ProxyMode::System, ProxyMode::Pac] {
+            let s = AdvancedSettings {
+                proxy_mode: mode,
+                ..Default::default()
+            };
+            let c = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+            assert_eq!(c.tun, TunEngine::SingboxTun);
+            let inbounds = c.config["inbounds"].as_array().unwrap();
+            assert!(inbounds.iter().all(|i| i["type"] != "tun"), "{mode:?}");
+            assert!(inbounds.iter().any(|i| i["type"] == "mixed"), "{mode:?}");
+        }
     }
 
     #[test]

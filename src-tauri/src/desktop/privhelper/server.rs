@@ -61,6 +61,7 @@ impl Server {
                 tun,
                 tun_opts,
                 socks_port,
+                mode,
             } => to_reply(
                 self.platform
                     .start_data_path(StartDataPath {
@@ -68,6 +69,7 @@ impl Server {
                         tun,
                         tun_opts,
                         socks_port,
+                        mode,
                     })
                     .await,
             ),

@@ -55,6 +55,26 @@ impl Platform for RemotePlatform {
         self.local.paths()
     }
 
+    fn supports_proxy_modes(&self) -> bool {
+        self.local.supports_proxy_modes()
+    }
+
+    // Deliberately answered by the local half, NOT forwarded: the OS proxy lives in
+    // the logged-in user's session (gsettings/D-Bus/HKCU) — the GUI's, not the
+    // helper's root/LocalSystem one.
+    async fn set_os_proxy(
+        &self,
+        mode: kasumi_core::state::ProxyMode,
+        engine: Engine,
+        socks_port: u16,
+    ) {
+        self.local.set_os_proxy(mode, engine, socks_port).await;
+    }
+
+    async fn clear_os_proxy(&self) {
+        self.local.clear_os_proxy().await;
+    }
+
     async fn boot_init(&self) -> anyhow::Result<()> {
         // The GUI owns datadir (profiles, built configs); create it before the
         // Service writes there. The helper's BootInit creates run_dir + seeds the
@@ -70,6 +90,7 @@ impl Platform for RemotePlatform {
             tun: opts.tun,
             tun_opts: opts.tun_opts,
             socks_port: opts.socks_port,
+            mode: opts.mode,
         })
         .await?;
         Ok(())

@@ -336,6 +336,13 @@ const hi = {
   "settings.coresHint": "प्रोटोकॉल के अनुसार डिफ़ॉल्ट कोर। प्रति-प्रोफ़ाइल ओवरराइड को प्राथमिकता मिलेगी।",
   "settings.coreLockedSingbox": "केवल sing-box",
   "settings.routing": "रूटिंग",
+  "settings.proxyMode": "प्रॉक्सी मोड",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "केवल प्रॉक्सी",
+  "settings.proxyModeSystem": "सिस्टम प्रॉक्सी",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "TUN सिस्टम का सारा ट्रैफ़िक कैप्चर करता है। अन्य मोड केवल एक लोकल प्रॉक्सी चलाते हैं: केवल प्रॉक्सी एक लोकल पोर्ट खोलता है, सिस्टम प्रॉक्सी OS प्रॉक्सी सेट करता है, और PAC एक ऑटो-कॉन्फ़िग देता है।",
   "settings.routingMode": "रूटिंग मोड",
   "settings.routingGlobal": "वैश्विक (सब कुछ प्रॉक्सी करें)",
   "settings.routingCustom": "कस्टम नियम",

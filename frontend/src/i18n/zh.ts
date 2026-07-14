@@ -339,6 +339,13 @@ const zh = {
   "settings.coresHint": "为每种协议设置默认核心。按配置的覆盖优先。",
   "settings.coreLockedSingbox": "仅限 sing-box",
   "settings.routing": "路由",
+  "settings.proxyMode": "代理模式",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "仅代理",
+  "settings.proxyModeSystem": "系统代理",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "TUN 接管系统全部流量。其他模式仅运行本地代理：仅代理开放一个本地端口，系统代理将操作系统代理指向它，PAC 提供自动配置脚本。",
   "settings.routingMode": "路由模式",
   "settings.routingGlobal": "全局（全部走代理）",
   "settings.routingCustom": "自定义规则",

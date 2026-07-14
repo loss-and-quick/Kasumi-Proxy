@@ -12,10 +12,10 @@ use regex::Regex;
 use tokio::process::Child;
 
 use kasumi_core::core::default_tun_for;
-use kasumi_core::enums::{CoreEngine, TunEngine, tun_from_marker};
+use kasumi_core::enums::{CoreEngine, NO_TUN_MARKER, TunEngine, tun_from_marker};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
-use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
+use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
 use kasumi_core::tun2socks_config::build_tun2socks_config;
 // Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
 use kasumi_core::tun as tun_addr;
@@ -24,7 +24,7 @@ use kasumi_core::tun::TunOptions;
 use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
 use crate::fsjson::{read_json, write_text_atomic};
-use crate::platform::{Engine, Platform};
+use crate::platform::{Platform, StartDataPath};
 use crate::proc::{RunOpts, pid_matches_bin, run, spawn_logged};
 
 /// Map a hex digit to a consonant so the interface name starts with a letter
@@ -58,12 +58,12 @@ pub fn random_tun_iface() -> String {
 }
 
 /// Build the config for `profile_id` (else the active profile), write it and the
-/// engine marker, and return the engine + resolved TUN engine + external-engine
-/// tuning + local SOCKS port.
+/// engine marker, and return the resolved [`StartDataPath`] (engine, TUN engine,
+/// external-engine tuning, SOCKS port, proxy mode).
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
-) -> Result<(Engine, TunEngine, TunOptions, u16), CommandError> {
+) -> Result<StartDataPath, CommandError> {
     let paths = platform.paths();
     let state = read_json::<AppState>(&paths.app_state).await;
     let id = profile_id
@@ -91,7 +91,20 @@ pub async fn resolve_and_write_config(
         .local_socks_port
         .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
     let tun_opts = settings.tun_options();
-    Ok((engine, tun, tun_opts, socks_port))
+    // Same normalization as the config build: a platform without proxy-mode
+    // support always starts in tun mode.
+    let mode = if platform.supports_proxy_modes() {
+        settings.proxy_mode
+    } else {
+        ProxyMode::Tun
+    };
+    Ok(StartDataPath {
+        engine,
+        tun,
+        tun_opts,
+        socks_port,
+        mode,
+    })
 }
 
 /// The core engine's on-disk label (written to `paths.engine_file` at config
@@ -130,6 +143,11 @@ pub fn running_external_engine(
     marker: Option<&str>,
     engine_label: Option<&str>,
 ) -> Option<TunEngine> {
+    // A no-tun data-path (proxy-only/system/pac) runs no helper whatever the
+    // core — never fall back to the engine default there.
+    if marker.map(str::trim) == Some(NO_TUN_MARKER) {
+        return None;
+    }
     let core = engine_label.and_then(core_from_label);
     if let Some(tun) = marker.map(str::trim).and_then(tun_from_marker) {
         // Native only when we're sure it's the sing-box core with its own tun; an
@@ -522,6 +540,16 @@ mod tests {
             running_external_engine(Some("  \n"), Some("xray")),
             Some(TunEngine::Tun2socks)
         );
+        // A no-tun data-path expects no helper, even for xray (no engine-default
+        // fallback).
+        assert_eq!(
+            running_external_engine(Some(NO_TUN_MARKER), Some("xray")),
+            None
+        );
+        assert_eq!(
+            running_external_engine(Some("no-tun\n"), Some("sing-box")),
+            None
+        );
     }
 
     #[test]
@@ -572,10 +600,12 @@ mod tests {
             .unwrap();
 
         // No explicit id → uses active_id.
-        let (engine, tun, _tun_opts, socks) = resolve_and_write_config(&p, None).await.unwrap();
-        assert_eq!(engine, CoreEngine::Xray);
-        assert_eq!(tun, TunEngine::Tun2socks);
-        assert_eq!(socks, 11080);
+        let opts = resolve_and_write_config(&p, None).await.unwrap();
+        assert_eq!(opts.engine, CoreEngine::Xray);
+        assert_eq!(opts.tun, TunEngine::Tun2socks);
+        assert_eq!(opts.socks_port, 11080);
+        // TestPlatform doesn't support proxy modes → always normalized to tun.
+        assert_eq!(opts.mode, ProxyMode::Tun);
         assert_eq!(
             read_text(&p.paths().engine_file).await.as_deref(),
             Some("xray")

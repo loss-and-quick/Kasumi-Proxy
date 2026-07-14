@@ -229,14 +229,15 @@ pub(crate) async fn build_profile_config(
         .find(|p| p.meta().id == id)
         .ok_or_else(|| err(format!("profile not found: {id}")))?;
     let srs_dir = paths.srs_dir.to_str().unwrap_or("");
-    let mut built = build_core_config(
-        profile,
-        &state.settings,
-        &state.routing_rules,
-        &profiles,
-        srs_dir,
-    )
-    .map_err(err)?;
+    let mut settings = state.settings;
+    if !platform.supports_proxy_modes() {
+        // A platform that always runs tun (the Android root module) must not have
+        // its tun inbound stripped by a non-tun proxyMode — e.g. one restored from
+        // a desktop backup.
+        settings.proxy_mode = kasumi_core::state::ProxyMode::Tun;
+    }
+    let mut built = build_core_config(profile, &settings, &state.routing_rules, &profiles, srs_dir)
+        .map_err(err)?;
     platform.tune_config(built.engine, &mut built.config);
     Ok(built)
 }

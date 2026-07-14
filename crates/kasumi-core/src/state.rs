@@ -140,6 +140,23 @@ pub enum RoutingMode {
     Rules,
 }
 
+/// How the data path captures traffic. `tun` (default) brings up a system-wide
+/// tun device and rewrites OS routing — it needs the privileged data-path. The
+/// other modes run the core with only its local socks/http inbound: `proxy-only`
+/// leaves the OS untouched (the user points apps at the port), `system` sets the
+/// OS proxy to that inbound, `pac` serves a PAC the OS is pointed at. These are
+/// mutually exclusive — there is no "tun + system proxy" combination, since the
+/// tun already captures everything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProxyMode {
+    #[default]
+    Tun,
+    ProxyOnly,
+    System,
+    Pac,
+}
+
 /// Xray domain resolution strategy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
 pub enum DomainStrategy {
@@ -214,6 +231,9 @@ pub enum AppFilterMode {
 #[serde(rename_all = "camelCase", default)]
 pub struct AdvancedSettings {
     pub routing_mode: RoutingMode,
+    /// How the data path captures traffic (tun vs proxy-only/system/pac). Desktop
+    /// only; platforms without proxy-mode support (Android) always run tun.
+    pub proxy_mode: ProxyMode,
     pub domain_sniffing: bool,
     pub route_only: bool,
     pub domain_strategy: DomainStrategy,
@@ -292,6 +312,7 @@ impl Default for AdvancedSettings {
     fn default() -> Self {
         Self {
             routing_mode: RoutingMode::Global,
+            proxy_mode: ProxyMode::Tun,
             domain_sniffing: true,
             route_only: false,
             domain_strategy: DomainStrategy::IpIfNonMatch,

@@ -532,6 +532,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "muxConcurrency": 8,
   "pingConcurrency": 3,
   "preferIpv6": false,
+  "proxyMode": "tun",
   "routeOnly": false,
   "routingMode": "global",
   "singboxStack": "gvisor",

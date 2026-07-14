@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::state::ProxyMode;
 use kasumi_core::tun::TunOptions;
 
 use crate::lifecycle::spawn_core;
@@ -127,12 +128,17 @@ pub struct StartDataPath {
     pub engine: Engine,
     /// The resolved TUN engine. `SingboxTun` uses the core's own tun (native for
     /// sing-box); `Tun2socks`/`Hev` front a socks-only core with an external tun.
+    /// Ignored when `mode` runs no tun.
     pub tun: TunEngine,
     /// External-engine tuning (mtu, buffers, timeouts, …), resolved once from the
     /// settings so the data-path owner (incl. the desktop root helper, across the
     /// privilege boundary) needn't re-read the settings schema.
     pub tun_opts: TunOptions,
     pub socks_port: u16,
+    /// How to capture traffic: `tun` brings up the tun device + routing; the other
+    /// modes run the core on its local socks/http inbound alone. Already
+    /// normalized to `Tun` for platforms without proxy-mode support.
+    pub mode: ProxyMode,
 }
 
 /// Options for [`Platform::stop_data_path`].
@@ -162,12 +168,33 @@ pub trait Platform: Send + Sync {
         Ok(())
     }
 
+    /// Whether this platform honours the non-tun proxy modes (proxy-only / system /
+    /// pac). Where it doesn't (the Android root module), config build and start
+    /// normalize `proxyMode` to `tun` — so e.g. a restored desktop backup carrying
+    /// a non-tun mode can't strip the tun inbound out from under the data path.
+    fn supports_proxy_modes(&self) -> bool {
+        false
+    }
+
     /// Spawn the core for `engine` from the on-disk config and route traffic through
     /// it. Resolves once the core is confirmed up, or errors with a reason.
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()>;
 
     /// Stop the core/helpers and remove all routing. Idempotent.
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()>;
+
+    /// Align the OS-level proxy with `mode` after a successful data-path start:
+    /// point the OS at the core's local inbound where the mode asks for it
+    /// (`system`/`pac`), clear any previously-set one otherwise — so a mode switch
+    /// can't leave a stale OS proxy behind. Runs in the client process (GUI /
+    /// daemon), never the privileged helper: the OS proxy lives in the logged-in
+    /// user's session (gsettings / D-Bus / HKCU), which the helper's isn't.
+    /// Default: no-op for platforms without an OS-proxy integration.
+    async fn set_os_proxy(&self, _mode: ProxyMode, _engine: Engine, _socks_port: u16) {}
+
+    /// Clear any OS-level proxy [`Platform::set_os_proxy`] may have set. Idempotent;
+    /// called on every data-path stop whatever the mode. Default: no-op.
+    async fn clear_os_proxy(&self) {}
 
     /// Current data-path status (liveness + traffic counters).
     async fn service_state(&self) -> anyhow::Result<ServiceState>;

@@ -343,6 +343,13 @@ const pt = {
   "settings.coresHint": "Núcleo padrão por protocolo. A substituição por perfil tem prioridade.",
   "settings.coreLockedSingbox": "somente sing-box",
   "settings.routing": "Roteamento",
+  "settings.proxyMode": "Modo de proxy",
+  "settings.proxyModeTun": "TUN",
+  "settings.proxyModeProxyOnly": "Apenas proxy",
+  "settings.proxyModeSystem": "Proxy do sistema",
+  "settings.proxyModePac": "PAC",
+  "settings.proxyModeHint":
+    "O TUN captura todo o tráfego do sistema. Os outros modos executam apenas um proxy local: apenas proxy abre uma porta local, proxy do sistema define o proxy do SO e o PAC fornece uma autoconfiguração.",
   "settings.routingMode": "Modo de roteamento",
   "settings.routingGlobal": "Global (proxy para tudo)",
   "settings.routingCustom": "Regras personalizadas",

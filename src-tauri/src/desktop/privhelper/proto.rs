@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use kasumi_core::contract::ServiceState;
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::state::ProxyMode;
 use kasumi_core::tun::TunOptions;
 
 /// A privileged operation the GUI asks the helper to perform. Mirrors the
@@ -32,12 +33,15 @@ pub enum PrivRequest {
     /// One-time boot setup (run dirs, seed lifecycle state).
     BootInit,
     /// Bring the data-path up for `engine` with TUN engine `tun`, routing through
-    /// the local SOCKS.
+    /// the local SOCKS. `mode` defaults to tun so a stale helper build without the
+    /// field keeps its old behaviour rather than failing the request.
     StartDataPath {
         engine: CoreEngine,
         tun: TunEngine,
         tun_opts: TunOptions,
         socks_port: u16,
+        #[serde(default)]
+        mode: ProxyMode,
     },
     /// Tear the data-path down. Idempotent.
     StopDataPath { keep_service_state: bool },
@@ -118,12 +122,14 @@ mod tests {
                 tun: TunEngine::Hev,
                 tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
                 socks_port: 10808,
+                mode: ProxyMode::Tun,
             },
             PrivRequest::StartDataPath {
                 engine: CoreEngine::SingBox,
                 tun: TunEngine::SingboxTun,
                 tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
                 socks_port: 1080,
+                mode: ProxyMode::ProxyOnly,
             },
             PrivRequest::StopDataPath {
                 keep_service_state: true,

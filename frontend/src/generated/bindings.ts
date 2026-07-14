@@ -48,6 +48,11 @@ export type AdvancedSettings = AdvancedSettings_Serialize | AdvancedSettings_Des
  */
 export type AdvancedSettings_Deserialize = {
 	routingMode?: RoutingMode_Deserialize,
+	/**
+	 *  How the data path captures traffic (tun vs proxy-only/system/pac). Desktop
+	 *  only; platforms without proxy-mode support (Android) always run tun.
+	 */
+	proxyMode?: ProxyMode,
 	domainSniffing?: boolean,
 	routeOnly?: boolean,
 	domainStrategy?: DomainStrategy,
@@ -117,6 +122,11 @@ export type AdvancedSettings_Deserialize = {
  */
 export type AdvancedSettings_Serialize = {
 	routingMode: RoutingMode_Serialize,
+	/**
+	 *  How the data path captures traffic (tun vs proxy-only/system/pac). Desktop
+	 *  only; platforms without proxy-mode support (Android) always run tun.
+	 */
+	proxyMode: ProxyMode,
 	domainSniffing: boolean,
 	routeOnly: boolean,
 	domainStrategy: DomainStrategy,
@@ -605,6 +615,17 @@ export type Profile = {
 
 /**  The set of supported protocols (the union's discriminant values). */
 export type Protocol = "vless" | "vmess" | "trojan" | "shadowsocks" | "socks" | "http" | "wireguard" | "hysteria2" | "tuic" | "anytls" | "naive" | "shadowtls" | "custom";
+
+/**
+ *  How the data path captures traffic. `tun` (default) brings up a system-wide
+ *  tun device and rewrites OS routing — it needs the privileged data-path. The
+ *  other modes run the core with only its local socks/http inbound: `proxy-only`
+ *  leaves the OS untouched (the user points apps at the port), `system` sets the
+ *  OS proxy to that inbound, `pac` serves a PAC the OS is pointed at. These are
+ *  mutually exclusive — there is no "tun + system proxy" combination, since the
+ *  tun already captures everything.
+ */
+export type ProxyMode = "tun" | "proxy-only" | "system" | "pac";
 
 /**  Raw QUIC transport. */
 export type QuicTransport = {

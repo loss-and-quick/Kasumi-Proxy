@@ -13,6 +13,7 @@ import {
 import type { RoutingRule } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
+import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
 import { ruleIcon, ruleSummary } from "../helpers";
 import { makePresetRule, RULE_PRESETS } from "../rule-presets";
 
@@ -45,6 +46,8 @@ export function RoutingSection({
 }) {
   const t = useT();
   const formatters = useFormatters();
+  // Proxy-mode selection is desktop-only — the Android root module is always tun.
+  const isDesktop = getRuntimeBridgeMode() === "tauri";
   const profileName = (tag: string) => profiles.find((p) => p.id === tag)?.remarks;
   const domainStrategy4Xray = settings.domainStrategy;
   const domainStrategy4Singbox = settings.domainStrategy4Singbox;
@@ -53,6 +56,24 @@ export function RoutingSection({
     <>
       <SectionLabel>{t("settings.routing")}</SectionLabel>
       <Card style={{ padding: 14 }}>
+        {isDesktop && (
+          <>
+            <Select
+              label={t("settings.proxyMode")}
+              value={settings.proxyMode}
+              onChange={(v) => set("proxyMode", v as AdvancedSettings["proxyMode"])}
+              options={[
+                { value: "tun", label: t("settings.proxyModeTun") },
+                { value: "proxy-only", label: t("settings.proxyModeProxyOnly") },
+                { value: "system", label: t("settings.proxyModeSystem") },
+                { value: "pac", label: t("settings.proxyModePac") },
+              ]}
+            />
+            <div style={{ fontSize: 12, color: "var(--on-surface-faint)", margin: "6px 2px 12px" }}>
+              {t("settings.proxyModeHint")}
+            </div>
+          </>
+        )}
         <Select
           label={t("settings.routingMode")}
           value={settings.routingMode}
