@@ -232,6 +232,18 @@ impl DesktopPaths {
             }
         };
 
+        Ok(Self::from_bases(datadir, run_dir, &bin, portable, webroot))
+    }
+
+    /// Build the layout from resolved bases (env-free, deterministic). `datadir`
+    /// and `run_dir` are final directories; `bin` holds the cores.
+    pub(crate) fn from_bases(
+        datadir: String,
+        run_dir: String,
+        bin: &str,
+        portable: bool,
+        webroot: Option<String>,
+    ) -> Self {
         let backend = BackendPaths {
             data_dir: PathBuf::from(&datadir),
             srs_dir: PathBuf::from(&datadir),
@@ -249,7 +261,7 @@ impl DesktopPaths {
             webroot: webroot.map(PathBuf::from),
         };
 
-        Ok(Self {
+        Self {
             datadir: datadir.clone(),
             run_dir: run_dir.clone(),
             portable,
@@ -277,7 +289,7 @@ impl DesktopPaths {
             singbox_bridge_config: format!("{run_dir}/singbox-bridge.json"),
             geodat2srs_bin: format!("{bin}/geodat2srs"),
             backend,
-        })
+        }
     }
 }
 
@@ -328,6 +340,18 @@ impl DesktopPaths {
             None => format!(r"{runtime_base}\kasumi-proxy\run"),
         };
 
+        Ok(Self::from_bases(datadir, run_dir, &bin, portable, webroot))
+    }
+
+    /// Build the layout from resolved bases (env-free, deterministic). `datadir`,
+    /// `run_dir` and `bin` are final, already backslash-normalized directories.
+    pub(crate) fn from_bases(
+        datadir: String,
+        run_dir: String,
+        bin: &str,
+        portable: bool,
+        webroot: Option<String>,
+    ) -> Self {
         let backend = BackendPaths {
             data_dir: PathBuf::from(&datadir),
             srs_dir: PathBuf::from(&datadir),
@@ -345,7 +369,7 @@ impl DesktopPaths {
             webroot: webroot.map(PathBuf::from),
         };
 
-        Ok(Self {
+        Self {
             datadir: datadir.clone(),
             run_dir: run_dir.clone(),
             portable,
@@ -371,7 +395,7 @@ impl DesktopPaths {
             geodat2srs_bin: format!(r"{bin}\geodat2srs.exe"),
             wintun_dll: format!(r"{bin}\wintun.dll"),
             backend,
-        })
+        }
     }
 }
 
