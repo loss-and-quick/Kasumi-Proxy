@@ -415,6 +415,7 @@ const vi = {
   "settings.localPorts": "Cổng cục bộ",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "Cho phép truy cập không phải localhost",
   "settings.allowNonLocalhostSub":
     "Gắn cổng proxy vào 0.0.0.0 để các thiết bị khác trên mạng có thể kết nối",

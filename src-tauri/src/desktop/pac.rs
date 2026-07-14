@@ -11,9 +11,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-/// The loopback port the PAC is served on (socks 10808 / http 10809 / pac 10811).
-pub const DEFAULT_PAC_PORT: u16 = 10811;
-
 static SERVER: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 
 /// The PAC script pointing at the local proxy, DIRECT for loopback/plain hosts.
@@ -26,17 +23,15 @@ fn build_pac(http_port: u16, socks_port: u16) -> String {
     )
 }
 
-/// Start (replacing any prior) the PAC server and return the URL to hand the OS, or
-/// `None` if the port could not be bound.
-pub async fn start(http_port: u16, socks_port: u16) -> Option<String> {
+/// Start (replacing any prior) the PAC server on `pac_port` and return the URL to
+/// hand the OS, or `None` if the port could not be bound.
+pub async fn start(pac_port: u16, http_port: u16, socks_port: u16) -> Option<String> {
     stop().await;
-    let listener = TcpListener::bind(("127.0.0.1", DEFAULT_PAC_PORT))
-        .await
-        .ok()?;
+    let listener = TcpListener::bind(("127.0.0.1", pac_port)).await.ok()?;
     let pac = build_pac(http_port, socks_port);
     let handle = tokio::spawn(serve(listener, pac));
     *SERVER.lock().unwrap() = Some(handle);
-    Some(format!("http://127.0.0.1:{DEFAULT_PAC_PORT}/proxy.pac"))
+    Some(format!("http://127.0.0.1:{pac_port}/proxy.pac"))
 }
 
 /// Stop the PAC server if running. Idempotent. Awaits the aborted task so the
@@ -83,10 +78,10 @@ mod tests {
 
     #[tokio::test]
     async fn serves_the_pac_and_stops() {
-        let url = start(10809, 10808).await.expect("pac server binds");
+        let url = start(10811, 10809, 10808).await.expect("pac server binds");
         assert_eq!(url, "http://127.0.0.1:10811/proxy.pac");
 
-        let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", DEFAULT_PAC_PORT))
+        let mut sock = tokio::net::TcpStream::connect(("127.0.0.1", 10811))
             .await
             .unwrap();
         sock.write_all(b"GET /proxy.pac HTTP/1.0\r\n\r\n")
@@ -99,7 +94,7 @@ mod tests {
 
         // Stop frees the port for a re-bind (restart with new ports).
         stop().await;
-        let again = start(1081, 1080).await.expect("rebind after stop");
+        let again = start(10811, 1081, 1080).await.expect("rebind after stop");
         assert!(again.ends_with("/proxy.pac"));
         stop().await;
     }

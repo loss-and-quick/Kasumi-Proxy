@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { Card, Field, RowToggle, SectionLabel } from "../../../components";
-import { DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT } from "../../../generated/defaults";
+import {
+  DEFAULT_LOCAL_HTTP_PORT,
+  DEFAULT_LOCAL_PAC_PORT,
+  DEFAULT_LOCAL_SOCKS_PORT,
+} from "../../../generated/defaults";
 import { useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
+import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
 
 export function LocalPortsSection({
   settings,
@@ -12,6 +17,8 @@ export function LocalPortsSection({
   set: <K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) => void;
 }) {
   const t = useT();
+  // The PAC port only applies to the desktop `pac` proxy mode.
+  const isDesktop = getRuntimeBridgeMode() === "tauri";
   // Auth is "on" when either credential is set; the toggle reveals the fields and
   // clears both when turned off. Both must be filled for the backend to enforce it.
   const [authOpen, setAuthOpen] = useState(
@@ -42,6 +49,14 @@ export function LocalPortsSection({
             type="number"
             onChange={(value) => set("localHttpPort", Number(value))}
           />
+          {isDesktop && (
+            <Field
+              label={t("settings.pac")}
+              value={settings.localPacPort ?? DEFAULT_LOCAL_PAC_PORT}
+              type="number"
+              onChange={(value) => set("localPacPort", Number(value))}
+            />
+          )}
         </div>
         <RowToggle
           icon="language"

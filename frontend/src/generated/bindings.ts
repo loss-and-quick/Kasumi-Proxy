@@ -77,6 +77,8 @@ export type AdvancedSettings_Deserialize = {
 	logRotateMaxKb?: number,
 	localSocksPort?: number | null,
 	localHttpPort?: number | null,
+	/**  The loopback port the desktop PAC server binds in `pac` mode. */
+	localPacPort?: number | null,
 	remoteDns?: string | null,
 	domesticDns?: string | null,
 	dnsHosts?: string | null,
@@ -151,6 +153,8 @@ export type AdvancedSettings_Serialize = {
 	logRotateMaxKb: number,
 	localSocksPort?: number | null,
 	localHttpPort?: number | null,
+	/**  The loopback port the desktop PAC server binds in `pac` mode. */
+	localPacPort?: number | null,
 	remoteDns?: string | null,
 	domesticDns?: string | null,
 	dnsHosts?: string | null,

@@ -105,7 +105,7 @@ pub fn render() -> String {
     );
     // Test-core ports are backend-internal now (the daemon leases them from one
     // shared pool); the frontend just names a profile, so they're not exported.
-    let nums: [(&str, i64); 3] = [
+    let nums: [(&str, i64); 4] = [
         (
             "DEFAULT_LOCAL_SOCKS_PORT",
             state::DEFAULT_LOCAL_SOCKS_PORT as i64,
@@ -113,6 +113,10 @@ pub fn render() -> String {
         (
             "DEFAULT_LOCAL_HTTP_PORT",
             state::DEFAULT_LOCAL_HTTP_PORT as i64,
+        ),
+        (
+            "DEFAULT_LOCAL_PAC_PORT",
+            state::DEFAULT_LOCAL_PAC_PORT as i64,
         ),
         ("DEFAULT_LOG_ROTATE_KB", state::DEFAULT_LOG_ROTATE_KB),
     ];

@@ -411,6 +411,7 @@ const hi = {
   "settings.localPorts": "स्थानीय पोर्ट",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "गैर-लोकलहोस्ट एक्सेस की अनुमति दें",
   "settings.allowNonLocalhostSub":
     "प्रॉक्सी पोर्ट को 0.0.0.0 से बांधें ताकि नेटवर्क पर अन्य उपकरण कनेक्ट हो सकें",

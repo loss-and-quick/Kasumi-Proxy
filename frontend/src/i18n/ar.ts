@@ -490,6 +490,7 @@ const ar = {
   "settings.localPorts": "المنافذ المحلية",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "السماح بالوصول من غير المضيف المحلي",
   "settings.allowNonLocalhostSub":
     "ربط منافذ الوكيل بـ 0.0.0.0 للسماح للأجهزة الأخرى على الشبكة بالاتصال",

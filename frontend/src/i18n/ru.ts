@@ -440,6 +440,7 @@ const ru = {
   "settings.localPorts": "Локальные порты",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "Разрешить доступ не с localhost",
   "settings.allowNonLocalhostSub":
     "Привязать прокси-порты к 0.0.0.0, чтобы другие устройства в сети могли подключаться",
