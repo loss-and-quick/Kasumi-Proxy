@@ -35,6 +35,7 @@ const pt = {
   "overview.starting_btn": "Iniciando",
   "overview.connecting_btn": "Conectando",
   "overview.restart": "Reiniciar",
+  "overview.pendingRestart": "As configurações mudaram — reinicie para aplicar",
   "tray.show": "Mostrar",
   "tray.quit": "Sair",
   "tray.recent": "Perfis recentes",

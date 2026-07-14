@@ -293,6 +293,7 @@ export const useAppStore = create<Store>((set, get) => {
       uptimeSec: 0,
       core: "",
       engine: null,
+      pendingRestart: false,
     },
 
     async hydrate() {

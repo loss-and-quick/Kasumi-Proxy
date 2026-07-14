@@ -225,6 +225,17 @@ export default function Overview({
           <div
             style={{ display: "flex", gap: 10, padding: "0 16px 16px", flexDirection: "column" }}
           >
+            {up && service.pendingRestart && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <Icon name="restart_alt" style={{ fontSize: 18, color: "var(--warn)" }} />
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--warn)" }}>
+                  {t("overview.pendingRestart")}
+                </span>
+                <Btn sm variant="tonal" onClick={restart} disabled={!onSteady}>
+                  {t("overview.restart")}
+                </Btn>
+              </div>
+            )}
             {needsAssets && !up && (
               <div style={{ fontSize: 13, color: "var(--error)", paddingBottom: 4 }}>
                 {t("overview.needsAssets")}

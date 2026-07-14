@@ -60,9 +60,12 @@ export interface AppEntry {
 }
 
 /** ServiceStatus as screens consume it — keeps `error`, the reason carried by
- *  `failed` (couldn't start) and `noInternet` (up but no connectivity). */
+ *  `failed` (couldn't start) and `noInternet` (up but no connectivity).
+ *  `pendingRestart` is always concrete here (the parser defaults it), even
+ *  though older senders may omit it on the wire. */
 export interface ServiceStatus extends Omit<WireServiceStatus, "state"> {
   state: ServiceState;
+  pendingRestart: boolean;
 }
 
 export type ResourceUpdateMode = FetchMode;
@@ -165,6 +168,7 @@ export function parseServiceStatus(value: unknown): ServiceStatus {
     uptimeSec: typeof s.uptimeSec === "number" ? s.uptimeSec : 0,
     core: typeof s.core === "string" ? s.core : "",
     engine: s.engine === "xray" || s.engine === "sing-box" ? s.engine : null,
+    pendingRestart: s.pendingRestart === true,
   };
 }
 

@@ -748,6 +748,11 @@ export type ServiceStatus_Deserialize = {
 	activeId: string | null,
 	/**  e.g. `"Xray 25.5.16"`. */
 	core: string,
+	/**
+	 *  The running data path was started from settings that have since changed;
+	 *  one restart applies them all. Always `false` while nothing is running.
+	 */
+	pendingRestart?: boolean,
 } & ServiceState_Deserialize;
 
 /**  Full status frame pushed to clients: runtime facts + active profile + core label. */
@@ -755,6 +760,11 @@ export type ServiceStatus_Serialize = {
 	activeId: string | null,
 	/**  e.g. `"Xray 25.5.16"`. */
 	core: string,
+	/**
+	 *  The running data path was started from settings that have since changed;
+	 *  one restart applies them all. Always `false` while nothing is running.
+	 */
+	pendingRestart: boolean,
 } & ServiceState_Serialize;
 
 export type Shadowsocks = {
