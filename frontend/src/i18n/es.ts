@@ -420,6 +420,7 @@ const es = {
   "settings.localPorts": "Puertos locales",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "Permitir acceso no local",
   "settings.allowNonLocalhostSub":
     "Vincular puertos del proxy a 0.0.0.0 para que otros dispositivos de la red puedan conectarse",

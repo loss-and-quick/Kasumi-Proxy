@@ -29,7 +29,8 @@ use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, re
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
 use kasumi_core::enums::{CoreEngine, NO_TUN_MARKER, TunEngine};
 use kasumi_core::state::{
-    AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, force_socks_port,
+    AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
+    force_socks_port,
 };
 use kasumi_core::tun::TunOptions;
 
@@ -103,6 +104,13 @@ impl DesktopPlatform {
             .await
             .and_then(|s| s.settings.local_http_port)
             .unwrap_or(DEFAULT_LOCAL_HTTP_PORT)
+    }
+
+    async fn pac_port(&self) -> u16 {
+        read_json::<AppState>(&self.p.backend.app_state)
+            .await
+            .and_then(|s| s.settings.local_pac_port)
+            .unwrap_or(DEFAULT_LOCAL_PAC_PORT)
     }
 
     async fn core_version(&self, engine: CoreEngine) -> Option<String> {
@@ -360,7 +368,7 @@ impl Platform for DesktopPlatform {
         } else {
             self.http_port().await
         };
-        crate::desktop::apply_os_proxy(mode, socks_port, http).await;
+        crate::desktop::apply_os_proxy(mode, socks_port, http, self.pac_port().await).await;
     }
 
     async fn clear_os_proxy(&self) {

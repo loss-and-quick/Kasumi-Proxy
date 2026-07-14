@@ -419,6 +419,7 @@ const pt = {
   "settings.localPorts": "Portas locais",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "Permitir acesso não local",
   "settings.allowNonLocalhostSub":
     "Vincular portas do proxy a 0.0.0.0 para que outros dispositivos na rede possam conectar",

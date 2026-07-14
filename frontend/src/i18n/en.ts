@@ -425,6 +425,7 @@ const en = {
   "settings.localPorts": "Local ports",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "Allow non-localhost access",
   "settings.allowNonLocalhostSub":
     "Bind proxy ports to 0.0.0.0 so other devices on the network can connect",

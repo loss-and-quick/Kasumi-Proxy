@@ -13,6 +13,7 @@ use crate::profile::{Profile, Protocol};
 // Default local inbound ports used when settings leave them unset.
 pub const DEFAULT_LOCAL_SOCKS_PORT: u16 = 10808;
 pub const DEFAULT_LOCAL_HTTP_PORT: u16 = 10809;
+pub const DEFAULT_LOCAL_PAC_PORT: u16 = 10811;
 
 /// Port of the `force-in` socks inbound, derived from the user-facing ports. This
 /// inbound routes straight to the `proxy` outbound, bypassing the geo rules — used
@@ -265,6 +266,9 @@ pub struct AdvancedSettings {
     pub local_socks_port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_http_port: Option<u16>,
+    /// The loopback port the desktop PAC server binds in `pac` mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_pac_port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remote_dns: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -337,6 +341,7 @@ impl Default for AdvancedSettings {
             log_rotate_max_kb: DEFAULT_LOG_ROTATE_KB,
             local_socks_port: None,
             local_http_port: None,
+            local_pac_port: None,
             remote_dns: None,
             domestic_dns: None,
             dns_hosts: None,
@@ -491,8 +496,26 @@ mod tests {
         assert_eq!(v["tunMtu"], 9000);
         // Optional fields omitted, not null.
         assert!(v.get("localSocksPort").is_none());
+        assert!(v.get("localPacPort").is_none());
         assert!(v.get("logLevel").is_none());
         assert!(v.get("remoteDns").is_none());
+    }
+
+    #[test]
+    fn local_ports_fall_back_to_defaults_when_unset() {
+        let s: AdvancedSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            s.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT),
+            DEFAULT_LOCAL_SOCKS_PORT
+        );
+        assert_eq!(
+            s.local_http_port.unwrap_or(DEFAULT_LOCAL_HTTP_PORT),
+            DEFAULT_LOCAL_HTTP_PORT
+        );
+        assert_eq!(
+            s.local_pac_port.unwrap_or(DEFAULT_LOCAL_PAC_PORT),
+            DEFAULT_LOCAL_PAC_PORT
+        );
     }
 
     #[test]

@@ -414,6 +414,7 @@ const zh = {
   "settings.localPorts": "本地端口",
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
+  "settings.pac": "PAC",
   "settings.allowNonLocalhost": "允许非本机访问",
   "settings.allowNonLocalhostSub": "将代理端口绑定到 0.0.0.0，允许局域网设备连接",
   "settings.dnsRemote": "远程 DNS（经代理）",

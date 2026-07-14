@@ -51,14 +51,14 @@ use kasumi_core::state::ProxyMode;
 ///
 /// The first apply snapshots the pre-existing OS proxy into an ownership record so a
 /// later clear restores it rather than blanking a proxy the user set by hand.
-pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16) {
+pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16, pac_port: u16) {
     match mode {
         ProxyMode::System => {
             pac::stop().await;
             sysproxy::set_system_proxy(socks_port, http_port).await;
         }
         ProxyMode::Pac => {
-            if let Some(url) = pac::start(http_port, socks_port).await {
+            if let Some(url) = pac::start(pac_port, http_port, socks_port).await {
                 sysproxy::set_pac(&url).await;
             } else {
                 // The PAC port is taken — leave the OS un-proxied rather than
