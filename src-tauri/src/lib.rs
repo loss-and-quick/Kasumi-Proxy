@@ -413,6 +413,11 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let build = async {
                     let platform = build_platform().await?;
+                    // A surviving ownership record at GUI start means the previous run
+                    // exited without clearing (a hard crash) — the privileged helper
+                    // already reaped its data-path, so the record is an orphan. Restore
+                    // the user's OS proxy from it before bringing the data-path up.
+                    platform.clear_os_proxy().await;
                     anyhow::Ok(build_service(platform).await)
                 };
                 let built =
@@ -467,9 +472,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
-            // On real process exit (the tray's Quit, not a window close), clear any
-            // OS proxy we set so the system isn't left pointing at a dead local
-            // port. Idempotent + a no-op outside `system`/`pac` mode.
+            // On real process exit (the tray's Quit, not a window close), restore the
+            // OS proxy we set from its ownership record so the system isn't left
+            // pointing at a dead local port. Idempotent + a no-op with no record.
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             if let tauri::RunEvent::Exit = event {
                 tauri::async_runtime::block_on(desktop::clear_os_proxy());
