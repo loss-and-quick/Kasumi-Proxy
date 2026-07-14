@@ -197,7 +197,7 @@ fn bind_pipe(
 /// is torn down, mirroring the Linux helper exiting with the GUI.
 async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyhow::Result<()> {
     let security = PipeSecurity::new()?;
-    let srv = Server::new(platform.clone());
+    let srv = Server::new(platform.clone(), None);
     let mut first = true;
     loop {
         let server = bind_pipe(PIPE_NAME, &security, first)?;
@@ -252,7 +252,7 @@ async fn serve_transient(platform: Arc<dyn Platform>, pipe_name: &str) -> anyhow
     }
     log::info!("GUI connected; serving data-path");
 
-    let srv = Server::new(platform.clone());
+    let srv = Server::new(platform.clone(), None);
     let (read, write) = tokio::io::split(server);
     if let Err(e) = serve_conn(srv, Box::new(read), Box::new(write)).await {
         log::warn!("connection ended: {e}");

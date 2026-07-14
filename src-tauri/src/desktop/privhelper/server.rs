@@ -37,23 +37,34 @@ pub struct Server {
     test_cores: AsyncMutex<HashMap<u64, Box<dyn TestCore>>>,
     /// Monotonic source of test-core handles.
     next_handle: AtomicU64,
+    /// The unprivileged GUI user runtime files created by the privileged data-path
+    /// are handed back to (see [`Server::hand_files_to_owner`]). `None` for a
+    /// same-user run (tests, or a caps-only wrapper already running as the user).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    owner_uid: Option<u32>,
 }
 
 impl Server {
     /// Wrap a platform for serving. `Arc` so connections and orphan-sweep tasks share
-    /// the one registry.
-    pub fn new(platform: Arc<dyn Platform>) -> Arc<Self> {
+    /// the one registry. `owner_uid` is the unprivileged user helper-created files are
+    /// handed to; `None` where the helper runs as that user already.
+    pub fn new(platform: Arc<dyn Platform>, owner_uid: Option<u32>) -> Arc<Self> {
         Arc::new(Self {
             platform,
             test_cores: AsyncMutex::new(HashMap::new()),
             next_handle: AtomicU64::new(1),
+            owner_uid,
         })
     }
 
     /// Map one request to its reply by calling into the platform. Errors are folded
     /// into `PrivReply::Err` so a failing operation never drops the connection.
     pub async fn dispatch(self: &Arc<Self>, req: PrivRequest) -> PrivReply {
-        match req {
+        // Which helper-created files this request leaves behind, resolved before `req`
+        // is consumed so they can be handed to the GUI owner once it is handled.
+        #[cfg(target_os = "linux")]
+        let handoff = Handoff::for_request(&req);
+        let reply = match req {
             PrivRequest::Ping => PrivReply::Pong,
             PrivRequest::BootInit => to_reply(self.platform.boot_init().await),
             PrivRequest::StartDataPath {
@@ -130,6 +141,78 @@ impl Server {
                 }
                 PrivReply::Ok
             }
+        };
+        #[cfg(target_os = "linux")]
+        self.hand_files_to_owner(handoff).await;
+        reply
+    }
+}
+
+/// The helper-created files one request leaves behind, so [`Server::hand_files_to_owner`]
+/// can chown exactly those to the GUI user after the request is handled.
+#[cfg(target_os = "linux")]
+enum Handoff {
+    /// Nothing helper-owned was written.
+    None,
+    /// The ephemeral run-dir state, engine configs and core logs of a data-path
+    /// start/stop (the fixed [`DesktopPaths::helper_owned_files`] list).
+    RuntimeFiles,
+    /// A single test core's log, at the GUI-chosen path carried in the request (its
+    /// port is dynamic, so it can't be part of the fixed list).
+    TestLog(std::path::PathBuf),
+}
+
+#[cfg(target_os = "linux")]
+impl Handoff {
+    fn for_request(req: &PrivRequest) -> Self {
+        match req {
+            PrivRequest::StartDataPath { .. } | PrivRequest::StopDataPath { .. } => {
+                Handoff::RuntimeFiles
+            }
+            PrivRequest::SpawnTestCore { log_path, .. } => {
+                Handoff::TestLog(std::path::PathBuf::from(log_path))
+            }
+            _ => Handoff::None,
+        }
+    }
+}
+
+/// The uid to hand files to: the owner, unless it is our own euid (a caps-only
+/// wrapper runs as the GUI user already, so chowning would be a needless no-op).
+#[cfg(target_os = "linux")]
+fn hand_off_target(owner_uid: Option<u32>, euid: u32) -> Option<u32> {
+    owner_uid.filter(|&uid| uid != euid)
+}
+
+#[cfg(target_os = "linux")]
+impl Server {
+    /// Chown the files a just-handled request left behind to the GUI owner, so an
+    /// unprivileged in-process data-path owner can later read/replace them without
+    /// EACCES. Missing files and per-file errors are ignored (a file the run didn't
+    /// create is normal); only the exact known paths are touched — the regular-file
+    /// list plus the app-owned run-dir inodes (create/unlink rights live on the
+    /// containing directory, not the files) — never anything recursive.
+    async fn hand_files_to_owner(&self, handoff: Handoff) {
+        let Some(uid) = hand_off_target(self.owner_uid, unsafe { libc::geteuid() }) else {
+            return;
+        };
+        let files = match handoff {
+            Handoff::None => return,
+            Handoff::TestLog(path) => vec![path],
+            Handoff::RuntimeFiles => match crate::desktop::paths::DesktopPaths::resolve() {
+                Ok(paths) => {
+                    let mut all = paths.helper_owned_files();
+                    all.extend(paths.helper_owned_dirs());
+                    all
+                }
+                Err(e) => {
+                    log::warn!("could not resolve paths to hand files to the owner: {e}");
+                    return;
+                }
+            },
+        };
+        for path in files {
+            let _ = std::os::unix::fs::chown(&path, Some(uid), None);
         }
     }
 }
@@ -172,7 +255,7 @@ pub async fn serve(
     let listener = listener?;
     restrict_socket(socket_path, owner_uid)
         .with_context(|| format!("restrict privilege-helper socket {socket_path}"))?;
-    let server = Server::new(platform);
+    let server = Server::new(platform, owner_uid);
     loop {
         let (stream, _addr) = listener.accept().await?;
         let (read, write) = tokio::io::split(stream);
@@ -234,4 +317,41 @@ pub(crate) async fn serve_conn(
         write.flush().await?;
     }
     Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hand_off_skips_a_same_user_run() {
+        // No owner set, or an owner that is our own euid: nothing to hand off.
+        assert_eq!(hand_off_target(None, 1000), None);
+        assert_eq!(hand_off_target(Some(1000), 1000), None);
+        // A distinct unprivileged owner while running privileged: hand off to it.
+        assert_eq!(hand_off_target(Some(1000), 0), Some(1000));
+    }
+
+    #[test]
+    fn handoff_classifies_file_creating_requests() {
+        assert!(matches!(
+            Handoff::for_request(&PrivRequest::StopDataPath {
+                keep_service_state: false,
+            }),
+            Handoff::RuntimeFiles
+        ));
+        let log = "/run/kasumi/test-43210.log";
+        assert!(matches!(
+            Handoff::for_request(&PrivRequest::SpawnTestCore {
+                engine: kasumi_backend::platform::Engine::Xray,
+                cfg_path: "/run/kasumi/test-43210.json".into(),
+                log_path: log.into(),
+            }),
+            Handoff::TestLog(p) if p == std::path::Path::new(log)
+        ));
+        assert!(matches!(
+            Handoff::for_request(&PrivRequest::Ping),
+            Handoff::None
+        ));
+    }
 }

@@ -30,6 +30,11 @@ pub(crate) const ARG_DATADIR: &str = "--datadir";
 pub(crate) const ARG_RUNDIR: &str = "--rundir";
 pub(crate) const ARG_BIN_DIR: &str = "--bin-dir";
 
+/// Leaf name of the privilege helper's own log, under `run_dir`. One source so the
+/// helper's logger and the owner hand-off (which chowns it back to the GUI user)
+/// name the same file.
+pub(crate) const HELPER_LOG_FILE: &str = "kasumi-helper.log";
+
 /// The `(flag, value)` triple every privilege-boundary launch passes so the helper
 /// resolves the GUI's exact dirs. Producer-side single source (the bin dir is the
 /// parent of the resolved xray path); the helper parses the same flags back.
@@ -104,6 +109,56 @@ impl DesktopPaths {
             self.hev_bin.clone(),
             self.singbox_bin.clone(),
         ]
+    }
+}
+
+/// Runtime files the privileged data-path owner creates and that must be handed to
+/// the unprivileged GUI user, so an unprivileged in-process owner can later operate
+/// over the same paths. Every entry is a regular file derived from a
+/// [`DesktopPaths`]/[`BackendPaths`] field — the ephemeral run-dir state and engine
+/// configs the data-path writes, the core logs its children write under datadir, and
+/// the helper's own log. Excludes GUI-written inputs (`engine_file`, the built core
+/// configs, `daemon.log`); the containing directories are handed over separately
+/// (see [`DesktopPaths::helper_owned_dirs`]).
+#[cfg(target_os = "linux")]
+impl DesktopPaths {
+    pub(crate) fn helper_owned_files(&self) -> Vec<PathBuf> {
+        use kasumi_core::contract::LogTarget;
+        vec![
+            PathBuf::from(&self.pidfile),
+            PathBuf::from(&self.tun2socks_pidfile),
+            PathBuf::from(&self.route_state_file),
+            PathBuf::from(&self.socks_port_file),
+            PathBuf::from(&self.tun_engine_file),
+            PathBuf::from(&self.tun_iface_file),
+            PathBuf::from(&self.tun2_iface_file),
+            PathBuf::from(&self.service_state_file),
+            PathBuf::from(&self.service_started_file),
+            PathBuf::from(&self.hev_config),
+            PathBuf::from(&self.tun2socks_config),
+            PathBuf::from(&self.singbox_bridge_config),
+            self.backend.log(LogTarget::Xray),
+            self.backend.log(LogTarget::Singbox),
+            self.backend.log(LogTarget::TunEngine),
+            self.backend.run_dir.join(HELPER_LOG_FILE),
+        ]
+    }
+
+    /// The app-owned directory inodes the privileged data-path owner may have
+    /// created (root-side `create_dir_all` at boot): `run_dir` itself and its
+    /// `kasumi-proxy` parent when that is our namespace level. Chowning the file
+    /// list alone grants content-write but not create/unlink — those live on the
+    /// containing directory — so these two inodes are handed over as well, still
+    /// strictly non-recursive: nothing beneath them is touched by this list.
+    pub(crate) fn helper_owned_dirs(&self) -> Vec<PathBuf> {
+        let run = PathBuf::from(&self.run_dir);
+        let mut dirs = vec![run.clone()];
+        if let Some(parent) = run.parent()
+            && parent.file_name().is_some_and(|n| n == "kasumi-proxy")
+        {
+            dirs.push(parent.to_path_buf());
+        }
+        dirs
     }
 }
 
@@ -361,6 +416,61 @@ mod tests {
         }
         assert!(p.engine_file.starts_with(&p.datadir));
         assert!(p.backend.xray_config.starts_with(&p.datadir));
+
+        // The owner hand-off list: only regular files under run_dir/datadir covering
+        // the helper-written run-dir state, engine configs, core logs and helper log.
+        let owned = p.helper_owned_files();
+        for f in &owned {
+            let s = f.to_string_lossy();
+            assert!(
+                s.starts_with(&p.run_dir) || s.starts_with(&p.datadir),
+                "{s} should live under run_dir or datadir"
+            );
+        }
+        let names: std::collections::HashSet<&str> = owned
+            .iter()
+            .map(|f| f.file_name().unwrap().to_str().unwrap())
+            .collect();
+        for expected in [
+            "core.pid",
+            "tun2socks.pid",
+            "desktop-route.json",
+            "local-socks-port",
+            "tun-engine",
+            "tun-iface",
+            "tun2-iface",
+            "service-state",
+            "service-started",
+            "hev.yml",
+            "tun2socks.yml",
+            "singbox-bridge.json",
+            "xray.log",
+            "singbox.log",
+            "tun-engine.log",
+            "kasumi-helper.log",
+        ] {
+            assert!(names.contains(expected), "hand-off list missing {expected}");
+        }
+        // GUI-written inputs stay out — they are already the user's.
+        assert!(!names.contains("engine"), "engine marker is GUI-written");
+        assert!(!names.contains("daemon.log"), "daemon.log is GUI-written");
+        assert!(!names.contains("config.json"), "config.json is GUI-written");
+
+        // The directory hand-off: run_dir itself plus its kasumi-proxy namespace
+        // parent, and nothing else (never datadir — the GUI creates that).
+        let dirs = p.helper_owned_dirs();
+        assert_eq!(dirs[0], std::path::PathBuf::from(&p.run_dir));
+        assert!(
+            dirs.iter()
+                .all(|d| d.to_string_lossy().starts_with(&p.run_dir)
+                    || d.file_name().is_some_and(|n| n == "kasumi-proxy")),
+            "only run_dir and its namespace parent are handed over"
+        );
+        assert!(
+            !dirs.iter().any(|d| d.as_os_str() == p.datadir.as_str()),
+            "datadir inode must stay untouched"
+        );
+
         // SAFETY: see the note on the first `set_var` in this test.
         unsafe {
             std::env::remove_var("KASUMI_DATA_HOME");
