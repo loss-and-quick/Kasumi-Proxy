@@ -15,7 +15,8 @@ use std::time::Duration;
 use tokio::sync::{Mutex, broadcast};
 
 use kasumi_core::contract::{FetchMode, PushFrame, RunState, ServiceStatus, SubAppliedEvent};
-use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL};
+use kasumi_core::core_config::{CoreConfig, MutationEffect, mutation_effect};
+use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
 
 use crate::commands::{self, Command, CommandError, Response};
 use crate::fs::read_text;
@@ -64,6 +65,15 @@ pub struct Service {
     /// Latest connectivity-probe result; the watchdog refreshes it, `current_status`
     /// overlays it onto a process-up state to tell Connected from NoInternet.
     connectivity: StdMutex<Connectivity>,
+    /// The exact post-tune build + proxy mode the running data path was started
+    /// with — the baseline settings mutations are diffed against. `None` while
+    /// stopped. Deliberately in-memory (not the on-disk config): the start path
+    /// may tune the written file further, so a disk diff would never settle.
+    running_config: StdMutex<Option<(CoreConfig, ProxyMode)>>,
+    /// Whether the running data path no longer matches the saved settings (one
+    /// restart applies them). Recomputed on mutations and lifecycle edges only;
+    /// `current_status` just reports it.
+    pending_restart: AtomicBool,
 }
 
 impl Service {
@@ -84,6 +94,8 @@ impl Service {
             sub_attempts: Mutex::new(HashMap::new()),
             auto_started: AtomicBool::new(false),
             connectivity: StdMutex::new(Connectivity::Unknown),
+            running_config: StdMutex::new(None),
+            pending_restart: AtomicBool::new(false),
         })
     }
 
@@ -111,6 +123,10 @@ impl Service {
                 // concurrent edits serialize into one consistent result.
                 let _g = self.state_write.lock().await;
                 let state = commands::run_mutation(&*self.platform, &intent).await?;
+                // A mutation never restarts the data path; instead compare what
+                // runs against what the new state would start (still under the
+                // lock so a concurrent edit can't interleave its own recompute).
+                self.refresh_pending_restart(&state).await;
                 Ok(Response::State(Box::new(state)))
             }
             Command::ApplySubscription { sub_id } => {
@@ -149,7 +165,7 @@ impl Service {
                     })
                     .await
                     .map_err(|e| e.to_string())?;
-                let opts = resolve_and_write_config(&*self.platform, id.as_deref())
+                let (opts, built) = resolve_and_write_config(&*self.platform, id.as_deref())
                     .await
                     .map_err(|e| e.0)?;
                 let (mode, engine, socks_port) = (opts.mode, opts.engine, opts.socks_port);
@@ -157,16 +173,19 @@ impl Service {
                     // A failed bring-up must not leave a previously-set OS proxy
                     // pointing at a dead port.
                     self.platform.clear_os_proxy().await;
+                    self.note_data_path_stopped();
                     return Err(e.to_string());
                 }
                 // With the data-path up, align the OS proxy with the mode (set for
                 // system/pac, cleared otherwise — covers mode switches).
                 self.platform.set_os_proxy(mode, engine, socks_port).await;
+                self.note_data_path_started(built, mode);
                 Ok(())
             }
             LifecycleCmd::Stop => {
                 // A stopped core must never leave the OS pointed at a dead port.
                 self.platform.clear_os_proxy().await;
+                self.note_data_path_stopped();
                 self.platform
                     .stop_data_path(StopDataPath::default())
                     .await
@@ -186,17 +205,83 @@ impl Service {
                         })
                         .await
                         .map_err(|e| e.to_string())?;
-                    let opts = resolve_and_write_config(&*self.platform, None)
+                    let (opts, built) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
-                    self.platform
-                        .start_data_path(opts)
-                        .await
-                        .map_err(|e| e.to_string())
+                    let mode = opts.mode;
+                    match self.platform.start_data_path(opts).await {
+                        Ok(()) => {
+                            self.note_data_path_started(built, mode);
+                            Ok(())
+                        }
+                        Err(e) => {
+                            self.note_data_path_stopped();
+                            Err(e.to_string())
+                        }
+                    }
                 } else if let Some(f) = self.platform.app_filter() {
                     f.reload_app_filter().await.map_err(|e| e.to_string())
                 } else {
                     Ok(())
+                }
+            }
+        }
+    }
+
+    /// Record a successful data-path start: the given build + mode become the
+    /// baseline mutations are diffed against, and nothing is pending anymore.
+    fn note_data_path_started(&self, built: CoreConfig, mode: ProxyMode) {
+        *self.running_config.lock().unwrap() = Some((built, mode));
+        self.pending_restart.store(false, Ordering::SeqCst);
+    }
+
+    /// Drop the running-config baseline: with nothing running there is nothing
+    /// that could be stale, so the pending flag clears too.
+    fn note_data_path_stopped(&self) {
+        *self.running_config.lock().unwrap() = None;
+        self.pending_restart.store(false, Ordering::SeqCst);
+    }
+
+    /// After a settings mutation, decide what it means for the running data path:
+    /// nothing (stopped, or the mutated state doesn't build), a live OS-proxy
+    /// re-point (mode moved within the non-tun family, identical build), or a
+    /// flip of `pending_restart`. Emits a status frame when the flag changes so
+    /// clients react immediately instead of waiting for the next push tick.
+    async fn refresh_pending_restart(&self, state: &AppState) {
+        // Clone the baseline out so no std lock is held across the build below.
+        let Some((running_cfg, running_mode)) = self.running_config.lock().unwrap().clone() else {
+            return;
+        };
+        let Some(active_id) = state.active_id.as_deref() else {
+            return;
+        };
+        // A state that can't build (e.g. the active profile was just removed) says
+        // nothing about the running path — leave the flag as it is.
+        let Ok(next_cfg) = commands::build_profile_config(&*self.platform, active_id).await else {
+            return;
+        };
+        // Same normalization as the start path: no proxy-mode support → tun.
+        let next_mode = if self.platform.supports_proxy_modes() {
+            state.settings.proxy_mode
+        } else {
+            ProxyMode::Tun
+        };
+        match mutation_effect(&running_cfg, running_mode, &next_cfg, next_mode) {
+            MutationEffect::LiveModeSwitch(mode) => {
+                let socks_port = state
+                    .settings
+                    .local_socks_port
+                    .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+                self.platform
+                    .set_os_proxy(mode, next_cfg.engine, socks_port)
+                    .await;
+                if let Some(running) = self.running_config.lock().unwrap().as_mut() {
+                    running.1 = mode;
+                }
+            }
+            MutationEffect::SetPending(pending) => {
+                if self.pending_restart.swap(pending, Ordering::SeqCst) != pending {
+                    self.emit_status().await;
                 }
             }
         }
@@ -234,7 +319,7 @@ impl Service {
             service,
             active_id,
             core,
-            pending_restart: false,
+            pending_restart: self.pending_restart.load(Ordering::SeqCst),
         })
     }
 
@@ -402,6 +487,7 @@ impl Service {
                     let _g = this.serialize.lock().await;
                     let _ = this.platform.stop_data_path(StopDataPath::default()).await;
                     drop(_g);
+                    this.note_data_path_stopped();
                     this.set_connectivity(Connectivity::Unknown);
                     this.emit_status().await;
                     continue;
@@ -528,6 +614,12 @@ mod tests {
     impl Platform for RecordingPlatform {
         fn paths(&self) -> &BackendPaths {
             &self.paths
+        }
+        fn supports_proxy_modes(&self) -> bool {
+            true
+        }
+        async fn set_os_proxy(&self, mode: ProxyMode, _engine: Engine, _socks_port: u16) {
+            self.log(&format!("os_proxy:{mode:?}"));
         }
         async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
             self.log(&format!("start:{:?}", opts.engine));
@@ -688,6 +780,133 @@ mod tests {
             .collect();
         ids.sort_unstable();
         assert_eq!(ids, vec!["a", "b"]);
+    }
+
+    /// Mutate the persisted settings through the service (the UI's write path).
+    async fn set_settings(
+        svc: &Service,
+        edit: impl FnOnce(&mut kasumi_core::state::AdvancedSettings),
+    ) {
+        let Response::State(state) = svc.dispatch(Command::ReadState).await.unwrap() else {
+            panic!()
+        };
+        let mut settings = state.settings.clone();
+        edit(&mut settings);
+        svc.dispatch(Command::Mutate {
+            intent: Box::new(kasumi_core::mutate::MutationIntent::SetSettings {
+                settings: Box::new(settings),
+            }),
+        })
+        .await
+        .unwrap();
+    }
+
+    async fn pending_restart(svc: &Service) -> bool {
+        svc.current_status().await.unwrap().pending_restart
+    }
+
+    #[tokio::test]
+    async fn config_mutation_flags_pending_restart_until_restart() {
+        let (platform, _d) = RecordingPlatform::new();
+        seed_active(&platform).await;
+        let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+
+        svc.dispatch(Command::Start { profile_id: None })
+            .await
+            .unwrap();
+        assert!(!pending_restart(&svc).await);
+
+        // A setting that lands in the built core config → the running path is stale.
+        let mut rx = svc.subscribe();
+        set_settings(&svc, |s| s.fragment = true).await;
+        assert!(pending_restart(&svc).await);
+        // The flag flip pushed a status frame immediately.
+        let PushFrame::Status { value } = rx.recv().await.unwrap() else {
+            panic!("expected status")
+        };
+        assert!(value.pending_restart);
+
+        // Reverting the edit settles the running path back to non-stale.
+        set_settings(&svc, |s| s.fragment = false).await;
+        assert!(!pending_restart(&svc).await);
+
+        // Restart applies whatever is saved and clears the flag.
+        set_settings(&svc, |s| s.fragment = true).await;
+        assert!(pending_restart(&svc).await);
+        svc.dispatch(Command::Restart { profile_id: None })
+            .await
+            .unwrap();
+        assert!(!pending_restart(&svc).await);
+    }
+
+    #[tokio::test]
+    async fn ui_only_mutation_keeps_pending_restart_clear() {
+        let (platform, _d) = RecordingPlatform::new();
+        seed_active(&platform).await;
+        let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+        svc.dispatch(Command::Start { profile_id: None })
+            .await
+            .unwrap();
+
+        // Neither setting reaches the built config: no restart needed.
+        set_settings(&svc, |s| {
+            s.delay_test_url = Some("https://probe.example/gen".into())
+        })
+        .await;
+        set_settings(&svc, |s| s.log_rotate_max_kb = 1024).await;
+        assert!(!pending_restart(&svc).await);
+    }
+
+    #[tokio::test]
+    async fn mutation_while_stopped_keeps_pending_restart_clear() {
+        let (platform, _d) = RecordingPlatform::new();
+        seed_active(&platform).await;
+        let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+
+        // Nothing runs, so nothing can be stale — even for a config-level edit.
+        set_settings(&svc, |s| s.fragment = true).await;
+        assert!(!pending_restart(&svc).await);
+
+        // A start from the mutated state runs it as saved: still nothing pending.
+        svc.dispatch(Command::Start { profile_id: None })
+            .await
+            .unwrap();
+        assert!(!pending_restart(&svc).await);
+
+        // Stop drops the baseline and the flag stays down for later edits.
+        svc.dispatch(Command::Stop).await.unwrap();
+        set_settings(&svc, |s| s.fragment = false).await;
+        assert!(!pending_restart(&svc).await);
+    }
+
+    #[tokio::test]
+    async fn non_tun_mode_switch_applies_live_without_pending_restart() {
+        let (platform, _d) = RecordingPlatform::new();
+        seed_active(&platform).await;
+        let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+
+        set_settings(&svc, |s| s.proxy_mode = ProxyMode::ProxyOnly).await;
+        svc.dispatch(Command::Start { profile_id: None })
+            .await
+            .unwrap();
+        platform.calls.lock().unwrap().clear();
+
+        // proxy-only → system: identical build, no tun involved — re-point the OS
+        // proxy live instead of demanding a restart.
+        set_settings(&svc, |s| s.proxy_mode = ProxyMode::System).await;
+        assert!(!pending_restart(&svc).await);
+        assert!(
+            platform
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|c| c == "os_proxy:System")
+        );
+
+        // system → tun crosses the tun boundary: a restart is required.
+        set_settings(&svc, |s| s.proxy_mode = ProxyMode::Tun).await;
+        assert!(pending_restart(&svc).await);
     }
 
     #[tokio::test]

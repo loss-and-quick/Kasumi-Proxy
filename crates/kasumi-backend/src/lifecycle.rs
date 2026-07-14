@@ -12,6 +12,7 @@ use regex::Regex;
 use tokio::process::Child;
 
 use kasumi_core::core::default_tun_for;
+use kasumi_core::core_config::CoreConfig;
 use kasumi_core::enums::{CoreEngine, NO_TUN_MARKER, TunEngine, tun_from_marker};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
@@ -59,11 +60,13 @@ pub fn random_tun_iface() -> String {
 
 /// Build the config for `profile_id` (else the active profile), write it and the
 /// engine marker, and return the resolved [`StartDataPath`] (engine, TUN engine,
-/// external-engine tuning, SOCKS port, proxy mode).
+/// external-engine tuning, SOCKS port, proxy mode) together with the exact
+/// [`CoreConfig`] that was written — the in-memory baseline a running data path
+/// is later diffed against (the on-disk file may be tuned further after start).
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
-) -> Result<StartDataPath, CommandError> {
+) -> Result<(StartDataPath, CoreConfig), CommandError> {
     let paths = platform.paths();
     let state = read_json::<AppState>(&paths.app_state).await;
     let id = profile_id
@@ -98,13 +101,16 @@ pub async fn resolve_and_write_config(
     } else {
         ProxyMode::Tun
     };
-    Ok(StartDataPath {
-        engine,
-        tun,
-        tun_opts,
-        socks_port,
-        mode,
-    })
+    Ok((
+        StartDataPath {
+            engine,
+            tun,
+            tun_opts,
+            socks_port,
+            mode,
+        },
+        built,
+    ))
 }
 
 /// The core engine's on-disk label (written to `paths.engine_file` at config
@@ -600,12 +606,15 @@ mod tests {
             .unwrap();
 
         // No explicit id → uses active_id.
-        let opts = resolve_and_write_config(&p, None).await.unwrap();
+        let (opts, built) = resolve_and_write_config(&p, None).await.unwrap();
         assert_eq!(opts.engine, CoreEngine::Xray);
         assert_eq!(opts.tun, TunEngine::Tun2socks);
         assert_eq!(opts.socks_port, 11080);
         // TestPlatform doesn't support proxy modes → always normalized to tun.
         assert_eq!(opts.mode, ProxyMode::Tun);
+        // The returned build mirrors what was written.
+        assert_eq!(built.engine, CoreEngine::Xray);
+        assert!(built.config["outbounds"].is_array());
         assert_eq!(
             read_text(&p.paths().engine_file).await.as_deref(),
             Some("xray")
