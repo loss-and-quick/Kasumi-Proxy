@@ -11,9 +11,8 @@ use std::time::Duration;
 use regex::Regex;
 use tokio::process::Child;
 
-use kasumi_core::core::default_tun_for;
 use kasumi_core::core_config::CoreConfig;
-use kasumi_core::enums::{CoreEngine, NO_TUN_MARKER, TunEngine, tun_from_marker};
+use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
@@ -114,55 +113,12 @@ pub async fn resolve_and_write_config(
 }
 
 /// The core engine's on-disk label (written to `paths.engine_file` at config
-/// resolution). Also the fallback input to [`running_external_engine`].
+/// resolution).
 pub fn engine_label(engine: CoreEngine) -> &'static str {
     match engine {
         CoreEngine::Xray => "xray",
         CoreEngine::SingBox => "sing-box",
     }
-}
-
-/// Parse an [`engine_label`] back to its core, or `None` for an absent/unknown label.
-fn core_from_label(label: &str) -> Option<CoreEngine> {
-    match label.trim() {
-        "xray" => Some(CoreEngine::Xray),
-        "sing-box" => Some(CoreEngine::SingBox),
-        _ => None,
-    }
-}
-
-/// The external TUN engine a *running* data-path uses — so a shell can map it to the
-/// helper binary and decide whether a live helper is required — or `None` when the
-/// core owns its TUN natively. This is the one place that reads that state, shared by
-/// the desktop helper and the Android daemon (which previously each reimplemented it
-/// and drifted).
-///
-/// The recorded tun-engine `marker` (its content, or `None` if absent) is
-/// authoritative for the *engine*; whether that engine is native depends on the core
-/// too (`SingboxTun` is native only under the sing-box core — under xray it's a
-/// sidecar sing-box helper, see [`crate`]'s callers / `core::owns_native_tun`). On an
-/// absent/legacy marker it falls back to the core `engine_label` alone: sing-box
-/// defaults to native, every other/unknown core to the universal default external
-/// engine. The caller supplies the label however it knows the running core (desktop
-/// from the live pid, the daemon from its engine file).
-pub fn running_external_engine(
-    marker: Option<&str>,
-    engine_label: Option<&str>,
-) -> Option<TunEngine> {
-    // A no-tun data-path (proxy-only/system/pac) runs no helper whatever the
-    // core — never fall back to the engine default there.
-    if marker.map(str::trim) == Some(NO_TUN_MARKER) {
-        return None;
-    }
-    let core = engine_label.and_then(core_from_label);
-    if let Some(tun) = marker.map(str::trim).and_then(tun_from_marker) {
-        // Native only when we're sure it's the sing-box core with its own tun; an
-        // unknown core with a SingboxTun marker is treated as external (a sidecar),
-        // which is the safe guess — teardown then still reaps a helper if present.
-        let native = core == Some(CoreEngine::SingBox) && tun == TunEngine::SingboxTun;
-        return (!native).then_some(tun);
-    }
-    (core != Some(CoreEngine::SingBox)).then(|| default_tun_for(CoreEngine::Xray))
 }
 
 // ---------- geo assets (geodat2srs) ----------
@@ -509,54 +465,6 @@ mod tests {
     use crate::fsjson::write_json_atomic;
     use crate::testutil::{TestPlatform, sample_vless};
     use kasumi_core::state::default_app_state;
-
-    #[test]
-    fn external_engine_resolution() {
-        use kasumi_core::enums::{TunEngine, tun_marker};
-        // SingboxTun under the sing-box core is native → no helper expected.
-        let singbox_tun = tun_marker(TunEngine::SingboxTun);
-        assert_eq!(
-            running_external_engine(Some(&singbox_tun), Some("sing-box")),
-            None
-        );
-        // SingboxTun under xray is a sidecar sing-box → an external helper.
-        assert_eq!(
-            running_external_engine(Some(&singbox_tun), Some("xray")),
-            Some(TunEngine::SingboxTun)
-        );
-        // Marker names an external engine → that engine (even behind sing-box).
-        let hev = tun_marker(TunEngine::Hev);
-        assert_eq!(
-            running_external_engine(Some(&hev), Some("sing-box")),
-            Some(TunEngine::Hev)
-        );
-        // Absent marker falls back to the core: xray → external default, sing-box →
-        // native, unknown/absent → external (conservative).
-        assert_eq!(
-            running_external_engine(None, Some("xray")),
-            Some(TunEngine::Tun2socks)
-        );
-        assert_eq!(running_external_engine(None, Some("sing-box")), None);
-        assert_eq!(
-            running_external_engine(None, None),
-            Some(TunEngine::Tun2socks)
-        );
-        // Whitespace/garbage markers are treated as absent.
-        assert_eq!(
-            running_external_engine(Some("  \n"), Some("xray")),
-            Some(TunEngine::Tun2socks)
-        );
-        // A no-tun data-path expects no helper, even for xray (no engine-default
-        // fallback).
-        assert_eq!(
-            running_external_engine(Some(NO_TUN_MARKER), Some("xray")),
-            None
-        );
-        assert_eq!(
-            running_external_engine(Some("no-tun\n"), Some("sing-box")),
-            None
-        );
-    }
 
     #[test]
     fn random_iface_is_letter_then_hex() {
