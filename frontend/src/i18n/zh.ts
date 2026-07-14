@@ -34,6 +34,7 @@ const zh = {
   "overview.starting_btn": "启动中",
   "overview.connecting_btn": "连接中",
   "overview.restart": "重启",
+  "overview.pendingRestart": "设置已更改，重启后生效",
   "tray.show": "显示",
   "tray.quit": "退出",
   "tray.recent": "最近的配置",

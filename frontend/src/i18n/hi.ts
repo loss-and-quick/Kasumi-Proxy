@@ -34,6 +34,7 @@ const hi = {
   "overview.starting_btn": "शुरू हो रहा है",
   "overview.connecting_btn": "कनेक्ट हो रहा है",
   "overview.restart": "पुनः प्रारंभ करें",
+  "overview.pendingRestart": "सेटिंग्स बदल गई हैं — लागू करने के लिए पुनः प्रारंभ करें",
   "tray.show": "दिखाएँ",
   "tray.quit": "बाहर निकलें",
   "tray.recent": "हाल के प्रोफ़ाइल",

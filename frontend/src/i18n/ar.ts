@@ -34,6 +34,7 @@ const ar = {
   "overview.starting_btn": "جارٍ البدء",
   "overview.connecting_btn": "جارٍ الاتصال",
   "overview.restart": "إعادة التشغيل",
+  "overview.pendingRestart": "تم تغيير الإعدادات — أعد التشغيل لتطبيقها",
   "tray.show": "إظهار",
   "tray.quit": "خروج",
   "tray.recent": "الملفات الأخيرة",

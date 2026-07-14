@@ -34,6 +34,7 @@ const DEFAULT_STATUS: ServiceStatus = {
   uptimeSec: 0,
   core: "Xray",
   engine: null,
+  pendingRestart: false,
 };
 
 // Nested-model builder: Vless is `meta`/`endpoint`/`transport`/`tls`/ root

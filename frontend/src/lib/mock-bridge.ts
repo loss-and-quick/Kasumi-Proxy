@@ -62,6 +62,7 @@ let serviceState: ServiceStatus = {
   uptimeSec: 0,
   core: "Xray 25.5.16",
   engine: "xray",
+  pendingRestart: false,
 };
 
 function cloneServiceStatus(): ServiceStatus {

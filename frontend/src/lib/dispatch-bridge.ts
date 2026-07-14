@@ -63,7 +63,8 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
   let lastState: AppState | null = null;
   let lastStatus: ServiceStatus | null = null;
 
-  /** Compose the UI ServiceStatus from a status-command ServiceState + cached id/core. */
+  /** Compose the UI ServiceStatus from a status-command ServiceState + the cached
+   *  push-only fields (active id, core label, pending-restart flag). */
   function composeStatus(raw: unknown): ServiceStatus {
     const s = (raw && typeof raw === "object" ? { ...(raw as object) } : {}) as Record<
       string,
@@ -73,6 +74,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       ...s,
       activeId: lastStatus?.activeId ?? lastState?.activeId ?? null,
       core: lastStatus?.core ?? "",
+      pendingRestart: lastStatus?.pendingRestart ?? false,
     });
   }
 

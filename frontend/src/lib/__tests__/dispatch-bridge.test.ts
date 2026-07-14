@@ -120,3 +120,57 @@ describe("dispatch-bridge core resolution", () => {
     ]);
   });
 });
+
+describe("dispatch-bridge status stream", () => {
+  const statusFrame = (extra: Record<string, unknown>) => ({
+    state: "connected",
+    uploadBytes: 0,
+    downloadBytes: 0,
+    uptimeSec: 1,
+    engine: "xray",
+    activeId: "p1",
+    core: "Xray 1.0",
+    ...extra,
+  });
+
+  it("carries pendingRestart from pushes into composed status() replies", async () => {
+    let pushStatus: ((raw: unknown) => void) | undefined;
+    const push: PushStreams = {
+      subscribeStatus: (cb) => {
+        pushStatus = cb;
+        return () => {};
+      },
+      subscribeSubApplied: () => () => {},
+    };
+    // The status command replies with the bare ServiceState — no pendingRestart —
+    // so status() must fill it from the last push.
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
+      if (cmd.cmd === "status") {
+        return {
+          kind: "status",
+          value: {
+            state: "connected",
+            uploadBytes: 0,
+            downloadBytes: 0,
+            uptimeSec: 1,
+            engine: "xray",
+          },
+        } as Response_Serialize;
+      }
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, push);
+
+    const seen: boolean[] = [];
+    bridge.onStatus((s) => seen.push(s.pendingRestart));
+
+    pushStatus?.(statusFrame({ pendingRestart: true }));
+    expect(seen).toEqual([true]);
+    expect((await bridge.status()).pendingRestart).toBe(true);
+
+    // A frame without the field (an older sender) parses as not pending.
+    pushStatus?.(statusFrame({}));
+    expect(seen).toEqual([true, false]);
+    expect((await bridge.status()).pendingRestart).toBe(false);
+  });
+});

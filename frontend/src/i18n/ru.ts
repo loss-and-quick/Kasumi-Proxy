@@ -35,6 +35,7 @@ const ru = {
   "overview.starting_btn": "Запуск",
   "overview.connecting_btn": "Подключение",
   "overview.restart": "Перезапустить",
+  "overview.pendingRestart": "Настройки изменены — перезапустите, чтобы применить",
   "tray.show": "Показать",
   "tray.quit": "Выход",
   "tray.recent": "Недавние профили",

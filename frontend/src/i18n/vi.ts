@@ -35,6 +35,7 @@ const vi = {
   "overview.starting_btn": "Đang khởi động",
   "overview.connecting_btn": "Đang kết nối",
   "overview.restart": "Khởi động lại",
+  "overview.pendingRestart": "Cài đặt đã thay đổi — khởi động lại để áp dụng",
   "tray.show": "Hiển thị",
   "tray.quit": "Thoát",
   "tray.recent": "Hồ sơ gần đây",
