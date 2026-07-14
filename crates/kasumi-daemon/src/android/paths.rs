@@ -18,15 +18,12 @@ pub const PIDFILE: &str = "/data/adb/kasumi-proxy/run/core.pid";
 pub const TUN2SOCKS_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks.pid";
 pub const TUN2SOCKS2_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks2.pid";
 
-pub const SOCKS_PORT_FILE: &str = "/data/adb/kasumi-proxy/local-socks-port";
 pub const ENGINE_FILE: &str = "/data/adb/kasumi-proxy/engine";
 pub const TUN_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun-iface";
-/// Records the running data-path's TUN engine (its wire label) so teardown and the
-/// watchdog resolve the matching helper binary, mirroring the desktop marker.
-pub const TUN_ENGINE_FILE: &str = "/data/adb/kasumi-proxy/run/tun-engine";
 pub const TUN2_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun2-iface";
-pub const SERVICE_STATE_FILE: &str = "/data/adb/kasumi-proxy/service-state";
-pub const SERVICE_STARTED_FILE: &str = "/data/adb/kasumi-proxy/service-started";
+/// The single persisted record of the running data-path (run state, engine, TUN
+/// selection, socks port, start time), written by the daemon in the run dir.
+pub const DATA_PATH_STATE_FILE: &str = "/data/adb/kasumi-proxy/run/data-path.json";
 
 pub const XRAY_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/xray";
 pub const SINGBOX_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/sing-box";

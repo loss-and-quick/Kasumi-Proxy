@@ -11,10 +11,10 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
-use kasumi_backend::fsjson::read_json;
+use kasumi_backend::fsjson::{read_data_path_state, read_json, write_data_path_state};
 use kasumi_backend::lifecycle::{
-    TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, running_external_engine,
-    spawn_core, spawn_tun_engine, sync_geo_asset, verify_core_alive,
+    TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core,
+    spawn_tun_engine, sync_geo_asset, verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -23,7 +23,8 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
-use kasumi_core::enums::{CoreEngine, TunEngine, tun_marker};
+use kasumi_core::data_path_state::{DataPathState, TunSelection};
+use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::state::{
     AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
@@ -31,11 +32,10 @@ use kasumi_core::tun::{TUN_IPV4, TUN_IPV6, TUN2_IPV4, TUN2_IPV6, TunOptions};
 
 use super::network::run_watcher;
 use super::paths::{
-    CORE_BINS, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG, HEV2_CONFIG, IP, PIDFILE,
-    RUN_DIR, SERVICE_STARTED_FILE, SERVICE_STATE_FILE, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG,
-    SINGBOX_BRIDGE2_CONFIG, SOCKS_PORT_FILE, TUN_ENGINE_FILE, TUN_IFACE_FILE, TUN2_IFACE_FILE,
-    TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE, TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE,
-    XRAY_BIN, backend_paths,
+    CORE_BINS, DATA_PATH_STATE_FILE, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG,
+    HEV2_CONFIG, IP, PIDFILE, RUN_DIR, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG, SINGBOX_BRIDGE2_CONFIG,
+    TUN_IFACE_FILE, TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE,
+    TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
     Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_strict_carveouts,
@@ -109,13 +109,10 @@ async fn singbox_stack() -> String {
 }
 
 /// The external TUN engine the *running* data-path uses, or `None` for a native
-/// sing-box tun. The marker/engine-file decision is single-sourced in
-/// [`running_external_engine`] (shared with the desktop helper); the daemon only
-/// supplies the inputs and maps the result via [`tun_helper_bin`].
+/// sing-box tun (or when no document is recorded). A lookup on the recorded document
+/// ([`DataPathState::external_tun`]); the daemon maps the result via [`tun_helper_bin`].
 async fn running_tun_engine() -> Option<TunEngine> {
-    let marker = read_text(TUN_ENGINE_FILE).await;
-    let engine = read_text(ENGINE_FILE).await;
-    running_external_engine(marker.as_deref(), engine.as_deref())
+    read_state().await?.external_tun()
 }
 
 /// Helper binary a teardown/watchdog match targets for the running data-path —
@@ -138,8 +135,22 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-async fn set_service_state(value: &str) {
-    let _ = write_text(SERVICE_STATE_FILE, value).await;
+async fn read_state() -> Option<DataPathState> {
+    read_data_path_state(DATA_PATH_STATE_FILE).await
+}
+
+async fn write_state(state: &DataPathState) {
+    let _ = write_data_path_state(DATA_PATH_STATE_FILE, state).await;
+}
+
+/// Mark the running data-path failed, keeping the recorded engine/tun so teardown
+/// still reaps the right helper.
+async fn set_failed(reason: &str) {
+    let mut state = read_state().await.unwrap_or_default();
+    state.run = RunState::Failed;
+    state.failure_reason = Some(reason.to_owned());
+    state.started_at = None;
+    write_state(&state).await;
 }
 
 async fn read_settings() -> Option<AdvancedSettings> {
@@ -355,7 +366,7 @@ async fn bring_up_external_tun(
 }
 
 async fn fail(reason: &str) -> anyhow::Result<()> {
-    set_service_state(&format!("failed:{reason}")).await;
+    set_failed(reason).await;
     anyhow::bail!("{reason}")
 }
 
@@ -378,8 +389,6 @@ async fn start_inner(
     // SingboxTun = sing-box owns its native tun; any other engine fronts a
     // socks-only core with an external userspace tun.
     let external = tun != TunEngine::SingboxTun;
-    // Record the engine so teardown/the watchdog match the right helper binary.
-    let _ = write_text(TUN_ENGINE_FILE, &tun_marker(tun)).await;
 
     if engine == CoreEngine::SingBox {
         // Generate/keep only the .srs this config references (needed even when
@@ -434,8 +443,12 @@ async fn start_inner(
         http_port().await,
     )
     .await;
-    let _ = write_text(SERVICE_STARTED_FILE, &now_secs().to_string()).await;
-    set_service_state("running").await;
+    // Process-up: `started_at` marks it (vs the bring-up `connecting`) and drives
+    // uptime; the wire state stays Connecting until the Service's connectivity probe
+    // refines it to Connected / NoInternet.
+    let mut state = read_state().await.unwrap_or_default();
+    state.started_at = Some(now_secs());
+    write_state(&state).await;
     Ok(())
 }
 
@@ -507,10 +520,10 @@ impl Platform for AndroidPlatform {
         ])
         .await;
         setup_sysctl_locks().await;
-        // Fresh boot: seed the lifecycle channel so a stale value can't make status
-        // lie before the first command.
-        set_service_state("stopped").await;
-        remove_file(SERVICE_STARTED_FILE).await;
+        // Fresh boot: seed a stopped document so a stale value can't make status lie
+        // before the first command. Drop the pre-document `service-started` marker.
+        write_state(&DataPathState::default()).await;
+        remove_file("/data/adb/kasumi-proxy/service-started").await;
         Ok(())
     }
 
@@ -524,19 +537,25 @@ impl Platform for AndroidPlatform {
             socks_port,
             ..
         } = opts;
-        set_service_state("connecting").await;
-        let _ = write_text(SOCKS_PORT_FILE, &socks_port.to_string()).await;
+        // Record the bring-up (no started_at yet); this platform is always tun mode.
+        write_state(&DataPathState {
+            run: RunState::Connecting,
+            engine: Some(engine),
+            tun: TunSelection::Engine(tun),
+            socks_port,
+            ..Default::default()
+        })
+        .await;
         ensure_tun_node().await;
 
         let (bin, cfg, log) = core_files(engine);
         if let Err(e) = start_inner(engine, tun, &tun_opts, bin, &cfg, &log, socks_port).await {
             // Roll back the half-built data-path so a failed start leaves no orphans.
-            let cur = read_text(SERVICE_STATE_FILE)
+            let already_failed = read_state()
                 .await
-                .map(|s| s.trim().to_string())
-                .unwrap_or_default();
-            if !cur.starts_with("failed") {
-                set_service_state(&format!("failed:{e}")).await;
+                .is_some_and(|s| s.run == RunState::Failed);
+            if !already_failed {
+                set_failed(&e.to_string()).await;
             }
             let _ = self
                 .stop_data_path(StopDataPath {
@@ -553,14 +572,11 @@ impl Platform for AndroidPlatform {
             tun_iface: read_iface(TUN_IFACE_FILE).await,
             tun2_iface: read_iface(TUN2_IFACE_FILE).await,
             filter: read_app_filter().await,
-            socks_port: {
-                let p = read_pidfile(SOCKS_PORT_FILE).await;
-                if p > 0 {
-                    p as u16
-                } else {
-                    DEFAULT_LOCAL_SOCKS_PORT
-                }
-            },
+            socks_port: read_state()
+                .await
+                .map(|d| d.socks_port)
+                .filter(|&p| p != 0)
+                .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT),
             http_port: http_port().await,
         };
         // Stop the core first, gracefully: a sing-box auto_route core removes its own
@@ -571,7 +587,7 @@ impl Platform for AndroidPlatform {
         remove_file(TUN_IFACE_FILE).await;
         remove_file(TUN2_IFACE_FILE).await;
         // Match the helper binary the running data-path actually used (from the
-        // tun-engine marker) so an engine switch never orphans the old helper.
+        // recorded document) so an engine switch never orphans the old helper.
         let helper_bin = running_helper_bin().await;
         kill_if_running(
             read_pidfile(TUN2SOCKS_PIDFILE).await,
@@ -587,41 +603,28 @@ impl Platform for AndroidPlatform {
             false,
         )
         .await;
-        remove_file(TUN_ENGINE_FILE).await;
+        // Drop the pre-document `tun-engine` marker if an old version left one.
+        remove_file("/data/adb/kasumi-proxy/run/tun-engine").await;
         if !opts.keep_service_state {
-            set_service_state("stopped").await;
+            write_state(&DataPathState::default()).await;
         }
         Ok(())
     }
 
     async fn service_state(&self) -> anyhow::Result<ServiceState> {
-        let raw = read_text(SERVICE_STATE_FILE)
-            .await
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|| "stopped".into());
-        let mut state = RunState::Stopped;
-        let mut error = None;
-        if raw.starts_with("failed") {
-            state = RunState::Failed;
-            let reason = raw
-                .find(':')
-                .map(|i| raw[i + 1..].to_string())
-                .unwrap_or_default();
-            error = (!reason.is_empty()).then_some(reason);
-        } else if raw == "connecting" || raw == "running" {
-            // "running" = the core process is up; whether it actually reaches the
-            // internet is the Service's connectivity probe to decide, which refines
-            // this to Connected / NoInternet. Until then it's still Connecting.
-            state = RunState::Connecting;
-        }
+        // The recorded document is authoritative for the base state; the Service's
+        // connectivity probe later refines a running Connecting → Connected / NoInternet.
+        let doc = read_state().await;
+        let state = doc.as_ref().map(|d| d.run).unwrap_or(RunState::Stopped);
+        let error = doc.as_ref().and_then(|d| d.failure_reason.clone());
         let tun = read_iface(TUN_IFACE_FILE).await;
         let (rx, tx) = iface_traffic(tun.as_deref()).await;
-        let started = read_pidfile(SERVICE_STARTED_FILE).await;
-        let uptime_sec = if raw == "running" && started > 0 {
-            now_secs().saturating_sub(started as u64)
-        } else {
-            0
-        };
+        // `started_at` is set only once the core is up, so uptime counts from there.
+        let uptime_sec = doc
+            .as_ref()
+            .and_then(|d| d.started_at)
+            .map(|s| now_secs().saturating_sub(s))
+            .unwrap_or(0);
         Ok(ServiceState {
             state,
             error,
@@ -648,11 +651,10 @@ impl Platform for AndroidPlatform {
     }
 
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus> {
-        let port = read_text(SOCKS_PORT_FILE)
+        let port = read_state()
             .await
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
-            .and_then(|s| s.parse().ok())
+            .map(|d| d.socks_port)
+            .filter(|&p| p != 0)
             .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
         let pid = read_pidfile(PIDFILE).await;
         let running = pid > 0 && pid_matches_any(pid, &core_bins()).await;
