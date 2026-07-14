@@ -3,7 +3,7 @@ use crate::platform::{
     BackendPaths, Engine, InstalledCores, PlatformCapabilities, StartDataPath, StopDataPath,
 };
 use crate::testutil::sample_vless;
-use kasumi_core::contract::ServiceState;
+use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::default_app_state;
 use std::path::PathBuf;
