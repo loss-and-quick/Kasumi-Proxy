@@ -72,13 +72,31 @@ pub(crate) trait DesktopOs: Send + Sync {
 pub struct DesktopPlatform {
     p: DesktopPaths,
     os: OsSeam,
+    /// This in-process data-path runs unprivileged because the saved proxy mode needs
+    /// no privileges, so no privileged helper was brought up. A live switch to tun
+    /// then can't succeed and is refused with a restart-required error (see
+    /// [`Platform::start_data_path`]); the helper-backed and skip-elevation instances
+    /// leave this `false` and behave exactly as before.
+    gated_unprivileged: bool,
 }
 
 impl DesktopPlatform {
     pub fn new() -> anyhow::Result<Self> {
+        Self::build(false)
+    }
+
+    /// An in-process platform for a session that came up with no privileged helper
+    /// (the saved proxy mode needs none). It serves the non-tun modes fully but
+    /// refuses a live switch to tun, which the helper-less process can't bring up.
+    pub fn new_gated() -> anyhow::Result<Self> {
+        Self::build(true)
+    }
+
+    fn build(gated_unprivileged: bool) -> anyhow::Result<Self> {
         Ok(Self {
             p: DesktopPaths::resolve()?,
             os: OsSeam::new()?,
+            gated_unprivileged,
         })
     }
 
@@ -399,6 +417,16 @@ impl Platform for DesktopPlatform {
         log::info!(
             "starting data-path: engine={engine:?} tun={tun:?} socks_port={socks_port} mode={mode:?}"
         );
+        // A helper-less in-process session can't bring up a tun; refuse the switch with
+        // an actionable reason before any bring-up, so the UI shows a `failed:<reason>`
+        // rather than a cryptic tun-creation error. Only the tun direction needs this —
+        // the reverse (a helper-backed session running a non-tun mode) works fine, since
+        // the mode rides `StartDataPath` and the privileged path serves every mode.
+        if self.gated_unprivileged && mode == ProxyMode::Tun {
+            return self
+                .fail("tun mode needs an app restart (the privileged helper is not running)")
+                .await;
+        }
         self.set_service_state("connecting").await;
         let _ = write_text(&self.p.socks_port_file, &socks_port.to_string()).await;
         let result = self

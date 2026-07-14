@@ -388,6 +388,7 @@ mod tests {
 
     #[test]
     fn resolve_honours_data_home_override() {
+        let _env = crate::env_test_guard();
         // Set a deterministic data home; resolve must place the datadir under it.
         // SAFETY (Rust 1.95): set_var/remove_var are unsafe because concurrent env
         // access is UB. These env-mutating tests pre-date that and were never safe
@@ -520,6 +521,7 @@ mod tests {
 
     #[test]
     fn resolve_honours_data_home_override() {
+        let _env = crate::env_test_guard();
         // SAFETY (Rust 1.95): set_var/remove_var are unsafe; this test is the only
         // env-touching one in the module and the mutations are bracketed.
         unsafe {
