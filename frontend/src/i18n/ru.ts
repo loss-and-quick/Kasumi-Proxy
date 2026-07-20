@@ -683,7 +683,6 @@ const ru = {
   "settings.assetLinks": "Готовые ссылки для geoip.dat / geosite.dat",
   "settings.assetUse": "Использовать",
   "settings.assetNotDownloaded": "Ещё не скачано",
-  "settings.proxyRunningWarning": "Прокси запущен. Остановите его, чтобы изменить эти настройки.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

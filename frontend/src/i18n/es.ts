@@ -644,7 +644,6 @@ const es = {
   "settings.assetLinks": "Enlaces listos para geoip.dat / geosite.dat",
   "settings.assetUse": "Usar",
   "settings.assetNotDownloaded": "Aún no se ha descargado",
-  "settings.proxyRunningWarning": "El proxy está activo. Detenlo para cambiar estos ajustes.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",
