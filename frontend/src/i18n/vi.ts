@@ -639,7 +639,6 @@ const vi = {
   "settings.assetLinks": "Liên kết sẵn cho geoip.dat / geosite.dat",
   "settings.assetUse": "Sử dụng",
   "settings.assetNotDownloaded": "Chưa tải về",
-  "settings.proxyRunningWarning": "Proxy đang chạy. Dừng lại để thay đổi các cài đặt này.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

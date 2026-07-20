@@ -172,8 +172,6 @@ export default function Settings({
 
   const setRoutingMode = (mode: typeof settings.routingMode) => set("routingMode", mode);
 
-  const running = isServiceUp(service.state);
-
   return (
     <div className="app-region screen-enter">
       <AppBar title={t("settings.title")} subtitle={t("settings.subtitle")} />
@@ -187,23 +185,7 @@ export default function Settings({
           subscriptionsCount={subscriptions.length}
           activeId={activeId}
         />
-        {running && (
-          <div
-            style={{
-              margin: "12px 0 2px",
-              padding: "12px 16px",
-              borderRadius: 12,
-              borderLeft: "3px solid var(--running)",
-              background: "var(--sc-low)",
-              color: "var(--on-surface-variant)",
-              fontSize: 13,
-              lineHeight: 1.5,
-            }}
-          >
-            {t("settings.proxyRunningWarning")}
-          </div>
-        )}
-        <div style={running ? { pointerEvents: "none", opacity: 0.5 } : undefined}>
+        <div>
           <RoutingSection
             settings={settings}
             set={set}

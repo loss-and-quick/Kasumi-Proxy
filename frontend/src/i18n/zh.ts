@@ -635,7 +635,6 @@ const zh = {
   "settings.assetLinks": "geoip.dat / geosite.dat 现成链接",
   "settings.assetUse": "使用",
   "settings.assetNotDownloaded": "尚未下载",
-  "settings.proxyRunningWarning": "代理正在运行。请先停止代理再修改这些设置。",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

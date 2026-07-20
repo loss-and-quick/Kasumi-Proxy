@@ -635,7 +635,6 @@ const hi = {
   "settings.assetLinks": "geoip.dat / geosite.dat के लिए तैयार लिंक",
   "settings.assetUse": "उपयोग करें",
   "settings.assetNotDownloaded": "अभी डाउनलोड नहीं किया गया",
-  "settings.proxyRunningWarning": "प्रॉक्सी चल रहा है। इन सेटिंग्स को बदलने के लिए इसे बंद करें।",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",

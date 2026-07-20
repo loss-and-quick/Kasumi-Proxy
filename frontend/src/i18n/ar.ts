@@ -769,7 +769,6 @@ const ar = {
   "settings.assetLinks": "روابط جاهزة لـ geoip.dat / geosite.dat",
   "settings.assetUse": "استخدام",
   "settings.assetNotDownloaded": "لم يتم تنزيله بعد",
-  "settings.proxyRunningWarning": "الوكيل يعمل. أوقفه لتغيير هذه الإعدادات.",
   "settings.protocol.vless": "VLESS",
   "settings.protocol.vmess": "VMess",
   "settings.protocol.trojan": "Trojan",
