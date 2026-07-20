@@ -245,14 +245,13 @@ pub async fn serve(
     use tokio::net::UnixListener;
 
     let _ = tokio::fs::remove_file(socket_path).await;
-    // Narrow the bind→chmod window: create the socket 0600 from the start (root's
-    // umask is otherwise 022, leaving it briefly group/other-readable) so no other
-    // account can connect even for an instant.
-    let prev_umask = unsafe { libc::umask(0o177) };
     let listener = UnixListener::bind(socket_path)
-        .with_context(|| format!("bind privilege-helper socket {socket_path}"));
-    unsafe { libc::umask(prev_umask) };
-    let listener = listener?;
+        .with_context(|| format!("bind privilege-helper socket {socket_path}"))?;
+    // Lock the socket to 0600 right after bind rather than toggling the process-global
+    // umask around it — a mask that any concurrent file creation on another thread
+    // would inherit. The bind→restrict window is harmless: connecting to a unix socket
+    // needs write permission, which the helper's inherited (pkexec) 022 umask denies
+    // group/other, and `restrict_socket` pins 0600 immediately regardless.
     restrict_socket(socket_path, owner_uid)
         .with_context(|| format!("restrict privilege-helper socket {socket_path}"))?;
     let server = Server::new(platform, owner_uid);

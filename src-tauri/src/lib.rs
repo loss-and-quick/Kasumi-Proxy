@@ -514,18 +514,6 @@ mod tests {
     fn tempdir_paths(dir: &std::path::Path) -> desktop::paths::DesktopPaths {
         let join = |name: &str| dir.join(name).to_string_lossy().into_owned();
         let (data, run) = (join("data"), join("run"));
-        // privhelper's serve() toggles the process-global umask while binding its
-        // socket; pin our dirs to 0700 with an explicit chmod so a concurrent test's
-        // window can't strip the exec bit and make boot_init's mkdir EACCES.
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
-            for d in [&data, &run] {
-                let _ = std::fs::create_dir_all(d);
-                let _ = std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o700));
-            }
-        }
         desktop::paths::DesktopPaths::from_bases(data, run, &join("bin"), false, None)
     }
 

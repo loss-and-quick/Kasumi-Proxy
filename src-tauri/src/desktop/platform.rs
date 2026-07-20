@@ -404,11 +404,17 @@ impl Platform for DesktopPlatform {
     }
 
     async fn boot_init(&self) -> anyhow::Result<()> {
+        use anyhow::Context;
         // Unlike Android (RUN_DIR ⊂ DATADIR), the desktop runtime dir may live under
         // a different base (XDG_RUNTIME_DIR / %LOCALAPPDATA%), so both must be created
-        // explicitly.
-        let _ = tokio::fs::create_dir_all(&self.p.datadir).await;
-        let _ = tokio::fs::create_dir_all(&self.p.run_dir).await;
+        // explicitly. Propagate failures: a run-dir that can't be created surfaces as a
+        // `failed:` state instead of silently misbehaving downstream.
+        tokio::fs::create_dir_all(&self.p.datadir)
+            .await
+            .with_context(|| format!("create data dir {}", self.p.datadir))?;
+        tokio::fs::create_dir_all(&self.p.run_dir)
+            .await
+            .with_context(|| format!("create run dir {}", self.p.run_dir))?;
         // Fresh start: seed a stopped document so a stale value can't make status lie
         // before the first command. Drop the pre-document `service-started` marker.
         self.write_state(&DataPathState::default()).await;
