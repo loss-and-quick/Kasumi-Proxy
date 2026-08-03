@@ -1,3 +1,31 @@
+## v0.4.4 — 2026-08-03
+
+### Core updates
+
+- sing-box: `v1.13.14` → `v1.13.15`
+
+### Changes
+
+- [`49dc58f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/49dc58f) fix(desktop): propagate boot_init dir-creation errors
+- [`0beef3c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0beef3c) fix(desktop): stop mutating the process-global umask in privhelper serve
+- [`8b73874`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/8b73874) fix(desktop): let settings stay editable while the proxy is running
+- [`4789239`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4789239) feat(core): DataPathState document + read/write helpers
+- [`a12e8ea`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a12e8ea) test(desktop): drop env mutation from path-dependent tests
+- [`9fdcba8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9fdcba8) feat(frontend): pending-restart banner on the overview
+- [`f2b20a0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f2b20a0) feat(backend): flag a running data path stale after settings mutations
+- [`37f0aa3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/37f0aa3) feat(core): pendingRestart status flag + mutation-effect decision
+- [`a878c4c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a878c4c) feat(desktop): skip the privileged helper in non-tun proxy modes
+- [`04643a7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/04643a7) fix(desktop): hand helper-created runtime files to the GUI owner
+- [`5617db8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5617db8) feat(desktop): make the PAC port a local-ports setting
+- [`2463bb2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2463bb2) feat(desktop): snapshot and restore the OS proxy around system/pac
+- [`157ee72`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/157ee72) feat(desktop): serve a PAC in pac mode
+- [`af5f1e2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/af5f1e2) feat(desktop): set the OS proxy in system mode
+- [`49196c3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/49196c3) feat(desktop): run a proxy-only data path + mode selector
+- [`7839739`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7839739) feat(core): add proxyMode setting (tun/proxy-only/system/pac)
+- [`64286d3`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/64286d3) fix(desktop): tunnel root traffic on Linux; escape the core by fwmark
+- [`91ea0b2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/91ea0b2) fix(core): make tun uid-0 exclusion a platform decision, not builder policy
+- [`0063db2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0063db2) fix(tun): drive tun2socks through its YAML config
+
 ## v0.4.3 — 2026-07-13
 
 ### Core updates

@@ -1,7 +1,7 @@
 id=kasumi-proxy
 name=Kasumi Proxy
-version=v0.4.3
-versionCode=011
+version=v0.4.4
+versionCode=012
 updateJson=https://raw.githubusercontent.com/loss-and-quick/Kasumi-Proxy/main/update.json
 author=minicx
 description=A system-level transparent proxy routing engine using Xray-core / Sing-Box
