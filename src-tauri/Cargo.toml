@@ -68,9 +68,12 @@ libc = "0.2"
 caps = "0.5"
 
 # logind `PrepareForSleep` subscription over the system bus (desktop/linux/resume.rs).
+# webkit2gtk pinned to wry's version so `with_webview().inner()` yields the same
+# `WebView` type — used to trim the WebKitWebProcess's resident set (page cache off).
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 futures-util = "0.3"
+webkit2gtk = "=2.0.2"
 
 # Windows privilege separation: the LocalSystem data-path service (windows-service)
 # + the named-pipe security descriptor and the one-time install elevation

@@ -2474,6 +2474,7 @@ dependencies = [
  "tauri-specta",
  "tempfile",
  "tokio",
+ "webkit2gtk",
  "windows-service",
  "windows-sys 0.59.0",
  "zbus",
