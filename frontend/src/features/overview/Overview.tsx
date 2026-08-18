@@ -231,9 +231,6 @@ export default function Overview({
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--warn)" }}>
                   {t("overview.pendingRestart")}
                 </span>
-                <Btn sm variant="tonal" onClick={restart} disabled={!onSteady}>
-                  {t("overview.restart")}
-                </Btn>
               </div>
             )}
             {needsAssets && !up && (
@@ -263,7 +260,11 @@ export default function Overview({
                 variant="tonal"
                 onClick={restart}
                 disabled={!onSteady}
-                style={{ flex: 1, height: 52 }}
+                style={{
+                  flex: 1,
+                  height: 52,
+                  outline: up && service.pendingRestart ? "1.5px solid var(--warn)" : undefined,
+                }}
               >
                 <Icon name="restart_alt" /> {t("overview.restart")}
               </Btn>
