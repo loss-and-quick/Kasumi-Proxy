@@ -621,6 +621,8 @@ const es = {
   "settings.routingRuleDefault": "Regla {n}",
   "settings.routingCatchAll":
     "Coincide con todas las conexiones: las reglas siguientes y la comprobación automática de IP nunca se ejecutan.",
+  "settings.routingCatchAllRedundant":
+    "Coincide con todas las conexiones. La salida final por el proxy ya se añade automáticamente, así que esta regla solo te cuesta la comprobación automática de IP.",
   "settings.routingUnreachable": "Nunca se alcanza.",
   "settings.routingRuleDomains": plural("count", {
     one: "# dominio",

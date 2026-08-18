@@ -737,6 +737,8 @@ const ar = {
   "settings.routingEmpty": "لا توجد قواعد توجيه بعد.",
   "settings.routingRuleDefault": "القاعدة {n}",
   "settings.routingCatchAll": "يطابق كل اتصال — القواعد أدناه وفحص IP التلقائي لن تُنفَّذ.",
+  "settings.routingCatchAllRedundant":
+    "يطابق كل اتصال. يُضاف التوجيه النهائي إلى البروكسي تلقائيًا بالفعل، لذا فإن هذه القاعدة تُلغي فحص IP التلقائي دون أي فائدة.",
   "settings.routingUnreachable": "لا يتم الوصول إليها أبدًا.",
   "settings.routingRuleDomains": plural("count", {
     zero: "لا نطاقات",

@@ -611,6 +611,8 @@ const zh = {
   "settings.routingEmpty": "暂无路由规则。",
   "settings.routingRuleDefault": "规则 {n}",
   "settings.routingCatchAll": "匹配所有连接 — 下方规则和自动 IP 检查都不会执行。",
+  "settings.routingCatchAllRedundant":
+    "匹配所有连接。最终回退到代理本就会自动添加，因此此规则只会白白关闭自动 IP 检查。",
   "settings.routingUnreachable": "永远不会生效。",
   "settings.routingRuleDomains": plural("count", {
     one: "# 个域名",

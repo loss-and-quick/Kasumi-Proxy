@@ -627,6 +627,8 @@ const en = {
   "settings.routingRuleDefault": "Rule {n}",
   "settings.routingCatchAll":
     "Matches every connection — the rules below and the automatic IP check never run.",
+  "settings.routingCatchAllRedundant":
+    "Matches every connection. The proxy fallback is already appended automatically, so this rule only costs you the automatic IP check.",
   "settings.routingUnreachable": "Never reached.",
   "settings.routingRuleDomains": plural("count", {
     one: "# domain",

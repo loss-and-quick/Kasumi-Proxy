@@ -620,6 +620,8 @@ const pt = {
   "settings.routingRuleDefault": "Regra {n}",
   "settings.routingCatchAll":
     "Corresponde a todas as conexões — as regras abaixo e a verificação automática de IP nunca são executadas.",
+  "settings.routingCatchAllRedundant":
+    "Corresponde a todas as conexões. O encaminhamento final para o proxy já é adicionado automaticamente, portanto esta regra só lhe custa a verificação automática de IP.",
   "settings.routingUnreachable": "Nunca é alcançada.",
   "settings.routingRuleDomains": plural("count", {
     one: "# domínio",

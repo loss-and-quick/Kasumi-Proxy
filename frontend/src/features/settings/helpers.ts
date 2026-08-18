@@ -94,6 +94,15 @@ export function isCatchAllRule(rule: RoutingRule): boolean {
   return portCoversEveryPort(rule.port);
 }
 
+/**
+ * Whether the catch-all at `index` shadows nothing but the automatic tail, which
+ * already ends in the proxy fallback — so the rule costs the IP check and buys nothing.
+ */
+export function isRedundantCatchAll(rules: RoutingRule[], index: number): boolean {
+  if (index < 0 || rules[index]?.outboundTag !== "proxy") return false;
+  return !rules.slice(index + 1).some((rule) => rule.enabled);
+}
+
 export function ruleIcon(rule: RoutingRule): string {
   if (rule.outboundTag === "direct") return "near_me";
   if (rule.outboundTag === "block") return "block";
