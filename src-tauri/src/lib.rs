@@ -20,6 +20,8 @@ use tauri_specta::{Builder, Event, collect_commands, collect_events};
 use kasumi_backend::platform::Platform;
 use kasumi_backend::{Command, Response, Service};
 use kasumi_core::contract::{PushFrame, RunState, ServiceStatus, SubAppliedEvent};
+use kasumi_core::enums::wire_value;
+use kasumi_core::state::RoutingMode;
 
 pub mod defaults;
 pub mod desktop;
@@ -78,11 +80,11 @@ fn update_tray(
     labels: TrayLabels,
     running: bool,
     connected: bool,
-    routing_mode: String,
+    routing_mode: RoutingMode,
 ) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        rebuild_tray_menu(&app, &profiles, &labels, running, connected, &routing_mode)
+        rebuild_tray_menu(&app, &profiles, &labels, running, connected, routing_mode)
             .map_err(|e| e.to_string())?;
     }
     #[cfg(not(desktop))]
@@ -232,8 +234,9 @@ fn rebuild_tray_menu(
     labels: &TrayLabels,
     running: bool,
     connected: bool,
-    routing_mode: &str,
+    routing_mode: RoutingMode,
 ) -> tauri::Result<()> {
+    use strum::IntoEnumIterator;
     use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 
     let Some(tray) = app.tray_by_id("main") else {
@@ -281,18 +284,21 @@ fn rebuild_tray_menu(
     // Routing-mode radio: exactly the current mode is checked. Tauri has no native
     // radio item, so — like v2rayN's tray — we use check marks; clicks come back as
     // `routing:<mode>` TrayActions the webview applies to `settings.routingMode`.
+    // Ids come from each variant's wire value, and the match below is exhaustive, so
+    // a new RoutingMode variant fails to compile until it is given a label here.
     let routing = Submenu::with_id(app, "routing", &labels.routing, true)?;
-    for (mode, label) in [
-        ("rules", &labels.routing_rules),
-        ("global", &labels.routing_global),
-        ("custom", &labels.routing_custom),
-    ] {
+    for mode in RoutingMode::iter() {
+        let label = match mode {
+            RoutingMode::Rules => &labels.routing_rules,
+            RoutingMode::Global => &labels.routing_global,
+            RoutingMode::Custom => &labels.routing_custom,
+        };
         let item = CheckMenuItem::with_id(
             app,
-            format!("routing:{mode}"),
+            format!("routing:{}", wire_value(&mode)),
             label,
             true,
-            routing_mode == mode,
+            mode == routing_mode,
             None::<&str>,
         )?;
         routing.append(&item)?;
