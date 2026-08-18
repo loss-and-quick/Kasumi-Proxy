@@ -306,18 +306,18 @@ pub enum Hysteria2Obfs {
     Salamander,
 }
 
-/// Wire-string values of an enum in declaration order, for UI dropdowns. Reads
-/// each variant's `Serialize` output, so the lists never restate the values the
-/// enums already define.
+/// One enum variant's wire string, read from its `Serialize` output so callers
+/// never restate a value the enum already defines.
+pub fn wire_value<T: Serialize>(v: &T) -> String {
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|x| x.as_str().map(str::to_owned))
+        .unwrap_or_default()
+}
+
+/// Wire-string values of an enum in declaration order, for UI dropdowns.
 fn wire_values<T: strum::IntoEnumIterator + Serialize>() -> Vec<String> {
-    T::iter()
-        .map(|v| {
-            serde_json::to_value(v)
-                .ok()
-                .and_then(|x| x.as_str().map(str::to_owned))
-                .unwrap_or_default()
-        })
-        .collect()
+    T::iter().map(|v| wire_value(&v)).collect()
 }
 
 /// Editor dropdown option lists, keyed by the generated TS const name. The
@@ -328,8 +328,10 @@ pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
 
     use crate::contract::LogTarget;
     use crate::profile::Protocol;
+    use crate::state::RoutingMode;
     vec![
         ("PROTOCOL_OPTS", wire_values::<Protocol>()),
+        ("ROUTING_MODE_OPTS", wire_values::<RoutingMode>()),
         ("CORE_ENGINE_OPTS", wire_values::<CoreEngine>()),
         ("TUN_ENGINE_OPTS", wire_values::<TunEngine>()),
         ("LOG_TARGET_OPTS", wire_values::<LogTarget>()),
