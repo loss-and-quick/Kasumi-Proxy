@@ -12,6 +12,7 @@ import type {
 	PacketEncoding,
 	Profile,
 	Protocol,
+	RoutingMode_Serialize,
 	Security,
 	SsMethod,
 	Transport,
@@ -557,6 +558,7 @@ export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=
 
 /* Editor dropdown option lists (wire values, in declaration order). */
 export const PROTOCOL_OPTS: Protocol[] = ["vless","vmess","trojan","shadowsocks","socks","http","wireguard","hysteria2","tuic","anytls","naive","shadowtls","custom"];
+export const ROUTING_MODE_OPTS: RoutingMode_Serialize[] = ["global","custom","rules"];
 export const CORE_ENGINE_OPTS: CoreEngine[] = ["xray","sing-box"];
 export const TUN_ENGINE_OPTS: string[] = ["singbox-tun","tun2socks","hev"];
 export const LOG_TARGET_OPTS: LogTarget[] = ["daemon","xray","singbox","tun-engine"];

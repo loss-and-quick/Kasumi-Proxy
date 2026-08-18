@@ -32,6 +32,7 @@ import type {
 \tPacketEncoding,
 \tProfile,
 \tProtocol,
+\tRoutingMode_Serialize,
 \tSecurity,
 \tSsMethod,
 \tTransport,
@@ -45,6 +46,9 @@ import type {
 fn opts_type(name: &str) -> &'static str {
     match name {
         "PROTOCOL_OPTS" => "Protocol",
+        // The serialize side only: the deserialize union also carries the legacy
+        // `bypass-lan` alias, which is read but never written.
+        "ROUTING_MODE_OPTS" => "RoutingMode_Serialize",
         "CORE_ENGINE_OPTS" => "CoreEngine",
         "LOG_TARGET_OPTS" => "LogTarget",
         "TUN_TUNING_ENGINES" => "TunEngine",

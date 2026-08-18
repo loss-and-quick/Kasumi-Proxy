@@ -131,7 +131,18 @@ pub struct AssetFile {
 // ---- AdvancedSettings enums ----
 
 /// How traffic is routed. `bypass-lan` is a legacy alias mapped to `global`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Default,
+    strum::EnumIter,
+    specta::Type,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum RoutingMode {
     #[default]

@@ -8,7 +8,8 @@
 // ============================================================
 
 import { useEffect } from "react";
-import { commands, events, type RoutingMode_Serialize } from "../generated/bindings";
+import { commands, events } from "../generated/bindings";
+import { ROUTING_MODE_OPTS } from "../generated/defaults";
 import { useT } from "../i18n";
 import { isServiceUp } from "../lib/bridge";
 import { formatRate } from "../lib/format";
@@ -111,8 +112,10 @@ export function useTraySync(): void {
       if (action === "start" || action === "stop") void toggleService();
       else if (action === "restart") void restart();
       else if (action.startsWith("activate:")) void setActive(action.slice("activate:".length));
-      else if (action.startsWith("routing:"))
-        void setSetting("routingMode", action.slice("routing:".length) as RoutingMode_Serialize);
+      else if (action.startsWith("routing:")) {
+        const mode = ROUTING_MODE_OPTS.find((m) => m === action.slice("routing:".length));
+        if (mode) void setSetting("routingMode", mode);
+      }
     });
     return () => void pending.then((un) => un()).catch(() => {});
   }, [toggleService, restart, setActive, setSetting]);
