@@ -97,6 +97,9 @@ export function useTraySync(): void {
     let tooltip = `Kasumi Proxy — ${stateLabel}`;
     if (activeName) tooltip += ` · ${activeName}`;
     if (running) tooltip += `\n↓ ${formatRate(downloadRate)}  ↑ ${formatRate(uploadRate)}`;
+    // The routing submenu writes a setting the running core won't pick up on its own,
+    // so the tooltip carries the same restart cue the Overview banner shows.
+    if (running && service.pendingRestart) tooltip += `\n${t("overview.pendingRestart")}`;
     void commands.setTrayStatus(tooltip, service.state);
   }, [service, uploadRate, downloadRate, activeId, profiles, running, t]);
 
