@@ -614,6 +614,9 @@ const vi = {
   "settings.routingAddRule": "Thêm quy tắc",
   "settings.routingEmpty": "Chưa có quy tắc định tuyến nào.",
   "settings.routingRuleDefault": "Quy tắc {n}",
+  "settings.routingCatchAll":
+    "Khớp mọi kết nối — các quy tắc bên dưới và bước kiểm tra IP tự động sẽ không chạy.",
+  "settings.routingUnreachable": "Không bao giờ được dùng.",
   "settings.routingRuleDomains": plural("count", {
     one: "# domain",
     other: "# domain",

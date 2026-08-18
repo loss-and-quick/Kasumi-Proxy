@@ -619,6 +619,9 @@ const es = {
   "settings.routingAddRule": "Añadir regla",
   "settings.routingEmpty": "Aún no hay reglas de enrutamiento.",
   "settings.routingRuleDefault": "Regla {n}",
+  "settings.routingCatchAll":
+    "Coincide con todas las conexiones: las reglas siguientes y la comprobación automática de IP nunca se ejecutan.",
+  "settings.routingUnreachable": "Nunca se alcanza.",
   "settings.routingRuleDomains": plural("count", {
     one: "# dominio",
     other: "# dominios",

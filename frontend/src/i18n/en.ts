@@ -625,6 +625,9 @@ const en = {
   "settings.routingAddRule": "Add rule",
   "settings.routingEmpty": "No routing rules yet.",
   "settings.routingRuleDefault": "Rule {n}",
+  "settings.routingCatchAll":
+    "Matches every connection — the rules below and the automatic IP check never run.",
+  "settings.routingUnreachable": "Never reached.",
   "settings.routingRuleDomains": plural("count", {
     one: "# domain",
     other: "# domains",

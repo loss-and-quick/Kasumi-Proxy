@@ -14,7 +14,7 @@ import type { RoutingRule } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
-import { ruleIcon, ruleSummary } from "../helpers";
+import { isCatchAllRule, ruleIcon, ruleSummary } from "../helpers";
 import { makePresetRule, RULE_PRESETS } from "../rule-presets";
 
 export function RoutingSection({
@@ -51,6 +51,7 @@ export function RoutingSection({
   const profileName = (tag: string) => profiles.find((p) => p.id === tag)?.remarks;
   const domainStrategy4Xray = settings.domainStrategy;
   const domainStrategy4Singbox = settings.domainStrategy4Singbox;
+  const catchAllIndex = routingRules.findIndex(isCatchAllRule);
 
   return (
     <>
@@ -204,7 +205,21 @@ export function RoutingSection({
                   key={rule.id}
                   icon={ruleIcon(rule)}
                   title={rule.remarks || t("settings.routingRuleDefault", { n: index + 1 })}
-                  sub={ruleSummary(rule, t, formatters, profileName)}
+                  sub={
+                    <>
+                      {ruleSummary(rule, t, formatters, profileName)}
+                      {index === catchAllIndex && (
+                        <div style={{ color: "var(--warn)", marginTop: 2 }}>
+                          {t("settings.routingCatchAll")}
+                        </div>
+                      )}
+                      {catchAllIndex >= 0 && index > catchAllIndex && rule.enabled && (
+                        <div style={{ color: "var(--on-surface-faint)", marginTop: 2 }}>
+                          {t("settings.routingUnreachable")}
+                        </div>
+                      )}
+                    </>
+                  }
                   onClick={() => onEditRule(rule)}
                   right={
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

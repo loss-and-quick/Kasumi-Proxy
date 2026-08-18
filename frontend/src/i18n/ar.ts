@@ -736,6 +736,8 @@ const ar = {
   "settings.routingAddRule": "إضافة قاعدة",
   "settings.routingEmpty": "لا توجد قواعد توجيه بعد.",
   "settings.routingRuleDefault": "القاعدة {n}",
+  "settings.routingCatchAll": "يطابق كل اتصال — القواعد أدناه وفحص IP التلقائي لن تُنفَّذ.",
+  "settings.routingUnreachable": "لا يتم الوصول إليها أبدًا.",
   "settings.routingRuleDomains": plural("count", {
     zero: "لا نطاقات",
     one: "نطاق واحد",

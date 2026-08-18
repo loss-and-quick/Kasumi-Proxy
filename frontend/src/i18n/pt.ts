@@ -618,6 +618,9 @@ const pt = {
   "settings.routingAddRule": "Adicionar regra",
   "settings.routingEmpty": "Ainda não há regras de roteamento.",
   "settings.routingRuleDefault": "Regra {n}",
+  "settings.routingCatchAll":
+    "Corresponde a todas as conexões — as regras abaixo e a verificação automática de IP nunca são executadas.",
+  "settings.routingUnreachable": "Nunca é alcançada.",
   "settings.routingRuleDomains": plural("count", {
     one: "# domínio",
     other: "# domínios",
