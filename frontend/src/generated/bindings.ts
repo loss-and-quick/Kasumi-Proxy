@@ -25,7 +25,14 @@ export const commands = {
 	 *  calls this on hydrate and whenever the active/recent profiles or language
 	 *  change; clicks come back as [`TrayAction`] events (or `show`/`quit`).
 	 */
-	updateTray: (profiles: TrayProfile[], labels: TrayLabels, running: boolean, connected: boolean) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels, running, connected })),
+	updateTray: (profiles: TrayProfile[], labels: TrayLabels, running: boolean, connected: boolean, routingMode: string) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels, running, connected, routingMode })),
+	/**
+	 *  Update only the tray tooltip + state icon (not the menu). Called on every status
+	 *  tick, so it stays cheap: the menu is rebuilt separately via [`update_tray`] only
+	 *  when its own contents change. (Tooltips are honoured on Windows/macOS; the Linux
+	 *  app-indicator ignores them, but the state icon still updates there.)
+	 */
+	setTrayStatus: (tooltip: string, state: RunState) => typedError<null, string>(__TAURI_INVOKE("set_tray_status", { tooltip, state })),
 };
 
 /** Events */
@@ -921,8 +928,9 @@ export type Transport = {
 } & QuicTransport;
 
 /**
- *  A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"` or
- *  `"activate:<id>"`. `show`/`quit` never reach here — they're handled in Rust directly.
+ *  A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"`,
+ *  `"activate:<id>"`, or `"routing:<mode>"`. `show`/`quit` never reach here — they're
+ *  handled in Rust directly.
  */
 export type TrayAction = string;
 
@@ -934,6 +942,11 @@ export type TrayLabels = {
 	stop: string,
 	restart: string,
 	recent: string,
+	/**  "Routing mode" submenu title, then its three radio entries. */
+	routing: string,
+	routingGlobal: string,
+	routingCustom: string,
+	routingRules: string,
 };
 
 /**  One profile entry the UI wants in the tray's quick-switch list. */
