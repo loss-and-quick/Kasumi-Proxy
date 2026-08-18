@@ -654,6 +654,11 @@ const ru = {
   "settings.routingAddRule": "Добавить правило",
   "settings.routingEmpty": "Правил маршрутизации пока нет.",
   "settings.routingRuleDefault": "Правило {n}",
+  "settings.routingCatchAll":
+    "Перехватывает весь трафик — правила ниже и автопроверка по IP не сработают.",
+  "settings.routingCatchAllRedundant":
+    "Перехватывает весь трафик. Переход на прокси и так добавляется автоматически, поэтому правило лишь отключает автопроверку по IP.",
+  "settings.routingUnreachable": "Никогда не сработает.",
   "settings.routingRuleDomains": plural("count", {
     one: "# домен",
     few: "# домена",

@@ -614,6 +614,11 @@ const vi = {
   "settings.routingAddRule": "Thêm quy tắc",
   "settings.routingEmpty": "Chưa có quy tắc định tuyến nào.",
   "settings.routingRuleDefault": "Quy tắc {n}",
+  "settings.routingCatchAll":
+    "Khớp mọi kết nối — các quy tắc bên dưới và bước kiểm tra IP tự động sẽ không chạy.",
+  "settings.routingCatchAllRedundant":
+    "Khớp mọi kết nối. Bước chuyển cuối sang proxy vốn đã được thêm tự động, nên quy tắc này chỉ khiến bạn mất bước kiểm tra IP tự động.",
+  "settings.routingUnreachable": "Không bao giờ được dùng.",
   "settings.routingRuleDomains": plural("count", {
     one: "# domain",
     other: "# domain",

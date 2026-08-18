@@ -610,6 +610,10 @@ const hi = {
   "settings.routingAddRule": "नियम जोड़ें",
   "settings.routingEmpty": "अभी कोई रूटिंग नियम नहीं हैं।",
   "settings.routingRuleDefault": "नियम {n}",
+  "settings.routingCatchAll": "हर कनेक्शन से मेल खाता है — नीचे के नियम और स्वचालित IP जाँच कभी नहीं चलते।",
+  "settings.routingCatchAllRedundant":
+    "हर कनेक्शन से मेल खाता है। प्रॉक्सी पर अंतिम फ़ॉलबैक पहले से ही अपने आप जुड़ जाता है, इसलिए यह नियम सिर्फ़ स्वचालित IP जाँच छीन लेता है।",
+  "settings.routingUnreachable": "कभी लागू नहीं होता।",
   "settings.routingRuleDomains": plural("count", {
     one: "# डोमेन",
     other: "# डोमेन",
