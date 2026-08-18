@@ -107,9 +107,10 @@ fn set_tray_status(app: tauri::AppHandle, tooltip: String, state: RunState) -> R
         use std::sync::atomic::{AtomicU8, Ordering};
         static LAST_ICON: AtomicU8 = AtomicU8::new(u8::MAX);
         let idx = state as u8;
-        if LAST_ICON.load(Ordering::Relaxed) != idx {
-            tray.set_icon(Some(tray_icon(state)))
-                .map_err(|e| e.to_string())?;
+        if LAST_ICON.load(Ordering::Relaxed) != idx
+            && let Some(icon) = tray_icon(state)
+        {
+            tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
             LAST_ICON.store(idx, Ordering::Relaxed);
         }
     }
@@ -308,23 +309,25 @@ fn rebuild_tray_menu(
 /// A tray icon for the current state, derived at runtime from the bundled app icon so
 /// we ship no extra art: full colour when connected, desaturated + dimmed when off,
 /// and a muted tone while connecting / no-internet. Each variant is decoded and
-/// converted once, then cached.
+/// converted once, then cached. `None` if the bundled icon won't decode — the caller
+/// keeps whatever icon the tray already has rather than taking the process down.
 #[cfg(desktop)]
-fn tray_icon(state: RunState) -> tauri::image::Image<'static> {
+fn tray_icon(state: RunState) -> Option<tauri::image::Image<'static>> {
     use std::sync::OnceLock;
     use tauri::image::Image;
 
     const BASE_PNG: &[u8] =
         include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/icons/128x128.png"));
 
-    fn base() -> &'static Image<'static> {
-        static ICON: OnceLock<Image<'static>> = OnceLock::new();
-        ICON.get_or_init(|| Image::from_bytes(BASE_PNG).expect("decode tray icon"))
+    fn base() -> Option<&'static Image<'static>> {
+        static ICON: OnceLock<Option<Image<'static>>> = OnceLock::new();
+        ICON.get_or_init(|| Image::from_bytes(BASE_PNG).ok())
+            .as_ref()
     }
     // Blend each pixel toward its luminance by `1 - sat` (0 = greyscale) and scale
     // alpha by `alpha` (dim it). The bundled icon is always decoded to RGBA8.
-    fn recolour(sat: f32, alpha: f32) -> Image<'static> {
-        let src = base();
+    fn recolour(sat: f32, alpha: f32) -> Option<Image<'static>> {
+        let src = base()?;
         let (w, h) = (src.width(), src.height());
         let mut rgba = src.rgba().to_vec();
         for px in rgba.chunks_exact_mut(4) {
@@ -335,21 +338,21 @@ fn tray_icon(state: RunState) -> tauri::image::Image<'static> {
             px[2] = (b * sat + lum * (1.0 - sat)).round() as u8;
             px[3] = (f32::from(px[3]) * alpha).round() as u8;
         }
-        Image::new_owned(rgba, w, h)
+        Some(Image::new_owned(rgba, w, h))
     }
-    fn off() -> &'static Image<'static> {
-        static ICON: OnceLock<Image<'static>> = OnceLock::new();
-        ICON.get_or_init(|| recolour(0.0, 0.55))
+    fn off() -> Option<&'static Image<'static>> {
+        static ICON: OnceLock<Option<Image<'static>>> = OnceLock::new();
+        ICON.get_or_init(|| recolour(0.0, 0.55)).as_ref()
     }
-    fn pending() -> &'static Image<'static> {
-        static ICON: OnceLock<Image<'static>> = OnceLock::new();
-        ICON.get_or_init(|| recolour(0.4, 0.9))
+    fn pending() -> Option<&'static Image<'static>> {
+        static ICON: OnceLock<Option<Image<'static>>> = OnceLock::new();
+        ICON.get_or_init(|| recolour(0.4, 0.9)).as_ref()
     }
 
     match state {
-        RunState::Connected => base().clone(),
-        RunState::Connecting | RunState::NoInternet => pending().clone(),
-        RunState::Stopped | RunState::Failed => off().clone(),
+        RunState::Connected => base().cloned(),
+        RunState::Connecting | RunState::NoInternet => pending().cloned(),
+        RunState::Stopped | RunState::Failed => off().cloned(),
     }
 }
 
