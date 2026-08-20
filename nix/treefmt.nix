@@ -57,7 +57,7 @@
           # so the treefmt gate and `cargo fmt` (which reads Cargo.toml) can never
           # diverge on an edition bump. Single-sourced from the root Cargo.toml.
           edition =
-            (builtins.fromTOML
+            (fromTOML
               (builtins.readFile "${self}/Cargo.toml"))
             .workspace
             .package
