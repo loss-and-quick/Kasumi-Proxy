@@ -3,10 +3,9 @@
 # nix/ modules.
 {
   pkgs,
+  lib,
   crane,
 }: let
-  inherit (pkgs) lib;
-
   # The pinned toolchain is single-sourced from //rust-toolchain.toml (also read by
   # rustup for a bare `cargo`), so the version lives in exactly one place. Every
   # consumer below — the host dev-shell tools, the android cross-build, the crane
@@ -62,10 +61,10 @@
   # `rustToolchain` carries rustc/cargo/rustfmt/clippy for the host triple (the
   # default profile); cargo-tauri / cargo-ndk are separate cargo subcommands.
   # Deriving from `rustToolchain` keeps the dev shell on the pinned toolchain.
-  rustTools = [
+  rustTools = with pkgs; [
     rustToolchain
-    pkgs.cargo-tauri
-    pkgs.cargo-ndk
+    cargo-tauri
+    cargo-ndk
   ];
 
   nodeTools = with pkgs; [

@@ -33,7 +33,7 @@ in {
     '';
   };
 
-  config = lib.mkIf cfg.enable {
+  config = mkIf cfg.enable {
     environment.systemPackages = [cfg.package];
 
     # The data-path helper needs CAP_NET_ADMIN (tun + `ip` routing + tun2socks
