@@ -717,8 +717,27 @@ fn build_singbox_dns(
     let mut dns_rule_set_tags = Tags::new();
 
     if let Some(hosts) = hosts {
-        servers.push(json!({ "type": "hosts", "tag": "hosts", "predefined": hosts }));
-        rules.push(json!({ "ip_accept_any": true, "server": "hosts" }));
+        servers.push(json!({ "type": "hosts", "tag": "hosts", "predefined": &hosts }));
+        if s.fake_dns {
+            // query_type rules disable sing-box's legacy DNS mode, where response
+            // matched fields (ip_accept_any) are rejected — match the predefined
+            // names on the query side instead; the hosts server answers exactly them.
+            // An empty name list would leave the rule matching every A/AAAA query,
+            // so it is dropped (an empty predefined map answers nothing anyway).
+            let names: Vec<&str> = hosts
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            if !names.is_empty() {
+                rules.push(
+                    json!({ "query_type": ["A", "AAAA"], "domain": names, "server": "hosts" }),
+                );
+            }
+        } else {
+            rules.push(json!({ "ip_accept_any": true, "server": "hosts" }));
+        }
     }
     if s.fake_dns {
         servers.push(json!({ "type": "fakeip", "tag": "fakeip", "inet4_range": FAKEIP_INET4_RANGE, "inet6_range": "fc00::/18" }));
@@ -745,7 +764,13 @@ fn build_singbox_dns(
             }
         }
     }
-    rules.push(json!({ "ip_is_private": true, "server": "local" }));
+    // Skipped in fake-DNS configs: the fakeip rule ahead of it takes every A/AAAA
+    // query and other query types carry no addresses for ip_is_private to match,
+    // while as a response matched field without match_response it is rejected once
+    // query_type rules disable the legacy DNS mode.
+    if !s.fake_dns {
+        rules.push(json!({ "ip_is_private": true, "server": "local" }));
+    }
 
     let mut dns = json!({
         "servers": servers,
@@ -1620,6 +1645,68 @@ mod tests {
             .unwrap();
         assert_eq!(remote["type"], "https");
         assert_eq!(remote["detour"], "proxy");
+    }
+
+    #[test]
+    fn fake_dns_rules_use_no_response_matched_fields() {
+        // query_type rules disable sing-box's legacy DNS mode, where response
+        // matched fields (ip_accept_any, ip_is_private, ip_cidr) without
+        // match_response are rejected at startup.
+        let s = AdvancedSettings {
+            fake_dns: true,
+            dns_hosts: Some("example.com=1.2.3.4\nother.test=5.6.7.8".into()),
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        for rule in rules {
+            for field in [
+                "ip_accept_any",
+                "ip_is_private",
+                "ip_cidr",
+                "match_response",
+            ] {
+                assert!(
+                    rule.get(field).is_none(),
+                    "fake-DNS rule {rule} carries response matched field {field}"
+                );
+            }
+        }
+        // Hosts stay ahead of fakeip and are matched on the query side.
+        let hosts_rule = &rules[0];
+        assert_eq!(hosts_rule["server"], "hosts");
+        assert_eq!(hosts_rule["domain"], json!(["example.com", "other.test"]));
+        assert_eq!(hosts_rule["query_type"], json!(["A", "AAAA"]));
+        let fakeip_rule = &rules[1];
+        assert_eq!(fakeip_rule["server"], "fakeip");
+        assert_eq!(fakeip_rule["query_type"], json!(["A", "AAAA"]));
+
+        // An empty predefined map must not leave a rule matching every A/AAAA query.
+        let s = AdvancedSettings {
+            fake_dns: true,
+            dns_hosts: Some("{}".into()),
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0]["server"], "fakeip");
+    }
+
+    #[test]
+    fn legacy_dns_mode_keeps_address_filters_without_fake_dns() {
+        // Without fake_dns nothing disables the legacy DNS mode, so the hosts
+        // fall-through and the private-answer re-resolve stay as address filters.
+        let s = AdvancedSettings {
+            dns_hosts: Some("example.com=1.2.3.4".into()),
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        assert_eq!(rules[0]["ip_accept_any"], json!(true));
+        assert_eq!(rules[0]["server"], "hosts");
+        assert_eq!(rules[rules.len() - 1]["ip_is_private"], json!(true));
+        assert_eq!(rules[rules.len() - 1]["server"], "local");
     }
 
     #[test]
