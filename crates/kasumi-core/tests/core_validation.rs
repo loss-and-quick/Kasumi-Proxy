@@ -874,12 +874,12 @@ fn find_core(env_var: &str, prefix: &str) -> Option<PathBuf> {
     None
 }
 
-fn write_config(
+fn build_config(
     profile: &Profile,
     settings: &AdvancedSettings,
     rules: &[RoutingRule],
     srs_dir: &Path,
-) -> Option<(tempfile::TempDir, PathBuf, CoreEngine)> {
+) -> Option<(Value, CoreEngine)> {
     let built = build_core_config(
         profile,
         settings,
@@ -888,10 +888,98 @@ fn write_config(
         &srs_dir.to_string_lossy(),
     )
     .ok()?;
+    Some((built.config, built.engine))
+}
+
+fn write_config(cfg: &Value) -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.json");
-    std::fs::write(&path, serde_json::to_string_pretty(&built.config).unwrap()).unwrap();
-    Some((dir, path, built.engine))
+    std::fs::write(&path, serde_json::to_string_pretty(cfg).unwrap()).unwrap();
+    (dir, path)
+}
+
+/// Whether a field matches the way sing-box reads it: bools by value, listables
+/// by length, `ip_version` by being non-zero. `response_rcode` is a pointer
+/// upstream, so any non-null value counts.
+fn dns_field_is_set(rule: &Value, key: &str) -> bool {
+    match rule.get(key) {
+        None | Some(Value::Null) => false,
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Array(a)) => !a.is_empty(),
+        Some(Value::String(s)) => !s.is_empty(),
+        Some(Value::Number(n)) => key == "response_rcode" || n.as_f64() != Some(0.0),
+        Some(Value::Object(_)) => true,
+    }
+}
+
+/// sing-box 1.14 `defaultRuleDisablesLegacyDNSMode` plus the action-side
+/// disablers of `dnsRuleActionDisablesLegacyDNSMode`.
+fn disables_legacy_dns_mode(rule: &Value) -> bool {
+    const DISABLING: [&str; 7] = [
+        "query_type",
+        "ip_version",
+        "match_response",
+        "response_rcode",
+        "response_answer",
+        "response_ns",
+        "response_extra",
+    ];
+    if DISABLING.iter().any(|k| dns_field_is_set(rule, k)) || dns_field_is_set(rule, "race") {
+        return true;
+    }
+    let action = match rule["action"].as_str() {
+        None | Some("") => "route",
+        Some(a) => a,
+    };
+    if matches!(action, "evaluate" | "respond") {
+        return true;
+    }
+    matches!(action, "route" | "evaluate" | "route-options")
+        && ["speculative", "disable_optimistic_cache"]
+            .iter()
+            .any(|k| dns_field_is_set(rule, k))
+}
+
+/// sing-box 1.14 constraint on generated DNS rules: once any rule disables the
+/// legacy DNS mode, every response matched field (`ip_cidr`, `ip_is_private`,
+/// `ip_accept_any`, `response_*`) without `match_response` is a startup error.
+/// `sing-box check` fails on the first offending rule only; this lists all of
+/// them, and needs neither a staged core nor geo data. Rule-set purity and
+/// logical-rule nesting are out of scope — our generator emits neither.
+fn singbox_legacy_dns_violations(cfg: &Value) -> Vec<String> {
+    const RESPONSE_MATCHED: [&str; 7] = [
+        "ip_cidr",
+        "ip_is_private",
+        "ip_accept_any",
+        "response_rcode",
+        "response_answer",
+        "response_ns",
+        "response_extra",
+    ];
+    let Some(rules) = cfg["dns"]["rules"].as_array() else {
+        return Vec::new();
+    };
+    if !rules.iter().any(disables_legacy_dns_mode) {
+        return Vec::new();
+    }
+    rules
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| !dns_field_is_set(r, "match_response"))
+        .filter_map(|(i, r)| {
+            let used: Vec<&str> = RESPONSE_MATCHED
+                .iter()
+                .filter(|k| dns_field_is_set(r, k))
+                .copied()
+                .collect();
+            (!used.is_empty()).then(|| {
+                format!(
+                    "dns rule[{i}] uses {} without match_response while the legacy DNS mode is disabled",
+                    used.join(", ")
+                )
+            })
+        })
+        .collect()
 }
 
 fn validate(engine: CoreEngine, bin: &Path, cfg: &Path, asset_dir: &Path) -> (bool, String) {
@@ -911,17 +999,19 @@ fn validate(engine: CoreEngine, bin: &Path, cfg: &Path, asset_dir: &Path) -> (bo
     (out.status.success(), combined)
 }
 
-/// Build + run every case against the staged cores. Shared by the protocol and
-/// settings sweeps. Skips wholesale when no cores are staged (plain CI).
+/// Build every case, sweep the generated configs for constraints a core would
+/// only surface one at a time, then run them past the staged cores. The sweep
+/// is static, so it also runs where no core is staged (plain CI) and on cases
+/// the missing geo data would otherwise skip.
 fn validate_all(cases: Vec<Case>) {
     let xray = find_core("KASUMI_XRAY_BIN", "xray");
     let singbox = find_core("KASUMI_SINGBOX_BIN", "sing-box");
-    if xray.is_none() && singbox.is_none() {
+    let cores_staged = xray.is_some() || singbox.is_some();
+    if !cores_staged {
         eprintln!(
-            "skipping core validation: no staged binaries in {} (run scripts/fetch-binaries.sh desktop)",
+            "no staged binaries in {} (run scripts/fetch-binaries.sh desktop): static sweep only",
             binaries_dir().display()
         );
-        return;
     }
 
     let asset_dir = binaries_dir();
@@ -932,7 +1022,9 @@ fn validate_all(cases: Vec<Case>) {
     // rather than failing them for missing data.
     let has_geo = asset_dir.join("geoip.dat").is_file();
 
-    let mut failures = Vec::new();
+    let mut lint_failures = Vec::new();
+    let mut core_failures = Vec::new();
+    let mut built = 0;
     let mut checked = 0;
     let mut skipped_geo = 0;
     for Case {
@@ -943,29 +1035,40 @@ fn validate_all(cases: Vec<Case>) {
         needs_geo,
     } in cases
     {
+        let Some((cfg_value, engine)) = build_config(&profile, &settings, &rules, srs_dir.path())
+        else {
+            continue; // our builder declined this combo — not a core problem.
+        };
+        built += 1;
+        if engine == CoreEngine::SingBox {
+            for violation in singbox_legacy_dns_violations(&cfg_value) {
+                lint_failures.push(format!("[{name}] {violation}"));
+            }
+        }
+        if !cores_staged {
+            continue;
+        }
         if needs_geo && !has_geo {
             skipped_geo += 1;
             continue;
         }
-        let Some((_keep, cfg, engine)) = write_config(&profile, &settings, &rules, srs_dir.path())
-        else {
-            continue; // our builder declined this combo — not a core problem.
-        };
         let bin = match engine {
             CoreEngine::Xray => xray.as_deref(),
             CoreEngine::SingBox => singbox.as_deref(),
         };
         let Some(bin) = bin else { continue };
+        let (_keep, cfg) = write_config(&cfg_value);
         let (ok, output) = validate(engine, bin, &cfg, asset_dir.as_path());
         checked += 1;
         if !ok {
-            failures.push(format!("[{name}] {engine:?} rejected:\n{}", output.trim()));
+            core_failures.push(format!("[{name}] {engine:?} rejected:\n{}", output.trim()));
         }
     }
 
     eprintln!(
-        "core validation: {}/{checked} configs accepted{}",
-        checked - failures.len(),
+        "config sweep: {built} built, {} static violations; {}/{checked} accepted by their core{}",
+        lint_failures.len(),
+        checked - core_failures.len(),
         if skipped_geo > 0 {
             format!(
                 ", {skipped_geo} geo-dependent skipped (no geoip.dat in {})",
@@ -975,16 +1078,102 @@ fn validate_all(cases: Vec<Case>) {
             String::new()
         }
     );
+    let failures: Vec<String> = lint_failures.into_iter().chain(core_failures).collect();
     assert!(
         failures.is_empty(),
-        "{}/{} configs rejected by their core:\n\n{}",
+        "{} problems across {built} generated configs ({checked} core-validated):\n\n{}",
         failures.len(),
-        checked,
         failures.join("\n---\n")
     );
     assert!(
-        checked > 0,
+        built > 0,
+        "no cases built — generator declined every combo?"
+    );
+    assert!(
+        !cores_staged || checked > 0,
         "no cases validated — staged binaries unreadable?"
+    );
+}
+
+#[test]
+fn legacy_dns_lint_lists_every_offending_rule() {
+    // The pre-fix fake-DNS shape: `sing-box check` rejected it naming only the
+    // first offending rule; the lint must list both response matched rules.
+    let pre_fix = json!({
+        "dns": {
+            "rules": [
+                { "ip_accept_any": true, "server": "hosts" },
+                { "query_type": ["A", "AAAA"], "server": "fakeip" },
+                { "ip_is_private": true, "server": "local" },
+            ]
+        }
+    });
+    let violations = singbox_legacy_dns_violations(&pre_fix);
+    assert_eq!(violations.len(), 2, "both rules listed: {violations:?}");
+    assert!(
+        violations[0].contains("dns rule[0]") && violations[0].contains("ip_accept_any"),
+        "{violations:?}"
+    );
+    assert!(
+        violations[1].contains("dns rule[2]") && violations[1].contains("ip_is_private"),
+        "{violations:?}"
+    );
+
+    // With no legacy-disabling rule the same address filters stay legal.
+    let legacy_only = json!({
+        "dns": {
+            "rules": [
+                { "ip_accept_any": true, "server": "hosts" },
+                { "ip_is_private": true, "server": "local" },
+            ]
+        }
+    });
+    assert!(singbox_legacy_dns_violations(&legacy_only).is_empty());
+}
+
+#[test]
+fn legacy_dns_lint_reads_fields_like_singbox() {
+    let violations =
+        |rules: Value| singbox_legacy_dns_violations(&json!({ "dns": { "rules": rules } }));
+
+    // Falsy fields don't match upstream either: `ip_version: 0` leaves the
+    // legacy mode on, and `ip_is_private: false` filters nothing.
+    assert!(
+        violations(json!([
+            { "ip_version": 0, "server": "local" },
+            { "ip_is_private": false, "ip_cidr": [], "server": "local" },
+        ]))
+        .is_empty()
+    );
+
+    // A `match_response` tag is a string, and it exempts its own rule.
+    assert!(
+        violations(json!([
+            { "query_type": ["A"], "action": "evaluate", "server": "remote" },
+            { "match_response": "probe", "ip_is_private": true, "server": "local" },
+        ]))
+        .is_empty()
+    );
+
+    // Action-side disablers, not just matched fields, turn the mode off.
+    for disabler in [
+        json!({ "race": true, "server": "remote" }),
+        json!({ "action": "route", "speculative": true, "server": "remote" }),
+        json!({ "action": "route-options", "disable_optimistic_cache": true }),
+        json!({ "action": "respond", "server": "remote" }),
+    ] {
+        let found = violations(json!([disabler, { "ip_accept_any": true, "server": "hosts" }]));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(found[0].contains("dns rule[1]"), "{found:?}");
+    }
+
+    // The same keys under an action that ignores them stay inert.
+    assert!(
+        violations(json!([
+            { "action": "reject", "speculative": true },
+            { "ip_accept_any": true, "server": "hosts" },
+        ]))
+        .is_empty()
     );
 }
 
