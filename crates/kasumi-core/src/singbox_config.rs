@@ -718,26 +718,11 @@ fn build_singbox_dns(
 
     if let Some(hosts) = hosts {
         servers.push(json!({ "type": "hosts", "tag": "hosts", "predefined": &hosts }));
-        if s.fake_dns {
-            // query_type rules disable sing-box's legacy DNS mode, where response
-            // matched fields (ip_accept_any) are rejected — match the predefined
-            // names on the query side instead; the hosts server answers exactly them.
-            // An empty name list would leave the rule matching every A/AAAA query,
-            // so it is dropped (an empty predefined map answers nothing anyway).
-            let names: Vec<&str> = hosts
-                .as_object()
-                .unwrap()
-                .keys()
-                .map(String::as_str)
-                .collect();
-            if !names.is_empty() {
-                rules.push(
-                    json!({ "query_type": ["A", "AAAA"], "domain": names, "server": "hosts" }),
-                );
-            }
-        } else {
-            rules.push(json!({ "ip_accept_any": true, "server": "hosts" }));
-        }
+        // The hosts server answers its predefined names and nothing else, so an
+        // answer carrying any address means the name is a host entry; anything
+        // else leaves the response unmatched and falls through to the rules below.
+        rules.push(json!({ "action": "evaluate", "server": "hosts" }));
+        rules.push(json!({ "match_response": true, "ip_accept_any": true, "action": "respond" }));
     }
     if s.fake_dns {
         servers.push(json!({ "type": "fakeip", "tag": "fakeip", "inet4_range": FAKEIP_INET4_RANGE, "inet6_range": "fc00::/18" }));
@@ -765,11 +750,10 @@ fn build_singbox_dns(
         }
     }
     // Skipped in fake-DNS configs: the fakeip rule ahead of it takes every A/AAAA
-    // query and other query types carry no addresses for ip_is_private to match,
-    // while as a response matched field without match_response it is rejected once
-    // query_type rules disable the legacy DNS mode.
+    // query and other query types carry no addresses to match.
     if !s.fake_dns {
-        rules.push(json!({ "ip_is_private": true, "server": "local" }));
+        rules.push(json!({ "action": "evaluate", "server": "local" }));
+        rules.push(json!({ "match_response": true, "ip_is_private": true, "action": "respond" }));
     }
 
     let mut dns = json!({
@@ -1648,65 +1632,97 @@ mod tests {
     }
 
     #[test]
-    fn fake_dns_rules_use_no_response_matched_fields() {
-        // query_type rules disable sing-box's legacy DNS mode, where response
-        // matched fields (ip_accept_any, ip_is_private, ip_cidr) without
-        // match_response are rejected at startup.
-        let s = AdvancedSettings {
-            fake_dns: true,
-            dns_hosts: Some("example.com=1.2.3.4\nother.test=5.6.7.8".into()),
-            ..Default::default()
-        };
-        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
-        let rules = dns["rules"].as_array().unwrap();
-        for rule in rules {
-            for field in [
-                "ip_accept_any",
-                "ip_is_private",
-                "ip_cidr",
-                "match_response",
-            ] {
-                assert!(
-                    rule.get(field).is_none(),
-                    "fake-DNS rule {rule} carries response matched field {field}"
-                );
+    fn hosts_entries_are_matched_on_the_response() {
+        for fake_dns in [false, true] {
+            let s = AdvancedSettings {
+                fake_dns,
+                dns_hosts: Some("example.com=1.2.3.4\nother.test=5.6.7.8".into()),
+                ..Default::default()
+            };
+            let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+            let rules = dns["rules"].as_array().unwrap();
+            assert_eq!(rules[0], json!({ "action": "evaluate", "server": "hosts" }));
+            assert_eq!(
+                rules[1],
+                json!({ "match_response": true, "ip_accept_any": true, "action": "respond" })
+            );
+            if fake_dns {
+                assert_eq!(rules[2]["server"], "fakeip");
             }
         }
-        // Hosts stay ahead of fakeip and are matched on the query side.
-        let hosts_rule = &rules[0];
-        assert_eq!(hosts_rule["server"], "hosts");
-        assert_eq!(hosts_rule["domain"], json!(["example.com", "other.test"]));
-        assert_eq!(hosts_rule["query_type"], json!(["A", "AAAA"]));
-        let fakeip_rule = &rules[1];
-        assert_eq!(fakeip_rule["server"], "fakeip");
-        assert_eq!(fakeip_rule["query_type"], json!(["A", "AAAA"]));
 
-        // An empty predefined map must not leave a rule matching every A/AAAA query.
+        // A hosts server with nothing predefined answers nothing, so the pair
+        // simply never matches — no rule has to be dropped for it.
         let s = AdvancedSettings {
-            fake_dns: true,
             dns_hosts: Some("{}".into()),
             ..Default::default()
         };
         let dns = build_singbox_dns(&s, &[], &mut Tags::new());
-        let rules = dns["rules"].as_array().unwrap();
-        assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0]["server"], "fakeip");
+        assert_eq!(dns["rules"][0]["server"], "hosts");
     }
 
     #[test]
-    fn legacy_dns_mode_keeps_address_filters_without_fake_dns() {
-        // Without fake_dns nothing disables the legacy DNS mode, so the hosts
-        // fall-through and the private-answer re-resolve stay as address filters.
+    fn private_answers_re_resolve_only_without_fake_dns() {
         let s = AdvancedSettings {
             dns_hosts: Some("example.com=1.2.3.4".into()),
             ..Default::default()
         };
         let dns = build_singbox_dns(&s, &[], &mut Tags::new());
         let rules = dns["rules"].as_array().unwrap();
-        assert_eq!(rules[0]["ip_accept_any"], json!(true));
-        assert_eq!(rules[0]["server"], "hosts");
-        assert_eq!(rules[rules.len() - 1]["ip_is_private"], json!(true));
-        assert_eq!(rules[rules.len() - 1]["server"], "local");
+        assert_eq!(
+            rules[rules.len() - 2],
+            json!({ "action": "evaluate", "server": "local" })
+        );
+        assert_eq!(
+            rules[rules.len() - 1],
+            json!({ "match_response": true, "ip_is_private": true, "action": "respond" })
+        );
+
+        // Behind fakeip the re-resolve can never match, so it is not emitted.
+        let s = AdvancedSettings {
+            fake_dns: true,
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        assert!(rules.iter().all(|r| r["action"] != "respond"), "{rules:?}");
+    }
+
+    #[test]
+    fn no_dns_rule_uses_a_response_matched_field_bare() {
+        // Response Match Fields without match_response are a startup error in
+        // sing-box 1.14 once any rule leaves the legacy DNS mode, and the legacy
+        // mode itself is gone in 1.16.
+        for fake_dns in [false, true] {
+            for routing_mode in [RoutingMode::Global, RoutingMode::Rules] {
+                let s = AdvancedSettings {
+                    fake_dns,
+                    routing_mode,
+                    dns_hosts: Some("example.com=1.2.3.4".into()),
+                    ..Default::default()
+                };
+                let rule = RoutingRule {
+                    id: "r".into(),
+                    remarks: "direct".into(),
+                    enabled: true,
+                    outbound_tag: "direct".into(),
+                    domain: Some(vec!["blocked.test".into()]),
+                    ip: None,
+                    port: None,
+                    network: None,
+                    protocol: None,
+                };
+                let dns = build_singbox_dns(&s, &[rule], &mut Tags::new());
+                for r in dns["rules"].as_array().unwrap() {
+                    if r["match_response"] == json!(true) {
+                        continue;
+                    }
+                    for field in ["ip_cidr", "ip_is_private", "ip_accept_any"] {
+                        assert!(r.get(field).is_none(), "bare {field} in {r}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]
