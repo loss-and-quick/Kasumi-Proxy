@@ -399,6 +399,10 @@ const vi = {
   "settings.fragmentDelay": "Độ trễ phân mảnh",
   "settings.tunMtu": "TUN MTU",
   "settings.tunHevTuning": "Tinh chỉnh hev",
+  "settings.tunExclude": "Các loại trừ TUN",
+  "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
+  "settings.tunExcludeHint":
+    "CIDR đi ngoài đường hầm, mỗi dòng một hoặc tách bằng dấu phẩy (ví dụ mạng Docker)",
   "settings.tunConnectTimeout": "Thời gian chờ kết nối (ms)",
   "settings.tunTcpRwTimeout": "Thời gian đọc/ghi TCP (ms)",
   "settings.tunUdpRwTimeout": "Thời gian đọc/ghi UDP (ms)",

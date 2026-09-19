@@ -474,6 +474,10 @@ const ar = {
   "settings.fragmentDelay": "تأخير التجزئة",
   "settings.tunMtu": "TUN MTU",
   "settings.tunHevTuning": "ضبط hev",
+  "settings.tunExclude": "استثناءات TUN",
+  "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
+  "settings.tunExcludeHint":
+    "استثناءات CIDR لتجاوز النفق، سطرًا واحدًا في كل سطر أو مفصولة بفاصلة (مثل شبكات Docker)",
   "settings.tunConnectTimeout": "مهلة الاتصال (مللي ثانية)",
   "settings.tunTcpRwTimeout": "مهلة قراءة/كتابة TCP (مللي ثانية)",
   "settings.tunUdpRwTimeout": "مهلة قراءة/كتابة UDP (مللي ثانية)",

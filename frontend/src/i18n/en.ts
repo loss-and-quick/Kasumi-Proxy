@@ -409,6 +409,10 @@ const en = {
   "settings.fragmentDelay": "Fragment delay",
   "settings.tunMtu": "TUN MTU",
   "settings.tunHevTuning": "hev tuning",
+  "settings.tunExclude": "TUN exclusions",
+  "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
+  "settings.tunExcludeHint":
+    "CIDRs to bypass the tunnel, one per line or comma-separated (e.g. docker networks)",
   "settings.tunConnectTimeout": "Connect timeout (ms)",
   "settings.tunTcpRwTimeout": "TCP read/write timeout (ms)",
   "settings.tunUdpRwTimeout": "UDP read/write timeout (ms)",

@@ -424,6 +424,10 @@ const ru = {
   "settings.fragmentDelay": "Задержка фрагментации",
   "settings.tunMtu": "TUN MTU",
   "settings.tunHevTuning": "Настройки hev",
+  "settings.tunExclude": "Исключения TUN",
+  "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
+  "settings.tunExcludeHint":
+    "CIDR, которые обходят туннель — по одной в строке или через запятую (напр. контейнерные сети Docker)",
   "settings.tunConnectTimeout": "Таймаут подключения (мс)",
   "settings.tunTcpRwTimeout": "Таймаут чтения/записи TCP (мс)",
   "settings.tunUdpRwTimeout": "Таймаут чтения/записи UDP (мс)",
