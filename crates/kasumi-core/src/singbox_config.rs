@@ -1023,6 +1023,20 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     if !exclude_uid.is_empty() {
         main_tun["exclude_uid"] = json!(exclude_uid);
     }
+    // User-specified TUN exclusions (e.g. docker bridge networks): excluded at the
+    // OS routing level via `route_exclude_address`, so they never enter the tun.
+    // Sorted + de-duplicated here for deterministic output; the desktop layers the
+    // proxy-server bypass in at runtime (`src-tauri/src/desktop/singbox.rs`), which
+    // merges rather than overwrites this list.
+    let exclude_cidrs: Vec<String> = s
+        .tun_exclude_cidrs()
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if !exclude_cidrs.is_empty() {
+        main_tun["route_exclude_address"] = json!(exclude_cidrs);
+    }
     let mut inbounds = vec![main_tun];
     if !force_uids.is_empty() {
         let force_addr = if v6 {
@@ -1041,6 +1055,10 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
         force_tun["iproute2_rule_index"] = json!(SINGBOX_FORCE_RULE_PRIO);
         force_tun["strict_route"] = json!(s.strict_route);
         force_tun["include_uid"] = json!(force_uids);
+        // Same user exclusions apply to the force tun (Android force-proxy uids).
+        if !exclude_cidrs.is_empty() {
+            force_tun["route_exclude_address"] = json!(exclude_cidrs);
+        }
         inbounds.push(force_tun);
     }
     inbounds
