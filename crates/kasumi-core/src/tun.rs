@@ -86,6 +86,24 @@ impl AdvancedSettings {
             log_level: hev_log_level(self.log_level).to_owned(),
         }
     }
+
+    /// The user's TUN-exclude CIDRs, parsed from the raw
+    /// `tun_exclude_addresses` string. Comma- or newline/whitespace-separated; each
+    /// token is trimmed and empties dropped. De-dup/sort is the caller's job (the
+    /// bypass sets collect into a `HashSet`), so this returns nothing extra when the
+    /// setting is unset — the proxy-server bypass still applies on its own.
+    pub fn tun_exclude_cidrs(&self) -> Vec<String> {
+        self.tun_exclude_addresses
+            .as_deref()
+            .map(|raw| {
+                raw.split(|c: char| c == ',' || c.is_whitespace())
+                    .map(str::trim)
+                    .filter(|c| !c.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
@@ -136,5 +154,22 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(none.tun_options().log_level, "error");
+    }
+
+    #[test]
+    fn exclude_cidrs_empty_when_unset() {
+        assert!(AdvancedSettings::default().tun_exclude_cidrs().is_empty());
+    }
+
+    #[test]
+    fn exclude_cidrs_split_on_commas_and_newlines() {
+        let s = AdvancedSettings {
+            tun_exclude_addresses: Some("172.17.0.0/16,\n172.18.0.0/12 , 10.8.0.0/24".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            s.tun_exclude_cidrs(),
+            vec!["172.17.0.0/16", "172.18.0.0/12", "10.8.0.0/24"]
+        );
     }
 }

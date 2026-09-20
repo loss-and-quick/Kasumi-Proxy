@@ -152,6 +152,16 @@ impl DesktopPlatform {
             .unwrap_or(DEFAULT_LOCAL_PAC_PORT)
     }
 
+    /// The user's TUN-exclude CIDRs (e.g. docker bridge networks) from the saved
+    /// settings, parsed into a list. Empty when unset — the proxy-server bypass
+    /// still applies on its own.
+    async fn tun_exclude_cidrs(&self) -> Vec<String> {
+        read_json::<AppState>(&self.p.backend.app_state)
+            .await
+            .map(|s| s.settings.tun_exclude_cidrs())
+            .unwrap_or_default()
+    }
+
     async fn core_version(&self, engine: CoreEngine) -> Option<String> {
         let bin = self.core_bin(engine);
         if !exists(bin).await {
@@ -292,8 +302,11 @@ impl DesktopPlatform {
 
         // External userspace tun in front of a socks-only core.
         self.os.precheck_external_tun(&self.p).await?;
-        // Resolve the server-bypass set before any tun route is up (needs DNS).
-        let bypass = routing::resolve_bypass_cidrs(&cfg_text).await;
+        // Resolve the server-bypass set before any tun route is up (needs DNS),
+        // plus the user's TUN-exclude CIDRs (e.g. docker networks) so they route
+        // straight out instead of through the proxy.
+        let bypass =
+            routing::resolve_bypass_cidrs(&cfg_text, &self.tun_exclude_cidrs().await).await;
 
         // Bind the core's own egress outbounds (proxy + direct) to the physical
         // uplink so they escape the tun at the socket layer instead of looping back

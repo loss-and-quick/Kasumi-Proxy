@@ -101,10 +101,11 @@ pub async fn read_resolvers() -> Vec<String> {
 }
 
 /// Resolve every server host in the core config to bypass CIDRs, plus the active
-/// DNS servers. The config parsing + resolution is shared with Linux; only the
-/// resolver source is Windows-specific (WMI vs /etc/resolv.conf).
-pub async fn resolve_bypass_cidrs(cfg_text: &str) -> Vec<String> {
-    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await).await
+/// DNS servers and the user's TUN-exclude CIDRs (e.g. docker networks). The config
+/// parsing + resolution is shared with Linux; only the resolver source is
+/// Windows-specific (WMI vs /etc/resolv.conf).
+pub async fn resolve_bypass_cidrs(cfg_text: &str, tun_exclude: &[String]) -> Vec<String> {
+    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await, tun_exclude).await
 }
 
 /// `1.2.3.4/32` → `("1.2.3.4", true)`; `2001:db8::1/128` → `("2001:db8::1", false)`.

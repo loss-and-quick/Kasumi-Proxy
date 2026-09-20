@@ -404,6 +404,10 @@ const es = {
   "settings.fragmentDelay": "Retardo de fragmentación",
   "settings.tunMtu": "MTU de TUN",
   "settings.tunHevTuning": "Ajustes de hev",
+  "settings.tunExclude": "Exclusiones TUN",
+  "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
+  "settings.tunExcludeHint":
+    "CIDR que deben evitar el túnel, uno por línea o separados por comas (por ejemplo, redes de Docker)",
   "settings.tunConnectTimeout": "Tiempo de conexión (ms)",
   "settings.tunTcpRwTimeout": "Tiempo lectura/escritura TCP (ms)",
   "settings.tunUdpRwTimeout": "Tiempo lectura/escritura UDP (ms)",

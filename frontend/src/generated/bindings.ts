@@ -123,6 +123,14 @@ export type AdvancedSettings_Deserialize = {
 	tunTcpBufferSize?: number,
 	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
 	tunUdpRecvBufferSize?: number,
+	/**
+	 *  Comma- or newline-separated CIDRs the tun must not capture (e.g. docker
+	 *  bridge networks like `172.17.0.0/16`). Empty/`None` = nothing extra excluded.
+	 *  Parsed into a `Vec<String>` and merged with the proxy-server bypass wherever
+	 *  that set is computed — sing-box `route_exclude_address` and the external-tun
+	 *  host-routes — so the same setting works on every engine.
+	 */
+	tunExcludeAddresses?: string | null,
 };
 
 /**
@@ -199,6 +207,14 @@ export type AdvancedSettings_Serialize = {
 	tunTcpBufferSize: number,
 	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
 	tunUdpRecvBufferSize: number,
+	/**
+	 *  Comma- or newline-separated CIDRs the tun must not capture (e.g. docker
+	 *  bridge networks like `172.17.0.0/16`). Empty/`None` = nothing extra excluded.
+	 *  Parsed into a `Vec<String>` and merged with the proxy-server bypass wherever
+	 *  that set is computed — sing-box `route_exclude_address` and the external-tun
+	 *  host-routes — so the same setting works on every engine.
+	 */
+	tunExcludeAddresses?: string | null,
 };
 
 export type Anytls = {

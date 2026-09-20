@@ -403,6 +403,10 @@ const pt = {
   "settings.fragmentDelay": "Atraso de fragmentação",
   "settings.tunMtu": "MTU do TUN",
   "settings.tunHevTuning": "Ajustes do hev",
+  "settings.tunExclude": "Exclusões TUN",
+  "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
+  "settings.tunExcludeHint":
+    "CIDRs que devem ignorar o túnel, um por linha ou separados por comas (por exemplo, redes de Docker)",
   "settings.tunConnectTimeout": "Tempo de conexão (ms)",
   "settings.tunTcpRwTimeout": "Tempo de leitura/escrita TCP (ms)",
   "settings.tunUdpRwTimeout": "Tempo de leitura/escrita UDP (ms)",

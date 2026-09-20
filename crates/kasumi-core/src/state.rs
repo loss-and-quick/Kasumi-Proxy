@@ -310,6 +310,13 @@ pub struct AdvancedSettings {
     pub tun_tcp_buffer_size: i64,
     /// UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`).
     pub tun_udp_recv_buffer_size: i64,
+    /// Comma- or newline-separated CIDRs the tun must not capture (e.g. docker
+    /// bridge networks like `172.17.0.0/16`). Empty/`None` = nothing extra excluded.
+    /// Parsed into a `Vec<String>` and merged with the proxy-server bypass wherever
+    /// that set is computed — sing-box `route_exclude_address` and the external-tun
+    /// host-routes — so the same setting works on every engine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tun_exclude_addresses: Option<String>,
 }
 
 impl Default for AdvancedSettings {
@@ -365,6 +372,7 @@ impl Default for AdvancedSettings {
             tun_udp_rw_timeout_ms: 60_000,
             tun_tcp_buffer_size: 65_536,
             tun_udp_recv_buffer_size: 524_288,
+            tun_exclude_addresses: None,
         }
     }
 }

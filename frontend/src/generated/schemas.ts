@@ -97,6 +97,7 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	tunUdpRwTimeoutMs: z.number(),
 	tunTcpBufferSize: z.number(),
 	tunUdpRecvBufferSize: z.number(),
+	tunExcludeAddresses: z.string().nullable().optional(),
 });
 export type AdvancedSettings_Serialize = z.infer<typeof AdvancedSettings_SerializeSchema>;
 
@@ -154,6 +155,7 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	tunUdpRwTimeoutMs: z.number().optional(),
 	tunTcpBufferSize: z.number().optional(),
 	tunUdpRecvBufferSize: z.number().optional(),
+	tunExcludeAddresses: z.string().nullable().optional(),
 });
 export type AdvancedSettings_Deserialize = z.infer<typeof AdvancedSettings_DeserializeSchema>;
 

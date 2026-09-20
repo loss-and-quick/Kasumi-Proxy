@@ -826,6 +826,17 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             vec![],
             false,
         ),
+        // TUN exclude CIDRs (docker bridge networks) — sing-box emits
+        // `route_exclude_address` on the tun inbound; both cores must accept it.
+        (
+            "tun-exclude",
+            AdvancedSettings {
+                tun_exclude_addresses: Some("172.17.0.0/16, 172.18.0.0/16".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
     ]
 }
 

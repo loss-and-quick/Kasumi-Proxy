@@ -64,6 +64,15 @@ export function TunEngineSection({
           );
         })}
 
+        <Field
+          area
+          label={t("settings.tunExclude")}
+          value={settings.tunExcludeAddresses ?? ""}
+          placeholder={t("settings.tunExcludePh")}
+          hint={t("settings.tunExcludeHint")}
+          onChange={(value) => set("tunExcludeAddresses", value)}
+        />
+
         {showTuning && (
           <div
             style={{ marginTop: 12, borderTop: "1px solid var(--outline-faint)", paddingTop: 12 }}

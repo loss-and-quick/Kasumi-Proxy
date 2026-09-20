@@ -70,10 +70,10 @@ async fn read_resolvers() -> Vec<String> {
 }
 
 /// Resolve every server host in the core config to bypass CIDRs, plus the resolv.conf
-/// nameservers. The config parsing + resolution is shared; only the resolver source
-/// is Linux-specific.
-pub async fn resolve_bypass_cidrs(cfg_text: &str) -> Vec<String> {
-    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await).await
+/// nameservers and the user's TUN-exclude CIDRs (e.g. docker networks). The config
+/// parsing + resolution is shared; only the resolver source is Linux-specific.
+pub async fn resolve_bypass_cidrs(cfg_text: &str, tun_exclude: &[String]) -> Vec<String> {
+    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await, tun_exclude).await
 }
 
 /// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address + up
