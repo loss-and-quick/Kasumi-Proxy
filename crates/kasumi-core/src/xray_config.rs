@@ -5,7 +5,7 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::config_shared::{build_ws_path, parse_pem_chain, split_list};
+use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::Profile;
@@ -90,10 +90,7 @@ fn build_wireguard_outbound(w: &crate::profile::Wireguard) -> Map<String, Value>
     let address: Vec<String> = if w.local_address.is_empty() {
         vec!["172.16.0.2/32".to_string()]
     } else {
-        w.local_address
-            .split(',')
-            .map(|x| x.trim().to_string())
-            .collect()
+        split_delimited(&w.local_address)
     };
     let mut settings = json!({
         "secretKey": w.secret_key,
@@ -371,7 +368,7 @@ fn build_transport_setting(p: &Profile) -> Option<(&'static str, Value)> {
             let headers = if tc.host.is_empty() {
                 json!({})
             } else {
-                json!({ "Host": tc.host.split(',').collect::<Vec<_>>() })
+                json!({ "Host": split_delimited(&tc.host) })
             };
             Some((
                 "tcpSettings",

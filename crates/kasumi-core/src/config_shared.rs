@@ -52,25 +52,26 @@ pub fn parse_ws_early_data(path: &str) -> WsEarlyData {
     }
 }
 
-/// Split a comma-separated string into trimmed non-empty parts, or `None`.
-pub fn split_csv(s: &str) -> Option<Vec<String>> {
-    let parts: Vec<String> = s
-        .split(',')
+/// Split on commas or newlines into trimmed non-empty parts. The single parser
+/// shared by [`split_csv`] and [`split_list`]: users may separate values with
+/// either delimiter (one per line is the convention), so both are accepted.
+pub fn split_delimited(s: &str) -> Vec<String> {
+    s.split([',', '\n'])
         .map(str::trim)
         .filter(|x| !x.is_empty())
         .map(str::to_string)
-        .collect();
+        .collect()
+}
+
+/// Split a comma/newline-separated string into trimmed non-empty parts, or `None`.
+pub fn split_csv(s: &str) -> Option<Vec<String>> {
+    let parts = split_delimited(s);
     if parts.is_empty() { None } else { Some(parts) }
 }
 
 /// Split on commas or newlines into trimmed non-empty parts, or a fallback list.
 pub fn split_list(v: &str, fallback: &[&str]) -> Vec<String> {
-    let parts: Vec<String> = v
-        .split([',', '\n'])
-        .map(str::trim)
-        .filter(|x| !x.is_empty())
-        .map(str::to_string)
-        .collect();
+    let parts = split_delimited(v);
     if parts.is_empty() {
         fallback.iter().map(|s| s.to_string()).collect()
     } else {
@@ -164,9 +165,24 @@ mod tests {
     }
 
     #[test]
+    fn split_delimited_splits_on_comma_and_newline() {
+        assert_eq!(
+            split_delimited(" a , b\nc , "),
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        // A string of only separators has no non-empty parts.
+        assert!(split_delimited(",, \n ,").is_empty());
+    }
+
+    #[test]
     fn split_csv_trims_and_drops_empties() {
         assert_eq!(
             split_csv(" a , ,b "),
+            Some(vec!["a".to_string(), "b".to_string()])
+        );
+        // Newline is accepted as a separator just like a comma.
+        assert_eq!(
+            split_csv("a\nb"),
             Some(vec!["a".to_string(), "b".to_string()])
         );
         assert_eq!(split_csv(""), None);
