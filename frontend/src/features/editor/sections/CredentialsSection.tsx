@@ -9,15 +9,12 @@ import {
   VMESS_ENC_OPTS,
 } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
+import { normalizeList, toText } from "../../../lib/utils";
 import type { FieldErrors, RootSetter } from "../types";
 
-const reservedToText = (reserved?: number[]) => (reserved ?? []).join(", ");
+const reservedToText = (reserved?: number[]) => toText((reserved ?? []).map(String));
 const textToReserved = (s: string) =>
-  s
-    .split(/[\s,]+/)
-    .filter(Boolean)
-    .map(Number)
-    .filter((n) => Number.isFinite(n));
+  (normalizeList(s) ?? []).map(Number).filter((n) => Number.isFinite(n));
 
 export function CredentialsSection({
   draft,
@@ -198,6 +195,7 @@ export function CredentialsSection({
                 label={t("editor.reserved")}
                 value={reservedToText(draft.reserved)}
                 onChange={(value) => setRoot({ reserved: textToReserved(value) })}
+                hint={t("editor.reservedHint")}
               />
             </div>
           </div>
