@@ -174,7 +174,7 @@ const es = {
   "editor.preSharedKey": "Clave precompartida (opcional)",
   "editor.localAddress": "Dirección local",
   "editor.reserved": "Reservado",
-  "editor.reservedHint": "Un elemento por línea o separados por comas",
+  "editor.reservedHint": "Tres bytes, separados por comas o espacios",
   "editor.mtu": "MTU",
   "editor.rawConfig": "Configuración Xray sin procesar (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',

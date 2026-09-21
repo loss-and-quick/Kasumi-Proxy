@@ -15,8 +15,12 @@ use crate::mixins::{Endpoint, Meta, Tls, Transport};
 fn enc_none() -> String {
     "none".into()
 }
+
+/// Default WireGuard tunnel address for a profile that leaves it blank.
+pub const WG_DEFAULT_LOCAL_ADDRESS: &str = "172.16.0.2/32";
+
 fn wg_local_address() -> String {
-    "172.16.0.2/32".into()
+    WG_DEFAULT_LOCAL_ADDRESS.into()
 }
 fn wg_mtu() -> i64 {
     1420

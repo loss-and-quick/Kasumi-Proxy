@@ -170,7 +170,7 @@ const hi = {
   "editor.preSharedKey": "पूर्व-साझा कुंजी (वैकल्पिक)",
   "editor.localAddress": "स्थानीय पता",
   "editor.reserved": "आरक्षित",
-  "editor.reservedHint": "प्रति पंक्ति एक आइटम या कॉमा से अलग",
+  "editor.reservedHint": "तीन बाइट, कॉमा या स्पेस से अलग",
   "editor.mtu": "MTU",
   "editor.rawConfig": "Raw Xray कॉन्फ़िग (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',

@@ -170,7 +170,7 @@ const zh = {
   "editor.preSharedKey": "预共享密钥（可选）",
   "editor.localAddress": "本地地址",
   "editor.reserved": "Reserved",
-  "editor.reservedHint": "每行一个，或使用逗号分隔",
+  "editor.reservedHint": "三个字节，使用逗号或空格分隔",
   "editor.mtu": "MTU",
   "editor.rawConfig": "原始 Xray 配置（JSON）",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
