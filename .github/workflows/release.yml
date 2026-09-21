@@ -41,18 +41,29 @@ jobs:
       version: ${{ steps.bump.outputs.version }}
       skip: ${{ steps.changes.outputs.skip }}
     steps:
+      # The version-bump commit is pushed under a PAT so it bypasses the `main`
+      # ruleset (the default GITHUB_TOKEN / github-actions app is not in the
+      # bypass list and cannot be added on a user-owned repo). RELEASE_TOKEN must
+      # hold a PAT of a user with the bypass role. Checking it here — before the
+      # checkout that used to carry it — turns an expired PAT into a named
+      # failure in seconds instead of a `could not read Username` git prompt.
+      - name: Verify the release token
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::RELEASE_TOKEN is unset. Set it to a PAT that bypasses the main ruleset."
+            exit 1
+          fi
+          if ! GH_TOKEN="$RELEASE_TOKEN" gh api user -q .login >/dev/null 2>&1; then
+            echo "::error::RELEASE_TOKEN is expired or revoked. Regenerate the PAT and run: gh secret set RELEASE_TOKEN"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-          # Push the version-bump commit under a PAT so it bypasses the `main`
-          # ruleset (the default GITHUB_TOKEN / github-actions app is not in the
-          # bypass list and cannot be added on a user-owned repo). Set the
-          # RELEASE_TOKEN secret to a PAT of a user holding the bypass role; it
-          # falls back to GITHUB_TOKEN, with which the push step would still be
-          # rejected by the ruleset.
-          token: ${{ secrets.RELEASE_TOKEN || github.token }}
-          persist-credentials: true
 
       - name: Check for changes since last release
         id: changes
@@ -221,6 +232,8 @@ jobs:
 
       - name: Commit version bump
         if: steps.changes.outputs.skip != 'true'
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -232,7 +245,8 @@ jobs:
             echo "nothing to commit — version, update.json and changelog already current"
           else
             git commit -m "chore(release): ${{ steps.bump.outputs.version }}"
-            git push
+            git push "https://x-access-token:${RELEASE_TOKEN}@github.com/${{ github.repository }}" \
+              "HEAD:${{ github.ref_name }}"
           fi
 
       - name: Create GitHub Release
@@ -552,3 +566,30 @@ jobs:
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
           files: latest.json
+
+  # ── A failed scheduled release is invisible: nobody is watching the cron, so a
+  #    revoked token or a broken toolchain can skip weeks of releases unnoticed.
+  #    Funnel every such failure into one issue. ──
+  notify-failure:
+    needs: [prepare, module, desktop, cachix-desktop, updater-manifest]
+    if: always() && github.event_name == 'schedule' && contains(needs.*.result, 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Report the failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: "Scheduled release is failing"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          body="The weekly release run failed: $RUN_URL"
+          open=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title \
+            --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty")
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "$TITLE" --label ci --body "$body"
+          fi
