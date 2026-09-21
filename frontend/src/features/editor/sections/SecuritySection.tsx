@@ -48,6 +48,7 @@ export function SecuritySection({
             onChange={(value) => setTls({ fingerprint: value })}
           />
           <Field
+            area
             label={t("editor.alpn")}
             value={toText(tls.alpn)}
             onChange={(value) => setTls({ alpn: normalizeList(value) })}
@@ -68,6 +69,7 @@ export function SecuritySection({
             />
           </div>
           <Field
+            area
             label={t("editor.tlsCipherSuites")}
             mono={false}
             value={toText(tls.tlsCipherSuites)}
@@ -75,6 +77,7 @@ export function SecuritySection({
             hint={t("editor.tlsCipherSuitesHint")}
           />
           <Field
+            area
             label={t("editor.tlsCurvePreferences")}
             mono={false}
             value={toText(tls.tlsCurvePreferences)}

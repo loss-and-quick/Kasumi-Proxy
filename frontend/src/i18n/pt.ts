@@ -174,7 +174,7 @@ const pt = {
   "editor.preSharedKey": "Chave pré-compartilhada (opcional)",
   "editor.localAddress": "Endereço local",
   "editor.reserved": "Reserved",
-  "editor.reservedHint": "Um item por linha ou separado por vírgula",
+  "editor.reservedHint": "Três bytes, separados por vírgula ou espaço",
   "editor.mtu": "MTU",
   "editor.rawConfig": "Configuração bruta do Xray (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',

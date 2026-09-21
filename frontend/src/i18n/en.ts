@@ -175,7 +175,7 @@ const en = {
   "editor.preSharedKey": "Pre-shared key (optional)",
   "editor.localAddress": "Local address",
   "editor.reserved": "Reserved",
-  "editor.reservedHint": "One item per line or comma-separated",
+  "editor.reservedHint": "Three bytes, comma- or space-separated",
   "editor.mtu": "MTU",
   "editor.rawConfig": "Raw Xray config (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',

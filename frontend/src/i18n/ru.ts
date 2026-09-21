@@ -184,7 +184,7 @@ const ru = {
   "editor.preSharedKey": "Предварительно общий ключ (необязательно)",
   "editor.localAddress": "Локальный адрес",
   "editor.reserved": "Reserved",
-  "editor.reservedHint": "По одному значению на строку или через запятую",
+  "editor.reservedHint": "Три байта, через запятую или пробел",
   "editor.mtu": "MTU",
   "editor.rawConfig": "Сырой Xray-конфиг (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',

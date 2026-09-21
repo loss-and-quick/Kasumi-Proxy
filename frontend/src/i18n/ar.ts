@@ -210,7 +210,7 @@ const ar = {
   "editor.preSharedKey": "المفتاح المشترك مسبقًا (اختياري)",
   "editor.localAddress": "العنوان المحلي",
   "editor.reserved": "Reserved",
-  "editor.reservedHint": "عنصر واحد في كل سطر أو مفصول بفواصل",
+  "editor.reservedHint": "ثلاث بايتات، مفصولة بفاصلة أو مسافة",
   "editor.mtu": "MTU",
   "editor.rawConfig": "إعداد Xray الخام (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',

@@ -9,12 +9,15 @@ import {
   VMESS_ENC_OPTS,
 } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
-import { normalizeList, toText } from "../../../lib/utils";
 import type { FieldErrors, RootSetter } from "../types";
 
-const reservedToText = (reserved?: number[]) => toText((reserved ?? []).map(String));
+const reservedToText = (reserved?: number[]) => (reserved ?? []).join(", ");
 const textToReserved = (s: string) =>
-  (normalizeList(s) ?? []).map(Number).filter((n) => Number.isFinite(n));
+  s
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
 
 export function CredentialsSection({
   draft,

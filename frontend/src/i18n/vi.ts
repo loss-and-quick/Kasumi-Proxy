@@ -171,7 +171,7 @@ const vi = {
   "editor.preSharedKey": "Khóa chia sẻ trước (tùy chọn)",
   "editor.localAddress": "Địa chỉ cục bộ",
   "editor.reserved": "Dự phòng",
-  "editor.reservedHint": "Mỗi mục một dòng hoặc ngăn cách bằng dấu phẩy",
+  "editor.reservedHint": "Ba byte, ngăn cách bằng dấu phẩy hoặc khoảng trắng",
   "editor.mtu": "MTU",
   "editor.rawConfig": "Cấu hình Xray thô (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
