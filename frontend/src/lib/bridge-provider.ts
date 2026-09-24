@@ -123,6 +123,20 @@ export const bridge: Bridge = {
       dispose?.();
     };
   },
+  onAssetsUpdated(cb) {
+    let unsubscribed = false;
+    let dispose: (() => void) | null = null;
+
+    void loadBridge().then((impl) => {
+      if (unsubscribed) return;
+      dispose = impl.onAssetsUpdated(cb);
+    });
+
+    return () => {
+      unsubscribed = true;
+      dispose?.();
+    };
+  },
   async downloadAsset(filename, url, mode) {
     return (await loadBridge()).downloadAsset(filename, url, mode);
   },

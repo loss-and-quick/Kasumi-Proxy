@@ -1,9 +1,14 @@
-import { Btn, Card, IconBtn, ListRow, SectionLabel, Select } from "../../../components";
+import { Btn, Card, IconBtn, ListRow, RowToggle, SectionLabel, Select } from "../../../components";
 import type { AssetFile } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
-import type { ResourceUpdateMode } from "../../../lib/bridge";
+import type { AdvancedSettings, ResourceUpdateMode } from "../../../lib/bridge";
 import { formatUpdatedAt } from "../helpers";
 import { RESOURCE_LINKS } from "../resource-links";
+
+// Auto-update interval presets (minutes). Geo data changes slowly and each fetch is
+// multi-megabyte, so the useful range is hours-to-weeks; the smallest preset is the
+// floor the backend clamps to (MIN_ASSET_UPDATE_INTERVAL).
+const INTERVAL_PRESETS = [360, 720, 1440, 4320, 10080];
 
 export function AssetFilesSection({
   assetFiles,
@@ -12,8 +17,8 @@ export function AssetFilesSection({
   updateAllAssets,
   openNewAsset,
   onEditAsset,
-  resourceUpdateMode,
-  setResourceUpdateMode,
+  settings,
+  set,
   addResourceLink,
   removeAssetFile,
 }: {
@@ -23,13 +28,21 @@ export function AssetFilesSection({
   updateAllAssets: () => Promise<void>;
   openNewAsset: () => void;
   onEditAsset: (asset: AssetFile) => void;
-  resourceUpdateMode: ResourceUpdateMode;
-  setResourceUpdateMode: (mode: ResourceUpdateMode) => void;
+  settings: AdvancedSettings;
+  set: <K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) => void;
   addResourceLink: (remarks: string, url: string) => void;
   removeAssetFile: (id: string) => void;
 }) {
   const t = useT();
   const formatters = useFormatters();
+
+  // Presets are whole hours, so a multiple of 24 reads better as days.
+  const intervalLabel = (minutes: number) => {
+    const hours = Math.round(minutes / 60);
+    return hours % 24 === 0
+      ? t("settings.assetIntervalDays", { count: hours / 24 })
+      : t("settings.assetIntervalHours", { count: hours });
+  };
 
   return (
     <>
@@ -57,8 +70,8 @@ export function AssetFilesSection({
         <div style={{ marginBottom: 12 }}>
           <Select
             label={t("common.updateMode")}
-            value={resourceUpdateMode}
-            onChange={(v) => setResourceUpdateMode(v as ResourceUpdateMode)}
+            value={settings.assetUpdateMode}
+            onChange={(v) => set("assetUpdateMode", v as ResourceUpdateMode)}
             options={[
               { value: "auto", label: t("common.mode.auto") },
               { value: "proxy", label: t("common.mode.proxy") },
@@ -66,6 +79,29 @@ export function AssetFilesSection({
             ]}
           />
         </div>
+        <RowToggle
+          icon="autorenew"
+          title={t("settings.assetAutoUpdate")}
+          sub={t("settings.assetAutoUpdateSub")}
+          on={settings.assetAutoUpdate}
+          onChange={(value) => set("assetAutoUpdate", value)}
+        />
+        {settings.assetAutoUpdate && (
+          <div style={{ paddingLeft: 54, marginBottom: 12 }}>
+            <Select
+              label={t("settings.assetUpdateInterval")}
+              value={String(settings.assetUpdateInterval)}
+              onChange={(v) => set("assetUpdateInterval", Number(v))}
+              options={INTERVAL_PRESETS.map((minutes) => ({
+                value: String(minutes),
+                label: intervalLabel(minutes),
+              }))}
+            />
+            <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 8, lineHeight: 1.5 }}>
+              {t("settings.assetAutoUpdateWarning")}
+            </div>
+          </div>
+        )}
         {assetFiles.map((asset) => (
           <ListRow
             key={asset.id}

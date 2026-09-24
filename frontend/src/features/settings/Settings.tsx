@@ -8,7 +8,6 @@ import { AppBar } from "../../components";
 import type { AssetFile, CoreEngine, Protocol, RoutingRule } from "../../generated/bindings";
 import { DEFAULT_CORE_BY_PROTOCOL } from "../../generated/defaults";
 import { useLang, useT } from "../../i18n";
-import type { ResourceUpdateMode } from "../../lib/bridge";
 import { isServiceUp } from "../../lib/bridge";
 import { getRuntimeBridgeMode } from "../../lib/ksu-webui";
 import { uid } from "../../lib/utils";
@@ -72,7 +71,6 @@ export default function Settings({
   const [editingAsset, setEditingAsset] = useState<AssetFile | null>(null);
   const [assetSheetOpen, setAssetSheetOpen] = useState(false);
   const [busyAssets, setBusyAssets] = useState<string[]>([]);
-  const [resourceUpdateMode, setResourceUpdateMode] = useState<ResourceUpdateMode>("auto");
   const [rulesIOOpen, setRulesIOOpen] = useState(false);
 
   const coreFor = (protocol: Protocol): CoreEngine =>
@@ -131,7 +129,7 @@ export default function Settings({
   };
 
   const ensureProxyForAssetDownload = () => {
-    if (resourceUpdateMode === "proxy" && !isServiceUp(service.state)) {
+    if (settings.assetUpdateMode === "proxy" && !isServiceUp(service.state)) {
       notify(t("common.proxyNotRunning"));
       return false;
     }
@@ -142,7 +140,7 @@ export default function Settings({
     if (!ensureProxyForAssetDownload()) return;
     setBusyAssets((current) => [...current, id]);
     try {
-      await downloadAsset(id, resourceUpdateMode);
+      await downloadAsset(id, settings.assetUpdateMode);
     } finally {
       setBusyAssets((current) => current.filter((item) => item !== id));
     }
@@ -208,8 +206,8 @@ export default function Settings({
             updateAllAssets={updateAllAssets}
             openNewAsset={openNewAsset}
             onEditAsset={openAssetEditor}
-            resourceUpdateMode={resourceUpdateMode}
-            setResourceUpdateMode={setResourceUpdateMode}
+            settings={settings}
+            set={set}
             addResourceLink={addResourceLink}
             removeAssetFile={removeAssetFile}
           />

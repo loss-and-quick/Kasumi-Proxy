@@ -10,7 +10,7 @@ use crate::commands::{self, CommandError, Response};
 use crate::fs::read_text;
 use crate::lifecycle::resolve_and_write_config;
 use crate::platform::StopDataPath;
-use crate::sub_update::LifecycleControl;
+use crate::updater::LifecycleControl;
 
 use super::Service;
 

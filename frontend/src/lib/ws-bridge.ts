@@ -9,9 +9,13 @@
 import type { Bridge } from "./bridge";
 import { createBridge } from "./dispatch-bridge";
 import { getRuntimeBridgeMode, hasKsuNativeApi, ksuListApps } from "./ksu-webui";
-import { subscribeStatus, subscribeSubApplied, wsDispatch } from "./ws-rpc";
+import { subscribeAssetsUpdated, subscribeStatus, subscribeSubApplied, wsDispatch } from "./ws-rpc";
 
-const base = createBridge(wsDispatch, { subscribeStatus, subscribeSubApplied });
+const base = createBridge(wsDispatch, {
+  subscribeStatus,
+  subscribeSubApplied,
+  subscribeAssetsUpdated,
+});
 
 export const wsBridge: Bridge = {
   ...base,

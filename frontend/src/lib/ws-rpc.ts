@@ -31,6 +31,7 @@ const pending = new Map<
 >();
 const statusCbs = new Set<(status: unknown) => void>();
 const subAppliedCbs = new Set<(info: unknown) => void>();
+const assetsUpdatedCbs = new Set<(info: unknown) => void>();
 
 /** Resolve the daemon's WS URL: ksu.exec wsInfo in the manager WebUI, the page's
  *  own origin + token query on a daemon-served page (browser). */
@@ -65,6 +66,10 @@ function handleMessage(ev: MessageEvent): void {
     for (const cb of subAppliedCbs) cb(msg.value);
     return;
   }
+  if (msg.event === "assetsUpdated") {
+    for (const cb of assetsUpdatedCbs) cb(msg.value);
+    return;
+  }
   if (typeof msg.id !== "number") return;
   const waiter = pending.get(msg.id);
   if (!waiter) return;
@@ -79,7 +84,7 @@ function onClose(): void {
   for (const { reject } of pending.values()) reject(new Error("connection closed"));
   pending.clear();
   // Keep the push streams alive: reconnect lazily if anyone is still listening.
-  if (statusCbs.size > 0 || subAppliedCbs.size > 0) {
+  if (statusCbs.size > 0 || subAppliedCbs.size > 0 || assetsUpdatedCbs.size > 0) {
     setTimeout(() => void ensureSocket().catch(() => {}), 1000);
   }
 }
@@ -146,5 +151,14 @@ export function subscribeSubApplied(cb: (info: unknown) => void): () => void {
   void ensureSocket().catch(() => {});
   return () => {
     subAppliedCbs.delete(cb);
+  };
+}
+
+/** Subscribe to the daemon's "geo assets updated" push. Returns an unsubscribe. */
+export function subscribeAssetsUpdated(cb: (info: unknown) => void): () => void {
+  assetsUpdatedCbs.add(cb);
+  void ensureSocket().catch(() => {});
+  return () => {
+    assetsUpdatedCbs.delete(cb);
   };
 }

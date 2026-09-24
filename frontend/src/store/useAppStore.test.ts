@@ -3,6 +3,7 @@ import type { AssetFile, Profile } from "../generated/bindings";
 import type {
   AdvancedSettings,
   AppState,
+  AssetsUpdatedEvent,
   Bridge,
   LogTarget,
   ServiceStatus,
@@ -150,6 +151,7 @@ function createBridgeMock(): BridgeMock {
     ),
     applySubscription: vi.fn(async (_subId: string) => makeState()),
     onSubApplied: vi.fn((_cb: (info: SubAppliedEvent) => void) => () => {}),
+    onAssetsUpdated: vi.fn((_cb: (info: AssetsUpdatedEvent) => void) => () => {}),
     downloadAsset: vi.fn(
       async (_filename: string, _url: string, _mode?: "auto" | "proxy" | "direct") => ({
         ok: true,
@@ -567,6 +569,33 @@ describe("useAppStore", () => {
     expect(state.activeId).toBe("fresh");
     expect(state.subscriptions[0].count).toBe(1);
     expect(state.recentActivity[0]?.icon).toBe("cloud_sync");
+  });
+
+  it("daemon assetsUpdated push reloads assets and reports the restart", async () => {
+    let push: ((info: AssetsUpdatedEvent) => void) | null = null;
+    bridge.onAssetsUpdated.mockImplementation((cb) => {
+      push = cb;
+      return () => {};
+    });
+    await useAppStore.getState().hydrate();
+    expect(push).not.toBeNull();
+
+    // The daemon refreshed the geo assets headlessly and stamped lastUpdated.
+    const asset = makeAsset({ id: "a1", remarks: "geoip.dat", lastUpdated: 1234 });
+    bridge.readState.mockResolvedValue(makeState({ assetFiles: [asset] }));
+
+    (push as unknown as (info: AssetsUpdatedEvent) => void)({
+      remarks: ["geoip.dat"],
+      restarted: true,
+    });
+    await vi.waitFor(() => {
+      expect(useAppStore.getState().assetFiles[0]?.lastUpdated).toBe(1234);
+    });
+
+    // Newest first: the unrequested restart, then the asset that caused it.
+    const feed = useAppStore.getState().recentActivity;
+    expect(feed[0].icon).toBe("autorenew");
+    expect(feed[1].text).toContain("geoip.dat");
   });
 
   describe("recentActivity", () => {
