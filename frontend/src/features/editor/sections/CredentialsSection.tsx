@@ -198,6 +198,7 @@ export function CredentialsSection({
                 label={t("editor.reserved")}
                 value={reservedToText(draft.reserved)}
                 onChange={(value) => setRoot({ reserved: textToReserved(value) })}
+                hint={t("editor.reservedHint")}
               />
             </div>
           </div>

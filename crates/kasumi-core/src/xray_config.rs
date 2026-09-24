@@ -5,10 +5,10 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::config_shared::{build_ws_path, parse_pem_chain, split_list};
+use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
-use crate::profile::Profile;
+use crate::profile::{Profile, WG_DEFAULT_LOCAL_ADDRESS};
 use crate::state::{
     AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS,
     FAKEIP_INET4_RANGE, RoutingRule, force_socks_port,
@@ -87,14 +87,10 @@ fn build_outbound_base(p: &Profile) -> Option<Map<String, Value>> {
 
 fn build_wireguard_outbound(w: &crate::profile::Wireguard) -> Map<String, Value> {
     let reserved: Vec<i64> = w.reserved.iter().map(|&b| b as i64).collect();
-    let address: Vec<String> = if w.local_address.is_empty() {
-        vec!["172.16.0.2/32".to_string()]
-    } else {
-        w.local_address
-            .split(',')
-            .map(|x| x.trim().to_string())
-            .collect()
-    };
+    let mut address = split_delimited(&w.local_address);
+    if address.is_empty() {
+        address.push(WG_DEFAULT_LOCAL_ADDRESS.to_string());
+    }
     let mut settings = json!({
         "secretKey": w.secret_key,
         "address": address,
@@ -371,7 +367,7 @@ fn build_transport_setting(p: &Profile) -> Option<(&'static str, Value)> {
             let headers = if tc.host.is_empty() {
                 json!({})
             } else {
-                json!({ "Host": tc.host.split(',').collect::<Vec<_>>() })
+                json!({ "Host": split_delimited(&tc.host) })
             };
             Some((
                 "tcpSettings",
@@ -871,5 +867,59 @@ mod tests {
         let cfg = build_xray_config(&p, &s, &[], std::slice::from_ref(&p)).unwrap();
         let socks = cfg["inbounds"].as_array().unwrap()[0].clone();
         assert_eq!(socks["settings"]["auth"], "noauth");
+    }
+
+    fn wireguard(local_address: &str) -> crate::profile::Wireguard {
+        let p: Profile = serde_json::from_value(json!({
+            "protocol": "wireguard",
+            "meta": { "id": "w", "remarks": "r", "groupId": "g-main" },
+            "endpoint": { "address": "e.x", "port": 51820 },
+            "secretKey": "sk",
+            "peerPublicKey": "pk",
+            "localAddress": local_address,
+        }))
+        .unwrap();
+        let Profile::Wireguard(w) = p else { panic!() };
+        w
+    }
+
+    #[test]
+    fn wireguard_address_splits_on_either_separator_and_is_never_empty() {
+        let out = build_wireguard_outbound(&wireguard("10.0.0.2/32\n fd00::2/128 "));
+        assert_eq!(
+            out["settings"]["address"],
+            json!(["10.0.0.2/32", "fd00::2/128"])
+        );
+        // A blank or separator-only value falls back to the default address:
+        // xray rejects a wireguard outbound with an empty address list.
+        for blank in ["", " , \n "] {
+            let out = build_wireguard_outbound(&wireguard(blank));
+            assert_eq!(
+                out["settings"]["address"],
+                json!([WG_DEFAULT_LOCAL_ADDRESS])
+            );
+        }
+    }
+
+    #[test]
+    fn tcp_http_host_header_entries_are_split_and_trimmed() {
+        let p: Profile = serde_json::from_value(json!({
+            "protocol": "vless",
+            "meta": { "id": "v", "remarks": "r", "groupId": "g-main" },
+            "endpoint": { "address": "e.x", "port": 443 },
+            "uuid": "u",
+            "transport": {
+                "kind": "tcp",
+                "headerType": "http",
+                "host": "a.example, b.example\nc.example",
+            },
+        }))
+        .unwrap();
+        let (key, v) = build_transport_setting(&p).unwrap();
+        assert_eq!(key, "tcpSettings");
+        assert_eq!(
+            v["header"]["request"]["headers"]["Host"],
+            json!(["a.example", "b.example", "c.example"])
+        );
     }
 }

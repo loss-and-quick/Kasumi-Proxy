@@ -30,6 +30,7 @@ export type Dispatch = (cmd: Command_Deserialize) => Promise<Response_Serialize>
 export interface PushStreams {
   subscribeStatus(cb: (raw: unknown) => void): () => void;
   subscribeSubApplied(cb: (raw: unknown) => void): () => void;
+  subscribeAssetsUpdated(cb: (raw: unknown) => void): () => void;
 }
 
 // ---- typed Response unwrapping ----
@@ -255,6 +256,17 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
             subId: o.subId,
             remarks: typeof o.remarks === "string" ? o.remarks : "",
             count: typeof o.count === "number" ? o.count : 0,
+          });
+        }
+      });
+    },
+    onAssetsUpdated(cb) {
+      return push.subscribeAssetsUpdated((raw) => {
+        const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        if (Array.isArray(o.remarks)) {
+          cb({
+            remarks: o.remarks.filter((r): r is string => typeof r === "string"),
+            restarted: o.restarted === true,
           });
         }
       });

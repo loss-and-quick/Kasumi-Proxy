@@ -1,7 +1,7 @@
 //! The `Service`: one owner of the data-path lifecycle, shared by both shells.
 //!
 //! It serializes lifecycle jobs through a single lock so a restart can't interleave
-//! with a concurrent start/stop, drives the headless sub-updater, auto-starts on
+//! with a concurrent start/stop, drives the headless sub- and asset-updaters, auto-starts on
 //! boot, re-pins on uplink changes, and watchdogs a dead data-path. There is no
 //! control socket — lifecycle commands are in-process calls. It also owns the
 //! status/`subApplied` event stream both
@@ -45,6 +45,8 @@ pub struct Service {
     cores: crate::platform::InstalledCores,
     /// Per-subscription last fetch attempt (ms), for the updater's backoff.
     sub_attempts: Mutex<HashMap<String, i64>>,
+    /// Per-asset last fetch attempt (ms), for the asset updater's backoff.
+    asset_attempts: Mutex<HashMap<String, i64>>,
     auto_started: AtomicBool,
     /// Latest connectivity-probe result; the watchdog refreshes it, `current_status`
     /// overlays it onto a process-up state to tell Connected from NoInternet.
@@ -76,6 +78,7 @@ impl Service {
             events,
             cores,
             sub_attempts: Mutex::new(HashMap::new()),
+            asset_attempts: Mutex::new(HashMap::new()),
             auto_started: AtomicBool::new(false),
             connectivity: StdMutex::new(Connectivity::Unknown),
             running_config: StdMutex::new(None),
@@ -124,8 +127,8 @@ impl Service {
         }
     }
 
-    /// Spawn the daemon loops: auto-start, network re-pin, watchdog, sub-updater and
-    /// the 1 Hz status push. Both shells call this after construction.
+    /// Spawn the daemon loops: auto-start, network re-pin, watchdog, the sub- and
+    /// asset-updaters and the 1 Hz status push. Both shells call this after construction.
     pub fn spawn_background(self: &Arc<Self>) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
@@ -140,6 +143,7 @@ impl Service {
         self.spawn_resume_watch();
         self.spawn_watchdog();
         self.spawn_sub_updater();
+        self.spawn_asset_updater();
         self.spawn_status_push();
     }
 }

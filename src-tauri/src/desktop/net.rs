@@ -159,7 +159,11 @@ fn collect_singbox_servers(cfg: &Value) -> HashSet<String> {
 /// `extra_hosts` the OS routing back-end supplies (its DNS resolvers, so name
 /// resolution keeps working while the tun is up). Handles both the xray and the
 /// sing-box config shapes (their server keys are disjoint, so the union is safe).
-pub async fn resolve_bypass_cidrs(cfg_text: &str, extra_hosts: &[String]) -> Vec<String> {
+pub async fn resolve_bypass_cidrs(
+    cfg_text: &str,
+    extra_hosts: &[String],
+    tun_exclude: &[String],
+) -> Vec<String> {
     let cfg: Value = serde_json::from_str(cfg_text).unwrap_or(Value::Null);
     let mut out = HashSet::new();
     let mut servers = collect_xray_servers(&cfg);
@@ -172,6 +176,9 @@ pub async fn resolve_bypass_cidrs(cfg_text: &str, extra_hosts: &[String]) -> Vec
     for host in extra_hosts {
         out.insert(cidr(host));
     }
+    // User-specified TUN exclusions (e.g. docker networks) are already CIDRs, so
+    // insert them verbatim — `cidr()` would append a /32 to an already-routed CIDR.
+    out.extend(tun_exclude.iter().cloned());
     out.into_iter().collect()
 }
 
@@ -285,10 +292,17 @@ mod tests {
             ]
         })
         .to_string();
-        let cidrs = resolve_bypass_cidrs(&cfg, &["8.8.8.8".to_string()]).await;
+        let cidrs = resolve_bypass_cidrs(
+            &cfg,
+            &["8.8.8.8".to_string()],
+            &["172.17.0.0/16".to_string()],
+        )
+        .await;
         assert!(cidrs.contains(&"1.2.3.4/32".to_string()));
         assert!(cidrs.contains(&"2001:db8::1/128".to_string()));
         assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
+        // User TUN exclusions pass through verbatim (no /32 re-wrap).
+        assert!(cidrs.contains(&"172.17.0.0/16".to_string()));
     }
 
     #[tokio::test]
@@ -297,7 +311,7 @@ mod tests {
             "dns": { "servers": ["1.1.1.1", "8.8.8.8", {"address": "223.5.5.5"}, "dns.google"] }
         })
         .to_string();
-        let cidrs: Vec<String> = resolve_bypass_cidrs(&cfg, &[]).await;
+        let cidrs: Vec<String> = resolve_bypass_cidrs(&cfg, &[], &[]).await;
         assert!(cidrs.contains(&"1.1.1.1/32".to_string()));
         assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
         assert!(cidrs.contains(&"223.5.5.5/32".to_string()));

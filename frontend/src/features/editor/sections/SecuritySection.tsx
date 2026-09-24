@@ -2,10 +2,8 @@ import { Field, SectionLabel, Select, Switch } from "../../../components";
 import type { Security, Tls } from "../../../generated/bindings";
 import { FINGERPRINT_OPTS, SECURITY_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
+import { normalizeList, toText } from "../../../lib/utils";
 import type { FieldErrors, TlsSetter } from "../types";
-
-const fromList = (list?: string[]) => (list ?? []).join(", ");
-const toList = (s: string) => s.split(/[\s,]+/).filter(Boolean);
 
 export function SecuritySection({
   tls,
@@ -50,9 +48,11 @@ export function SecuritySection({
             onChange={(value) => setTls({ fingerprint: value })}
           />
           <Field
+            area
             label={t("editor.alpn")}
-            value={fromList(tls.alpn)}
-            onChange={(value) => setTls({ alpn: toList(value) })}
+            value={toText(tls.alpn)}
+            onChange={(value) => setTls({ alpn: normalizeList(value) })}
+            hint={t("editor.alpnHint")}
           />
           <div className="input-row" style={{ marginBottom: 14 }}>
             <Field
@@ -69,16 +69,20 @@ export function SecuritySection({
             />
           </div>
           <Field
+            area
             label={t("editor.tlsCipherSuites")}
             mono={false}
-            value={fromList(tls.tlsCipherSuites)}
-            onChange={(value) => setTls({ tlsCipherSuites: toList(value) })}
+            value={toText(tls.tlsCipherSuites)}
+            onChange={(value) => setTls({ tlsCipherSuites: normalizeList(value) })}
+            hint={t("editor.tlsCipherSuitesHint")}
           />
           <Field
+            area
             label={t("editor.tlsCurvePreferences")}
             mono={false}
-            value={fromList(tls.tlsCurvePreferences)}
-            onChange={(value) => setTls({ tlsCurvePreferences: toList(value) })}
+            value={toText(tls.tlsCurvePreferences)}
+            onChange={(value) => setTls({ tlsCurvePreferences: normalizeList(value) })}
+            hint={t("editor.tlsCurvePreferencesHint")}
           />
           <Field
             area

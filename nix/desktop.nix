@@ -11,7 +11,7 @@
     lib,
     ...
   }: let
-    inherit (lib) makeBinPath makeLibraryPath;
+    inherit (lib) makeBinPath makeLibraryPath licenses;
     inherit (toolchain) craneLib tauriLibs baseNative;
     frontend = pkgs.stdenv.mkDerivation {
       pname = "kasumi-frontend";
@@ -167,7 +167,7 @@
         meta = {
           description = "Transparent proxy (Xray-core / sing-box) — Tauri 2 desktop app";
           homepage = "https://github.com/loss-and-quick/Kasumi-Proxy";
-          license = lib.licenses.gpl3Plus;
+          license = licenses.gpl3Plus;
           mainProgram = "kasumi-desktop";
           platforms = ["x86_64-linux"];
           maintainers = [];

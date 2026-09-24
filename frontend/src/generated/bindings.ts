@@ -37,6 +37,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	assetsUpdated: makeEvent<AssetsUpdated>("assets-updated"),
 	statusChanged: makeEvent<StatusChanged_Deserialize>("status-changed"),
 	subscriptionApplied: makeEvent<SubscriptionApplied>("subscription-applied"),
 	trayAction: makeEvent<TrayAction>("tray-action"),
@@ -100,6 +101,15 @@ export type AdvancedSettings_Deserialize = {
 	appFilter?: { [key in string]: AppFilterMode },
 	dedupOnUpdate?: boolean,
 	allowNonLocalhost?: boolean,
+	/**  Headless geosite/geoip auto-update: refresh the asset files on an interval. */
+	assetAutoUpdate?: boolean,
+	/**
+	 *  Asset auto-update interval in minutes (shared by all asset files), floored
+	 *  at [`MIN_ASSET_UPDATE_INTERVAL`] by the updater.
+	 */
+	assetUpdateInterval?: number,
+	/**  Fetch mode for both manual and headless asset downloads. */
+	assetUpdateMode?: FetchMode,
 	/**
 	 *  Which TUN engine each core uses; missing entries fall back to
 	 *  [`crate::core::default_tun_for`] (sing-box→SingboxTun, xray→Tun2socks).
@@ -123,6 +133,14 @@ export type AdvancedSettings_Deserialize = {
 	tunTcpBufferSize?: number,
 	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
 	tunUdpRecvBufferSize?: number,
+	/**
+	 *  Comma- or newline-separated CIDRs the tun must not capture (e.g. docker
+	 *  bridge networks like `172.17.0.0/16`). Empty/`None` = nothing extra excluded.
+	 *  Parsed into a `Vec<String>` and merged with the proxy-server bypass wherever
+	 *  that set is computed — sing-box `route_exclude_address` and the external-tun
+	 *  host-routes — so the same setting works on every engine.
+	 */
+	tunExcludeAddresses?: string | null,
 };
 
 /**
@@ -176,6 +194,15 @@ export type AdvancedSettings_Serialize = {
 	appFilter: { [key in string]: AppFilterMode },
 	dedupOnUpdate: boolean,
 	allowNonLocalhost: boolean,
+	/**  Headless geosite/geoip auto-update: refresh the asset files on an interval. */
+	assetAutoUpdate: boolean,
+	/**
+	 *  Asset auto-update interval in minutes (shared by all asset files), floored
+	 *  at [`MIN_ASSET_UPDATE_INTERVAL`] by the updater.
+	 */
+	assetUpdateInterval: number,
+	/**  Fetch mode for both manual and headless asset downloads. */
+	assetUpdateMode: FetchMode,
 	/**
 	 *  Which TUN engine each core uses; missing entries fall back to
 	 *  [`crate::core::default_tun_for`] (sing-box→SingboxTun, xray→Tun2socks).
@@ -199,6 +226,14 @@ export type AdvancedSettings_Serialize = {
 	tunTcpBufferSize: number,
 	/**  UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`). */
 	tunUdpRecvBufferSize: number,
+	/**
+	 *  Comma- or newline-separated CIDRs the tun must not capture (e.g. docker
+	 *  bridge networks like `172.17.0.0/16`). Empty/`None` = nothing extra excluded.
+	 *  Parsed into a `Vec<String>` and merged with the proxy-server bypass wherever
+	 *  that set is computed — sing-box `route_exclude_address` and the external-tun
+	 *  host-routes — so the same setting works on every engine.
+	 */
+	tunExcludeAddresses?: string | null,
 };
 
 export type Anytls = {
@@ -277,6 +312,22 @@ export type AssetFile = {
 	/**  Epoch-ms of last refresh, or `null` if never fetched (required + nullable). */
 	lastUpdated: number | null,
 	locked: boolean,
+};
+
+/**
+ *  Geo assets the headless updater refreshed; the UI reloads state so the asset
+ *  rows show their new timestamps.
+ */
+export type AssetsUpdated = AssetsUpdatedEvent;
+
+/**
+ *  Daemon push: it refreshed geo assets headlessly. `restarted` says whether the
+ *  active core was bounced to pick the new data up, so the UI can explain a
+ *  connection blip it didn't ask for.
+ */
+export type AssetsUpdatedEvent = {
+	remarks: string[],
+	restarted: boolean,
 };
 
 /**  Reply to the `capabilities` RPC. */

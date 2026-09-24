@@ -44,6 +44,13 @@ pub const DEFAULT_REMOTE_DNS: [&str; 2] = ["1.1.1.1", "8.8.8.8"];
 pub const FAKEIP_INET4_RANGE: &str = "198.18.0.0/15";
 // Default log-rotation cap (KB).
 pub const DEFAULT_LOG_ROTATE_KB: i64 = 512;
+// Default interval (minutes) for the headless geosite/geoip auto-update (24h). One
+// global cadence covers every asset file; the UI offers a few coarse presets.
+pub const DEFAULT_ASSET_UPDATE_INTERVAL: i64 = 1440;
+// Floor (minutes) for that interval, matching the smallest preset the UI offers.
+// Geo data changes slowly and each fetch is multi-megabyte, so the updater clamps
+// to this rather than honouring a smaller value from a hand-edited state file.
+pub const MIN_ASSET_UPDATE_INTERVAL: i64 = 360;
 
 /// The base group that must always exist (default `groupId`, can't be deleted).
 pub const BASE_GROUP_ID: &str = "g-main";
@@ -303,6 +310,14 @@ pub struct AdvancedSettings {
     pub app_filter: BTreeMap<String, AppFilterMode>,
     pub dedup_on_update: bool,
     pub allow_non_localhost: bool,
+    // ---- Geo asset auto-update ----
+    /// Headless geosite/geoip auto-update: refresh the asset files on an interval.
+    pub asset_auto_update: bool,
+    /// Asset auto-update interval in minutes (shared by all asset files), floored
+    /// at [`MIN_ASSET_UPDATE_INTERVAL`] by the updater.
+    pub asset_update_interval: i64,
+    /// Fetch mode for both manual and headless asset downloads.
+    pub asset_update_mode: FetchMode,
     // ---- TUN engine (per-core selection) ----
     /// Which TUN engine each core uses; missing entries fall back to
     /// [`crate::core::default_tun_for`] (sing-box→SingboxTun, xray→Tun2socks).
@@ -321,6 +336,13 @@ pub struct AdvancedSettings {
     pub tun_tcp_buffer_size: i64,
     /// UDP receive buffer (SO_RCVBUF) size in bytes (hev `misc.udp-recv-buffer-size`).
     pub tun_udp_recv_buffer_size: i64,
+    /// Comma- or newline-separated CIDRs the tun must not capture (e.g. docker
+    /// bridge networks like `172.17.0.0/16`). Empty/`None` = nothing extra excluded.
+    /// Parsed into a `Vec<String>` and merged with the proxy-server bypass wherever
+    /// that set is computed — sing-box `route_exclude_address` and the external-tun
+    /// host-routes — so the same setting works on every engine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tun_exclude_addresses: Option<String>,
 }
 
 impl Default for AdvancedSettings {
@@ -367,6 +389,9 @@ impl Default for AdvancedSettings {
             app_filter: BTreeMap::new(),
             dedup_on_update: false,
             allow_non_localhost: false,
+            asset_auto_update: false,
+            asset_update_interval: DEFAULT_ASSET_UPDATE_INTERVAL,
+            asset_update_mode: FetchMode::default(),
             tun_by_core: BTreeMap::new(),
             tun_mtu: 9000,
             // hev upstream defaults (mirror its built-in values, so an unedited
@@ -376,6 +401,7 @@ impl Default for AdvancedSettings {
             tun_udp_rw_timeout_ms: 60_000,
             tun_tcp_buffer_size: 65_536,
             tun_udp_recv_buffer_size: 524_288,
+            tun_exclude_addresses: None,
         }
     }
 }

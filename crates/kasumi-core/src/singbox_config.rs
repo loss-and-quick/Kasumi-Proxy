@@ -717,8 +717,12 @@ fn build_singbox_dns(
     let mut dns_rule_set_tags = Tags::new();
 
     if let Some(hosts) = hosts {
-        servers.push(json!({ "type": "hosts", "tag": "hosts", "predefined": hosts }));
-        rules.push(json!({ "ip_accept_any": true, "server": "hosts" }));
+        servers.push(json!({ "type": "hosts", "tag": "hosts", "predefined": &hosts }));
+        // The hosts server answers its predefined names and nothing else, so an
+        // answer carrying any address means the name is a host entry; anything
+        // else leaves the response unmatched and falls through to the rules below.
+        rules.push(json!({ "action": "evaluate", "server": "hosts" }));
+        rules.push(json!({ "match_response": true, "ip_accept_any": true, "action": "respond" }));
     }
     if s.fake_dns {
         servers.push(json!({ "type": "fakeip", "tag": "fakeip", "inet4_range": FAKEIP_INET4_RANGE, "inet6_range": "fc00::/18" }));
@@ -745,7 +749,12 @@ fn build_singbox_dns(
             }
         }
     }
-    rules.push(json!({ "ip_is_private": true, "server": "local" }));
+    // Skipped in fake-DNS configs: the fakeip rule ahead of it takes every A/AAAA
+    // query and other query types carry no addresses to match.
+    if !s.fake_dns {
+        rules.push(json!({ "action": "evaluate", "server": "local" }));
+        rules.push(json!({ "match_response": true, "ip_is_private": true, "action": "respond" }));
+    }
 
     let mut dns = json!({
         "servers": servers,
@@ -1014,6 +1023,20 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
     if !exclude_uid.is_empty() {
         main_tun["exclude_uid"] = json!(exclude_uid);
     }
+    // User-specified TUN exclusions (e.g. docker bridge networks): excluded at the
+    // OS routing level via `route_exclude_address`, so they never enter the tun.
+    // Sorted + de-duplicated here for deterministic output; the desktop layers the
+    // proxy-server bypass in at runtime (`src-tauri/src/desktop/singbox.rs`), which
+    // merges rather than overwrites this list.
+    let exclude_cidrs: Vec<String> = s
+        .tun_exclude_cidrs()
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if !exclude_cidrs.is_empty() {
+        main_tun["route_exclude_address"] = json!(exclude_cidrs);
+    }
     let mut inbounds = vec![main_tun];
     if !force_uids.is_empty() {
         let force_addr = if v6 {
@@ -1032,6 +1055,10 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
         force_tun["iproute2_rule_index"] = json!(SINGBOX_FORCE_RULE_PRIO);
         force_tun["strict_route"] = json!(s.strict_route);
         force_tun["include_uid"] = json!(force_uids);
+        // Same user exclusions apply to the force tun (Android force-proxy uids).
+        if !exclude_cidrs.is_empty() {
+            force_tun["route_exclude_address"] = json!(exclude_cidrs);
+        }
         inbounds.push(force_tun);
     }
     inbounds
@@ -1620,6 +1647,100 @@ mod tests {
             .unwrap();
         assert_eq!(remote["type"], "https");
         assert_eq!(remote["detour"], "proxy");
+    }
+
+    #[test]
+    fn hosts_entries_are_matched_on_the_response() {
+        for fake_dns in [false, true] {
+            let s = AdvancedSettings {
+                fake_dns,
+                dns_hosts: Some("example.com=1.2.3.4\nother.test=5.6.7.8".into()),
+                ..Default::default()
+            };
+            let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+            let rules = dns["rules"].as_array().unwrap();
+            assert_eq!(rules[0], json!({ "action": "evaluate", "server": "hosts" }));
+            assert_eq!(
+                rules[1],
+                json!({ "match_response": true, "ip_accept_any": true, "action": "respond" })
+            );
+            if fake_dns {
+                assert_eq!(rules[2]["server"], "fakeip");
+            }
+        }
+
+        // A hosts server with nothing predefined answers nothing, so the pair
+        // simply never matches — no rule has to be dropped for it.
+        let s = AdvancedSettings {
+            dns_hosts: Some("{}".into()),
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        assert_eq!(dns["rules"][0]["server"], "hosts");
+    }
+
+    #[test]
+    fn private_answers_re_resolve_only_without_fake_dns() {
+        let s = AdvancedSettings {
+            dns_hosts: Some("example.com=1.2.3.4".into()),
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        assert_eq!(
+            rules[rules.len() - 2],
+            json!({ "action": "evaluate", "server": "local" })
+        );
+        assert_eq!(
+            rules[rules.len() - 1],
+            json!({ "match_response": true, "ip_is_private": true, "action": "respond" })
+        );
+
+        // Behind fakeip the re-resolve can never match, so it is not emitted.
+        let s = AdvancedSettings {
+            fake_dns: true,
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        assert!(rules.iter().all(|r| r["action"] != "respond"), "{rules:?}");
+    }
+
+    #[test]
+    fn no_dns_rule_uses_a_response_matched_field_bare() {
+        // Response Match Fields without match_response are a startup error in
+        // sing-box 1.14 once any rule leaves the legacy DNS mode, and the legacy
+        // mode itself is gone in 1.16.
+        for fake_dns in [false, true] {
+            for routing_mode in [RoutingMode::Global, RoutingMode::Rules] {
+                let s = AdvancedSettings {
+                    fake_dns,
+                    routing_mode,
+                    dns_hosts: Some("example.com=1.2.3.4".into()),
+                    ..Default::default()
+                };
+                let rule = RoutingRule {
+                    id: "r".into(),
+                    remarks: "direct".into(),
+                    enabled: true,
+                    outbound_tag: "direct".into(),
+                    domain: Some(vec!["blocked.test".into()]),
+                    ip: None,
+                    port: None,
+                    network: None,
+                    protocol: None,
+                };
+                let dns = build_singbox_dns(&s, &[rule], &mut Tags::new());
+                for r in dns["rules"].as_array().unwrap() {
+                    if r["match_response"] == json!(true) {
+                        continue;
+                    }
+                    for field in ["ip_cidr", "ip_is_private", "ip_accept_any"] {
+                        assert!(r.get(field).is_none(), "bare {field} in {r}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

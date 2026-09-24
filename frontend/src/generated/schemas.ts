@@ -32,6 +32,10 @@ export const LogLevelSchema = z.union([z.literal("debug"), z.literal("error"), z
 export type LogLevel = z.infer<typeof LogLevelSchema>;
 
 
+export const FetchModeSchema = z.union([z.literal("auto"), z.literal("direct"), z.literal("proxy")]);
+export type FetchMode = z.infer<typeof FetchModeSchema>;
+
+
 export const DomainStrategySchema = z.union([z.literal("AsIs"), z.literal("IPIfNonMatch"), z.literal("IPOnDemand")]);
 export type DomainStrategy = z.infer<typeof DomainStrategySchema>;
 
@@ -90,6 +94,9 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	appFilter: z.record(z.string(), AppFilterModeSchema),
 	dedupOnUpdate: z.boolean(),
 	allowNonLocalhost: z.boolean(),
+	assetAutoUpdate: z.boolean(),
+	assetUpdateInterval: z.number(),
+	assetUpdateMode: FetchModeSchema,
 	tunByCore: z.record(CoreEngineSchema, TunEngineSchema),
 	tunMtu: z.number(),
 	tunConnectTimeoutMs: z.number(),
@@ -97,6 +104,7 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	tunUdpRwTimeoutMs: z.number(),
 	tunTcpBufferSize: z.number(),
 	tunUdpRecvBufferSize: z.number(),
+	tunExcludeAddresses: z.string().nullable().optional(),
 });
 export type AdvancedSettings_Serialize = z.infer<typeof AdvancedSettings_SerializeSchema>;
 
@@ -147,6 +155,9 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	appFilter: z.record(z.string(), AppFilterModeSchema).optional(),
 	dedupOnUpdate: z.boolean().optional(),
 	allowNonLocalhost: z.boolean().optional(),
+	assetAutoUpdate: z.boolean().optional(),
+	assetUpdateInterval: z.number().optional(),
+	assetUpdateMode: FetchModeSchema.optional(),
 	tunByCore: z.record(CoreEngineSchema, TunEngineSchema).optional(),
 	tunMtu: z.number().optional(),
 	tunConnectTimeoutMs: z.number().optional(),
@@ -154,6 +165,7 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	tunUdpRwTimeoutMs: z.number().optional(),
 	tunTcpBufferSize: z.number().optional(),
 	tunUdpRecvBufferSize: z.number().optional(),
+	tunExcludeAddresses: z.string().nullable().optional(),
 });
 export type AdvancedSettings_Deserialize = z.infer<typeof AdvancedSettings_DeserializeSchema>;
 
@@ -231,10 +243,6 @@ export const AppInfoSchema = z.object({
 	system: z.boolean(),
 });
 export type AppInfo = z.infer<typeof AppInfoSchema>;
-
-
-export const FetchModeSchema = z.union([z.literal("auto"), z.literal("direct"), z.literal("proxy")]);
-export type FetchMode = z.infer<typeof FetchModeSchema>;
 
 
 export const Subscription_SerializeSchema = z.object({

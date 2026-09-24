@@ -5,12 +5,12 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use kasumi_core::contract::{PushFrame, RunState, SubAppliedEvent};
+use kasumi_core::contract::{AssetsUpdatedEvent, PushFrame, RunState, SubAppliedEvent};
 use kasumi_core::state::AppState;
 
 use crate::fsjson::read_json;
 use crate::platform::StopDataPath;
-use crate::sub_update;
+use crate::{asset_update, sub_update, updater};
 
 use super::Service;
 use super::lifecycle::LifecycleCmd;
@@ -132,7 +132,7 @@ impl Service {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(sub_update::TICK).await;
+                tokio::time::sleep(updater::TICK).await;
                 let events = this.events.clone();
                 let on_applied = move |info: SubAppliedEvent| {
                     let _ = events.send(PushFrame::SubApplied { value: info });
@@ -144,6 +144,31 @@ impl Service {
                     &this.serialize,
                     &mut attempts,
                     &on_applied,
+                )
+                .await;
+            }
+        });
+    }
+
+    /// Re-fetch the geo assets on the shared updater cadence. Runs on its own task
+    /// (and its own backoff map) so a slow multi-megabyte download never delays the
+    /// subscription pass; both take the lifecycle lock only to write or restart.
+    pub(super) fn spawn_asset_updater(self: &Arc<Self>) {
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(updater::TICK).await;
+                let events = this.events.clone();
+                let on_updated = move |info: AssetsUpdatedEvent| {
+                    let _ = events.send(PushFrame::AssetsUpdated { value: info });
+                };
+                let mut attempts = this.asset_attempts.lock().await;
+                asset_update::tick(
+                    &*this.platform,
+                    this.as_ref(),
+                    &this.serialize,
+                    &mut attempts,
+                    &on_updated,
                 )
                 .await;
             }

@@ -1,26 +1,26 @@
 # Versions read from the single sources of truth: the product version from
 # module/module.prop, the pinned binary versions from scripts/binary-versions.sh.
 {
-  pkgs,
+  lib,
   self,
 }: let
-  inherit (pkgs) lib;
+  inherit (lib) findFirst hasPrefix splitString removePrefix;
 
   # Product version — the Android zip uses `vX.Y.Z`; nix/cargo want bare `X.Y.Z`.
   # A bump in module.prop re-versions the nix artifacts too.
   appVersion = let
-    propLine = lib.findFirst (l: lib.hasPrefix "version=" l) "version=0.0.0" (
-      lib.splitString "\n" (builtins.readFile (self + "/module/module.prop"))
+    propLine = findFirst (l: hasPrefix "version=" l) "version=0.0.0" (
+      splitString "\n" (builtins.readFile (self + "/module/module.prop"))
     );
   in
-    lib.removePrefix "v" (lib.removePrefix "version=" propLine);
+    removePrefix "v" (removePrefix "version=" propLine);
 
   # Pinned binary versions, shared with the fetch scripts so the nix desktop build
   # ships the SAME versions as the Android zip / CI installers. A line reads
   # `NAME="${NAME:-vX.Y.Z}"`; pull the default between `:-` and `}`.
   pinnedVersion = name: let
-    line = lib.findFirst (l: lib.hasPrefix "${name}=" l) "" (
-      lib.splitString "\n" (builtins.readFile (self + "/scripts/binary-versions.sh"))
+    line = findFirst (l: hasPrefix "${name}=" l) "" (
+      splitString "\n" (builtins.readFile (self + "/scripts/binary-versions.sh"))
     );
     m = builtins.match ".*:-([^}\"]+).*" line;
   in
@@ -38,5 +38,5 @@ in {
   inherit pinnedVersion;
   xrayVer = pinnedVersion "XRAY_VERSION";
   tun2socksVer = pinnedVersion "TUN2SOCKS_VERSION";
-  singboxVerBare = lib.removePrefix "v" singboxVer;
+  singboxVerBare = removePrefix "v" singboxVer;
 }

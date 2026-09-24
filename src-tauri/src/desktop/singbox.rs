@@ -5,7 +5,10 @@
 //! core's own uplink to the VPN server out of the tunnel — that connection gets
 //! captured by the tun and loops, causing timeouts. The fix is `route_exclude_address`
 //! on the tun inbound with the resolved server IPs (and literal DNS server IPs),
-//! which excludes them at the OS routing level regardless of fwmark.
+//! which excludes them at the OS routing level regardless of fwmark. The config
+//! generator bakes the user's own exclusions (`tun_exclude_addresses`, e.g. docker
+//! networks) into that list at build time; this post-processor merges the
+//! runtime-resolved server IPs in without clobbering them.
 //!
 //! On Linux the core's `direct` outbound additionally dials arbitrary
 //! geo-`direct` hosts whose IPs can't be pre-resolved into that exclude list, so
@@ -104,15 +107,29 @@ pub async fn prepare_singbox_config(
             excludes.insert(cidr(&ip));
         }
     }
-    if !excludes.is_empty() {
-        let mut list: Vec<String> = excludes.into_iter().collect();
-        list.sort();
-        if let Some(inbounds) = cfg.get_mut("inbounds").and_then(Value::as_array_mut) {
-            for ib in inbounds {
-                if ib.get("type").and_then(Value::as_str) == Some("tun") {
-                    ib["route_exclude_address"] = serde_json::to_value(&list)?;
-                    changed = true;
-                }
+    if !excludes.is_empty()
+        && let Some(inbounds) = cfg.get_mut("inbounds").and_then(Value::as_array_mut)
+    {
+        for ib in inbounds {
+            if ib.get("type").and_then(Value::as_str) == Some("tun") {
+                // Merge the proxy-server bypass into any user CIDRs the builder
+                // already placed on `route_exclude_address` (`tun_exclude_addresses`);
+                // never overwrite them, or the OS-level exclusion is lost when the
+                // config is rewritten on every reconnect.
+                let mut merged: HashSet<String> = ib
+                    .get("route_exclude_address")
+                    .and_then(Value::as_array)
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                merged.extend(excludes.iter().cloned());
+                let mut list: Vec<String> = merged.into_iter().collect();
+                list.sort();
+                ib["route_exclude_address"] = serde_json::to_value(&list)?;
+                changed = true;
             }
         }
     }
@@ -158,5 +175,48 @@ mod tests {
         // A config without a route section (not ours) is left alone.
         let mut cfg = serde_json::json!({ "inbounds": [] });
         assert!(!inject_escape_mark(&mut cfg));
+    }
+
+    // The proxy-server bypass (resolved at runtime) must merge with any
+    // user-specified CIDRs already baked into the tun inbound's `route_exclude_address`
+    // by the config generator (`tun_exclude_addresses`) — never overwrite them.
+    #[tokio::test]
+    async fn merges_proxy_bypass_into_existing_route_exclude() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg_path = dir.path().join("singbox.json");
+        let tun1 = dir.path().join("tun_iface");
+        let tun2 = dir.path().join("tun2_iface");
+        std::fs::write(&tun1, "").unwrap();
+        std::fs::write(&tun2, "").unwrap();
+
+        let cfg = serde_json::json!({
+            "inbounds": [
+                { "type": "tun", "tag": "tun-in", "route_exclude_address": ["172.17.0.0/16"] },
+                { "type": "loopback" },
+            ],
+            "outbounds": [{ "type": "socks", "server": "1.2.3.4" }],
+        });
+        std::fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).unwrap()).unwrap();
+
+        prepare_singbox_config(
+            cfg_path.to_str().unwrap(),
+            tun1.to_str().unwrap(),
+            tun2.to_str().unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let raw = read_text(&cfg_path).await.unwrap();
+        let out: Value = serde_json::from_str(&raw).unwrap();
+        let excluded: Vec<&str> = out["inbounds"][0]["route_exclude_address"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        // Both survive the rewrite: the user CIDR (verbatim) and the literal-IP
+        // server bypass (host-routed as /32).
+        assert!(excluded.contains(&"172.17.0.0/16"));
+        assert!(excluded.contains(&"1.2.3.4/32"));
     }
 }

@@ -16,6 +16,8 @@
 
 use serde_json::{Map, Value, json};
 
+use crate::config_shared::split_delimited;
+
 /// A single upgrade step, mutating the whole `AppState` value from one version to
 /// the next.
 type MigrationStep = fn(&mut Value);
@@ -217,26 +219,24 @@ fn fix_tls(tls: &mut Map<String, Value>) {
     }
 }
 
-/// CSV string → array of trimmed non-empty parts. An existing array is kept.
+/// CSV/newline string → array of trimmed non-empty parts. An existing array is
+/// kept. Accepts both comma and newline separators (one value per line too).
 fn csv_to_array(v: &Value) -> Value {
     match v {
-        Value::String(s) => Value::Array(
-            s.split(',')
-                .map(str::trim)
-                .filter(|x| !x.is_empty())
-                .map(|x| Value::String(x.to_string()))
-                .collect(),
-        ),
+        Value::String(s) => {
+            Value::Array(split_delimited(s).into_iter().map(Value::String).collect())
+        }
         other => other.clone(),
     }
 }
 
-/// `"0,0,0"` → `[0, 0, 0]`. An existing array is kept.
+/// `"0,0,0"` (or one per line) → `[0, 0, 0]`. An existing array is kept.
 fn reserved_to_bytes(v: &Value) -> Value {
     match v {
         Value::String(s) => Value::Array(
-            s.split(',')
-                .filter_map(|x| x.trim().parse::<u8>().ok())
+            split_delimited(s)
+                .iter()
+                .filter_map(|x| x.parse::<u8>().ok())
                 .map(Value::from)
                 .collect(),
         ),

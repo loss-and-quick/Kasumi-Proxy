@@ -19,7 +19,9 @@ use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
 use kasumi_backend::platform::Platform;
 use kasumi_backend::{Command, Response, Service};
-use kasumi_core::contract::{PushFrame, RunState, ServiceStatus, SubAppliedEvent};
+use kasumi_core::contract::{
+    AssetsUpdatedEvent, PushFrame, RunState, ServiceStatus, SubAppliedEvent,
+};
 use kasumi_core::enums::wire_value;
 use kasumi_core::state::RoutingMode;
 
@@ -36,6 +38,11 @@ pub struct StatusChanged(pub ServiceStatus);
 /// A subscription the headless updater fetched and applied; the UI reloads state.
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct SubscriptionApplied(pub SubAppliedEvent);
+
+/// Geo assets the headless updater refreshed; the UI reloads state so the asset
+/// rows show their new timestamps.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
+pub struct AssetsUpdated(pub AssetsUpdatedEvent);
 
 /// A tray menu action for the webview to handle: `"restart"` / `"start"` / `"stop"`,
 /// `"activate:<id>"`, or `"routing:<mode>"`. `show`/`quit` never reach here — they're
@@ -431,6 +438,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .events(collect_events![
             StatusChanged,
             SubscriptionApplied,
+            AssetsUpdated,
             TrayAction
         ])
         // Wire numbers are JSON numbers; the UI wants `number`, not `bigint`.
@@ -582,7 +590,7 @@ pub fn run() {
                     }
                 };
 
-                // Re-emit the Service's status / subApplied frames as typed events.
+                // Re-emit the Service's push frames as typed events.
                 let emit_handle = handle.clone();
                 let mut frames = service.subscribe();
                 tauri::async_runtime::spawn(async move {
@@ -591,6 +599,9 @@ pub fn run() {
                             PushFrame::Status { value } => StatusChanged(value).emit(&emit_handle),
                             PushFrame::SubApplied { value } => {
                                 SubscriptionApplied(value).emit(&emit_handle)
+                            }
+                            PushFrame::AssetsUpdated { value } => {
+                                AssetsUpdated(value).emit(&emit_handle)
                             }
                         };
                     }

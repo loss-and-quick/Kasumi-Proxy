@@ -31,7 +31,7 @@ use crate::mixins::{
 };
 use crate::profile::{
     Anytls, Http, Hysteria2, Naive, Profile, Shadowsocks, Shadowtls, Socks, Trojan, Tuic, Vless,
-    Vmess, Wireguard,
+    Vmess, WG_DEFAULT_LOCAL_ADDRESS, Wireguard,
 };
 use crate::uid::uid;
 
@@ -386,7 +386,7 @@ fn parse_wireguard(uri: &str, group_id: Option<&str>) -> Option<Profile> {
             .iter()
             .filter_map(|s| s.trim().parse::<u8>().ok())
             .collect(),
-        local_address: get("address", "172.16.0.2/32"),
+        local_address: get("address", WG_DEFAULT_LOCAL_ADDRESS),
         mtu: q.get("mtu").and_then(|s| s.parse().ok()).unwrap_or(1420),
         workers: 0,
         persistent_keepalive: 0,
@@ -1439,7 +1439,7 @@ fn build_wireguard(p: &Wireguard) -> String {
             .join(",");
         q.set("reserved", csv);
     }
-    if !p.local_address.is_empty() && p.local_address != "172.16.0.2/32" {
+    if !p.local_address.is_empty() && p.local_address != WG_DEFAULT_LOCAL_ADDRESS {
         q.set("address", p.local_address.clone());
     }
     if p.mtu != 0 && p.mtu != 1420 {

@@ -52,17 +52,20 @@
             inputs.rust-overlay.overlays.default
           ];
         };
+        inherit (pkgs) lib;
         toolchain = import ./nix/toolchain.nix {
-          inherit pkgs;
+          inherit pkgs lib;
           inherit (inputs) crane;
         };
-        version = import ./nix/version.nix {inherit pkgs self;};
+        version = import ./nix/version.nix {
+          inherit lib self;
+        };
       in {
         _module.args = {
-          inherit pkgs toolchain version;
+          inherit pkgs lib toolchain version;
           binaries = import ./nix/binaries.nix {
             inherit pkgs self version;
-            inherit (pkgs) lib;
+            inherit lib;
           };
         };
       };
