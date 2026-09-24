@@ -7,6 +7,7 @@
 // impl never touches a screen.
 // ============================================================
 import type {
+  AssetsUpdatedEvent,
   Capabilities,
   CoreResolution,
   FetchMode,
@@ -24,6 +25,7 @@ import type {
 export type {
   AdvancedSettings_Serialize as AdvancedSettings,
   AssetFile,
+  AssetsUpdatedEvent,
   Capabilities,
   CoreResolution,
   Group,
@@ -122,6 +124,10 @@ export interface Bridge {
   // The daemon fetches & applies auto-update subscriptions itself; this stream
   // tells the UI to reload the persisted state. Returns an unsubscribe.
   onSubApplied(cb: (info: SubAppliedEvent) => void): () => void;
+
+  // Same, for the headless geo-asset refresh: it stamps each asset's `lastUpdated`
+  // (and may restart the core), so the UI reloads. Returns an unsubscribe.
+  onAssetsUpdated(cb: (info: AssetsUpdatedEvent) => void): () => void;
 
   // asset files
   downloadAsset(

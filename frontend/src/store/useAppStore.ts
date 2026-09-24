@@ -12,6 +12,7 @@ import type {
   AdvancedSettings,
   AppState,
   AssetFile,
+  AssetsUpdatedEvent,
   Capabilities,
   CoreResolution,
   MutationIntent,
@@ -182,7 +183,7 @@ export const useAppStore = create<Store>((set, get) => {
   let lastTrafficSample: { uploadBytes: number; downloadBytes: number; at: number } | null = null;
   // hydrate() can run more than once (tests, dev StrictMode) — register the
   // background watchers a single time.
-  let subAppliedWatchStarted = false;
+  let daemonPushWatchStarted = false;
   const syncService = (service: ServiceStatus) => {
     const now = Date.now();
     let uploadRate = 0;
@@ -229,6 +230,24 @@ export const useAppStore = create<Store>((set, get) => {
       return;
     }
     pushActivity("cloud_sync", translateCurrent("activity.subUpdated", { name: info.remarks }));
+  };
+  // The daemon refreshed the geo assets headlessly: it stamped each asset's
+  // `lastUpdated` and may have restarted the core, so re-read the persisted state
+  // the same way a headless sub-apply does.
+  const onDaemonAssetsUpdated = async (info: AssetsUpdatedEvent) => {
+    try {
+      const state = await bridge.readState();
+      set({ assetFiles: state.assetFiles, settings: mergeSettings(state.settings) });
+    } catch {
+      return;
+    }
+    for (const name of info.remarks) {
+      pushActivity("folder_zip", translateCurrent("activity.assetDownloaded", { name }));
+    }
+    // A restart the user didn't ask for needs saying out loud.
+    if (info.restarted) {
+      pushActivity("autorenew", translateCurrent("activity.assetRestart"));
+    }
   };
   const waitForUiPaint = () =>
     new Promise<void>((resolve) => {
@@ -360,11 +379,12 @@ export const useAppStore = create<Store>((set, get) => {
           } as AppState_Serialize,
         });
       }
-      // The daemon fetches & applies subscriptions headlessly; reload the
-      // persisted state whenever it pushes a subApplied event.
-      if (!subAppliedWatchStarted) {
-        subAppliedWatchStarted = true;
+      // The daemon fetches subscriptions and geo assets headlessly; reload the
+      // persisted state whenever it pushes about one.
+      if (!daemonPushWatchStarted) {
+        daemonPushWatchStarted = true;
         bridge.onSubApplied((info) => void onDaemonSubApplied(info));
+        bridge.onAssetsUpdated((info) => void onDaemonAssetsUpdated(info));
       }
     },
     notify(msg) {

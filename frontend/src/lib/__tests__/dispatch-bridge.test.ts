@@ -6,6 +6,7 @@ import { createBridge, type Dispatch, type PushStreams } from "../dispatch-bridg
 const noPush: PushStreams = {
   subscribeStatus: () => () => {},
   subscribeSubApplied: () => () => {},
+  subscribeAssetsUpdated: () => () => {},
 };
 
 // A bare AppState shell — the bridge only ever reads `.profiles`/`.settings` here.
@@ -141,6 +142,7 @@ describe("dispatch-bridge status stream", () => {
         return () => {};
       },
       subscribeSubApplied: () => () => {},
+      subscribeAssetsUpdated: () => () => {},
     };
     // The status command replies with the bare ServiceState — no pendingRestart —
     // so status() must fill it from the last push.

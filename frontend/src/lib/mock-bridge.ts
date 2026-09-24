@@ -307,8 +307,12 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return this.readState();
   },
 
-  // No backend daemon in dev, so headless sub-applies never happen.
+  // No backend daemon in dev, so headless sub-applies / asset refreshes never happen.
   onSubApplied() {
+    return () => {};
+  },
+
+  onAssetsUpdated() {
     return () => {};
   },
 
