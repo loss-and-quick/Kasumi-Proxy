@@ -117,6 +117,15 @@ pub struct SubAppliedEvent {
     pub count: u32,
 }
 
+/// Daemon push: it refreshed geo assets headlessly. `restarted` says whether the
+/// active core was bounced to pick the new data up, so the UI can explain a
+/// connection blip it didn't ask for.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+pub struct AssetsUpdatedEvent {
+    pub remarks: Vec<String>,
+    pub restarted: bool,
+}
+
 /// One WS RPC call (client → daemon).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RpcRequest {
@@ -147,6 +156,8 @@ pub enum PushFrame {
     Status { value: ServiceStatus },
     #[serde(rename = "subApplied")]
     SubApplied { value: SubAppliedEvent },
+    #[serde(rename = "assetsUpdated")]
+    AssetsUpdated { value: AssetsUpdatedEvent },
 }
 
 /// WS bootstrap the daemon writes (and serves via the `wsInfo` command).

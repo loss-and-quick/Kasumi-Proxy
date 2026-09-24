@@ -2,6 +2,8 @@
 //! sample profiles. Compiled only under `cfg(test)`.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use tempfile::TempDir;
@@ -23,9 +25,24 @@ use crate::platform::{
 pub struct TestPlatform {
     paths: BackendPaths,
     bin_dir: PathBuf,
+    /// Filenames handed to `convert_asset`, in call order.
+    converted: Mutex<Vec<String>>,
+    /// When set, `convert_asset` errors — for the asset-update rollback path.
+    convert_fails: AtomicBool,
 }
 
 impl TestPlatform {
+    /// Make `convert_asset` fail (or succeed again), so a test can drive the
+    /// "downloaded but not converted" branch.
+    pub fn fail_conversions(&self, yes: bool) {
+        self.convert_fails.store(yes, Ordering::SeqCst);
+    }
+
+    /// Filenames `convert_asset` was called with, in order.
+    pub fn converted(&self) -> Vec<String> {
+        self.converted.lock().unwrap().clone()
+    }
+
     pub fn new() -> (Self, TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path().to_path_buf();
@@ -45,7 +62,15 @@ impl TestPlatform {
             webroot: None,
         };
         let bin_dir = d.join("bin");
-        (Self { paths, bin_dir }, dir)
+        (
+            Self {
+                paths,
+                bin_dir,
+                converted: Mutex::new(Vec::new()),
+                convert_fails: AtomicBool::new(false),
+            },
+            dir,
+        )
     }
 }
 
@@ -87,6 +112,13 @@ impl Platform for TestPlatform {
             CoreEngine::SingBox => "sing-box",
         };
         self.bin_dir.join(name)
+    }
+    async fn convert_asset(&self, filename: &str) -> anyhow::Result<()> {
+        if self.convert_fails.load(Ordering::SeqCst) {
+            anyhow::bail!("convert_asset failed (test)");
+        }
+        self.converted.lock().unwrap().push(filename.to_owned());
+        Ok(())
     }
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus> {
         Ok(ProxyStatus {
