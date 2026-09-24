@@ -25,7 +25,7 @@ export const commands = {
 	 *  calls this on hydrate and whenever the active/recent profiles or language
 	 *  change; clicks come back as [`TrayAction`] events (or `show`/`quit`).
 	 */
-	updateTray: (profiles: TrayProfile[], labels: TrayLabels, running: boolean, connected: boolean, routingMode: string) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels, running, connected, routingMode })),
+	updateTray: (profiles: TrayProfile[], labels: TrayLabels, running: boolean, connected: boolean, routingMode: RoutingMode_Deserialize) => typedError<null, string>(__TAURI_INVOKE("update_tray", { profiles, labels, running, connected, routingMode })),
 	/**
 	 *  Update only the tray tooltip + state icon (not the menu). Called on every status
 	 *  tick, so it stays cheap: the menu is rebuilt separately via [`update_tray`] only
