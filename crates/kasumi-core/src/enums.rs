@@ -379,7 +379,7 @@ fn wire_values<T: strum::IntoEnumIterator + Serialize>() -> Vec<String> {
 pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
     use crate::contract::LogTarget;
     use crate::profile::Protocol;
-    use crate::state::RoutingMode;
+    use crate::state::{RoutingMode, SingboxFragment};
     vec![
         ("PROTOCOL_OPTS", wire_values::<Protocol>()),
         ("ROUTING_MODE_OPTS", wire_values::<RoutingMode>()),
@@ -396,6 +396,7 @@ pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
         ("FLOW_OPTS", wire_values::<Flow>()),
         ("PACKET_ENCODING_OPTS", wire_values::<PacketEncoding>()),
         ("HYSTERIA2_OBFS_OPTS", wire_values::<Hysteria2Obfs>()),
+        ("SINGBOX_FRAGMENT_OPTS", wire_values::<SingboxFragment>()),
     ]
 }
 

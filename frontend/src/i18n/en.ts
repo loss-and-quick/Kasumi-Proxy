@@ -208,6 +208,10 @@ const en = {
   "editor.engine": "Core engine",
   "editor.engineGlobal": "Global default",
   "editor.engineResolved": "Will run on: {core}",
+  "editor.via": "Connect through",
+  "editor.viaDirect": "Directly",
+  "editor.viaHint":
+    "Reach this server through another profile (a proxy chain). The chain runs on this profile's core.",
   "editor.engineForced": "This profile can only run on {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
@@ -411,6 +415,12 @@ const en = {
   "settings.fragmentPackets": "Fragment packets",
   "settings.fragmentLength": "Fragment length",
   "settings.fragmentDelay": "Fragment delay",
+  "settings.singboxFragment": "sing-box method",
+  "settings.singboxFragmentSub":
+    "The fields above apply to xray. TCP segments are slower; try TLS records first.",
+  "settings.singboxFragment.record": "TLS records",
+  "settings.singboxFragment.segment": "TCP segments",
+  "settings.singboxFragment.both": "Both",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "Engine settings",
   "settings.tunExclude": "TUN exclusions",
@@ -616,6 +626,16 @@ const en = {
   "routingSheet.protocols": "Protocols",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Optional application protocols",
+  "routingSheet.processes": "Processes",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Name, full path, or a folder ending in /. Seen by sing-box TUN, or when an app uses the local proxy port directly.",
+  "routingSheet.packages": "Android apps",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "Package names. sing-box only: xray skips rules that name apps.",
+  "routingSheet.sourceIps": "Source addresses",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "Addresses or CIDRs of devices using the shared proxy port.",
   "routingSheet.delete": "Delete",
   // asset file sheet
   "assetSheet.addTitle": "Add resource file",

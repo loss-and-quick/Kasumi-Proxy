@@ -207,6 +207,10 @@ const es = {
   "editor.engine": "Motor principal",
   "editor.engineGlobal": "Predeterminado global",
   "editor.engineResolved": "Se ejecutará con: {core}",
+  "editor.via": "Conectar a través de",
+  "editor.viaDirect": "Directamente",
+  "editor.viaHint":
+    "Llegar a este servidor a través de otro perfil (cadena de proxies). La cadena usa el núcleo de este perfil.",
   "editor.engineForced": "Este perfil solo puede ejecutarse en {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Ofuscación",
@@ -406,6 +410,12 @@ const es = {
   "settings.fragmentPackets": "Fragmentar paquetes",
   "settings.fragmentLength": "Longitud de los fragmentos",
   "settings.fragmentDelay": "Retardo de fragmentación",
+  "settings.singboxFragment": "Método de sing-box",
+  "settings.singboxFragmentSub":
+    "Los campos de arriba se aplican a xray. Los segmentos TCP son más lentos; pruebe primero los registros TLS.",
+  "settings.singboxFragment.record": "Registros TLS",
+  "settings.singboxFragment.segment": "Segmentos TCP",
+  "settings.singboxFragment.both": "Ambos",
   "settings.tunMtu": "MTU de TUN",
   "settings.tunEngineSettings": "Ajustes del motor",
   "settings.tunExclude": "Exclusiones TUN",
@@ -610,6 +620,18 @@ const es = {
   "routingSheet.protocols": "Protocolos",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Protocolos de aplicación opcionales",
+  "routingSheet.processes": "Procesos",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Nombre, ruta completa o carpeta terminada en /. Los ve el TUN de sing-box, o cuando una app usa directamente el puerto proxy local.",
+  "routingSheet.packages": "Apps de Android",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint":
+    "Nombres de paquete. Solo sing-box: xray omite las reglas que nombran apps.",
+  "routingSheet.sourceIps": "Direcciones de origen",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint":
+    "Direcciones o CIDR de los dispositivos que usan el puerto proxy compartido.",
   "routingSheet.delete": "Eliminar",
   // asset file sheet
   "assetSheet.addTitle": "Añadir archivo de recursos",

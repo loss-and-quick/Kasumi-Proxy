@@ -203,6 +203,10 @@ const hi = {
   "editor.engine": "कोर इंजन",
   "editor.engineGlobal": "वैश्विक डिफ़ॉल्ट",
   "editor.engineResolved": "इस पर चलेगा: {core}",
+  "editor.via": "इसके ज़रिए कनेक्ट करें",
+  "editor.viaDirect": "सीधे",
+  "editor.viaHint":
+    "इस सर्वर तक किसी दूसरी प्रोफ़ाइल के ज़रिए पहुँचें (प्रॉक्सी चेन)। चेन इसी प्रोफ़ाइल के कोर पर चलती है।",
   "editor.engineForced": "यह प्रोफ़ाइल केवल {core} पर चल सकती है",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
@@ -397,6 +401,12 @@ const hi = {
   "settings.fragmentPackets": "फ्रैगमेंट पैकेट",
   "settings.fragmentLength": "फ्रैगमेंट लंबाई",
   "settings.fragmentDelay": "फ्रैगमेंट विलंब",
+  "settings.singboxFragment": "sing-box विधि",
+  "settings.singboxFragmentSub":
+    "ऊपर के फ़ील्ड xray पर लागू होते हैं। TCP सेगमेंट धीमे हैं; पहले TLS रिकॉर्ड आज़माएँ।",
+  "settings.singboxFragment.record": "TLS रिकॉर्ड",
+  "settings.singboxFragment.segment": "TCP सेगमेंट",
+  "settings.singboxFragment.both": "दोनों",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "इंजन सेटिंग्स",
   "settings.tunExclude": "TUN अपवाद",
@@ -600,6 +610,16 @@ const hi = {
   "routingSheet.protocols": "प्रोटोकॉल",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "वैकल्पिक एप्लिकेशन प्रोटोकॉल",
+  "routingSheet.processes": "प्रोसेस",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "नाम, पूरा पाथ या / पर खत्म होने वाला फ़ोल्डर। sing-box TUN इन्हें पहचानता है, या जब ऐप सीधे लोकल प्रॉक्सी पोर्ट इस्तेमाल करता है।",
+  "routingSheet.packages": "Android ऐप्स",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "पैकेज नाम। केवल sing-box: xray ऐप वाले नियम छोड़ देता है।",
+  "routingSheet.sourceIps": "स्रोत पते",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "साझा प्रॉक्सी पोर्ट इस्तेमाल करने वाले डिवाइसों के पते या CIDR।",
   "routingSheet.delete": "हटाएँ",
   // asset file sheet
   "assetSheet.addTitle": "रिसोर्स फ़ाइल जोड़ें",

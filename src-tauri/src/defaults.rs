@@ -34,6 +34,7 @@ import type {
 \tProtocol,
 \tRoutingMode_Serialize,
 \tSecurity,
+\tSingboxFragment,
 \tSsMethod,
 \tTransport,
 \tTunEngine,
@@ -61,6 +62,7 @@ fn opts_type(name: &str) -> &'static str {
         "FLOW_OPTS" => "Flow",
         "PACKET_ENCODING_OPTS" => "PacketEncoding",
         "HYSTERIA2_OBFS_OPTS" => "Hysteria2Obfs",
+        "SINGBOX_FRAGMENT_OPTS" => "SingboxFragment",
         _ => "string",
     }
 }

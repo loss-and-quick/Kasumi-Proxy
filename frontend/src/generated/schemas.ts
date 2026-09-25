@@ -8,6 +8,10 @@ export const SingboxStackSchema = z.union([z.literal("gvisor"), z.literal("mixed
 export type SingboxStack = z.infer<typeof SingboxStackSchema>;
 
 
+export const SingboxFragmentSchema = z.union([z.literal("both"), z.literal("record"), z.literal("segment")]);
+export type SingboxFragment = z.infer<typeof SingboxFragmentSchema>;
+
+
 export const SingboxDomainStrategySchema = z.union([z.literal("ipv4_only"), z.literal("ipv6_only"), z.literal("prefer_ipv4"), z.literal("prefer_ipv6")]);
 export type SingboxDomainStrategy = z.infer<typeof SingboxDomainStrategySchema>;
 
@@ -75,6 +79,7 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	fragmentPackets: z.string(),
 	fragmentLength: z.string().nullable().optional(),
 	fragmentDelay: z.string().nullable().optional(),
+	singboxFragment: SingboxFragmentSchema,
 	logLevel: LogLevelSchema.nullable().optional(),
 	logRotateMaxKb: z.number(),
 	localSocksPort: z.number().nullable().optional(),
@@ -136,6 +141,7 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	fragmentPackets: z.string().optional(),
 	fragmentLength: z.string().nullable().optional(),
 	fragmentDelay: z.string().nullable().optional(),
+	singboxFragment: SingboxFragmentSchema.optional(),
 	logLevel: LogLevelSchema.nullable().optional(),
 	logRotateMaxKb: z.number().optional(),
 	localSocksPort: z.number().nullable().optional(),
@@ -214,6 +220,7 @@ export const MetaSchema = z.object({
 	groupId: z.string(),
 	subId: z.string().nullable().optional(),
 	coreType: CoreEngineSchema.nullable().optional(),
+	via: z.string().nullable().optional(),
 });
 export type Meta = z.infer<typeof MetaSchema>;
 
@@ -280,6 +287,9 @@ export const RoutingRule_SerializeSchema = z.object({
 	port: z.string().nullable().optional(),
 	network: RuleNetworkSchema.nullable().optional(),
 	protocol: z.array(z.string()).nullable().optional(),
+	process: z.array(z.string()).nullable().optional(),
+	packageName: z.array(z.string()).nullable().optional(),
+	sourceIp: z.array(z.string()).nullable().optional(),
 });
 export type RoutingRule_Serialize = z.infer<typeof RoutingRule_SerializeSchema>;
 
@@ -654,6 +664,9 @@ export const RoutingRule_DeserializeSchema = z.object({
 	port: z.string().nullable().optional(),
 	network: RuleNetworkSchema.nullable().optional(),
 	protocol: z.array(z.string()).nullable().optional(),
+	process: z.array(z.string()).nullable().optional(),
+	packageName: z.array(z.string()).nullable().optional(),
+	sourceIp: z.array(z.string()).nullable().optional(),
 });
 export type RoutingRule_Deserialize = z.infer<typeof RoutingRule_DeserializeSchema>;
 
@@ -793,6 +806,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	profile: ProfileSchema,
 }), z.object({
 	cmd: z.literal("capabilities"),
+}), z.object({
+	cmd: z.literal("chainCandidates"),
+	profile: ProfileSchema,
 }), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
@@ -957,6 +973,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("capabilities"),
 }), z.object({
+	cmd: z.literal("chainCandidates"),
+	profile: ProfileSchema,
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1093,6 +1112,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
 }), z.object({
+	kind: z.literal("profileIds"),
+	value: z.array(z.string()),
+}), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
 }), z.object({
@@ -1145,6 +1167,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
+}), z.object({
+	kind: z.literal("profileIds"),
+	value: z.array(z.string()),
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),

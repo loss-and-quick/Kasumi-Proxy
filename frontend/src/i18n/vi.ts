@@ -204,6 +204,10 @@ const vi = {
   "editor.engine": "Nhân lõi",
   "editor.engineGlobal": "Mặc định toàn cục",
   "editor.engineResolved": "Sẽ chạy trên: {core}",
+  "editor.via": "Kết nối qua",
+  "editor.viaDirect": "Trực tiếp",
+  "editor.viaHint":
+    "Kết nối tới máy chủ này qua một hồ sơ khác (chuỗi proxy). Chuỗi chạy trên lõi của hồ sơ này.",
   "editor.engineForced": "Hồ sơ này chỉ có thể chạy trên {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
@@ -401,6 +405,12 @@ const vi = {
   "settings.fragmentPackets": "Phân mảnh gói",
   "settings.fragmentLength": "Độ dài phân mảnh",
   "settings.fragmentDelay": "Độ trễ phân mảnh",
+  "settings.singboxFragment": "Phương thức sing-box",
+  "settings.singboxFragmentSub":
+    "Các trường ở trên áp dụng cho xray. Phân đoạn TCP chậm hơn; hãy thử bản ghi TLS trước.",
+  "settings.singboxFragment.record": "Bản ghi TLS",
+  "settings.singboxFragment.segment": "Phân đoạn TCP",
+  "settings.singboxFragment.both": "Cả hai",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "Cài đặt engine",
   "settings.tunExclude": "Các loại trừ TUN",
@@ -605,6 +615,16 @@ const vi = {
   "routingSheet.protocols": "Giao thức",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Các giao thức tầng ứng dụng tùy chọn",
+  "routingSheet.processes": "Tiến trình",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Tên, đường dẫn đầy đủ hoặc thư mục kết thúc bằng /. sing-box TUN nhận ra được, hoặc khi ứng dụng dùng trực tiếp cổng proxy cục bộ.",
+  "routingSheet.packages": "Ứng dụng Android",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "Tên gói. Chỉ sing-box: xray bỏ qua các quy tắc nêu tên ứng dụng.",
+  "routingSheet.sourceIps": "Địa chỉ nguồn",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "Địa chỉ hoặc CIDR của các thiết bị dùng cổng proxy chia sẻ.",
   "routingSheet.delete": "Xóa",
   // asset file sheet
   "assetSheet.addTitle": "Thêm tệp tài nguyên",

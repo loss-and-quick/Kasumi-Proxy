@@ -3,8 +3,11 @@
 //! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
 //! invariants (e.g. inbound/routing shape) are covered by the unit tests below.
 
+use std::collections::HashSet;
+
 use serde_json::{Map, Value, json};
 
+use crate::chain::chain_hops;
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
@@ -542,6 +545,16 @@ fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Va
     {
         m.insert("protocol".into(), json!(proto));
     }
+    if let Some(process) = &rule.process
+        && !process.is_empty()
+    {
+        m.insert("process".into(), json!(process));
+    }
+    if let Some(source) = &rule.source_ip
+        && !source.is_empty()
+    {
+        m.insert("sourceIP".into(), json!(source));
+    }
     m.insert("outboundTag".into(), resolve(&rule.outbound_tag).into());
     Value::Object(m)
 }
@@ -597,6 +610,59 @@ fn build_profile_outbounds(
         outbounds,
         resolved,
     }
+}
+
+/// Make `ob` dial its server through the outbound tagged `via`.
+fn set_dialer_proxy(ob: &mut Value, via: &str) {
+    let stream = ob
+        .as_object_mut()
+        .expect("outbound is an object")
+        .entry("streamSettings")
+        .or_insert_with(|| json!({}));
+    let sockopt = stream
+        .as_object_mut()
+        .expect("streamSettings is an object")
+        .entry("sockopt")
+        .or_insert_with(|| json!({}));
+    sockopt["dialerProxy"] = via.into();
+}
+
+/// Chain the outbound built for `p` to its hops ([`chain_hops`]): `ob` dials
+/// through the first hop, each hop through the next, and every hop not yet in the
+/// config is appended to `outbounds`, tagged by its profile id like the routing
+/// targets (`emitted` holds the tags already present).
+fn attach_chain(
+    p: &Profile,
+    ob: &mut Value,
+    s: &AdvancedSettings,
+    profiles: &[Profile],
+    outbounds: &mut Vec<Value>,
+    emitted: &mut HashSet<String>,
+) -> Result<(), String> {
+    let hops = chain_hops(p, profiles)?;
+    let Some(first) = hops.first() else {
+        return Ok(());
+    };
+    set_dialer_proxy(ob, &first.meta().id);
+    for (i, hop) in hops.iter().enumerate() {
+        let tag = &hop.meta().id;
+        if !emitted.insert(tag.clone()) {
+            continue;
+        }
+        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| {
+            format!(
+                "proxy chain hop \"{}\" ({:?}) requires sing-box",
+                hop.meta().remarks,
+                hop.protocol()
+            )
+        })?;
+        hop_ob["tag"] = tag.as_str().into();
+        if let Some(next) = hops.get(i + 1) {
+            set_dialer_proxy(&mut hop_ob, &next.meta().id);
+        }
+        outbounds.push(hop_ob);
+    }
+    Ok(())
 }
 
 fn parse_hosts(v: &str) -> Option<Value> {
@@ -658,7 +724,13 @@ fn build_routing(
 
     if s.routing_mode == crate::state::RoutingMode::Rules && !routing_rules.is_empty() {
         let mut rules: Vec<Value> = vec![force_rule, dns_rule];
-        for r in routing_rules.iter().filter(|r| r.enabled) {
+        // xray can't tell which Android package opened a connection. Dropping just
+        // the package condition would widen the rule to every app, so a rule that
+        // names packages is left out on xray entirely.
+        for r in routing_rules
+            .iter()
+            .filter(|r| r.enabled && r.package_name.as_ref().is_none_or(Vec::is_empty))
+        {
             rules.push(build_rule_object(r, resolve));
         }
         rules.push(final_rule);
@@ -765,8 +837,24 @@ pub fn build_xray_config(
         "settings": { "auth": "noauth", "udp": true },
     }));
 
+    let mut outbound = outbound;
+    let mut targets = po.outbounds.clone();
+    let mut hops: Vec<Value> = Vec::new();
+    let mut emitted: HashSet<String> = targets
+        .iter()
+        .filter_map(|o| o["tag"].as_str().map(str::to_string))
+        .collect();
+    attach_chain(p, &mut outbound, s, profiles, &mut hops, &mut emitted)?;
+    for target in &mut targets {
+        let id = target["tag"].as_str().unwrap_or_default().to_string();
+        if let Some(tp) = profiles.iter().find(|x| x.meta().id == id) {
+            attach_chain(tp, target, s, profiles, &mut hops, &mut emitted)?;
+        }
+    }
+
     let mut outbounds = vec![outbound];
-    outbounds.extend(po.outbounds.iter().cloned());
+    outbounds.extend(targets);
+    outbounds.extend(hops);
     outbounds.push(json!({ "protocol": "freedom", "tag": "direct" }));
     outbounds.push(json!({ "protocol": "blackhole", "tag": "block" }));
 
@@ -783,9 +871,111 @@ pub fn build_xray_config(
 mod tests {
     use super::*;
 
+    fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
+        let mut p = crate::share::parse_share_link(uri, None).unwrap();
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    }
+
+    #[test]
+    fn chain_dials_each_hop_through_the_next() {
+        let all = vec![
+            chained(
+                "vless://u@exit.ex:443?type=ws&security=tls&sni=exit.ex",
+                "exit",
+                Some("mid"),
+            ),
+            chained(
+                "trojan://pw@mid.ex:443?security=tls&sni=mid.ex",
+                "mid",
+                Some("entry"),
+            ),
+            chained("ss://YWVzLTEyOC1nY206cHc@entry.ex:8388", "entry", None),
+        ];
+        let cfg = build_xray_config(&all[0], &AdvancedSettings::default(), &[], &all).unwrap();
+        let obs = cfg["outbounds"].as_array().unwrap();
+        let by_tag = |t: &str| obs.iter().find(|o| o["tag"] == t).unwrap();
+        assert_eq!(
+            by_tag("proxy")["streamSettings"]["sockopt"]["dialerProxy"],
+            "mid"
+        );
+        assert_eq!(
+            by_tag("mid")["streamSettings"]["sockopt"]["dialerProxy"],
+            "entry"
+        );
+        // The entry hop connects directly (no stream settings of its own to carry).
+        assert!(
+            by_tag("entry")["streamSettings"]["sockopt"]
+                .get("dialerProxy")
+                .is_none()
+        );
+        assert_eq!(obs.iter().filter(|o| o["tag"] == "mid").count(), 1);
+    }
+
+    #[test]
+    fn chain_with_a_hop_xray_cannot_run_is_an_error() {
+        let all = vec![
+            chained(
+                "vless://u@exit.ex:443?security=tls&sni=exit.ex",
+                "exit",
+                Some("t"),
+            ),
+            chained("tuic://u:pw@t.ex:443?sni=t.ex", "t", None),
+        ];
+        let err = build_xray_config(&all[0], &AdvancedSettings::default(), &[], &all).unwrap_err();
+        assert!(err.contains("requires sing-box"), "{err}");
+    }
+
     fn sample() -> Profile {
         crate::share::parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None)
             .unwrap()
+    }
+
+    fn source_rule(outbound: &str) -> RoutingRule {
+        RoutingRule {
+            id: "r".into(),
+            remarks: "r".into(),
+            enabled: true,
+            outbound_tag: outbound.into(),
+            domain: None,
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        }
+    }
+
+    #[test]
+    fn process_and_source_pass_through_and_package_rules_are_skipped() {
+        let p = sample();
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let rules = vec![
+            RoutingRule {
+                process: Some(vec!["curl".into(), "/opt/games/".into()]),
+                source_ip: Some(vec!["192.168.1.0/24".into()]),
+                ..source_rule("direct")
+            },
+            RoutingRule {
+                domain: Some(vec!["example.com".into()]),
+                package_name: Some(vec!["com.example.app".into()]),
+                ..source_rule("block")
+            },
+        ];
+        let cfg = build_xray_config(&p, &s, &rules, std::slice::from_ref(&p)).unwrap();
+        let emitted = cfg["routing"]["rules"].as_array().unwrap();
+        let r = emitted.iter().find(|r| r.get("process").is_some()).unwrap();
+        assert_eq!(r["process"], json!(["curl", "/opt/games/"]));
+        assert_eq!(r["sourceIP"], json!(["192.168.1.0/24"]));
+        // Emitting the package rule without its package would block example.com
+        // for every app.
+        assert!(emitted.iter().all(|r| r["outboundTag"] != "block"));
     }
 
     #[test]
@@ -831,6 +1021,9 @@ mod tests {
             port: None,
             network: None,
             protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
         };
         let cfg = build_xray_config(&p, &s, std::slice::from_ref(&geo), std::slice::from_ref(&p))
             .unwrap();

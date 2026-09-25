@@ -144,6 +144,11 @@ export interface Bridge {
   // re-implementing the resolution matrix. Batch: one call per profile list.
   resolveCores(profiles: Profile[]): Promise<CoreResolution[]>;
 
+  // Ids of the stored profiles `profile` (possibly an unsaved draft) can dial
+  // through, checked by the backend's `chain::chain_candidates` — the same rule
+  // the config builders enforce, so the UI never re-implements chain validity.
+  chainCandidates(profile: Profile): Promise<string[]>;
+
   // import / export / backup
   parseShareLinks(text: string): Promise<Profile[]>; // vless:// vmess:// trojan://
   buildShareLink(p: Profile): Promise<string>;

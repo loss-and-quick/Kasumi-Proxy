@@ -14,6 +14,7 @@ import type {
 	Protocol,
 	RoutingMode_Serialize,
 	Security,
+	SingboxFragment,
 	SsMethod,
 	Transport,
 	TunEngine,
@@ -34,7 +35,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "minIdleSession": 0,
     "password": "",
@@ -69,7 +71,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "protocol": "custom",
     "raw": ""
@@ -84,7 +87,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "password": "",
     "protocol": "http",
@@ -125,7 +129,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "obfsPassword": "",
     "obfsType": "",
@@ -170,7 +175,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "naiveQuic": false,
     "password": "",
@@ -210,7 +216,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "method": "aes-256-gcm",
     "muxEnabled": false,
@@ -256,7 +263,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "password": "",
     "protocol": "shadowtls",
@@ -295,7 +303,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "password": "",
     "protocol": "socks",
@@ -312,7 +321,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "muxEnabled": false,
     "password": "",
@@ -359,7 +369,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "password": "",
     "protocol": "tuic",
@@ -403,7 +414,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "muxEnabled": false,
     "packetEncoding": "",
@@ -451,7 +463,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "muxEnabled": false,
     "packetEncoding": "",
@@ -500,7 +513,8 @@ export const EMPTY_PROFILES = {
       "groupId": "",
       "id": "",
       "remarks": "New profile",
-      "subId": null
+      "subId": null,
+      "via": null
     },
     "mtu": 1420,
     "peerPublicKey": "",
@@ -539,6 +553,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "proxyMode": "tun",
   "routeOnly": false,
   "routingMode": "global",
+  "singboxFragment": "record",
   "singboxStack": "gvisor",
   "speedConcurrency": 1,
   "strictRoute": false,
@@ -575,6 +590,7 @@ export const FINGERPRINT_OPTS: Fingerprint[] = ["","chrome","firefox","safari","
 export const FLOW_OPTS: Flow[] = ["","xtls-rprx-vision","xtls-rprx-vision-udp443"];
 export const PACKET_ENCODING_OPTS: PacketEncoding[] = ["","xudp","packetaddr"];
 export const HYSTERIA2_OBFS_OPTS: Hysteria2Obfs[] = ["","salamander"];
+export const SINGBOX_FRAGMENT_OPTS: SingboxFragment[] = ["record","segment","both"];
 
 /** Per-core TUN engine options (default + selectable), single-sourced from Rust `resolve_tun`. */
 export const TUN_BY_CORE = {

@@ -121,6 +121,19 @@ pub struct RoutingRule {
     pub network: Option<RuleNetwork>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub protocol: Option<Vec<String>>,
+    /// Local processes that opened the connection: a bare name (`curl`), an
+    /// absolute path (`/usr/bin/curl`), or a directory ending in `/`. Only
+    /// connections made on this machine carry a process, and only a core that
+    /// sees the app's own socket can tell (sing-box's tun, or any core addressed
+    /// directly through its local proxy port).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub process: Option<Vec<String>>,
+    /// Android package names of the app that opened the connection (sing-box only).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub package_name: Option<Vec<String>>,
+    /// Source addresses/CIDRs, e.g. LAN clients using the shared proxy port.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_ip: Option<Vec<String>>,
 }
 
 /// A downloadable asset (geoip/geosite) the daemon keeps current (`AssetFileSchema`).
@@ -222,6 +235,31 @@ pub enum SingboxStack {
     Mixed,
 }
 
+/// How sing-box fragments the TLS handshake when `fragment` is on (xray splits
+/// by `fragment_packets`/`length`/`delay` instead). `record` splits the
+/// ClientHello into several TLS records; `segment` sends it as several TCP
+/// segments, waiting for each to be acknowledged — slower, upstream advises trying
+/// records first; `both` does both.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Default,
+    strum::EnumIter,
+    specta::Type,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum SingboxFragment {
+    #[default]
+    Record,
+    Segment,
+    Both,
+}
+
 /// Mux xudp-over-443 handling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
@@ -291,6 +329,7 @@ pub struct AdvancedSettings {
     pub fragment_length: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fragment_delay: Option<String>,
+    pub singbox_fragment: SingboxFragment,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_level: Option<LogLevel>,
     pub log_rotate_max_kb: i64,
@@ -384,6 +423,7 @@ impl Default for AdvancedSettings {
             fragment_packets: "tlshello".into(),
             fragment_length: None,
             fragment_delay: None,
+            singbox_fragment: SingboxFragment::Record,
             log_level: None,
             log_rotate_max_kb: DEFAULT_LOG_ROTATE_KB,
             local_socks_port: None,

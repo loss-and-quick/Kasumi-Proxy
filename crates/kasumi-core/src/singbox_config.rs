@@ -5,6 +5,7 @@
 
 use serde_json::{Map, Value, json};
 
+use crate::chain::chain_hops;
 use crate::config_shared::{parse_pem_chain, split_csv, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
@@ -12,7 +13,7 @@ use crate::profile::Profile;
 use crate::state::{
     AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
     DEFAULT_REMOTE_DNS, DomainStrategy, FAKEIP_INET4_RANGE, RoutingMode, RoutingRule,
-    force_socks_port,
+    SingboxFragment, force_socks_port,
 };
 
 /// iproute2 table + rule-priority indices that native sing-box `auto_route`
@@ -178,7 +179,18 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
         t["certificate"] = json!(certs);
     }
     if s.fragment {
-        t["record_fragment"] = true.into();
+        if matches!(
+            s.singbox_fragment,
+            SingboxFragment::Record | SingboxFragment::Both
+        ) {
+            t["record_fragment"] = true.into();
+        }
+        if matches!(
+            s.singbox_fragment,
+            SingboxFragment::Segment | SingboxFragment::Both
+        ) {
+            t["fragment"] = true.into();
+        }
     }
     if !tls.alpn.is_empty() {
         t["alpn"] = tls.alpn.clone().into();
@@ -761,9 +773,12 @@ fn build_singbox_dns(
                 "proxy" => "remote",
                 _ => continue,
             };
-            if let Some(dr) =
+            if let Some(mut dr) =
                 build_singbox_dns_rule_for_domains(domain, server, &mut dns_rule_set_tags)
             {
+                // Scoped like the route rule, so a per-app rule doesn't move every
+                // app's lookups of these domains to its resolver.
+                push_source_matchers(r, &mut dr);
                 rules.push(dr);
             }
         }
@@ -805,6 +820,60 @@ fn build_singbox_dns(
 
 // ---------- structured routing ----------
 
+/// Match fields that narrow a rule to where the connection came from: the local
+/// process or Android package, or the source address.
+const SOURCE_MATCH_FIELDS: [&str; 5] = [
+    "process_name",
+    "process_path",
+    "process_path_regex",
+    "package_name",
+    "source_ip_cidr",
+];
+
+/// Escape a literal for a Go (RE2) regular expression.
+fn regex_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if r"\.+*?()|[]{}^$".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Add the rule's source matchers to a sing-box route or DNS rule. A process
+/// entry is a bare name, an absolute path, or a directory ending in `/` (the same
+/// forms xray's `process` takes), each mapped to the sing-box field for it.
+fn push_source_matchers(rule: &RoutingRule, out: &mut Value) {
+    for name in rule.process.iter().flatten().map(|x| x.trim()) {
+        if name.is_empty() {
+            continue;
+        }
+        if name.ends_with('/') || name.ends_with('\\') {
+            push_str(
+                out,
+                "process_path_regex",
+                format!("^{}", regex_literal(name)),
+            );
+        } else if name.contains(['/', '\\']) {
+            push_str(out, "process_path", name.to_string());
+        } else {
+            push_str(out, "process_name", name.to_string());
+        }
+    }
+    for pkg in rule.package_name.iter().flatten().map(|x| x.trim()) {
+        if !pkg.is_empty() {
+            push_str(out, "package_name", pkg.to_string());
+        }
+    }
+    for cidr in rule.source_ip.iter().flatten().map(|x| x.trim()) {
+        if !cidr.is_empty() {
+            push_str(out, "source_ip_cidr", cidr.to_string());
+        }
+    }
+}
+
 fn build_base_singbox_rule(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
     let mut out = if rule.outbound_tag == "block" {
         json!({ "action": "reject" })
@@ -833,6 +902,7 @@ fn build_base_singbox_rule(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String)
     {
         out["protocol"] = json!(proto);
     }
+    push_source_matchers(rule, &mut out);
     out
 }
 
@@ -977,7 +1047,11 @@ fn build_structured_singbox_rules(
                 emitted = true;
             }
         }
-        if !emitted && has_match_fields(&base, &["port", "port_range", "network", "protocol"]) {
+        let other_fields = ["port", "port_range", "network", "protocol"];
+        if !emitted
+            && (has_match_fields(&base, &other_fields)
+                || has_match_fields(&base, &SOURCE_MATCH_FIELDS))
+        {
             rules.push(base);
         }
     }
@@ -1270,6 +1344,62 @@ fn build_singbox_profile_targets(
     }
 }
 
+/// Point the active sing-box core at a persistent cache file. The core restarts on
+/// every settings change, and without the cache each restart forgets the fake-IP
+/// mappings apps are still connected to (their connections break) and starts DNS
+/// cold. Only the long-running core gets it: the file is an exclusively locked
+/// database, so the short-lived test cores started alongside must not share it.
+pub fn apply_singbox_cache_file(config: &mut Value, path: &str, s: &AdvancedSettings) {
+    let Some(cfg) = config.as_object_mut() else {
+        return;
+    };
+    let experimental = cfg.entry("experimental").or_insert_with(|| json!({}));
+    experimental["cache_file"] = json!({
+        "enabled": true,
+        "path": path,
+        "store_fakeip": s.fake_dns,
+        "store_dns": true,
+    });
+}
+
+/// Chain the outbound (or wireguard endpoint) built for `p` to its hops
+/// ([`chain_hops`]) with sing-box `detour`: `ob` dials through the first hop, each
+/// hop through the next. Hops not yet in the config are appended — wireguard ones
+/// to `endpoints`, the rest to `outbounds` — tagged by profile id like the routing
+/// targets (`emitted` holds the tags already present).
+fn attach_chain(
+    p: &Profile,
+    ob: &mut Value,
+    s: &AdvancedSettings,
+    profiles: &[Profile],
+    outbounds: &mut Vec<Value>,
+    endpoints: &mut Vec<Value>,
+    emitted: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    let hops = chain_hops(p, profiles)?;
+    let Some(first) = hops.first() else {
+        return Ok(());
+    };
+    ob["detour"] = first.meta().id.as_str().into();
+    for (i, hop) in hops.iter().enumerate() {
+        let tag = &hop.meta().id;
+        if !emitted.insert(tag.clone()) {
+            continue;
+        }
+        let mut hop_ob = build_singbox_outbound(hop, s);
+        hop_ob["tag"] = tag.as_str().into();
+        if let Some(next) = hops.get(i + 1) {
+            hop_ob["detour"] = next.meta().id.as_str().into();
+        }
+        if matches!(hop, Profile::Wireguard(_)) {
+            endpoints.push(hop_ob);
+        } else {
+            outbounds.push(hop_ob);
+        }
+    }
+    Ok(())
+}
+
 /// Build-time inputs the neutral builder can't infer.
 #[derive(Default, Clone, Copy)]
 pub struct SingboxBuildOpts<'a> {
@@ -1288,9 +1418,44 @@ pub fn build_singbox_config(
         return Err("custom profiles run on Xray, not sing-box".to_string());
     }
     let socks_port = s.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-    let proxy = build_singbox_outbound(p, s);
+    let mut proxy = build_singbox_outbound(p, s);
     let is_endpoint = matches!(p, Profile::Wireguard(_));
-    let targets = build_singbox_profile_targets(p, s, routing_rules, profiles);
+    let mut targets = build_singbox_profile_targets(p, s, routing_rules, profiles);
+    let mut hop_outbounds: Vec<Value> = Vec::new();
+    let mut hop_endpoints: Vec<Value> = Vec::new();
+    let mut emitted: std::collections::HashSet<String> = targets
+        .outbounds
+        .iter()
+        .chain(&targets.endpoints)
+        .filter_map(|o| o["tag"].as_str().map(str::to_string))
+        .collect();
+    attach_chain(
+        p,
+        &mut proxy,
+        s,
+        profiles,
+        &mut hop_outbounds,
+        &mut hop_endpoints,
+        &mut emitted,
+    )?;
+    for target in targets
+        .outbounds
+        .iter_mut()
+        .chain(targets.endpoints.iter_mut())
+    {
+        let id = target["tag"].as_str().unwrap_or_default().to_string();
+        if let Some(tp) = profiles.iter().find(|x| x.meta().id == id) {
+            attach_chain(
+                tp,
+                target,
+                s,
+                profiles,
+                &mut hop_outbounds,
+                &mut hop_endpoints,
+                &mut emitted,
+            )?;
+        }
+    }
     let mut shared_rule_set_tags = Tags::new();
     let dns = build_singbox_dns(s, routing_rules, &mut shared_rule_set_tags);
 
@@ -1344,6 +1509,7 @@ pub fn build_singbox_config(
         outbounds.push(proxy.clone());
     }
     outbounds.extend(targets.outbounds.iter().cloned());
+    outbounds.extend(hop_outbounds);
     outbounds.push(direct);
 
     let route = build_singbox_route(
@@ -1371,6 +1537,7 @@ pub fn build_singbox_config(
         endpoints.push(proxy);
     }
     endpoints.extend(targets.endpoints);
+    endpoints.extend(hop_endpoints);
     if !endpoints.is_empty() {
         cfg.as_object_mut()
             .unwrap()
@@ -1382,6 +1549,145 @@ pub fn build_singbox_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn source_rule(outbound: &str) -> RoutingRule {
+        RoutingRule {
+            id: "r".into(),
+            remarks: "r".into(),
+            enabled: true,
+            outbound_tag: outbound.into(),
+            domain: None,
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        }
+    }
+
+    #[test]
+    fn source_matchers_map_to_their_singbox_fields() {
+        let rule = RoutingRule {
+            process: Some(vec![
+                "curl".into(),
+                "/usr/bin/wget".into(),
+                "C:\\Games\\".into(),
+                "/opt/a.b/".into(),
+            ]),
+            package_name: Some(vec!["com.example.app".into()]),
+            source_ip: Some(vec!["192.168.1.0/24".into()]),
+            ..source_rule("direct")
+        };
+        let resolve = |t: &str| t.to_string();
+        let out = build_structured_singbox_rules(std::slice::from_ref(&rule), &resolve);
+        // Source matchers alone still make a rule.
+        assert_eq!(out.rules.len(), 1);
+        let r = &out.rules[0];
+        assert_eq!(r["process_name"], json!(["curl"]));
+        assert_eq!(r["process_path"], json!(["/usr/bin/wget"]));
+        assert_eq!(
+            r["process_path_regex"],
+            json!(["^C:\\\\Games\\\\", "^/opt/a\\.b/"])
+        );
+        assert_eq!(r["package_name"], json!(["com.example.app"]));
+        assert_eq!(r["source_ip_cidr"], json!(["192.168.1.0/24"]));
+        assert_eq!(r["outbound"], "direct");
+    }
+
+    #[test]
+    fn a_scoped_domain_rule_scopes_its_dns_rule_too() {
+        let rule = RoutingRule {
+            domain: Some(vec!["domain:example.com".into()]),
+            package_name: Some(vec!["com.example.app".into()]),
+            ..source_rule("direct")
+        };
+        let s = AdvancedSettings {
+            routing_mode: RoutingMode::Rules,
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, std::slice::from_ref(&rule), &mut Tags::new());
+        let dr = dns["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["domain_suffix"] == json!(["example.com"]))
+            .unwrap();
+        assert_eq!(dr["server"], "local");
+        assert_eq!(dr["package_name"], json!(["com.example.app"]));
+    }
+
+    fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
+        let mut p = crate::share::parse_share_link(uri, None).unwrap();
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    }
+
+    #[test]
+    fn chain_detours_each_hop_through_the_next() {
+        let all = vec![
+            chained("tuic://u:pw@exit.ex:443?sni=exit.ex", "exit", Some("mid")),
+            chained(
+                "wireguard://c2s@mid.ex:51820?publickey=cGs&address=10.0.0.2/32",
+                "mid",
+                Some("entry"),
+            ),
+            chained(
+                "trojan://pw@entry.ex:443?security=tls&sni=entry.ex",
+                "entry",
+                None,
+            ),
+        ];
+        let cfg = build_singbox_config(
+            &all[0],
+            &AdvancedSettings::default(),
+            &[],
+            &all,
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let find = |key: &str, tag: &str| {
+            cfg[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["tag"] == tag)
+                .cloned()
+                .unwrap()
+        };
+        assert_eq!(find("outbounds", "proxy")["detour"], "mid");
+        // A wireguard hop is an endpoint, and still detours onward.
+        assert_eq!(find("endpoints", "mid")["detour"], "entry");
+        assert!(find("outbounds", "entry").get("detour").is_none());
+    }
+
+    #[test]
+    fn fragment_method_picks_the_tls_split() {
+        let p = crate::share::parse_share_link("trojan://pw@t.ex:443?security=tls&sni=t.ex", None)
+            .unwrap();
+        let tls_of = |fragment: bool, method: SingboxFragment| {
+            let s = AdvancedSettings {
+                fragment,
+                singbox_fragment: method,
+                ..Default::default()
+            };
+            build_singbox_outbound(&p, &s)["tls"].clone()
+        };
+        let t = tls_of(true, SingboxFragment::Record);
+        assert_eq!(t["record_fragment"], true);
+        assert!(t.get("fragment").is_none());
+        let t = tls_of(true, SingboxFragment::Segment);
+        assert!(t.get("record_fragment").is_none());
+        assert_eq!(t["fragment"], true);
+        let t = tls_of(true, SingboxFragment::Both);
+        assert_eq!(t["record_fragment"], true);
+        assert_eq!(t["fragment"], true);
+        // The method is inert while fragmenting is off.
+        let t = tls_of(false, SingboxFragment::Both);
+        assert!(t.get("record_fragment").is_none() && t.get("fragment").is_none());
+    }
 
     #[test]
     fn sidecar_bridge_forwards_to_socks_with_named_off_route_tun() {
@@ -1665,6 +1971,24 @@ mod tests {
     }
 
     #[test]
+    fn cache_file_persists_fakeip_only_with_fake_dns() {
+        for fake_dns in [false, true] {
+            let s = AdvancedSettings {
+                fake_dns,
+                ..Default::default()
+            };
+            let mut cfg = json!({ "log": {} });
+            apply_singbox_cache_file(&mut cfg, "/run/kp/singbox-cache.db", &s);
+            let cache = &cfg["experimental"]["cache_file"];
+            assert_eq!(cache["enabled"], true);
+            assert_eq!(cache["path"], "/run/kp/singbox-cache.db");
+            assert_eq!(cache["store_fakeip"], fake_dns);
+            assert_eq!(cache["store_dns"], true);
+            assert!(cfg.get("log").is_some(), "the rest of the config is kept");
+        }
+    }
+
+    #[test]
     fn dns_via_proxy_detours_remote_server_with_scheme() {
         let s = AdvancedSettings {
             remote_dns: Some("https://1.1.1.1/dns-query".into()),
@@ -1805,6 +2129,9 @@ mod tests {
                     port: None,
                     network: None,
                     protocol: None,
+                    process: None,
+                    package_name: None,
+                    source_ip: None,
                 };
                 let dns = build_singbox_dns(&s, &[rule], &mut Tags::new());
                 for r in dns["rules"].as_array().unwrap() {

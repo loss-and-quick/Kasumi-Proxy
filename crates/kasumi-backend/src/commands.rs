@@ -14,14 +14,17 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use kasumi_core::chain::chain_candidates;
 use kasumi_core::contract::{
     Capabilities, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind, WsInfo,
 };
 use kasumi_core::core::{forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
+use kasumi_core::enums::CoreEngine;
 use kasumi_core::mutate::{MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
 use kasumi_core::share::{build_share_link, parse_share_links};
+use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
 
 use crate::fs::{read_text, write_text};
@@ -127,6 +130,12 @@ pub enum Command {
     ResolveCores {
         profiles: Vec<Profile>,
     },
+    /// Which stored profiles the given (possibly unsaved) profile can dial through,
+    /// by `chain::chain_candidates` — the same check the config builders make, so
+    /// the UI never re-implements chain validity.
+    ChainCandidates {
+        profile: Box<Profile>,
+    },
     #[serde(rename_all = "camelCase")]
     Ping {
         profile_id: String,
@@ -181,6 +190,8 @@ pub enum Response {
     WsInfo(Option<WsInfo>),
     /// Per-profile core resolutions, in the request's profile order.
     CoreResolutions(Vec<CoreResolution>),
+    /// Profile ids, in stored order.
+    ProfileIds(Vec<String>),
     /// Latency in ms (tcp-ping and real-ping); `null` when there is no result.
     Ping(Option<i64>),
     /// Throughput in bytes/sec; `null` when there is no result.
@@ -238,6 +249,13 @@ pub(crate) async fn build_profile_config(
     }
     let mut built = build_core_config(profile, &settings, &state.routing_rules, &profiles, srs_dir)
         .map_err(err)?;
+    if built.engine == CoreEngine::SingBox {
+        apply_singbox_cache_file(
+            &mut built.config,
+            &paths.singbox_cache().to_string_lossy(),
+            &settings,
+        );
+    }
     platform.tune_config(built.engine, &mut built.config);
     Ok(built)
 }
@@ -411,6 +429,11 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         ))),
 
         Command::BuildShareLink { profile } => Ok(Response::Text(build_share_link(&profile))),
+
+        Command::ChainCandidates { profile } => {
+            let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
+            Ok(Response::ProfileIds(chain_candidates(&profile, &profiles)))
+        }
 
         Command::ResolveCores { profiles } => {
             let settings = read_json::<AppState>(&paths.app_state)
@@ -756,6 +779,48 @@ mod tests {
             panic!()
         };
         assert!(link.starts_with("vless://"));
+    }
+
+    #[tokio::test]
+    async fn chain_candidates_checks_the_draft_against_stored_profiles() {
+        use kasumi_core::share::parse_share_link;
+
+        let (p, _d) = TestPlatform::new();
+        let mut a = parse_share_link("trojan://pw@a.ex:443#A", None).unwrap();
+        a.meta_mut().id = "a".into();
+        let mut b = parse_share_link("trojan://pw@b.ex:443#B", None).unwrap();
+        b.meta_mut().id = "b".into();
+        b.meta_mut().via = Some("a".into());
+        write_json_atomic(&p.paths().profiles, &vec![a.clone(), b])
+            .await
+            .unwrap();
+
+        // b already dials through a, so a has nothing left to dial through.
+        let Response::ProfileIds(ids) = dispatch(
+            &p,
+            Command::ChainCandidates {
+                profile: Box::new(a),
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert!(ids.is_empty(), "{ids:?}");
+
+        // A new draft may dial through either.
+        let draft = parse_share_link("trojan://pw@n.ex:443#N", None).unwrap();
+        let Response::ProfileIds(ids) = dispatch(
+            &p,
+            Command::ChainCandidates {
+                profile: Box::new(draft),
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(ids, ["a", "b"]);
     }
 
     #[tokio::test]

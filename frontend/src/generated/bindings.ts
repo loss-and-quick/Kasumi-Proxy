@@ -81,6 +81,7 @@ export type AdvancedSettings_Deserialize = {
 	fragmentPackets?: string,
 	fragmentLength?: string | null,
 	fragmentDelay?: string | null,
+	singboxFragment?: SingboxFragment,
 	logLevel?: LogLevel | null,
 	logRotateMaxKb?: number,
 	localSocksPort?: number | null,
@@ -174,6 +175,7 @@ export type AdvancedSettings_Serialize = {
 	fragmentPackets: string,
 	fragmentLength?: string | null,
 	fragmentDelay?: string | null,
+	singboxFragment: SingboxFragment,
 	logLevel?: LogLevel | null,
 	logRotateMaxKb: number,
 	localSocksPort?: number | null,
@@ -360,7 +362,13 @@ export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: nev
  *  persisted settings) plus its capability force, so the UI never re-implements
  *  the resolution matrix. Batch: one call covers a whole profile list.
  */
-({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
+({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+/**
+ *  Which stored profiles the given (possibly unsaved) profile can dial through,
+ *  by `chain::chain_candidates` — the same check the config builders make, so
+ *  the UI never re-implements chain validity.
+ */
+({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
 
 /**  One client request. The tag `cmd` selects the variant; fields are its inputs. */
 export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
@@ -377,7 +385,13 @@ export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never
  *  persisted settings) plus its capability force, so the UI never re-implements
  *  the resolution matrix. Batch: one call covers a whole profile list.
  */
-({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
+({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+/**
+ *  Which stored profiles the given (possibly unsaved) profile can dial through,
+ *  by `chain::chain_candidates` — the same check the config builders make, so
+ *  the UI never re-implements chain validity.
+ */
+({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
 
 /**  TUIC / QUIC congestion control. */
 export type CongestionControl = "bbr" | "cubic" | "new_reno";
@@ -527,6 +541,11 @@ export type Meta = {
 	subId?: string | null,
 	/**  Per-profile core override; `None` resolves by protocol/settings. */
 	coreType?: CoreEngine | null,
+	/**
+	 *  Profile this one dials its server through (a proxy chain, see
+	 *  [`crate::chain`]); `None` connects directly.
+	 */
+	via?: string | null,
 };
 
 /**
@@ -701,6 +720,8 @@ export type Response = Response_Serialize | Response_Deserialize;
 export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo[] } | { kind: "status"; value: ServiceState_Deserialize } | { kind: "wsInfo"; value: WsInfo | null } | 
 /**  Per-profile core resolutions, in the request's profile order. */
 { kind: "coreResolutions"; value: CoreResolution[] } | 
+/**  Profile ids, in stored order. */
+{ kind: "profileIds"; value: string[] } | 
 /**  Latency in ms (tcp-ping and real-ping); `null` when there is no result. */
 { kind: "ping"; value: number | null } | 
 /**  Throughput in bytes/sec; `null` when there is no result. */
@@ -712,6 +733,8 @@ export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize 
 export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo[] } | { kind: "status"; value: ServiceState_Serialize } | { kind: "wsInfo"; value: WsInfo | null } | 
 /**  Per-profile core resolutions, in the request's profile order. */
 { kind: "coreResolutions"; value: CoreResolution[] } | 
+/**  Profile ids, in stored order. */
+{ kind: "profileIds"; value: string[] } | 
 /**  Latency in ms (tcp-ping and real-ping); `null` when there is no result. */
 { kind: "ping"; value: number | null } | 
 /**  Throughput in bytes/sec; `null` when there is no result. */
@@ -742,6 +765,18 @@ export type RoutingRule_Deserialize = {
 	port?: string | null,
 	network?: RuleNetwork | null,
 	protocol?: string[] | null,
+	/**
+	 *  Local processes that opened the connection: a bare name (`curl`), an
+	 *  absolute path (`/usr/bin/curl`), or a directory ending in `/`. Only
+	 *  connections made on this machine carry a process, and only a core that
+	 *  sees the app's own socket can tell (sing-box's tun, or any core addressed
+	 *  directly through its local proxy port).
+	 */
+	process?: string[] | null,
+	/**  Android package names of the app that opened the connection (sing-box only). */
+	packageName?: string[] | null,
+	/**  Source addresses/CIDRs, e.g. LAN clients using the shared proxy port. */
+	sourceIp?: string[] | null,
 };
 
 /**  A custom routing rule (`RoutingRuleSchema`). */
@@ -755,6 +790,18 @@ export type RoutingRule_Serialize = {
 	port?: string | null,
 	network?: RuleNetwork | null,
 	protocol?: string[] | null,
+	/**
+	 *  Local processes that opened the connection: a bare name (`curl`), an
+	 *  absolute path (`/usr/bin/curl`), or a directory ending in `/`. Only
+	 *  connections made on this machine carry a process, and only a core that
+	 *  sees the app's own socket can tell (sing-box's tun, or any core addressed
+	 *  directly through its local proxy port).
+	 */
+	process?: string[] | null,
+	/**  Android package names of the app that opened the connection (sing-box only). */
+	packageName?: string[] | null,
+	/**  Source addresses/CIDRs, e.g. LAN clients using the shared proxy port. */
+	sourceIp?: string[] | null,
 };
 
 /**  Transport scope of a routing rule. */
@@ -845,6 +892,15 @@ export type Shadowtls = {
 
 /**  sing-box domain resolution strategy. */
 export type SingboxDomainStrategy = "prefer_ipv4" | "prefer_ipv6" | "ipv4_only" | "ipv6_only";
+
+/**
+ *  How sing-box fragments the TLS handshake when `fragment` is on (xray splits
+ *  by `fragment_packets`/`length`/`delay` instead). `record` splits the
+ *  ClientHello into several TLS records; `segment` sends it as several TCP
+ *  segments, waiting for each to be acknowledged — slower, upstream advises trying
+ *  records first; `both` does both.
+ */
+export type SingboxFragment = "record" | "segment" | "both";
 
 /**
  *  sing-box tun network stack: `gvisor` terminates everything in userspace,
