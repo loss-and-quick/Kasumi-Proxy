@@ -14,9 +14,11 @@ import {
   IntervalField,
   RowToggle,
   Select,
+  SettingGroup,
   Sheet,
   SheetAction,
   Switch,
+  UpdateModeControl,
 } from "../../components";
 import { useFormatters, useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
@@ -657,17 +659,7 @@ function SubEditSheet({
           error={errors.filter}
         />
       </div>
-      <div className="field-label">{t("common.updateMode")}</div>
-      <Select
-        value={d.updateMode}
-        onChange={(v) => set("updateMode", v as Subscription["updateMode"])}
-        style={{ marginBottom: 14 }}
-        options={[
-          { value: "auto", label: t("common.mode.auto") },
-          { value: "proxy", label: t("common.mode.proxy") },
-          { value: "direct", label: t("common.mode.direct") },
-        ]}
-      />
+      <UpdateModeControl value={d.updateMode} onChange={(v) => set("updateMode", v)} />
       <RowToggle
         icon="autorenew"
         title={t("subs.autoUpdate")}
@@ -676,14 +668,14 @@ function SubEditSheet({
         onChange={(v) => set("autoUpdate", v)}
       />
       {d.autoUpdate && (
-        <div style={{ paddingLeft: 54 }}>
+        <SettingGroup>
           <IntervalField
             label={t("subs.interval")}
             minutes={d.interval}
             onChange={(v) => set("interval", v)}
             error={errors.interval}
           />
-        </div>
+        </SettingGroup>
       )}
       <div style={{ height: 10 }} />
     </Sheet>

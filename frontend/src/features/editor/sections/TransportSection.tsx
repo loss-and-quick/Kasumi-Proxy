@@ -1,4 +1,4 @@
-import { Field, SectionLabel, Select, Switch } from "../../../components";
+import { Field, SectionLabel, Segmented, Select, Switch } from "../../../components";
 import type { HeaderType, Transport } from "../../../generated/bindings";
 import { HEADER_TYPE_OPTS, NETWORK_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -123,7 +123,7 @@ export function TransportSection({
             onChange={(value) => patch({ serviceName: value })}
             error={errors.serviceName}
           />
-          <Select
+          <Segmented
             label={t("editor.grpcMode")}
             value={transport.mode ?? ""}
             options={[

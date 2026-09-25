@@ -9,7 +9,9 @@ import {
   type WheelEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import type { FetchMode } from "../generated/bindings";
 import { useT } from "../i18n";
+import { fuzzyScore, NO_MATCH } from "../lib/fuzzy";
 import { Btn } from "./buttons";
 import { Icon } from "./icons";
 import { Dialog } from "./overlays";
@@ -40,27 +42,57 @@ export function Segmented<T extends string>({
   options,
   value,
   onChange,
+  size,
+  disabled,
+  label,
+  hint,
+  ariaLabel,
 }: {
-  options: Opt<T>[];
+  options: (Opt<T> | { value: T; label: string; disabled?: boolean })[];
   value: T;
   onChange: (v: T) => void;
+  /** "sm" is the compact variant for a control sitting on the right of a row. */
+  size?: "sm";
+  disabled?: boolean;
+  /** Field label above the control; also names the group for screen readers. */
+  label?: string;
+  hint?: string;
+  ariaLabel?: string;
 }) {
-  return (
-    <div className="segmented">
+  const t = useT();
+  const group = (
+    <fieldset className={`segmented${size ? ` ${size}` : ""}`} aria-label={ariaLabel ?? label}>
       {options.map((o) => {
         const val = typeof o === "string" ? o : o.value;
-        const lab = typeof o === "string" ? o : o.label;
+        const raw = typeof o === "string" ? (o === "" ? t("common.none") : o) : o.label;
+        // Non-breaking hyphens keep "sing-box" / "xtls-rprx-vision" whole when a label wraps.
+        const lab = raw.replace(/-/g, "\u2011");
+        const off = disabled || (typeof o === "object" && "disabled" in o && o.disabled);
         return (
           <button
             type="button"
             key={val}
+            aria-pressed={value === val}
             className={value === val ? "active" : ""}
-            onClick={() => onChange(val)}
+            disabled={off}
+            onClick={() => value !== val && onChange(val)}
           >
             {lab}
           </button>
         );
       })}
+    </fieldset>
+  );
+  if (!label && !hint) return group;
+  return (
+    <div className="field">
+      {label && <div className="field-label">{label}</div>}
+      {group}
+      {hint && (
+        <div className="hint" style={{ marginTop: 6 }}>
+          {hint}
+        </div>
+      )}
     </div>
   );
 }
@@ -377,8 +409,11 @@ export const IntervalField = ({
   );
 };
 
-const normOpt = <T extends string>(o: Opt<T>): { value: T; label: string } =>
-  typeof o === "string" ? { value: o, label: o === "" ? "— none —" : o } : o;
+const normOpt = <T extends string>(o: Opt<T>, none: string): { value: T; label: string } =>
+  typeof o === "string" ? { value: o, label: o === "" ? none : o } : o;
+
+/** Menus longer than this get a filter box, so a long list never has to be scrolled through. */
+const SEARCH_THRESHOLD = 8;
 
 const isGroup = <T extends string>(o: SelectItem<T>): o is OptGroup<T> =>
   typeof o === "object" && "group" in o;
@@ -412,27 +447,31 @@ export function Select<T extends string>({
   className?: string;
   style?: CSSProperties;
 }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   // Flatten into a render list (group headers + options) and a flat list of the
   // selectable options (for label lookup and keyboard navigation).
+  const all: { value: T; label: string }[] = [];
+  for (const item of options) {
+    for (const inner of isGroup(item) ? item.options : [item])
+      all.push(normOpt(inner, t("common.none")));
+  }
+  const current = all.find((o) => o.value === value);
+  const searchable = all.length > SEARCH_THRESHOLD;
+  const matches = (o: { value: T; label: string }) =>
+    !query.trim() || fuzzyScore(`${o.label} ${o.value}`, query) > NO_MATCH;
   const rows: ({ header: string } | { value: T; label: string })[] = [];
   const selectable: { value: T; label: string }[] = [];
   for (const item of options) {
-    if (isGroup(item)) {
-      rows.push({ header: item.group });
-      for (const inner of item.options) {
-        const n = normOpt(inner);
-        rows.push(n);
-        selectable.push(n);
-      }
-    } else {
-      const n = normOpt(item);
-      rows.push(n);
-      selectable.push(n);
-    }
+    const inner = (isGroup(item) ? item.options : [item])
+      .map((o) => normOpt(o, t("common.none")))
+      .filter(matches);
+    if (isGroup(item) && inner.length) rows.push({ header: item.group });
+    rows.push(...inner);
+    selectable.push(...inner);
   }
-  const current = selectable.find((o) => o.value === value);
 
-  const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -483,8 +522,9 @@ export function Select<T extends string>({
 
   const openMenu = () => {
     if (disabled) return;
-    const idx = selectable.findIndex((o) => o.value === value);
+    const idx = all.findIndex((o) => o.value === value);
     setActive(idx < 0 ? 0 : idx);
+    setQuery("");
     setOpen(true);
   };
 
@@ -495,6 +535,9 @@ export function Select<T extends string>({
   };
 
   const onKey = (e: KeyboardEvent) => {
+    // Typing into the filter box: let space/Home/End edit the text.
+    const inSearch = e.target instanceof HTMLInputElement;
+    if (inSearch && (e.key === " " || e.key === "Home" || e.key === "End")) return;
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -567,6 +610,25 @@ export function Select<T extends string>({
               }}
               onKeyDown={onKey}
             >
+              {searchable && (
+                <div className="select-search">
+                  <Icon name="search" />
+                  <input
+                    // biome-ignore lint/a11y/noAutofocus: the filter is the point of opening a long menu
+                    autoFocus
+                    value={query}
+                    placeholder={t("common.search")}
+                    aria-label={t("common.search")}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setActive(0);
+                    }}
+                  />
+                </div>
+              )}
+              {searchable && selectable.length === 0 && (
+                <div className="select-empty">{t("common.noMatches")}</div>
+              )}
               {rows.map((row) =>
                 "header" in row ? (
                   <div key={`h-${row.header}`} className="select-group">
@@ -613,6 +675,41 @@ export function Select<T extends string>({
         <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginTop: 5 }}>{hint}</div>
       ) : null}
       {menu}
+    </div>
+  );
+}
+
+/** How a download (subscription, geo file) reaches the network. One control so
+ *  every place that asks it reads the same. */
+export function UpdateModeControl({
+  value,
+  onChange,
+}: {
+  value: FetchMode;
+  onChange: (v: FetchMode) => void;
+}) {
+  const t = useT();
+  const full: Record<FetchMode, string> = {
+    auto: t("common.mode.auto"),
+    proxy: t("common.mode.proxy"),
+    direct: t("common.mode.direct"),
+  };
+  return (
+    <div className="field">
+      <div className="field-label">{t("common.updateMode")}</div>
+      <Segmented
+        ariaLabel={t("common.updateMode")}
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: "auto", label: t("common.modeShort.auto") },
+          { value: "proxy", label: t("common.modeShort.proxy") },
+          { value: "direct", label: t("common.modeShort.direct") },
+        ]}
+      />
+      <div className="hint" style={{ marginTop: 6 }}>
+        {full[value]}
+      </div>
     </div>
   );
 }

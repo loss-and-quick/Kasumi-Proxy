@@ -1,4 +1,4 @@
-import { Field, SectionLabel, Select, Switch } from "../../../components";
+import { Field, SectionLabel, Segmented, Select, Switch } from "../../../components";
 import type { Security, Tls } from "../../../generated/bindings";
 import { FINGERPRINT_OPTS, SECURITY_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -26,7 +26,7 @@ export function SecuritySection({
     <>
       <SectionLabel>{t("editor.security")}</SectionLabel>
       {!isQuic && (
-        <Select
+        <Segmented
           label={t("editor.tlsSecurity")}
           value={tls.security ?? "none"}
           options={SECURITY_OPTS}

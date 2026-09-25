@@ -33,7 +33,7 @@ export function DiagnosticsSection({
           sub={singboxVersion || notInstalled}
         />
         <ListRow
-          icon="vpn_lock"
+          icon="shield_moon"
           title={t("settings.tun")}
           sub={tun ? t("common.available") : t("common.unavailable")}
         />

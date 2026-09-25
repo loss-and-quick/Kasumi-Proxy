@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Btn, Field, RowToggle, Select, Sheet } from "../../components";
+import { Btn, Field, RowToggle, Segmented, Select, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { normalizeList, toText, uid } from "../../lib/utils";
@@ -46,6 +46,10 @@ export function RoutingRuleSheet({
   onDelete: (id: string) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(makeDraft(rule));
+  // Built-in outbounds are one tap; a specific profile is picked from its own list.
+  const outboundKind = BUILTIN_OUTBOUNDS.has(draft.outboundTag)
+    ? (draft.outboundTag as "proxy" | "direct" | "block")
+    : "profile";
   const t = useT();
 
   useEffect(() => {
@@ -89,29 +93,38 @@ export function RoutingRuleSheet({
         mono={false}
       />
       <div className="field-label">{t("routingSheet.outbound")}</div>
-      <Select
-        value={draft.outboundTag}
-        onChange={(v) => setDraft((current) => ({ ...current, outboundTag: v }))}
+      <Segmented
+        ariaLabel={t("routingSheet.outbound")}
+        value={outboundKind}
+        onChange={(kind) => {
+          if (kind === "profile") {
+            setDraft((current) => ({ ...current, outboundTag: profiles[0]?.id ?? "proxy" }));
+          } else {
+            setDraft((current) => ({ ...current, outboundTag: kind }));
+          }
+        }}
         options={[
           { value: "proxy", label: t("routingSheet.outbound.proxy") },
           { value: "direct", label: t("routingSheet.outbound.direct") },
           { value: "block", label: t("routingSheet.outbound.block") },
-          ...(profiles.length > 0
-            ? [
-                {
-                  group: t("routingSheet.outbound.profiles"),
-                  options: profiles.map((profile) => ({
-                    value: profile.id,
-                    label: profile.remarks,
-                  })),
-                },
-              ]
-            : []),
+          {
+            value: "profile",
+            label: t("routingSheet.outbound.profiles"),
+            disabled: profiles.length === 0 && outboundKind !== "profile",
+          },
         ]}
       />
-      {!BUILTIN_OUTBOUNDS.has(draft.outboundTag) && (
-        <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginTop: 6 }}>
-          {t("routingSheet.outboundProfileHint")}
+      {outboundKind === "profile" && (
+        <div style={{ marginTop: 10 }}>
+          <Select
+            value={draft.outboundTag}
+            onChange={(v) => setDraft((current) => ({ ...current, outboundTag: v }))}
+            placeholder={draft.outboundTag}
+            options={profiles.map((profile) => ({ value: profile.id, label: profile.remarks }))}
+          />
+          <div className="hint" style={{ marginTop: 6 }}>
+            {t("routingSheet.outboundProfileHint")}
+          </div>
         </div>
       )}
       <div style={{ height: 12 }} />
@@ -146,14 +159,15 @@ export function RoutingRuleSheet({
         mono={false}
       />
       <div className="field-label">{t("routingSheet.network")}</div>
-      <Select
+      <Segmented
+        ariaLabel={t("routingSheet.network")}
         value={draft.network}
-        onChange={(v) => setDraft((current) => ({ ...current, network: v as Draft["network"] }))}
+        onChange={(v) => setDraft((current) => ({ ...current, network: v }))}
         options={[
           { value: "", label: t("routingSheet.network.any") },
-          { value: "tcp", label: "tcp" },
-          { value: "udp", label: "udp" },
-          { value: "tcp,udp", label: "tcp,udp" },
+          { value: "tcp", label: "TCP" },
+          { value: "udp", label: "UDP" },
+          { value: "tcp,udp", label: "TCP+UDP" },
         ]}
       />
       <div style={{ height: 12 }} />

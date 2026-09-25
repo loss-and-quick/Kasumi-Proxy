@@ -1,7 +1,18 @@
-import { Btn, Card, IconBtn, ListRow, RowToggle, SectionLabel, Select } from "../../../components";
+import {
+  Btn,
+  Card,
+  Disclosure,
+  IconBtn,
+  ListRow,
+  RowToggle,
+  SectionLabel,
+  Segmented,
+  SettingGroup,
+  UpdateModeControl,
+} from "../../../components";
 import type { AssetFile } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
-import type { AdvancedSettings, ResourceUpdateMode } from "../../../lib/bridge";
+import type { AdvancedSettings } from "../../../lib/bridge";
 import { formatUpdatedAt } from "../helpers";
 import { RESOURCE_LINKS } from "../resource-links";
 
@@ -35,6 +46,9 @@ export function AssetFilesSection({
 }) {
   const t = useT();
   const formatters = useFormatters();
+  const suggested = RESOURCE_LINKS.filter(
+    (link) => !assetFiles.some((a) => a.remarks === link.remarks && a.url === link.url),
+  );
 
   // Presets are whole hours, so a multiple of 24 reads better as days.
   const intervalLabel = (minutes: number) => {
@@ -48,7 +62,7 @@ export function AssetFilesSection({
     <>
       <SectionLabel>{t("settings.assetFiles")}</SectionLabel>
       <Card style={{ padding: 14 }}>
-        <div style={{ fontSize: 12, color: "var(--on-surface-faint)", marginBottom: 10 }}>
+        <div className="hint" style={{ marginBottom: 10 }}>
           {t("settings.assetHint")}
         </div>
         <div
@@ -67,18 +81,10 @@ export function AssetFilesSection({
             {t("settings.assetAdd")}
           </Btn>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <Select
-            label={t("common.updateMode")}
-            value={settings.assetUpdateMode}
-            onChange={(v) => set("assetUpdateMode", v as ResourceUpdateMode)}
-            options={[
-              { value: "auto", label: t("common.mode.auto") },
-              { value: "proxy", label: t("common.mode.proxy") },
-              { value: "direct", label: t("common.mode.direct") },
-            ]}
-          />
-        </div>
+        <UpdateModeControl
+          value={settings.assetUpdateMode}
+          onChange={(v) => set("assetUpdateMode", v)}
+        />
         <RowToggle
           icon="autorenew"
           title={t("settings.assetAutoUpdate")}
@@ -87,9 +93,10 @@ export function AssetFilesSection({
           onChange={(value) => set("assetAutoUpdate", value)}
         />
         {settings.assetAutoUpdate && (
-          <div style={{ paddingLeft: 54, marginBottom: 12 }}>
-            <Select
-              label={t("settings.assetUpdateInterval")}
+          <SettingGroup>
+            <div className="field-label">{t("settings.assetUpdateInterval")}</div>
+            <Segmented
+              ariaLabel={t("settings.assetUpdateInterval")}
               value={String(settings.assetUpdateInterval)}
               onChange={(v) => set("assetUpdateInterval", Number(v))}
               options={INTERVAL_PRESETS.map((minutes) => ({
@@ -100,7 +107,7 @@ export function AssetFilesSection({
             <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 8, lineHeight: 1.5 }}>
               {t("settings.assetAutoUpdateWarning")}
             </div>
-          </div>
+          </SettingGroup>
         )}
         {assetFiles.map((asset) => (
           <ListRow
@@ -131,26 +138,27 @@ export function AssetFilesSection({
             }
           />
         ))}
-        <div style={{ height: 10 }} />
-        <div style={{ fontSize: 12, color: "var(--on-surface-faint)", marginBottom: 8 }}>
-          {t("settings.assetLinks")}
-        </div>
-        {RESOURCE_LINKS.filter(
-          (link) => !assetFiles.some((a) => a.remarks === link.remarks && a.url === link.url),
-        ).map((link) => (
-          <ListRow
-            key={link.id}
-            icon="link"
-            title={t(link.labelKey)}
-            sub={`${t(link.noteKey)} · ${link.url}`}
-            right={
-              <Btn variant="outline" sm onClick={() => addResourceLink(link.remarks, link.url)}>
-                {t("settings.assetUse")}
-              </Btn>
-            }
-          />
-        ))}
       </Card>
+      {suggested.length > 0 && (
+        <Card style={{ padding: "0 14px", marginTop: 12 }}>
+          {/* Open by default only while nothing is set up yet — that's when the links help. */}
+          <Disclosure label={t("settings.assetLinks")} defaultOpen={assetFiles.length === 0}>
+            {suggested.map((link) => (
+              <ListRow
+                key={link.id}
+                icon="link"
+                title={t(link.labelKey)}
+                sub={`${t(link.noteKey)} · ${link.url}`}
+                right={
+                  <Btn variant="outline" sm onClick={() => addResourceLink(link.remarks, link.url)}>
+                    {t("settings.assetUse")}
+                  </Btn>
+                }
+              />
+            ))}
+          </Disclosure>
+        </Card>
+      )}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { Field, Select, Switch } from "../../../components";
+import { Field, Segmented, Select, SettingRow, Switch } from "../../../components";
 import type { Profile } from "../../../generated/bindings";
 import {
   CONGESTION_OPTS,
@@ -48,7 +48,7 @@ export function CredentialsSection({
             options={FLOW_OPTS}
             onChange={(value) => setRoot({ flow: value })}
           />
-          <Select
+          <Segmented
             label={t("editor.packetEncoding")}
             value={draft.packetEncoding ?? ""}
             options={PACKET_ENCODING_OPTS}
@@ -79,7 +79,7 @@ export function CredentialsSection({
               />
             </div>
           </div>
-          <Select
+          <Segmented
             label={t("editor.packetEncoding")}
             value={draft.packetEncoding ?? ""}
             options={PACKET_ENCODING_OPTS}
@@ -233,7 +233,7 @@ export function CredentialsSection({
             onChange={(value) => setRoot({ password: value })}
             error={errors.password}
           />
-          <Select
+          <Segmented
             label={t("editor.obfsType")}
             value={draft.obfsType ?? ""}
             options={HYSTERIA2_OBFS_OPTS}
@@ -294,36 +294,24 @@ export function CredentialsSection({
             onChange={(value) => setRoot({ password: value })}
             error={errors.password}
           />
-          <Select
+          <Segmented
             label={t("editor.congestion")}
             value={draft.congestionControl ?? "bbr"}
             options={CONGESTION_OPTS}
             onChange={(value) => setRoot({ congestionControl: value })}
           />
-          <Select
+          <Segmented
             label={t("editor.tuicUdpRelayMode")}
             value={draft.udpRelayMode ?? ""}
             options={["", "native", "quic"]}
             onChange={(value) => setRoot({ udpRelayMode: value })}
           />
-          <Select
-            label={t("editor.tuicZeroRtt")}
-            value={draft.zeroRtt ? "on" : "off"}
-            options={[
-              { value: "off", label: "off" },
-              { value: "on", label: "on" },
-            ]}
-            onChange={(value) => setRoot({ zeroRtt: value === "on" })}
-          />
-          <Select
-            label={t("editor.tuicUdpOverStream")}
-            value={draft.udpOverStream ? "on" : "off"}
-            options={[
-              { value: "off", label: "off" },
-              { value: "on", label: "on" },
-            ]}
-            onChange={(value) => setRoot({ udpOverStream: value === "on" })}
-          />
+          <SettingRow title={t("editor.tuicZeroRtt")}>
+            <Switch on={!!draft.zeroRtt} onChange={(v) => setRoot({ zeroRtt: v })} />
+          </SettingRow>
+          <SettingRow title={t("editor.tuicUdpOverStream")}>
+            <Switch on={!!draft.udpOverStream} onChange={(v) => setRoot({ udpOverStream: v })} />
+          </SettingRow>
           <Field
             label={t("editor.tuicHeartbeat")}
             value={draft.heartbeat ?? ""}
@@ -378,13 +366,13 @@ export function CredentialsSection({
             onChange={(value) => setRoot({ password: value })}
             error={errors.password}
           />
-          <Select
+          <Segmented
             label={t("editor.congestion")}
             value={draft.congestionControl ?? "bbr"}
             options={CONGESTION_OPTS}
             onChange={(value) => setRoot({ congestionControl: value })}
           />
-          <Select
+          <Segmented
             label={t("editor.naiveTransport")}
             value={draft.naiveQuic ? "quic" : "https"}
             options={[

@@ -1,4 +1,12 @@
-import { Card, Field, SectionLabel, Select } from "../../../components";
+import {
+  Card,
+  Disclosure,
+  Field,
+  RowToggle,
+  SectionLabel,
+  Segmented,
+  SettingRow,
+} from "../../../components";
 import type { CoreEngine, TunEngine } from "../../../generated/bindings";
 import { CORE_ENGINE_OPTS, TUN_BY_CORE, TUN_TUNING_ENGINES } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -31,56 +39,74 @@ export function TunEngineSection({
   // Which engines expose the tuning knobs below is a Rust fact (TUN_TUNING_ENGINES);
   // only surface the block when at least one core uses such an engine.
   const showTuning = CORE_ENGINE_OPTS.some((core) => TUN_TUNING_ENGINES.includes(tunFor(core)));
+  // The stack choice only matters when sing-box's own TUN inbound is in use.
+  const singboxTun = CORE_ENGINE_OPTS.some((core) => tunFor(core) === "singbox-tun");
 
   return (
     <>
       <SectionLabel>{t("settings.tunEngine")}</SectionLabel>
-      <Card style={{ padding: 14 }}>
-        <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginBottom: 10 }}>
-          {t("settings.tunEngineHint")}
-        </div>
+      <Card style={{ padding: "4px 14px" }}>
         {CORE_ENGINE_OPTS.map((core) => {
           const engines = TUN_BY_CORE[core].valid;
           return (
-            <div
+            <SettingRow
               key={core}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "5px 0",
-              }}
+              stacked
+              title={t("settings.tunEngineFor", { core })}
+              hint={core === CORE_ENGINE_OPTS[0] ? t("settings.tunEngineHint") : undefined}
             >
-              <span style={{ fontSize: 13.5, color: "var(--on-surface)" }}>{core}</span>
-              <Select
-                style={{ width: 150, flex: "0 0 auto" }}
+              <Segmented
+                ariaLabel={t("settings.tunEngineFor", { core })}
                 value={tunFor(core)}
                 disabled={engines.length < 2}
-                onChange={(v) => setTunFor(core, v as TunEngine)}
+                onChange={(v) => setTunFor(core, v)}
                 options={engines.map((e) => ({ value: e, label: ENGINE_LABEL[e] }))}
               />
-            </div>
+            </SettingRow>
           );
         })}
-
-        <Field
-          area
-          label={t("settings.tunExclude")}
-          value={settings.tunExcludeAddresses ?? ""}
-          placeholder={t("settings.tunExcludePh")}
-          hint={t("settings.tunExcludeHint")}
-          onChange={(value) => set("tunExcludeAddresses", value)}
+        {singboxTun && (
+          <SettingRow title={t("settings.singboxStack")}>
+            <Segmented
+              size="sm"
+              ariaLabel={t("settings.singboxStack")}
+              value={settings.singboxStack}
+              onChange={(value) => set("singboxStack", value)}
+              options={[
+                { value: "gvisor", label: "gVisor" },
+                { value: "system", label: "System" },
+              ]}
+            />
+          </SettingRow>
+        )}
+      </Card>
+      <Card style={{ padding: "4px 14px", marginTop: 12 }}>
+        <RowToggle
+          icon="gpp_maybe"
+          title={t("settings.strictRoute")}
+          sub={t("settings.strictRouteSub")}
+          on={settings.strictRoute}
+          onChange={(value) => set("strictRoute", value)}
         />
-
+        <div style={{ padding: "8px 4px 0" }}>
+          <Field
+            label={t("settings.tunMtu")}
+            value={settings.tunMtu}
+            type="number"
+            onChange={(value) => set("tunMtu", Number(value))}
+          />
+          <Field
+            area
+            label={t("settings.tunExclude")}
+            value={settings.tunExcludeAddresses ?? ""}
+            placeholder={t("settings.tunExcludePh")}
+            hint={t("settings.tunExcludeHint")}
+            onChange={(value) => set("tunExcludeAddresses", value)}
+          />
+        </div>
         {showTuning && (
-          <div
-            style={{ marginTop: 12, borderTop: "1px solid var(--outline-faint)", paddingTop: 12 }}
-          >
-            <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginBottom: 10 }}>
-              {t("settings.tunHevTuning")}
-            </div>
-            <div style={{ padding: "0 4px" }}>
+          <Disclosure label={t("settings.tunHevTuning")}>
+            <div style={{ padding: "0 4px 8px" }}>
               <Field
                 label={t("settings.tunConnectTimeout")}
                 value={settings.tunConnectTimeoutMs}
@@ -112,7 +138,7 @@ export function TunEngineSection({
                 onChange={(value) => set("tunUdpRecvBufferSize", Number(value))}
               />
             </div>
-          </div>
+          </Disclosure>
         )}
       </Card>
     </>

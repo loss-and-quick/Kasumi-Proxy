@@ -1,7 +1,15 @@
 import { useEffect, useState } from "react";
-import { Card, Field, Icon, ListRow, RowToggle, SectionLabel, Select } from "../../../components";
+import {
+  Card,
+  Field,
+  NavRow,
+  RowToggle,
+  SectionLabel,
+  Select,
+  SettingRow,
+} from "../../../components";
 import { DEFAULT_LOG_ROTATE_KB } from "../../../generated/defaults";
-import { useT } from "../../../i18n";
+import { type Lang, LOCALES, useLang, useT } from "../../../i18n";
 import {
   autostartSupported,
   isAutostartEnabled,
@@ -53,11 +61,23 @@ export function SystemSection({
   onOpenLogs: () => void;
 }) {
   const t = useT();
+  const { lang, setLang } = useLang();
 
   return (
     <>
       <SectionLabel>{t("settings.system")}</SectionLabel>
       <Card style={{ padding: "4px 14px" }}>
+        <SettingRow title={t("settings.language")}>
+          <Select
+            style={{ width: 170 }}
+            value={lang}
+            onChange={(v) => setLang(v as Lang)}
+            options={Object.entries(LOCALES).map(([code, { label }]) => ({
+              value: code,
+              label,
+            }))}
+          />
+        </SettingRow>
         <RowToggle
           icon="autorenew"
           title={t("settings.autoStart")}
@@ -67,31 +87,33 @@ export function SystemSection({
         />
         <LaunchOnLoginRow />
         <RowToggle
-          icon="content_cut"
+          icon="content_copy"
           title={t("settings.dedupOnUpdate")}
           sub={t("settings.dedupOnUpdateSub")}
           on={settings.dedupOnUpdate ?? false}
           onChange={(value) => set("dedupOnUpdate", value)}
         />
-        <ListRow
+        <NavRow
           icon="backup"
           title={t("settings.backup")}
           sub={t("settings.backupSub")}
           onClick={onOpenBackup}
-          right={<Icon name="chevron_right" style={{ color: "var(--on-surface-faint)" }} />}
         />
-        <ListRow
+      </Card>
+
+      <SectionLabel>{t("settings.logs")}</SectionLabel>
+      <Card style={{ padding: "4px 14px" }}>
+        <NavRow
           icon="description"
           title={t("settings.connectionLog")}
           sub={t("settings.connectionLogSub")}
           onClick={onOpenLogs}
-          right={<Icon name="chevron_right" style={{ color: "var(--on-surface-faint)" }} />}
         />
-        <div style={{ padding: "12px 0 4px" }}>
+        <SettingRow title={t("settings.logLevel")}>
           <Select
-            label={t("settings.logLevel")}
+            style={{ width: 150 }}
             value={settings.logLevel ?? "warning"}
-            onChange={(v) => set("logLevel", v as NonNullable<AdvancedSettings["logLevel"]>)}
+            onChange={(v) => set("logLevel", v)}
             options={[
               { value: "debug", label: t("settings.logLevel.debug") },
               { value: "info", label: t("settings.logLevel.info") },
@@ -100,8 +122,8 @@ export function SystemSection({
               { value: "none", label: t("settings.logLevel.none") },
             ]}
           />
-        </div>
-        <div style={{ padding: "12px 0 4px" }}>
+        </SettingRow>
+        <div style={{ padding: "8px 0 0" }}>
           <Field
             label={t("settings.logRotateMaxKb")}
             type="number"

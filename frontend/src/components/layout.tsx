@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Switch } from "./forms";
 import { Icon } from "./icons";
 
@@ -170,3 +170,82 @@ export const SheetAction = ({
     </div>
   </button>
 );
+
+/** A setting: title and optional hint on the left, a compact control on the right.
+ *  `stacked` puts a wide control (segmented, text field) under the title instead. */
+export const SettingRow = ({
+  title,
+  hint,
+  stacked,
+  children,
+}: {
+  title: ReactNode;
+  hint?: ReactNode;
+  stacked?: boolean;
+  children: ReactNode;
+}) => (
+  <div className={`setting-row${stacked ? " stacked" : ""}`}>
+    <div className="sr-main">
+      <div className="sr-title">{title}</div>
+      {hint && <div className="sr-hint">{hint}</div>}
+    </div>
+    <div className="sr-control">{children}</div>
+  </div>
+);
+
+/** Options revealed under a toggle row, indented to line up with the row's text. */
+export const SettingGroup = ({ children }: { children: ReactNode }) => (
+  <div className="setting-group">{children}</div>
+);
+
+/** A row that navigates somewhere: icon, title, one-line summary and a chevron. */
+export const NavRow = ({
+  icon,
+  title,
+  sub,
+  onClick,
+  selected,
+}: {
+  icon: string;
+  title: ReactNode;
+  sub?: ReactNode;
+  onClick: () => void;
+  selected?: boolean;
+}) => (
+  <div className={`nav-row${selected ? " selected" : ""}`}>
+    <ListRow
+      icon={icon}
+      title={title}
+      sub={sub}
+      onClick={onClick}
+      right={<Icon name="chevron_right" style={{ color: "var(--on-surface-faint)" }} />}
+    />
+  </div>
+);
+
+/** Rarely-touched options folded away behind a "show more" toggle. */
+export const Disclosure = ({
+  label,
+  defaultOpen,
+  children,
+}: {
+  label: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) => {
+  const [open, setOpen] = useState(defaultOpen ?? false);
+  return (
+    <>
+      <button
+        type="button"
+        className={`disclosure${open ? " open" : ""}`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span style={{ flex: 1 }}>{label}</span>
+        <Icon name="expand_more" />
+      </button>
+      {open && children}
+    </>
+  );
+};
