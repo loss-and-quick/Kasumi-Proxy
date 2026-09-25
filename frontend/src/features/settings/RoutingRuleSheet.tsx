@@ -13,6 +13,9 @@ type Draft = {
   port: string;
   network: "" | "tcp" | "udp" | "tcp,udp";
   protocolText: string;
+  processText: string;
+  packageText: string;
+  sourceIpText: string;
 };
 
 function makeDraft(rule?: RoutingRule | null): Draft {
@@ -25,6 +28,9 @@ function makeDraft(rule?: RoutingRule | null): Draft {
     port: rule?.port ?? "",
     network: rule?.network ?? "",
     protocolText: toText(rule?.protocol ?? undefined),
+    processText: toText(rule?.process ?? undefined),
+    packageText: toText(rule?.packageName ?? undefined),
+    sourceIpText: toText(rule?.sourceIp ?? undefined),
   };
 }
 
@@ -60,6 +66,9 @@ export function RoutingRuleSheet({
     const domain = normalizeList(draft.domainText);
     const ip = normalizeList(draft.ipText);
     const protocol = normalizeList(draft.protocolText);
+    const process = normalizeList(draft.processText);
+    const packageName = normalizeList(draft.packageText);
+    const sourceIp = normalizeList(draft.sourceIpText);
     const next: RoutingRule = {
       id: rule?.id ?? uid(),
       remarks: draft.remarks.trim() || t("routingSheet.defaultName"),
@@ -70,6 +79,9 @@ export function RoutingRuleSheet({
       ...(draft.port.trim() ? { port: draft.port.trim() } : {}),
       ...(draft.network ? { network: draft.network } : {}),
       ...(protocol ? { protocol } : {}),
+      ...(process ? { process } : {}),
+      ...(packageName ? { packageName } : {}),
+      ...(sourceIp ? { sourceIp } : {}),
     };
     onSave(next);
     onClose();
@@ -178,6 +190,30 @@ export function RoutingRuleSheet({
         onChange={(value) => setDraft((current) => ({ ...current, protocolText: value }))}
         placeholder={t("routingSheet.protocolsPh")}
         hint={t("routingSheet.protocolsHint")}
+      />
+      <Field
+        area
+        label={t("routingSheet.processes")}
+        value={draft.processText}
+        onChange={(value) => setDraft((current) => ({ ...current, processText: value }))}
+        placeholder={t("routingSheet.processesPh")}
+        hint={t("routingSheet.processesHint")}
+      />
+      <Field
+        area
+        label={t("routingSheet.packages")}
+        value={draft.packageText}
+        onChange={(value) => setDraft((current) => ({ ...current, packageText: value }))}
+        placeholder={t("routingSheet.packagesPh")}
+        hint={t("routingSheet.packagesHint")}
+      />
+      <Field
+        area
+        label={t("routingSheet.sourceIps")}
+        value={draft.sourceIpText}
+        onChange={(value) => setDraft((current) => ({ ...current, sourceIpText: value }))}
+        placeholder={t("routingSheet.sourceIpsPh")}
+        hint={t("routingSheet.sourceIpsHint")}
       />
       {rule && (
         <div style={{ marginTop: 16 }}>

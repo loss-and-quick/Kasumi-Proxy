@@ -727,6 +727,16 @@ const ar = {
   "routingSheet.protocols": "البروتوكولات",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "بروتوكولات تطبيق اختيارية",
+  "routingSheet.processes": "العمليات",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "اسم أو مسار كامل أو مجلد ينتهي بـ /. يراها TUN في sing-box، أو عندما يستخدم التطبيق منفذ الوكيل المحلي مباشرة.",
+  "routingSheet.packages": "تطبيقات Android",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "أسماء الحزم. sing-box فقط: يتجاهل xray القواعد التي تذكر تطبيقات.",
+  "routingSheet.sourceIps": "عناوين المصدر",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "عناوين أو CIDR للأجهزة التي تستخدم منفذ الوكيل المشترك.",
   "routingSheet.delete": "حذف",
   // asset file sheet
   "assetSheet.addTitle": "إضافة ملف موارد",

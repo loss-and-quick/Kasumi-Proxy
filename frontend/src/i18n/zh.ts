@@ -600,6 +600,16 @@ const zh = {
   "routingSheet.protocols": "协议",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "可选的应用层协议",
+  "routingSheet.processes": "进程",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "名称、完整路径或以 / 结尾的文件夹。sing-box TUN 可识别，或应用直接使用本地代理端口时可识别。",
+  "routingSheet.packages": "Android 应用",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "包名。仅 sing-box：xray 会跳过指定应用的规则。",
+  "routingSheet.sourceIps": "来源地址",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "使用共享代理端口的设备的地址或 CIDR。",
   "routingSheet.delete": "删除",
   // asset file sheet
   "assetSheet.addTitle": "添加资源文件",

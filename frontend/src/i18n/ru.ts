@@ -645,6 +645,18 @@ const ru = {
   "routingSheet.protocols": "Протоколы",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Необязательные прикладные протоколы",
+  "routingSheet.processes": "Процессы",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Имя, полный путь или папка с / на конце. Видны sing-box TUN или когда приложение ходит через локальный порт прокси напрямую.",
+  "routingSheet.packages": "Приложения Android",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint":
+    "Имена пакетов. Только sing-box: xray пропускает правила с приложениями.",
+  "routingSheet.sourceIps": "Адреса источника",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint":
+    "Адреса или CIDR устройств, которые пользуются общим портом прокси.",
   "routingSheet.delete": "Удалить",
   // asset file sheet
   "assetSheet.addTitle": "Добавить файл ресурсов",

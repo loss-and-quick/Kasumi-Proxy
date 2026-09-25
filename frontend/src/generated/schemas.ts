@@ -280,6 +280,9 @@ export const RoutingRule_SerializeSchema = z.object({
 	port: z.string().nullable().optional(),
 	network: RuleNetworkSchema.nullable().optional(),
 	protocol: z.array(z.string()).nullable().optional(),
+	process: z.array(z.string()).nullable().optional(),
+	packageName: z.array(z.string()).nullable().optional(),
+	sourceIp: z.array(z.string()).nullable().optional(),
 });
 export type RoutingRule_Serialize = z.infer<typeof RoutingRule_SerializeSchema>;
 
@@ -654,6 +657,9 @@ export const RoutingRule_DeserializeSchema = z.object({
 	port: z.string().nullable().optional(),
 	network: RuleNetworkSchema.nullable().optional(),
 	protocol: z.array(z.string()).nullable().optional(),
+	process: z.array(z.string()).nullable().optional(),
+	packageName: z.array(z.string()).nullable().optional(),
+	sourceIp: z.array(z.string()).nullable().optional(),
 });
 export type RoutingRule_Deserialize = z.infer<typeof RoutingRule_DeserializeSchema>;
 

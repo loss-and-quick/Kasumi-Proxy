@@ -616,6 +616,16 @@ const en = {
   "routingSheet.protocols": "Protocols",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Optional application protocols",
+  "routingSheet.processes": "Processes",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Name, full path, or a folder ending in /. Seen by sing-box TUN, or when an app uses the local proxy port directly.",
+  "routingSheet.packages": "Android apps",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "Package names. sing-box only: xray skips rules that name apps.",
+  "routingSheet.sourceIps": "Source addresses",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "Addresses or CIDRs of devices using the shared proxy port.",
   "routingSheet.delete": "Delete",
   // asset file sheet
   "assetSheet.addTitle": "Add resource file",
