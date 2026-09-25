@@ -293,6 +293,11 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "coreResolutions" ? r.value : wrongKind(r, "coreResolutions");
     },
 
+    async chainCandidates(profile) {
+      const r = await dispatch({ cmd: "chainCandidates", profile });
+      return r.kind === "profileIds" ? r.value : wrongKind(r, "profileIds");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);

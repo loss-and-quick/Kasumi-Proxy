@@ -355,6 +355,12 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     }));
   },
 
+  // Dev stub: every other stored profile (no loop check — the real answer lives
+  // behind the backend's `chainCandidates`).
+  async chainCandidates(profile: Profile) {
+    return state.profiles.filter((p) => p.meta.id !== profile.meta.id).map((p) => p.meta.id);
+  },
+
   // Dev stub: emit one nested placeholder profile per non-empty line.
   async parseShareLinks(text: string): Promise<Profile[]> {
     await new Promise((r) => setTimeout(r, 150));

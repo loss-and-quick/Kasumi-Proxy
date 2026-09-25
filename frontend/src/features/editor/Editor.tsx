@@ -37,6 +37,7 @@ export default function Editor({
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
+  const profiles = useAppStore((s) => s.profiles);
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
   const t = useT();
@@ -69,6 +70,7 @@ export default function Editor({
         remarks: cur.meta.remarks,
         subId: cur.meta.subId,
         coreType: cur.meta.coreType,
+        via: cur.meta.via,
       };
       if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
       if ("tls" in next && next.tls && "tls" in cur && cur.tls) next.tls = { ...cur.tls };
@@ -113,6 +115,20 @@ export default function Editor({
     };
   }, [draft]);
 
+  // Which profiles the draft may dial through is a backend answer (the same chain
+  // check the config builders make), re-asked on every edit like the engine.
+  const [viaIds, setViaIds] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    bridge
+      .chainCandidates(draft)
+      .then((ids) => alive && setViaIds(ids))
+      .catch(() => alive && setViaIds([]));
+    return () => {
+      alive = false;
+    };
+  }, [draft]);
+
   const save = () => {
     const result = schemaFor(draft.protocol).safeParse(draft);
     if (!result.success) {
@@ -129,6 +145,10 @@ export default function Editor({
   };
 
   const groupOpts = groups.map((group) => ({ value: group.id, label: group.name }));
+  const viaOpts = viaIds.flatMap((id) => {
+    const hop = profiles.find((p) => p.meta.id === id);
+    return hop ? [{ value: id, label: hop.meta.remarks }] : [];
+  });
   const proto = draft.protocol;
   const security = "tls" in draft && draft.tls ? (draft.tls.security ?? "none") : "none";
   const isReality = security === "reality";
@@ -161,6 +181,7 @@ export default function Editor({
         setEndpoint={setEndpoint}
         errors={errors}
         groupOpts={groupOpts}
+        viaOpts={viaOpts}
         changeProtocol={changeProtocol}
         engineForced={engineForced}
         engineHint={engineHint}

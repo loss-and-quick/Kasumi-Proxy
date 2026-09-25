@@ -23,12 +23,16 @@ const PROTOCOL_LABELS: Record<Protocol, string> = {
 // UI sentinel for "resolve by protocol/global settings" (nested `coreType` is null).
 const CORE_SEL = ["global", ...CORE_ENGINE_OPTS] as const;
 
+// UI sentinel for "connect directly" (nested `via` is null).
+const VIA_DIRECT = "";
+
 export function BasicsSection({
   draft,
   setMeta,
   setEndpoint,
   errors,
   groupOpts,
+  viaOpts,
   changeProtocol,
   engineForced,
   engineHint,
@@ -38,6 +42,7 @@ export function BasicsSection({
   setEndpoint: EndpointSetter;
   errors: FieldErrors;
   groupOpts: Array<{ value: string; label: string }>;
+  viaOpts: Array<{ value: string; label: string }>;
   changeProtocol: (proto: Protocol) => void;
   engineForced: CoreEngine | null;
   engineHint: string;
@@ -91,6 +96,16 @@ export function BasicsSection({
         options={groupOpts}
         onChange={(value) => setMeta({ groupId: value })}
       />
+
+      {draft.protocol !== "custom" && (
+        <Select
+          label={t("editor.via")}
+          value={draft.meta.via ?? VIA_DIRECT}
+          options={[{ value: VIA_DIRECT, label: t("editor.viaDirect") }, ...viaOpts]}
+          onChange={(value) => setMeta({ via: value === VIA_DIRECT ? null : value })}
+          hint={t("editor.viaHint")}
+        />
+      )}
 
       {/* When the profile is forced onto one engine, pin the selector to that
           engine (not "global" or a stale stored choice) and disable it. */}
