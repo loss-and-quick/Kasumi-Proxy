@@ -207,7 +207,12 @@ export const useAppStore = create<Store>((set, get) => {
       ? { uploadBytes: service.uploadBytes, downloadBytes: service.downloadBytes, at: now }
       : null;
 
-    set({ service, uploadRate, downloadRate });
+    // While this client drives a start/stop, the restart it's running is the
+    // answer to any "restart to apply" — a frame from just before it (the saved
+    // profile switch) must not flash the cue. The closing refreshStatus reports
+    // the settled flag.
+    const pendingRestart = service.pendingRestart && !get().busy;
+    set({ service: { ...service, pendingRestart }, uploadRate, downloadRate });
   };
   // The daemon fetched & applied a subscription headlessly (it owns the restart
   // decision too) — re-read the persisted state so the UI reflects the new
@@ -267,6 +272,7 @@ export const useAppStore = create<Store>((set, get) => {
         ...s.service,
         state: "connecting",
         activeId: nextActiveId,
+        pendingRestart: false,
       },
     }));
     await waitForUiPaint();

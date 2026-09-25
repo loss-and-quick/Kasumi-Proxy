@@ -336,6 +336,49 @@ describe("useAppStore", () => {
     expect(bridge.start).toHaveBeenCalledWith("p2");
   });
 
+  it("setActive keeps the restart cue down while its own restart runs", async () => {
+    let statusListener: ((status: ServiceStatus) => void) | undefined;
+    bridge.onStatus.mockImplementation((cb: (status: ServiceStatus) => void) => {
+      statusListener = cb;
+      return () => {};
+    });
+    const p1 = makeVless({ meta: { id: "p1", remarks: "One" } });
+    const p2 = makeVless({ meta: { id: "p2", remarks: "Two" } });
+    const running = { ...DEFAULT_STATUS, state: "connected" as const, activeId: "p1" };
+    bridge.readState.mockResolvedValue(makeState({ profiles: [p1, p2], activeId: "p1" }));
+    bridge.status.mockResolvedValue(running);
+    await useAppStore.getState().hydrate();
+
+    // The saved switch is stale against what runs until the start lands; the
+    // backend pushes that frame (and keeps ticking it) before the start begins.
+    const stale = { ...running, pendingRestart: true };
+    bridge.mutate.mockImplementationOnce(async (intent) => {
+      statusListener?.(stale);
+      return applyMutation(makeState({ profiles: [p1, p2], activeId: "p1" }), intent);
+    });
+    let resolveStart: ((value: ServiceStatus) => void) | undefined;
+    bridge.start.mockImplementationOnce(
+      () =>
+        new Promise<ServiceStatus>((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+
+    const switching = useAppStore.getState().setActive("p2");
+    await vi.waitFor(() => expect(resolveStart).toBeDefined());
+    statusListener?.(stale);
+    expect(useAppStore.getState().service.pendingRestart).toBe(false);
+
+    bridge.status.mockResolvedValue({ ...running, activeId: "p2" });
+    resolveStart?.({ ...running, activeId: "p2" });
+    await switching;
+    expect(useAppStore.getState().service.pendingRestart).toBe(false);
+
+    // Outside a start/stop the cue is reported as the backend has it.
+    statusListener?.(stale);
+    expect(useAppStore.getState().service.pendingRestart).toBe(true);
+  });
+
   it("toggleService exposes connecting state before start resolves", async () => {
     const profile = makeVless({ meta: { id: "p1", remarks: "One" } });
     let resolveStart: ((value: ServiceStatus) => void) | null = null;
