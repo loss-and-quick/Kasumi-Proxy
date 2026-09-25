@@ -20,9 +20,11 @@ use kasumi_core::contract::{
 };
 use kasumi_core::core::{forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
+use kasumi_core::enums::CoreEngine;
 use kasumi_core::mutate::{MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
 use kasumi_core::share::{build_share_link, parse_share_links};
+use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
 
 use crate::fs::{read_text, write_text};
@@ -247,6 +249,13 @@ pub(crate) async fn build_profile_config(
     }
     let mut built = build_core_config(profile, &settings, &state.routing_rules, &profiles, srs_dir)
         .map_err(err)?;
+    if built.engine == CoreEngine::SingBox {
+        apply_singbox_cache_file(
+            &mut built.config,
+            &paths.singbox_cache().to_string_lossy(),
+            &settings,
+        );
+    }
     platform.tune_config(built.engine, &mut built.config);
     Ok(built)
 }

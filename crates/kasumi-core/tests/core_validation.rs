@@ -31,6 +31,7 @@ use kasumi_core::enums::{
 };
 use kasumi_core::mixins::Transport;
 use kasumi_core::profile::{Profile, Protocol};
+use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{
     AdvancedSettings, DomainStrategy, LogLevel, MuxXudp443, RoutingMode, RoutingRule,
     SingboxFragment,
@@ -1022,7 +1023,12 @@ fn build_config(
         &srs_dir.to_string_lossy(),
     )
     .ok()?;
-    Some((built.config, built.engine))
+    let mut config = built.config;
+    // The backend adds the cache file to every sing-box config it launches.
+    if built.engine == CoreEngine::SingBox {
+        apply_singbox_cache_file(&mut config, "cache.db", settings);
+    }
+    Some((config, built.engine))
 }
 
 fn write_config(cfg: &Value) -> (tempfile::TempDir, PathBuf) {

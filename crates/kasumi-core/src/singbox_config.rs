@@ -1344,6 +1344,24 @@ fn build_singbox_profile_targets(
     }
 }
 
+/// Point the active sing-box core at a persistent cache file. The core restarts on
+/// every settings change, and without the cache each restart forgets the fake-IP
+/// mappings apps are still connected to (their connections break) and starts DNS
+/// cold. Only the long-running core gets it: the file is an exclusively locked
+/// database, so the short-lived test cores started alongside must not share it.
+pub fn apply_singbox_cache_file(config: &mut Value, path: &str, s: &AdvancedSettings) {
+    let Some(cfg) = config.as_object_mut() else {
+        return;
+    };
+    let experimental = cfg.entry("experimental").or_insert_with(|| json!({}));
+    experimental["cache_file"] = json!({
+        "enabled": true,
+        "path": path,
+        "store_fakeip": s.fake_dns,
+        "store_dns": true,
+    });
+}
+
 /// Chain the outbound (or wireguard endpoint) built for `p` to its hops
 /// ([`chain_hops`]) with sing-box `detour`: `ob` dials through the first hop, each
 /// hop through the next. Hops not yet in the config are appended — wireguard ones
@@ -1950,6 +1968,24 @@ mod tests {
             build_singbox_dns_server("local", "[2606:4700:4700::1111]:53"),
             json!({ "type": "udp", "tag": "local", "server": "2606:4700:4700::1111", "server_port": 53 })
         );
+    }
+
+    #[test]
+    fn cache_file_persists_fakeip_only_with_fake_dns() {
+        for fake_dns in [false, true] {
+            let s = AdvancedSettings {
+                fake_dns,
+                ..Default::default()
+            };
+            let mut cfg = json!({ "log": {} });
+            apply_singbox_cache_file(&mut cfg, "/run/kp/singbox-cache.db", &s);
+            let cache = &cfg["experimental"]["cache_file"];
+            assert_eq!(cache["enabled"], true);
+            assert_eq!(cache["path"], "/run/kp/singbox-cache.db");
+            assert_eq!(cache["store_fakeip"], fake_dns);
+            assert_eq!(cache["store_dns"], true);
+            assert!(cfg.get("log").is_some(), "the rest of the config is kept");
+        }
     }
 
     #[test]
