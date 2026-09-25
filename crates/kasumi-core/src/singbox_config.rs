@@ -704,15 +704,34 @@ fn build_singbox_dns(
     routing_rules: &[RoutingRule],
     extra_rule_set_tags: &mut Tags,
 ) -> Value {
-    let remote = split_list(s.remote_dns.as_deref().unwrap_or(""), &DEFAULT_REMOTE_DNS)[0].clone();
+    let remotes = split_list(s.remote_dns.as_deref().unwrap_or(""), &DEFAULT_REMOTE_DNS);
     let domestic = split_list(s.domestic_dns.as_deref().unwrap_or(""), &["223.5.5.5"])[0].clone();
     let hosts = parse_hosts(s.dns_hosts.as_deref().unwrap_or(""));
 
-    let mut remote_server = build_singbox_dns_server("remote", &remote);
-    if s.dns_via_proxy {
-        remote_server["detour"] = "proxy".into();
-    }
-    let mut servers = vec![remote_server, build_singbox_dns_server("local", &domestic)];
+    // The first remote server keeps the `remote` tag every rule and `final` point
+    // at; the rest are `remote-2`, `remote-3`, … and only take part in the
+    // fallback chain appended at the end of the rules.
+    let remote_tags: Vec<String> = (0..remotes.len())
+        .map(|i| {
+            if i == 0 {
+                "remote".to_string()
+            } else {
+                format!("remote-{}", i + 1)
+            }
+        })
+        .collect();
+    let mut servers: Vec<Value> = remotes
+        .iter()
+        .zip(&remote_tags)
+        .map(|(addr, tag)| {
+            let mut server = build_singbox_dns_server(tag, addr);
+            if s.dns_via_proxy {
+                server["detour"] = "proxy".into();
+            }
+            server
+        })
+        .collect();
+    servers.push(build_singbox_dns_server("local", &domestic));
     let mut rules: Vec<Value> = Vec::new();
     let mut dns_rule_set_tags = Tags::new();
 
@@ -754,6 +773,20 @@ fn build_singbox_dns(
     if !s.fake_dns {
         rules.push(json!({ "action": "evaluate", "server": "local" }));
         rules.push(json!({ "match_response": true, "ip_is_private": true, "action": "respond" }));
+    }
+    // Several remote servers: query all of them at once and answer with the first
+    // successful response in list order, so a dead or blocked primary falls through
+    // to the next one instead of failing the lookup. A single server needs no chain;
+    // `final` still catches the case where every server failed.
+    if remote_tags.len() > 1 {
+        for tag in &remote_tags {
+            rules.push(json!({ "action": "evaluate", "server": tag, "tag": tag }));
+        }
+        for tag in &remote_tags {
+            rules.push(
+                json!({ "match_response": tag, "response_rcode": "NOERROR", "action": "respond" }),
+            );
+        }
     }
 
     let mut dns = json!({
@@ -1650,6 +1683,47 @@ mod tests {
     }
 
     #[test]
+    fn every_remote_dns_server_is_used_in_list_order() {
+        let s = AdvancedSettings {
+            remote_dns: Some("https://1.1.1.1/dns-query, 8.8.8.8\ntls://9.9.9.9".into()),
+            dns_via_proxy: true,
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let servers = dns["servers"].as_array().unwrap();
+        let tags: Vec<&str> = servers.iter().map(|x| x["tag"].as_str().unwrap()).collect();
+        assert_eq!(tags, ["remote", "remote-2", "remote-3", "local"]);
+        assert!(servers[..3].iter().all(|x| x["detour"] == "proxy"));
+        assert_eq!(servers[2]["type"], "tls");
+        assert_eq!(dns["final"], "remote");
+
+        // All servers are queried up front, then answered in list order.
+        let rules = dns["rules"].as_array().unwrap();
+        let tail = &rules[rules.len() - 6..];
+        for (i, tag) in ["remote", "remote-2", "remote-3"].iter().enumerate() {
+            assert_eq!(
+                tail[i],
+                json!({ "action": "evaluate", "server": tag, "tag": tag })
+            );
+            assert_eq!(tail[i + 3]["match_response"], *tag);
+            assert_eq!(tail[i + 3]["response_rcode"], "NOERROR");
+            assert_eq!(tail[i + 3]["action"], "respond");
+        }
+    }
+
+    #[test]
+    fn a_single_remote_dns_server_adds_no_fallback_chain() {
+        let s = AdvancedSettings {
+            remote_dns: Some("1.1.1.1".into()),
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, &[], &mut Tags::new());
+        let rules = dns["rules"].as_array().unwrap();
+        assert!(rules.iter().all(|r| r.get("tag").is_none()));
+        assert_eq!(dns["servers"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
     fn hosts_entries_are_matched_on_the_response() {
         for fake_dns in [false, true] {
             let s = AdvancedSettings {
@@ -1683,6 +1757,7 @@ mod tests {
     fn private_answers_re_resolve_only_without_fake_dns() {
         let s = AdvancedSettings {
             dns_hosts: Some("example.com=1.2.3.4".into()),
+            remote_dns: Some("1.1.1.1".into()),
             ..Default::default()
         };
         let dns = build_singbox_dns(&s, &[], &mut Tags::new());
@@ -1699,6 +1774,7 @@ mod tests {
         // Behind fakeip the re-resolve can never match, so it is not emitted.
         let s = AdvancedSettings {
             fake_dns: true,
+            remote_dns: Some("1.1.1.1".into()),
             ..Default::default()
         };
         let dns = build_singbox_dns(&s, &[], &mut Tags::new());

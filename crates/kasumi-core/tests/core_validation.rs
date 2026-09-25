@@ -826,6 +826,27 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             vec![],
             false,
         ),
+        // Several remote DNS servers of mixed transports — sing-box chains them
+        // with tagged `evaluate` rules; xray takes the list as-is.
+        (
+            "dns-remote-list",
+            AdvancedSettings {
+                remote_dns: Some("https://1.1.1.1/dns-query, 8.8.8.8, tls://dns.google".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "dns-remote-list-fakedns",
+            AdvancedSettings {
+                remote_dns: Some("1.1.1.1, 8.8.8.8".into()),
+                fake_dns: true,
+                ..Default::default()
+            },
+            vec![],
+            true,
+        ),
         // TUN exclude CIDRs (docker bridge networks) — sing-box emits
         // `route_exclude_address` on the tun inbound; both cores must accept it.
         (
