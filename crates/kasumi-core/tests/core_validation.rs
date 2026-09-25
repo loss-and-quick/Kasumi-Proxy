@@ -536,6 +536,8 @@ struct Case {
     settings: AdvancedSettings,
     rules: Vec<RoutingRule>,
     needs_geo: bool,
+    /// Other profiles in the state besides `profile` (proxy-chain hops).
+    others: Vec<Profile>,
 }
 
 /// A couple of plain (non-geo) routing rules: a domain → direct and an IP →
@@ -889,6 +891,27 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             vec![],
             false,
         ),
+        // Several remote DNS servers of mixed transports — sing-box chains them
+        // with tagged `evaluate` rules; xray takes the list as-is.
+        (
+            "dns-remote-list",
+            AdvancedSettings {
+                remote_dns: Some("https://1.1.1.1/dns-query, 8.8.8.8, tls://dns.google".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "dns-remote-list-fakedns",
+            AdvancedSettings {
+                remote_dns: Some("1.1.1.1, 8.8.8.8".into()),
+                fake_dns: true,
+                ..Default::default()
+            },
+            vec![],
+            true,
+        ),
         // TUN exclude CIDRs (docker bridge networks) — sing-box emits
         // `route_exclude_address` on the tun inbound; both cores must accept it.
         (
@@ -917,6 +940,7 @@ fn settings_cases() -> Vec<Case> {
                 settings: settings.clone(),
                 rules: rules.clone(),
                 needs_geo,
+                others: vec![],
             });
         }
     }
@@ -950,15 +974,19 @@ fn find_core(env_var: &str, prefix: &str) -> Option<PathBuf> {
 
 fn build_config(
     profile: &Profile,
+    others: &[Profile],
     settings: &AdvancedSettings,
     rules: &[RoutingRule],
     srs_dir: &Path,
 ) -> Option<(Value, CoreEngine)> {
+    let profiles: Vec<Profile> = std::iter::once(profile.clone())
+        .chain(others.iter().cloned())
+        .collect();
     let built = build_core_config(
         profile,
         settings,
         rules,
-        std::slice::from_ref(profile),
+        &profiles,
         &srs_dir.to_string_lossy(),
     )
     .ok()?;
@@ -1107,9 +1135,11 @@ fn validate_all(cases: Vec<Case>) {
         settings,
         rules,
         needs_geo,
+        others,
     } in cases
     {
-        let Some((cfg_value, engine)) = build_config(&profile, &settings, &rules, srs_dir.path())
+        let Some((cfg_value, engine)) =
+            build_config(&profile, &others, &settings, &rules, srs_dir.path())
         else {
             continue; // our builder declined this combo — not a core problem.
         };
@@ -1261,9 +1291,60 @@ fn protocol_matrix_validates_against_real_cores() {
             rules: vec![],
             needs_geo: false,
             profile,
+            others: vec![],
         })
         .collect();
     validate_all(cases);
+}
+
+/// Proxy chains: an exit profile dialing through a two-hop chain whose hops cover
+/// a stream protocol and the non-stream ones that dial differently (wireguard is a
+/// sing-box endpoint, hysteria2 is QUIC), on both cores. A chain a core can't
+/// build (e.g. a sing-box-only hop on xray) is declined by the builder, not sent.
+fn chain_cases() -> Vec<Case> {
+    let with_id = |mut p: Profile, id: &str, via: Option<&str>| {
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    };
+    let exit = make(Protocol::Vless, Some(Network::Ws), Security::Tls, "exit").unwrap();
+    let hop_kinds = [
+        (Protocol::Trojan, Some(Network::Tcp)),
+        (Protocol::Wireguard, None),
+        (Protocol::Hysteria2, None),
+        (Protocol::Shadowsocks, None),
+    ];
+    let mut cases = Vec::new();
+    for (proto, net) in hop_kinds {
+        let mid = with_id(
+            make(proto, net, Security::Tls, "mid").unwrap(),
+            "mid",
+            Some("entry"),
+        );
+        let entry = with_id(
+            make(Protocol::Vmess, Some(Network::Grpc), Security::Tls, "entry").unwrap(),
+            "entry",
+            None,
+        );
+        for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+            let mut exit = with_id(exit.clone(), "exit", Some("mid"));
+            exit.meta_mut().core_type = Some(engine);
+            cases.push(Case {
+                name: format!("chain/{}/{}", wire(&proto), wire(&engine)),
+                profile: exit,
+                settings: AdvancedSettings::default(),
+                rules: vec![],
+                needs_geo: false,
+                others: vec![mid.clone(), entry.clone()],
+            });
+        }
+    }
+    cases
+}
+
+#[test]
+fn chain_matrix_validates_against_real_cores() {
+    validate_all(chain_cases());
 }
 
 #[test]

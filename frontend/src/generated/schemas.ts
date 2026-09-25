@@ -214,6 +214,7 @@ export const MetaSchema = z.object({
 	groupId: z.string(),
 	subId: z.string().nullable().optional(),
 	coreType: CoreEngineSchema.nullable().optional(),
+	via: z.string().nullable().optional(),
 });
 export type Meta = z.infer<typeof MetaSchema>;
 
@@ -800,6 +801,9 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("capabilities"),
 }), z.object({
+	cmd: z.literal("chainCandidates"),
+	profile: ProfileSchema,
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -963,6 +967,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("capabilities"),
 }), z.object({
+	cmd: z.literal("chainCandidates"),
+	profile: ProfileSchema,
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1099,6 +1106,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
 }), z.object({
+	kind: z.literal("profileIds"),
+	value: z.array(z.string()),
+}), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
 }), z.object({
@@ -1151,6 +1161,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
+}), z.object({
+	kind: z.literal("profileIds"),
+	value: z.array(z.string()),
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),

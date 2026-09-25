@@ -204,6 +204,10 @@ const vi = {
   "editor.engine": "Nhân lõi",
   "editor.engineGlobal": "Mặc định toàn cục",
   "editor.engineResolved": "Sẽ chạy trên: {core}",
+  "editor.via": "Kết nối qua",
+  "editor.viaDirect": "Trực tiếp",
+  "editor.viaHint":
+    "Kết nối tới máy chủ này qua một hồ sơ khác (chuỗi proxy). Chuỗi chạy trên lõi của hồ sơ này.",
   "editor.engineForced": "Hồ sơ này chỉ có thể chạy trên {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",

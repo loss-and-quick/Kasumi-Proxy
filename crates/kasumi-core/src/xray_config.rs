@@ -3,8 +3,11 @@
 //! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
 //! invariants (e.g. inbound/routing shape) are covered by the unit tests below.
 
+use std::collections::HashSet;
+
 use serde_json::{Map, Value, json};
 
+use crate::chain::chain_hops;
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
@@ -609,6 +612,59 @@ fn build_profile_outbounds(
     }
 }
 
+/// Make `ob` dial its server through the outbound tagged `via`.
+fn set_dialer_proxy(ob: &mut Value, via: &str) {
+    let stream = ob
+        .as_object_mut()
+        .expect("outbound is an object")
+        .entry("streamSettings")
+        .or_insert_with(|| json!({}));
+    let sockopt = stream
+        .as_object_mut()
+        .expect("streamSettings is an object")
+        .entry("sockopt")
+        .or_insert_with(|| json!({}));
+    sockopt["dialerProxy"] = via.into();
+}
+
+/// Chain the outbound built for `p` to its hops ([`chain_hops`]): `ob` dials
+/// through the first hop, each hop through the next, and every hop not yet in the
+/// config is appended to `outbounds`, tagged by its profile id like the routing
+/// targets (`emitted` holds the tags already present).
+fn attach_chain(
+    p: &Profile,
+    ob: &mut Value,
+    s: &AdvancedSettings,
+    profiles: &[Profile],
+    outbounds: &mut Vec<Value>,
+    emitted: &mut HashSet<String>,
+) -> Result<(), String> {
+    let hops = chain_hops(p, profiles)?;
+    let Some(first) = hops.first() else {
+        return Ok(());
+    };
+    set_dialer_proxy(ob, &first.meta().id);
+    for (i, hop) in hops.iter().enumerate() {
+        let tag = &hop.meta().id;
+        if !emitted.insert(tag.clone()) {
+            continue;
+        }
+        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| {
+            format!(
+                "proxy chain hop \"{}\" ({:?}) requires sing-box",
+                hop.meta().remarks,
+                hop.protocol()
+            )
+        })?;
+        hop_ob["tag"] = tag.as_str().into();
+        if let Some(next) = hops.get(i + 1) {
+            set_dialer_proxy(&mut hop_ob, &next.meta().id);
+        }
+        outbounds.push(hop_ob);
+    }
+    Ok(())
+}
+
 fn parse_hosts(v: &str) -> Option<Value> {
     if v.trim().is_empty() {
         return None;
@@ -781,8 +837,24 @@ pub fn build_xray_config(
         "settings": { "auth": "noauth", "udp": true },
     }));
 
+    let mut outbound = outbound;
+    let mut targets = po.outbounds.clone();
+    let mut hops: Vec<Value> = Vec::new();
+    let mut emitted: HashSet<String> = targets
+        .iter()
+        .filter_map(|o| o["tag"].as_str().map(str::to_string))
+        .collect();
+    attach_chain(p, &mut outbound, s, profiles, &mut hops, &mut emitted)?;
+    for target in &mut targets {
+        let id = target["tag"].as_str().unwrap_or_default().to_string();
+        if let Some(tp) = profiles.iter().find(|x| x.meta().id == id) {
+            attach_chain(tp, target, s, profiles, &mut hops, &mut emitted)?;
+        }
+    }
+
     let mut outbounds = vec![outbound];
-    outbounds.extend(po.outbounds.iter().cloned());
+    outbounds.extend(targets);
+    outbounds.extend(hops);
     outbounds.push(json!({ "protocol": "freedom", "tag": "direct" }));
     outbounds.push(json!({ "protocol": "blackhole", "tag": "block" }));
 
@@ -798,6 +870,62 @@ pub fn build_xray_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
+        let mut p = crate::share::parse_share_link(uri, None).unwrap();
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    }
+
+    #[test]
+    fn chain_dials_each_hop_through_the_next() {
+        let all = vec![
+            chained(
+                "vless://u@exit.ex:443?type=ws&security=tls&sni=exit.ex",
+                "exit",
+                Some("mid"),
+            ),
+            chained(
+                "trojan://pw@mid.ex:443?security=tls&sni=mid.ex",
+                "mid",
+                Some("entry"),
+            ),
+            chained("ss://YWVzLTEyOC1nY206cHc@entry.ex:8388", "entry", None),
+        ];
+        let cfg = build_xray_config(&all[0], &AdvancedSettings::default(), &[], &all).unwrap();
+        let obs = cfg["outbounds"].as_array().unwrap();
+        let by_tag = |t: &str| obs.iter().find(|o| o["tag"] == t).unwrap();
+        assert_eq!(
+            by_tag("proxy")["streamSettings"]["sockopt"]["dialerProxy"],
+            "mid"
+        );
+        assert_eq!(
+            by_tag("mid")["streamSettings"]["sockopt"]["dialerProxy"],
+            "entry"
+        );
+        // The entry hop connects directly (no stream settings of its own to carry).
+        assert!(
+            by_tag("entry")["streamSettings"]["sockopt"]
+                .get("dialerProxy")
+                .is_none()
+        );
+        assert_eq!(obs.iter().filter(|o| o["tag"] == "mid").count(), 1);
+    }
+
+    #[test]
+    fn chain_with_a_hop_xray_cannot_run_is_an_error() {
+        let all = vec![
+            chained(
+                "vless://u@exit.ex:443?security=tls&sni=exit.ex",
+                "exit",
+                Some("t"),
+            ),
+            chained("tuic://u:pw@t.ex:443?sni=t.ex", "t", None),
+        ];
+        let err = build_xray_config(&all[0], &AdvancedSettings::default(), &[], &all).unwrap_err();
+        assert!(err.contains("requires sing-box"), "{err}");
+    }
 
     fn sample() -> Profile {
         crate::share::parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None)

@@ -208,6 +208,10 @@ const en = {
   "editor.engine": "Core engine",
   "editor.engineGlobal": "Global default",
   "editor.engineResolved": "Will run on: {core}",
+  "editor.via": "Connect through",
+  "editor.viaDirect": "Directly",
+  "editor.viaHint":
+    "Reach this server through another profile (a proxy chain). The chain runs on this profile's core.",
   "editor.engineForced": "This profile can only run on {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",

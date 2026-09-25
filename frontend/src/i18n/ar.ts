@@ -243,6 +243,10 @@ const ar = {
   "editor.engine": "المحرك",
   "editor.engineGlobal": "الإعداد العام الافتراضي",
   "editor.engineResolved": "سيعمل على: {core}",
+  "editor.via": "الاتصال عبر",
+  "editor.viaDirect": "مباشرة",
+  "editor.viaHint":
+    "الوصول إلى هذا الخادم عبر ملف تعريف آخر (سلسلة وكلاء). تعمل السلسلة على نواة ملف التعريف هذا.",
   "editor.engineForced": "هذا الملف الشخصي يعمل فقط على {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "التعمية",

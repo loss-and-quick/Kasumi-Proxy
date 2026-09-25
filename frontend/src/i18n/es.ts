@@ -207,6 +207,10 @@ const es = {
   "editor.engine": "Motor principal",
   "editor.engineGlobal": "Predeterminado global",
   "editor.engineResolved": "Se ejecutará con: {core}",
+  "editor.via": "Conectar a través de",
+  "editor.viaDirect": "Directamente",
+  "editor.viaHint":
+    "Llegar a este servidor a través de otro perfil (cadena de proxies). La cadena usa el núcleo de este perfil.",
   "editor.engineForced": "Este perfil solo puede ejecutarse en {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Ofuscación",

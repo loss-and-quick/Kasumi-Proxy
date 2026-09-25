@@ -21,6 +21,10 @@ pub struct Meta {
     /// Per-profile core override; `None` resolves by protocol/settings.
     #[serde(default)]
     pub core_type: Option<CoreEngine>,
+    /// Profile this one dials its server through (a proxy chain, see
+    /// [`crate::chain`]); `None` connects directly.
+    #[serde(default)]
+    pub via: Option<String>,
 }
 
 /// Server endpoint (`endpointShape`). Both fields are required.

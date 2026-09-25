@@ -203,6 +203,10 @@ const hi = {
   "editor.engine": "कोर इंजन",
   "editor.engineGlobal": "वैश्विक डिफ़ॉल्ट",
   "editor.engineResolved": "इस पर चलेगा: {core}",
+  "editor.via": "इसके ज़रिए कनेक्ट करें",
+  "editor.viaDirect": "सीधे",
+  "editor.viaHint":
+    "इस सर्वर तक किसी दूसरी प्रोफ़ाइल के ज़रिए पहुँचें (प्रॉक्सी चेन)। चेन इसी प्रोफ़ाइल के कोर पर चलती है।",
   "editor.engineForced": "यह प्रोफ़ाइल केवल {core} पर चल सकती है",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
