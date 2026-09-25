@@ -7,8 +7,17 @@ import {
   SettingGroup,
   SettingRow,
 } from "../../../components";
-import { useT } from "../../../i18n";
+import type { SingboxFragment } from "../../../generated/bindings";
+import { SINGBOX_FRAGMENT_OPTS } from "../../../generated/defaults";
+import { type DictKey, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
+
+// Labels for the sing-box fragment methods; the methods themselves come from Rust.
+const SINGBOX_FRAGMENT_LABEL: Record<SingboxFragment, DictKey> = {
+  record: "settings.singboxFragment.record",
+  segment: "settings.singboxFragment.segment",
+  both: "settings.singboxFragment.both",
+};
 
 export function ConnectionSection({
   settings,
@@ -102,11 +111,10 @@ export function ConnectionSection({
                 ariaLabel={t("settings.singboxFragment")}
                 value={settings.singboxFragment}
                 onChange={(v) => set("singboxFragment", v)}
-                options={[
-                  { value: "record", label: t("settings.singboxFragment.record") },
-                  { value: "segment", label: t("settings.singboxFragment.segment") },
-                  { value: "both", label: t("settings.singboxFragment.both") },
-                ]}
+                options={SINGBOX_FRAGMENT_OPTS.map((value) => ({
+                  value,
+                  label: t(SINGBOX_FRAGMENT_LABEL[value]),
+                }))}
               />
             </SettingRow>
           </SettingGroup>
