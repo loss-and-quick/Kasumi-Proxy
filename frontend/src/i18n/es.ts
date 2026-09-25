@@ -410,6 +410,12 @@ const es = {
   "settings.fragmentPackets": "Fragmentar paquetes",
   "settings.fragmentLength": "Longitud de los fragmentos",
   "settings.fragmentDelay": "Retardo de fragmentación",
+  "settings.singboxFragment": "Método de sing-box",
+  "settings.singboxFragmentSub":
+    "Los campos de arriba se aplican a xray. Los segmentos TCP son más lentos; pruebe primero los registros TLS.",
+  "settings.singboxFragment.record": "Registros TLS",
+  "settings.singboxFragment.segment": "Segmentos TCP",
+  "settings.singboxFragment.both": "Ambos",
   "settings.tunMtu": "MTU de TUN",
   "settings.tunEngineSettings": "Ajustes del motor",
   "settings.tunExclude": "Exclusiones TUN",

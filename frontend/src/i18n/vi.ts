@@ -405,6 +405,12 @@ const vi = {
   "settings.fragmentPackets": "Phân mảnh gói",
   "settings.fragmentLength": "Độ dài phân mảnh",
   "settings.fragmentDelay": "Độ trễ phân mảnh",
+  "settings.singboxFragment": "Phương thức sing-box",
+  "settings.singboxFragmentSub":
+    "Các trường ở trên áp dụng cho xray. Phân đoạn TCP chậm hơn; hãy thử bản ghi TLS trước.",
+  "settings.singboxFragment.record": "Bản ghi TLS",
+  "settings.singboxFragment.segment": "Phân đoạn TCP",
+  "settings.singboxFragment.both": "Cả hai",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "Cài đặt engine",
   "settings.tunExclude": "Các loại trừ TUN",

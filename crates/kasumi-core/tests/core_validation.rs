@@ -33,6 +33,7 @@ use kasumi_core::mixins::Transport;
 use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::state::{
     AdvancedSettings, DomainStrategy, LogLevel, MuxXudp443, RoutingMode, RoutingRule,
+    SingboxFragment,
 };
 
 // ── valid credential / crypto material (cores validate these) ──
@@ -886,6 +887,37 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             "allow-lan",
             AdvancedSettings {
                 allow_non_localhost: true,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // Every sing-box TLS fragment method (xray ignores the choice).
+        (
+            "fragment-record",
+            AdvancedSettings {
+                fragment: true,
+                singbox_fragment: SingboxFragment::Record,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "fragment-segment",
+            AdvancedSettings {
+                fragment: true,
+                singbox_fragment: SingboxFragment::Segment,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "fragment-both",
+            AdvancedSettings {
+                fragment: true,
+                singbox_fragment: SingboxFragment::Both,
                 ..Default::default()
             },
             vec![],

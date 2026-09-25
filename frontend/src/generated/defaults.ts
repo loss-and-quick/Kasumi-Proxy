@@ -14,6 +14,7 @@ import type {
 	Protocol,
 	RoutingMode_Serialize,
 	Security,
+	SingboxFragment,
 	SsMethod,
 	Transport,
 	TunEngine,
@@ -552,6 +553,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "proxyMode": "tun",
   "routeOnly": false,
   "routingMode": "global",
+  "singboxFragment": "record",
   "singboxStack": "gvisor",
   "speedConcurrency": 1,
   "strictRoute": false,
@@ -588,6 +590,7 @@ export const FINGERPRINT_OPTS: Fingerprint[] = ["","chrome","firefox","safari","
 export const FLOW_OPTS: Flow[] = ["","xtls-rprx-vision","xtls-rprx-vision-udp443"];
 export const PACKET_ENCODING_OPTS: PacketEncoding[] = ["","xudp","packetaddr"];
 export const HYSTERIA2_OBFS_OPTS: Hysteria2Obfs[] = ["","salamander"];
+export const SINGBOX_FRAGMENT_OPTS: SingboxFragment[] = ["record","segment","both"];
 
 /** Per-core TUN engine options (default + selectable), single-sourced from Rust `resolve_tun`. */
 export const TUN_BY_CORE = {

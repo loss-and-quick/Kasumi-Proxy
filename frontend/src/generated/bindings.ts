@@ -81,6 +81,7 @@ export type AdvancedSettings_Deserialize = {
 	fragmentPackets?: string,
 	fragmentLength?: string | null,
 	fragmentDelay?: string | null,
+	singboxFragment?: SingboxFragment,
 	logLevel?: LogLevel | null,
 	logRotateMaxKb?: number,
 	localSocksPort?: number | null,
@@ -174,6 +175,7 @@ export type AdvancedSettings_Serialize = {
 	fragmentPackets: string,
 	fragmentLength?: string | null,
 	fragmentDelay?: string | null,
+	singboxFragment: SingboxFragment,
 	logLevel?: LogLevel | null,
 	logRotateMaxKb: number,
 	localSocksPort?: number | null,
@@ -890,6 +892,15 @@ export type Shadowtls = {
 
 /**  sing-box domain resolution strategy. */
 export type SingboxDomainStrategy = "prefer_ipv4" | "prefer_ipv6" | "ipv4_only" | "ipv6_only";
+
+/**
+ *  How sing-box fragments the TLS handshake when `fragment` is on (xray splits
+ *  by `fragment_packets`/`length`/`delay` instead). `record` splits the
+ *  ClientHello into several TLS records; `segment` sends it as several TCP
+ *  segments, waiting for each to be acknowledged — slower, upstream advises trying
+ *  records first; `both` does both.
+ */
+export type SingboxFragment = "record" | "segment" | "both";
 
 /**  sing-box tun network stack (see the Zod comment / [[singbox-gvisor-stack]]). */
 export type SingboxStack = "gvisor" | "system";

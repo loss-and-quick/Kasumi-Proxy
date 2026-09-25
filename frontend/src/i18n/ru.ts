@@ -430,6 +430,12 @@ const ru = {
   "settings.fragmentPackets": "Фрагментировать пакеты",
   "settings.fragmentLength": "Длина фрагмента",
   "settings.fragmentDelay": "Задержка фрагментации",
+  "settings.singboxFragment": "Метод sing-box",
+  "settings.singboxFragmentSub":
+    "Поля выше относятся к xray. TCP-сегменты медленнее — сначала попробуйте TLS-записи.",
+  "settings.singboxFragment.record": "TLS-записи",
+  "settings.singboxFragment.segment": "TCP-сегменты",
+  "settings.singboxFragment.both": "Оба",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "Настройки движка",
   "settings.tunExclude": "Исключения TUN",
