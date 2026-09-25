@@ -552,6 +552,9 @@ fn plain_rules() -> Vec<RoutingRule> {
             port: None,
             network: None,
             protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
         },
         RoutingRule {
             id: "i".into(),
@@ -563,6 +566,9 @@ fn plain_rules() -> Vec<RoutingRule> {
             port: None,
             network: None,
             protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
         },
     ]
 }
@@ -580,7 +586,54 @@ fn match_field_rules() -> Vec<RoutingRule> {
         port: Some("80,443,8080-8090".into()),
         network: Some(kasumi_core::state::RuleNetwork::Tcp),
         protocol: Some(vec!["http".into()]),
+        process: None,
+        package_name: None,
+        source_ip: None,
     }]
+}
+
+/// Rules scoped by where the connection came from: every process form (name,
+/// path, directory), an Android package, and a source CIDR, alone and next to a
+/// domain (which sing-box also turns into a scoped DNS rule).
+fn source_match_rules() -> Vec<RoutingRule> {
+    let rule = |id: &str| RoutingRule {
+        id: id.into(),
+        remarks: id.into(),
+        enabled: true,
+        outbound_tag: "direct".into(),
+        domain: None,
+        ip: None,
+        port: None,
+        network: None,
+        protocol: None,
+        process: None,
+        package_name: None,
+        source_ip: None,
+    };
+    vec![
+        RoutingRule {
+            process: Some(vec![
+                "curl".into(),
+                "/usr/bin/wget".into(),
+                "/opt/games/".into(),
+            ]),
+            ..rule("process")
+        },
+        RoutingRule {
+            package_name: Some(vec!["com.example.app".into()]),
+            ..rule("package")
+        },
+        RoutingRule {
+            source_ip: Some(vec!["192.168.1.0/24".into()]),
+            ..rule("source")
+        },
+        RoutingRule {
+            domain: Some(vec!["example.com".into()]),
+            process: Some(vec!["firefox".into()]),
+            source_ip: Some(vec!["10.0.0.5".into()]),
+            ..rule("domain-and-source")
+        },
+    ]
 }
 
 /// Named settings/rules variants, each exercising a distinct builder branch. The
@@ -629,6 +682,16 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
                 ..Default::default()
             },
             match_field_rules(),
+            false,
+        ),
+        // Rules mode with process / package / source-address match fields.
+        (
+            "rules-source-fields",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                ..Default::default()
+            },
+            source_match_rules(),
             false,
         ),
         // Every domain strategy the builder branches on.

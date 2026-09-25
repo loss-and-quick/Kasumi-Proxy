@@ -736,6 +736,9 @@ mod tests {
             port: None,
             network: None,
             protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
         };
         s.routing_rules = vec![rule("r1")];
         apply_mutation(
