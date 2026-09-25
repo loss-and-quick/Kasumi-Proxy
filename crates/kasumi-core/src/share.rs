@@ -160,6 +160,7 @@ fn meta(remarks: String, group_id: Option<&str>) -> Meta {
         group_id: group_id.unwrap_or("g-main").to_string(),
         sub_id: None,
         core_type: None,
+        via: None,
     }
 }
 

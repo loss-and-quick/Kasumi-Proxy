@@ -12,17 +12,19 @@
 //! this module runs *after* deserialization on a typed [`AppState`] (valid-but-stale
 //! fixes). Pure and idempotent — running it twice equals running it once.
 
+use crate::chain::fixup_dangling_via;
 use crate::state::{AppState, BASE_GROUP_ID, BASE_GROUP_NAME, Group, fixup_active_id};
 
 /// Legacy locked asset ids that used to ship as built-in defaults; dropped on read.
 const LEGACY_DEFAULT_ASSET_IDS: [&str; 2] = ["asset-geoip", "asset-geosite"];
 
 /// Normalize a freshly-read [`AppState`] in place: ensure the base group exists,
-/// drop legacy default assets, and null a dangling `active_id`.
+/// drop legacy default assets, and null a dangling `active_id` and `via`s.
 pub fn normalize_app_state(state: &mut AppState) {
     ensure_base_group(state);
     strip_legacy_default_assets(state);
     fixup_active_id(state);
+    fixup_dangling_via(state);
 }
 
 /// The `g-main` base group must always exist (the share-import / emptyProfile

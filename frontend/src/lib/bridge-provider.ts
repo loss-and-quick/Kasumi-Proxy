@@ -152,6 +152,9 @@ export const bridge: Bridge = {
   async resolveCores(profiles) {
     return (await loadBridge()).resolveCores(profiles);
   },
+  async chainCandidates(profile) {
+    return (await loadBridge()).chainCandidates(profile);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

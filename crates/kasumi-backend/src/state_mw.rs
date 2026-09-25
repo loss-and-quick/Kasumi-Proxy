@@ -25,6 +25,7 @@
 //! place — the [`default_chain`] constructor — so it is visible at a glance and
 //! not scattered across init sites.
 
+use kasumi_core::chain::fixup_dangling_via;
 use kasumi_core::state::{AppState, fixup_active_id};
 
 /// A single write-side rule. Pure: no I/O, deterministic, trivially unit-testable.
@@ -95,6 +96,21 @@ impl WriteMiddleware for FixupDanglingActiveId {
     }
 }
 
+/// Null every proxy-chain `via` whose hop profile no longer exists, for the same
+/// sources of removal as the active id. A deleted hop turns the chain back into a
+/// direct connection; left dangling, the profile would refuse to start.
+pub struct FixupDanglingVia;
+
+impl WriteMiddleware for FixupDanglingVia {
+    fn name(&self) -> &'static str {
+        "fixup-dangling-via"
+    }
+
+    fn apply(&self, _prev: &AppState, next: &mut AppState) {
+        fixup_dangling_via(next);
+    }
+}
+
 /// Build the canonical chain of write-side rules, in dependency order.
 ///
 /// Centralizing construction here keeps rule ordering auditable in one spot;
@@ -105,6 +121,7 @@ pub fn default_chain() -> WriteChain {
     // Runs last so it sees the final profile set; add profile-removing rules before
     // it as the graph grows.
     chain.push(FixupDanglingActiveId);
+    chain.push(FixupDanglingVia);
     chain
 }
 
@@ -137,8 +154,27 @@ mod tests {
     }
 
     #[test]
-    fn default_chain_has_the_fixup_rule() {
-        assert_eq!(default_chain().len(), 1);
+    fn fixup_nulls_a_via_whose_hop_is_gone() {
+        let mut a = p("vless://u1@e.x:443?type=tcp#A");
+        a.meta_mut().id = "a".into();
+        a.meta_mut().via = Some("b".into());
+        let mut b = p("trojan://pw@h.x:443#B");
+        b.meta_mut().id = "b".into();
+        let prev = default_app_state();
+        let mut next = default_app_state();
+        next.profiles = vec![a, b];
+        default_chain().run(&prev, &mut next);
+        assert_eq!(next.profiles[0].meta().via.as_deref(), Some("b"));
+
+        // Deleting the hop turns the chain back into a direct connection.
+        next.profiles.pop();
+        default_chain().run(&prev, &mut next);
+        assert_eq!(next.profiles[0].meta().via, None);
+    }
+
+    #[test]
+    fn default_chain_has_the_fixup_rules() {
+        assert_eq!(default_chain().len(), 2);
     }
 
     #[test]

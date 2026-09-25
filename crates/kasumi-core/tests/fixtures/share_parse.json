@@ -8,7 +8,8 @@
         "remarks": "DE Node",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -59,7 +60,8 @@
         "remarks": "XH",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -111,7 +113,8 @@
         "remarks": "EX",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -162,7 +165,8 @@
         "remarks": "GRPC",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -219,7 +223,8 @@
         "remarks": "WS",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -274,7 +279,8 @@
         "remarks": "T",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -323,7 +329,8 @@
         "remarks": "🇦🇹 23 - AT - Trojan/TLS/UTLS - 443",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -372,7 +379,8 @@
         "remarks": "VM",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -429,7 +437,8 @@
         "remarks": "GRPC-VM",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ex.com",
@@ -488,7 +497,8 @@
         "remarks": "SSWS",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ss.ex",
@@ -541,7 +551,8 @@
         "remarks": "SSOBFS",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "ss.ex",
@@ -590,7 +601,8 @@
         "remarks": "FI Node",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "hy.ex",
@@ -638,7 +650,8 @@
         "remarks": "hy.ex",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "hy.ex",
@@ -686,7 +699,8 @@
         "remarks": "JP",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "t.ex",
@@ -735,7 +749,8 @@
         "remarks": "AT",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "a.ex",
@@ -781,7 +796,8 @@
         "remarks": "NV",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "n.ex",
@@ -826,7 +842,8 @@
         "remarks": "ST",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "s.ex",
@@ -868,7 +885,8 @@
         "remarks": "SL",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "s.ex",
@@ -910,7 +928,8 @@
         "remarks": "sanya-wg-tunnel",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "127.0.0.1",
@@ -939,7 +958,8 @@
         "remarks": "my-socks",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "1.2.3.4",
@@ -958,7 +978,8 @@
         "remarks": "s5",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "1.2.3.4",
@@ -977,7 +998,8 @@
         "remarks": "my-http",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "1.2.3.4",
@@ -1019,7 +1041,8 @@
         "remarks": "my-https",
         "groupId": "g-main",
         "subId": null,
-        "coreType": null
+        "coreType": null,
+        "via": null
       },
       "endpoint": {
         "address": "1.2.3.4",
