@@ -405,6 +405,12 @@ const pt = {
   "settings.fragmentPackets": "Pacotes fragmentados",
   "settings.fragmentLength": "Comprimento do fragmento",
   "settings.fragmentDelay": "Atraso de fragmentação",
+  "settings.singboxFragment": "Método do sing-box",
+  "settings.singboxFragmentSub":
+    "Os campos acima se aplicam ao xray. Segmentos TCP são mais lentos; tente primeiro os registros TLS.",
+  "settings.singboxFragment.record": "Registros TLS",
+  "settings.singboxFragment.segment": "Segmentos TCP",
+  "settings.singboxFragment.both": "Ambos",
   "settings.tunMtu": "MTU do TUN",
   "settings.tunEngineSettings": "Configurações do motor",
   "settings.tunExclude": "Exclusões TUN",

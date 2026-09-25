@@ -539,6 +539,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "proxyMode": "tun",
   "routeOnly": false,
   "routingMode": "global",
+  "singboxFragment": "record",
   "singboxStack": "gvisor",
   "speedConcurrency": 1,
   "strictRoute": false,

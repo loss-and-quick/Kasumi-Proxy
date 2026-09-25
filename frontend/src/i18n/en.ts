@@ -411,6 +411,12 @@ const en = {
   "settings.fragmentPackets": "Fragment packets",
   "settings.fragmentLength": "Fragment length",
   "settings.fragmentDelay": "Fragment delay",
+  "settings.singboxFragment": "sing-box method",
+  "settings.singboxFragmentSub":
+    "The fields above apply to xray. TCP segments are slower; try TLS records first.",
+  "settings.singboxFragment.record": "TLS records",
+  "settings.singboxFragment.segment": "TCP segments",
+  "settings.singboxFragment.both": "Both",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "Engine settings",
   "settings.tunExclude": "TUN exclusions",

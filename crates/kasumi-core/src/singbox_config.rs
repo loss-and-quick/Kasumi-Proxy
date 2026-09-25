@@ -12,7 +12,7 @@ use crate::profile::Profile;
 use crate::state::{
     AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
     DEFAULT_REMOTE_DNS, DomainStrategy, FAKEIP_INET4_RANGE, RoutingMode, RoutingRule,
-    force_socks_port,
+    SingboxFragment, force_socks_port,
 };
 
 /// iproute2 table + rule-priority indices that native sing-box `auto_route`
@@ -178,7 +178,18 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
         t["certificate"] = json!(certs);
     }
     if s.fragment {
-        t["record_fragment"] = true.into();
+        if matches!(
+            s.singbox_fragment,
+            SingboxFragment::Record | SingboxFragment::Both
+        ) {
+            t["record_fragment"] = true.into();
+        }
+        if matches!(
+            s.singbox_fragment,
+            SingboxFragment::Segment | SingboxFragment::Both
+        ) {
+            t["fragment"] = true.into();
+        }
     }
     if !tls.alpn.is_empty() {
         t["alpn"] = tls.alpn.clone().into();
@@ -1349,6 +1360,32 @@ pub fn build_singbox_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fragment_method_picks_the_tls_split() {
+        let p = crate::share::parse_share_link("trojan://pw@t.ex:443?security=tls&sni=t.ex", None)
+            .unwrap();
+        let tls_of = |fragment: bool, method: SingboxFragment| {
+            let s = AdvancedSettings {
+                fragment,
+                singbox_fragment: method,
+                ..Default::default()
+            };
+            build_singbox_outbound(&p, &s)["tls"].clone()
+        };
+        let t = tls_of(true, SingboxFragment::Record);
+        assert_eq!(t["record_fragment"], true);
+        assert!(t.get("fragment").is_none());
+        let t = tls_of(true, SingboxFragment::Segment);
+        assert!(t.get("record_fragment").is_none());
+        assert_eq!(t["fragment"], true);
+        let t = tls_of(true, SingboxFragment::Both);
+        assert_eq!(t["record_fragment"], true);
+        assert_eq!(t["fragment"], true);
+        // The method is inert while fragmenting is off.
+        let t = tls_of(false, SingboxFragment::Both);
+        assert!(t.get("record_fragment").is_none() && t.get("fragment").is_none());
+    }
 
     #[test]
     fn sidecar_bridge_forwards_to_socks_with_named_off_route_tun() {

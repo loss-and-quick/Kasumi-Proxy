@@ -8,6 +8,10 @@ export const SingboxStackSchema = z.union([z.literal("gvisor"), z.literal("syste
 export type SingboxStack = z.infer<typeof SingboxStackSchema>;
 
 
+export const SingboxFragmentSchema = z.union([z.literal("both"), z.literal("record"), z.literal("segment")]);
+export type SingboxFragment = z.infer<typeof SingboxFragmentSchema>;
+
+
 export const SingboxDomainStrategySchema = z.union([z.literal("ipv4_only"), z.literal("ipv6_only"), z.literal("prefer_ipv4"), z.literal("prefer_ipv6")]);
 export type SingboxDomainStrategy = z.infer<typeof SingboxDomainStrategySchema>;
 
@@ -75,6 +79,7 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	fragmentPackets: z.string(),
 	fragmentLength: z.string().nullable().optional(),
 	fragmentDelay: z.string().nullable().optional(),
+	singboxFragment: SingboxFragmentSchema,
 	logLevel: LogLevelSchema.nullable().optional(),
 	logRotateMaxKb: z.number(),
 	localSocksPort: z.number().nullable().optional(),
@@ -136,6 +141,7 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	fragmentPackets: z.string().optional(),
 	fragmentLength: z.string().nullable().optional(),
 	fragmentDelay: z.string().nullable().optional(),
+	singboxFragment: SingboxFragmentSchema.optional(),
 	logLevel: LogLevelSchema.nullable().optional(),
 	logRotateMaxKb: z.number().optional(),
 	localSocksPort: z.number().nullable().optional(),

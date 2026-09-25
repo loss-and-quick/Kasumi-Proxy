@@ -93,6 +93,22 @@ export function ConnectionSection({
               onChange={(value) => set("fragmentDelay", value)}
               mono={false}
             />
+            <SettingRow
+              title={t("settings.singboxFragment")}
+              hint={t("settings.singboxFragmentSub")}
+            >
+              <Segmented
+                size="sm"
+                ariaLabel={t("settings.singboxFragment")}
+                value={settings.singboxFragment}
+                onChange={(v) => set("singboxFragment", v)}
+                options={[
+                  { value: "record", label: t("settings.singboxFragment.record") },
+                  { value: "segment", label: t("settings.singboxFragment.segment") },
+                  { value: "both", label: t("settings.singboxFragment.both") },
+                ]}
+              />
+            </SettingRow>
           </SettingGroup>
         )}
       </Card>

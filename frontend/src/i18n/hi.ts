@@ -397,6 +397,12 @@ const hi = {
   "settings.fragmentPackets": "फ्रैगमेंट पैकेट",
   "settings.fragmentLength": "फ्रैगमेंट लंबाई",
   "settings.fragmentDelay": "फ्रैगमेंट विलंब",
+  "settings.singboxFragment": "sing-box विधि",
+  "settings.singboxFragmentSub":
+    "ऊपर के फ़ील्ड xray पर लागू होते हैं। TCP सेगमेंट धीमे हैं; पहले TLS रिकॉर्ड आज़माएँ।",
+  "settings.singboxFragment.record": "TLS रिकॉर्ड",
+  "settings.singboxFragment.segment": "TCP सेगमेंट",
+  "settings.singboxFragment.both": "दोनों",
   "settings.tunMtu": "TUN MTU",
   "settings.tunEngineSettings": "इंजन सेटिंग्स",
   "settings.tunExclude": "TUN अपवाद",
