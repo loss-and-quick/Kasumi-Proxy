@@ -134,7 +134,7 @@ export const Field = ({
       <input
         className="input"
         style={{
-          ...(mono ? null : { fontFamily: "var(--font-ui)" }),
+          ...(mono && type !== "number" ? null : { fontFamily: "var(--font-ui)" }),
           ...(error ? { borderBottomColor: "var(--error)" } : null),
         }}
         type={type}
@@ -146,9 +146,13 @@ export const Field = ({
       />
     )}
     {error ? (
-      <div style={{ fontSize: 11.5, color: "var(--error)", marginTop: 5 }}>{error}</div>
+      <div className="hint error" style={{ marginTop: 5 }}>
+        {error}
+      </div>
     ) : hint ? (
-      <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginTop: 5 }}>{hint}</div>
+      <div className="hint" style={{ marginTop: 5 }}>
+        {hint}
+      </div>
     ) : null}
   </div>
 );
@@ -373,7 +377,9 @@ export const IntervalField = ({
         <Icon name="schedule" />
       </button>
       {error ? (
-        <div style={{ fontSize: 11.5, color: "var(--error)", marginTop: 5 }}>{error}</div>
+        <div className="hint error" style={{ marginTop: 5 }}>
+          {error}
+        </div>
       ) : null}
       {/* Portal to <body>: the picker opens from inside a Sheet, so a centred
           dialog must escape that sheet's absolute-positioned, clipped body and
@@ -672,7 +678,9 @@ export function Select<T extends string>({
       {label && <div className="field-label">{label}</div>}
       {trigger}
       {hint ? (
-        <div style={{ fontSize: 11.5, color: "var(--on-surface-faint)", marginTop: 5 }}>{hint}</div>
+        <div className="hint" style={{ marginTop: 5 }}>
+          {hint}
+        </div>
       ) : null}
       {menu}
     </div>

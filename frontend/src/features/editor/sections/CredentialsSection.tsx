@@ -85,38 +85,18 @@ export function CredentialsSection({
             options={PACKET_ENCODING_OPTS}
             onChange={(value) => setRoot({ packetEncoding: value })}
           />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.vmessGlobalPadding")}
-            </span>
+          <SettingRow title={t("editor.vmessGlobalPadding")}>
             <Switch
               on={!!draft.vmessGlobalPadding}
               onChange={(value) => setRoot({ vmessGlobalPadding: value })}
             />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.vmessAuthenticatedLength")}
-            </span>
+          </SettingRow>
+          <SettingRow title={t("editor.vmessAuthenticatedLength")}>
             <Switch
               on={!!draft.vmessAuthenticatedLength}
               onChange={(value) => setRoot({ vmessAuthenticatedLength: value })}
             />
-          </div>
+          </SettingRow>
         </>
       )}
       {draft.protocol === "trojan" && (

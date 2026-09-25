@@ -488,7 +488,9 @@ function SubCard({
         </Btn>
       </div>
       {s.lastError && (
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--error)" }}>{s.lastError}</div>
+        <div className="hint error" style={{ marginTop: 8 }}>
+          {s.lastError}
+        </div>
       )}
     </Card>
   );

@@ -135,9 +135,7 @@ export function RoutingSection({
               </div>
             </div>
             {routingRules.length === 0 ? (
-              <div
-                style={{ fontSize: 13, color: "var(--on-surface-faint)", padding: "4px 2px 8px" }}
-              >
+              <div className="hint" style={{ padding: "4px 0 8px" }}>
                 {t("settings.routingEmpty")}
               </div>
             ) : (
