@@ -1,4 +1,4 @@
-import { Field, SectionLabel, Select, Switch } from "../../../components";
+import { Field, SectionLabel, Segmented, Select, SettingRow, Switch } from "../../../components";
 import type { HeaderType, Transport } from "../../../generated/bindings";
 import { HEADER_TYPE_OPTS, NETWORK_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -123,7 +123,7 @@ export function TransportSection({
             onChange={(value) => patch({ serviceName: value })}
             error={errors.serviceName}
           />
-          <Select
+          <Segmented
             label={t("editor.grpcMode")}
             value={transport.mode ?? ""}
             options={[
@@ -166,22 +166,12 @@ export function TransportSection({
             value={transport.userAgent ?? ""}
             onChange={(value) => patch({ userAgent: value })}
           />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.grpcPermitWithoutStream")}
-            </span>
+          <SettingRow title={t("editor.grpcPermitWithoutStream")}>
             <Switch
               on={!!transport.permitWithoutStream}
               onChange={(value) => patch({ permitWithoutStream: value })}
             />
-          </div>
+          </SettingRow>
         </>
       ) : needsHostPath || headerType === "http" ? (
         <>
@@ -224,22 +214,12 @@ export function TransportSection({
                 value={headersToText(transport.headers)}
                 onChange={(value) => patch({ headers: textToHeaders(value) })}
               />
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 0",
-                }}
-              >
-                <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-                  {t("editor.acceptProxyProtocol")}
-                </span>
+              <SettingRow title={t("editor.acceptProxyProtocol")}>
                 <Switch
                   on={!!transport.acceptProxyProtocol}
                   onChange={(value) => patch({ acceptProxyProtocol: value })}
                 />
-              </div>
+              </SettingRow>
             </>
           )}
           {transport.kind === "xhttp" && (
@@ -260,17 +240,9 @@ export function TransportSection({
           )}
         </>
       ) : null}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 0",
-        }}
-      >
-        <span style={{ fontSize: 14, color: "var(--on-surface)" }}>{t("editor.muxEnabled")}</span>
+      <SettingRow title={t("editor.muxEnabled")}>
         <Switch on={mux} onChange={setMux} />
-      </div>
+      </SettingRow>
     </>
   );
 }

@@ -565,7 +565,6 @@ export const ROUTING_MODE_OPTS: RoutingMode_Serialize[] = ["global","custom","ru
 export const CORE_ENGINE_OPTS: CoreEngine[] = ["xray","sing-box"];
 export const TUN_ENGINE_OPTS: string[] = ["singbox-tun","tun2socks","hev"];
 export const LOG_TARGET_OPTS: LogTarget[] = ["daemon","xray","singbox","tun-engine"];
-export const TUN_TUNING_ENGINES: TunEngine[] = ["hev"];
 export const NETWORK_OPTS: Transport["kind"][] = ["tcp","ws","grpc","httpupgrade","xhttp","h2","kcp","quic"];
 export const SECURITY_OPTS: Security[] = ["none","tls","reality"];
 export const HEADER_TYPE_OPTS: HeaderType[] = ["none","http","srtp","utp","wechat-video","dtls","wireguard","dns"];
@@ -596,6 +595,53 @@ export const TUN_BY_CORE = {
     ]
   }
 } as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;
+
+/** Engine-specific settings each TUN engine reads (Rust `tun_knobs`); shared ones (MTU, excludes, strict route) are not listed. */
+export type TunKnobSpec = { field: keyof AdvancedSettings_Serialize } & ({ kind: "number" } | { kind: "choice"; options: string[] });
+export const TUN_KNOBS_BY_ENGINE = {
+  "hev": [
+    {
+      "field": "tunConnectTimeoutMs",
+      "kind": "number"
+    },
+    {
+      "field": "tunTcpRwTimeoutMs",
+      "kind": "number"
+    },
+    {
+      "field": "tunUdpRwTimeoutMs",
+      "kind": "number"
+    },
+    {
+      "field": "tunTcpBufferSize",
+      "kind": "number"
+    },
+    {
+      "field": "tunUdpRecvBufferSize",
+      "kind": "number"
+    }
+  ],
+  "singbox-tun": [
+    {
+      "field": "singboxStack",
+      "kind": "choice",
+      "options": [
+        "gvisor",
+        "system"
+      ]
+    }
+  ],
+  "tun2socks": [
+    {
+      "field": "tunUdpRwTimeoutMs",
+      "kind": "number"
+    },
+    {
+      "field": "tunTcpBufferSize",
+      "kind": "number"
+    }
+  ]
+} as Record<TunEngine, TunKnobSpec[]>;
 
 /** Per-protocol default core (Rust `default_core_for`; full resolution = `resolveCores`). */
 export const DEFAULT_CORE_BY_PROTOCOL = {

@@ -1,4 +1,4 @@
-import { Field, SectionLabel, Select, Switch } from "../../../components";
+import { Field, SectionLabel, Segmented, Select, SettingRow, Switch } from "../../../components";
 import type { Security, Tls } from "../../../generated/bindings";
 import { FINGERPRINT_OPTS, SECURITY_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -26,7 +26,7 @@ export function SecuritySection({
     <>
       <SectionLabel>{t("editor.security")}</SectionLabel>
       {!isQuic && (
-        <Select
+        <Segmented
           label={t("editor.tlsSecurity")}
           value={tls.security ?? "none"}
           options={SECURITY_OPTS}
@@ -102,83 +102,33 @@ export function SecuritySection({
             onChange={(value) => setTls({ pcs: value })}
             hint={t("settings.pinnedCertHint")}
           />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.allowInsecure")}
-            </span>
+          <SettingRow title={t("editor.allowInsecure")}>
             <Switch
               on={!!tls.allowInsecure}
               onChange={(value) => setTls({ allowInsecure: value })}
             />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.tlsDisableSni")}
-            </span>
+          </SettingRow>
+          <SettingRow title={t("editor.tlsDisableSni")}>
             <Switch on={!!tls.disableSni} onChange={(value) => setTls({ disableSni: value })} />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.tlsDisableSystemRoot")}
-            </span>
+          </SettingRow>
+          <SettingRow title={t("editor.tlsDisableSystemRoot")}>
             <Switch
               on={!!tls.disableSystemRoot}
               onChange={(value) => setTls({ disableSystemRoot: value })}
             />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.tlsRejectUnknownSni")}
-            </span>
+          </SettingRow>
+          <SettingRow title={t("editor.tlsRejectUnknownSni")}>
             <Switch
               on={!!tls.rejectUnknownSni}
               onChange={(value) => setTls({ rejectUnknownSni: value })}
             />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 0",
-            }}
-          >
-            <span style={{ fontSize: 14, color: "var(--on-surface)" }}>
-              {t("editor.tlsEnableSessionResumption")}
-            </span>
+          </SettingRow>
+          <SettingRow title={t("editor.tlsEnableSessionResumption")}>
             <Switch
               on={!!tls.enableSessionResumption}
               onChange={(value) => setTls({ enableSessionResumption: value })}
             />
-          </div>
+          </SettingRow>
         </>
       )}
       {isReality && (

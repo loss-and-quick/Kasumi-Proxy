@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { Protocol, RoutingRule } from "../../generated/bindings";
+import type { CoreEngine, Protocol, RoutingRule } from "../../generated/bindings";
+import { DEFAULT_CORE_BY_PROTOCOL, PROTOCOL_OPTS } from "../../generated/defaults";
 import { RoutingRule_DeserializeSchema, RoutingRuleSchema } from "../../generated/schemas";
 import type { DictKey, I18nFormatters, Translate } from "../../i18n";
 import { uid } from "../../lib/utils";
@@ -142,4 +143,39 @@ export function parseRoutingRulesJson(text: string): { ok: boolean; rules: Routi
     // fall through
   }
   return { ok: false, rules: [] };
+}
+
+// ------------------------------------------------------------
+// Core-per-protocol presets
+// ------------------------------------------------------------
+
+/** Protocols only one core implements (hysteria2/tuic are sing-box-only; a custom
+ *  config is written for its own core), so the user can't reassign them. */
+export const LOCKED_CORE_PROTOCOLS: readonly Protocol[] = ["hysteria2", "tuic", "custom"];
+
+export type CoresPreset = "default" | CoreEngine | "custom";
+type CoreMap = Partial<Record<Protocol, CoreEngine>>;
+
+const switchable = PROTOCOL_OPTS.filter((p) => !LOCKED_CORE_PROTOCOLS.includes(p));
+
+const effectiveCore = (map: CoreMap | undefined, protocol: Protocol): CoreEngine =>
+  map?.[protocol] ?? DEFAULT_CORE_BY_PROTOCOL[protocol];
+
+/** Which preset the stored map amounts to. Only switchable protocols count, so a
+ *  stale override on a locked protocol doesn't turn the map into "custom". */
+export function coresPreset(map: CoreMap | undefined): CoresPreset {
+  if (switchable.every((p) => effectiveCore(map, p) === DEFAULT_CORE_BY_PROTOCOL[p])) {
+    return "default";
+  }
+  for (const core of ["xray", "sing-box"] as const) {
+    if (switchable.every((p) => effectiveCore(map, p) === core)) return core;
+  }
+  return "custom";
+}
+
+/** The map a preset stands for: `{}` defers to the per-protocol defaults; a single
+ *  core pins every switchable protocol to it and leaves the locked ones alone. */
+export function applyCoresPreset(preset: Exclude<CoresPreset, "custom">): CoreMap {
+  if (preset === "default") return {};
+  return Object.fromEntries(switchable.map((p) => [p, preset]));
 }

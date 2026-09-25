@@ -1,4 +1,4 @@
-import { Field, SectionLabel, Select } from "../../../components";
+import { Field, SectionLabel, Segmented, Select } from "../../../components";
 import type { CoreEngine, Profile, Protocol } from "../../../generated/bindings";
 import { CORE_ENGINE_OPTS, PROTOCOL_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
@@ -94,7 +94,7 @@ export function BasicsSection({
 
       {/* When the profile is forced onto one engine, pin the selector to that
           engine (not "global" or a stale stored choice) and disable it. */}
-      <Select
+      <Segmented
         label={t("editor.engine")}
         value={coreValue}
         disabled={engineForced != null}

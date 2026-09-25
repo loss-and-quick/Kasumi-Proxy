@@ -2,12 +2,14 @@ import {
   Btn,
   Card,
   Chip,
+  Disclosure,
   Field,
   IconBtn,
   ListRow,
+  NavRow,
   RowToggle,
-  SectionLabel,
-  Select,
+  Segmented,
+  SettingRow,
   Switch,
 } from "../../../components";
 import type { RoutingRule } from "../../../generated/bindings";
@@ -30,6 +32,7 @@ export function RoutingSection({
   reorderRoutingRules,
   removeRoutingRule,
   onOpenRulesIO,
+  onOpenAppFilter,
 }: {
   settings: AdvancedSettings;
   set: <K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) => void;
@@ -43,27 +46,32 @@ export function RoutingSection({
   reorderRoutingRules: (from: number, to: number) => void;
   removeRoutingRule: (id: string) => void;
   onOpenRulesIO: () => void;
+  onOpenAppFilter: () => void;
 }) {
   const t = useT();
   const formatters = useFormatters();
   // Proxy-mode selection is desktop-only — the Android root module is always tun.
   const isDesktop = getRuntimeBridgeMode() === "tauri";
   const profileName = (tag: string) => profiles.find((p) => p.id === tag)?.remarks;
-  const domainStrategy4Xray = settings.domainStrategy;
-  const domainStrategy4Singbox = settings.domainStrategy4Singbox;
   const catchAllIndex = routingRules.findIndex(isCatchAllRule);
   const catchAllRedundant = isRedundantCatchAll(routingRules, catchAllIndex);
+  const appFilterCount = Object.keys(settings.appFilter ?? {}).length;
+  const appFilterSummary =
+    appFilterCount > 0
+      ? t("appFilter.subtitle", { n: appFilterCount })
+      : settings.appCaptureMode === "none"
+        ? t("appFilter.captureNone")
+        : t("appFilter.captureAll");
 
   return (
     <>
-      <SectionLabel>{t("settings.routing")}</SectionLabel>
-      <Card style={{ padding: 14 }}>
+      <Card style={{ padding: "4px 14px", marginTop: 8 }}>
         {isDesktop && (
-          <>
-            <Select
-              label={t("settings.proxyMode")}
+          <SettingRow stacked title={t("settings.proxyMode")} hint={t("settings.proxyModeHint")}>
+            <Segmented
+              ariaLabel={t("settings.proxyMode")}
               value={settings.proxyMode}
-              onChange={(v) => set("proxyMode", v as AdvancedSettings["proxyMode"])}
+              onChange={(v) => set("proxyMode", v)}
               options={[
                 { value: "tun", label: t("settings.proxyModeTun") },
                 { value: "proxy-only", label: t("settings.proxyModeProxyOnly") },
@@ -71,90 +79,22 @@ export function RoutingSection({
                 { value: "pac", label: t("settings.proxyModePac") },
               ]}
             />
-            <div style={{ fontSize: 12, color: "var(--on-surface-faint)", margin: "6px 2px 12px" }}>
-              {t("settings.proxyModeHint")}
-            </div>
-          </>
+          </SettingRow>
         )}
-        <Select
-          label={t("settings.routingMode")}
-          value={settings.routingMode}
-          onChange={(v) => setRoutingMode(v as AdvancedSettings["routingMode"])}
-          options={[
-            { value: "global", label: t("settings.routingGlobal") },
-            { value: "custom", label: t("settings.routingCustom") },
-            { value: "rules", label: t("settings.routingRulesEditor") },
-          ]}
-        />
-        <div style={{ padding: "10px 4px 4px" }}>
-          <Select
-            label={t("settings.domainStrategy4Xray")}
-            value={domainStrategy4Xray}
-            onChange={(value) => set("domainStrategy", value)}
+        <SettingRow stacked title={t("settings.routingMode")}>
+          <Segmented
+            ariaLabel={t("settings.routingMode")}
+            value={settings.routingMode}
+            onChange={setRoutingMode}
             options={[
-              { value: "AsIs", label: t("settings.domainStrategy4Xray.AsIs") },
-              { value: "IPIfNonMatch", label: t("settings.domainStrategy4Xray.IPIfNonMatch") },
-              { value: "IPOnDemand", label: t("settings.domainStrategy4Xray.IPOnDemand") },
+              { value: "global", label: t("settings.routingGlobal") },
+              { value: "custom", label: t("settings.routingCustom") },
+              { value: "rules", label: t("settings.routingRulesEditor") },
             ]}
           />
-          <Select
-            label={t("settings.domainStrategy4Singbox")}
-            value={domainStrategy4Singbox}
-            onChange={(value) => set("domainStrategy4Singbox", value)}
-            options={[
-              {
-                value: "prefer_ipv4",
-                label: t("settings.domainStrategy4Singbox.prefer_ipv4"),
-              },
-              {
-                value: "prefer_ipv6",
-                label: t("settings.domainStrategy4Singbox.prefer_ipv6"),
-              },
-              {
-                value: "ipv4_only",
-                label: t("settings.domainStrategy4Singbox.ipv4_only"),
-              },
-              {
-                value: "ipv6_only",
-                label: t("settings.domainStrategy4Singbox.ipv6_only"),
-              },
-            ]}
-          />
-          <Select
-            label={t("settings.singboxStack")}
-            value={settings.singboxStack}
-            onChange={(value) => set("singboxStack", value)}
-            options={[
-              { value: "gvisor", label: "gVisor" },
-              { value: "system", label: "System" },
-            ]}
-          />
-        </div>
-        <div style={{ height: 2 }} />
-        <RowToggle
-          icon="travel_explore"
-          title={t("settings.domainSniffing")}
-          sub={t("settings.domainSniffingSub")}
-          on={settings.domainSniffing}
-          onChange={(value) => set("domainSniffing", value)}
-        />
-        <RowToggle
-          icon="route"
-          title={t("settings.routeOnly")}
-          sub={t("settings.routeOnlySub")}
-          on={settings.routeOnly}
-          onChange={(value) => set("routeOnly", value)}
-        />
-        <RowToggle
-          icon="shield_lock"
-          title={t("settings.strictRoute")}
-          sub={t("settings.strictRouteSub")}
-          on={settings.strictRoute}
-          onChange={(value) => set("strictRoute", value)}
-        />
-
+        </SettingRow>
         {settings.routingMode === "custom" && (
-          <div style={{ padding: "8px 4px 4px" }}>
+          <div style={{ padding: "8px 0 4px" }}>
             <Field
               area
               label={t("settings.customRouting")}
@@ -166,8 +106,8 @@ export function RoutingSection({
           </div>
         )}
         {settings.routingMode === "rules" && (
-          <div style={{ paddingTop: 12 }}>
-            <div style={{ fontSize: 12, color: "var(--on-surface-faint)", marginBottom: 10 }}>
+          <div style={{ padding: "12px 0 8px" }}>
+            <div className="hint" style={{ marginBottom: 10 }}>
               {t("settings.routingRulesHint")}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
@@ -179,7 +119,7 @@ export function RoutingSection({
               </Btn>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 12, color: "var(--on-surface-faint)", marginBottom: 6 }}>
+              <div className="hint" style={{ marginBottom: 6 }}>
                 {t("settings.rulePresets")}
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -195,9 +135,7 @@ export function RoutingSection({
               </div>
             </div>
             {routingRules.length === 0 ? (
-              <div
-                style={{ fontSize: 13, color: "var(--on-surface-faint)", padding: "4px 2px 8px" }}
-              >
+              <div className="hint" style={{ padding: "4px 0 8px" }}>
                 {t("settings.routingEmpty")}
               </div>
             ) : (
@@ -259,6 +197,59 @@ export function RoutingSection({
             )}
           </div>
         )}
+      </Card>
+
+      <Card style={{ padding: "4px 14px", marginTop: 12 }}>
+        <NavRow
+          icon="smart_toy"
+          title={t("appFilter.openPage")}
+          sub={`${t("appFilter.openPageSub")} · ${appFilterSummary}`}
+          onClick={onOpenAppFilter}
+        />
+      </Card>
+
+      <Card style={{ padding: "0 14px", marginTop: 12 }}>
+        <Disclosure label={t("settings.advanced")}>
+          <SettingRow stacked title={t("settings.domainStrategy4Xray")}>
+            <Segmented
+              ariaLabel={t("settings.domainStrategy4Xray")}
+              value={settings.domainStrategy}
+              onChange={(value) => set("domainStrategy", value)}
+              options={[
+                { value: "AsIs", label: t("settings.domainStrategy4Xray.AsIs") },
+                { value: "IPIfNonMatch", label: t("settings.domainStrategy4Xray.IPIfNonMatch") },
+                { value: "IPOnDemand", label: t("settings.domainStrategy4Xray.IPOnDemand") },
+              ]}
+            />
+          </SettingRow>
+          <SettingRow stacked title={t("settings.domainStrategy4Singbox")}>
+            <Segmented
+              ariaLabel={t("settings.domainStrategy4Singbox")}
+              value={settings.domainStrategy4Singbox}
+              onChange={(value) => set("domainStrategy4Singbox", value)}
+              options={[
+                { value: "prefer_ipv4", label: t("settings.domainStrategy4Singbox.prefer_ipv4") },
+                { value: "prefer_ipv6", label: t("settings.domainStrategy4Singbox.prefer_ipv6") },
+                { value: "ipv4_only", label: t("settings.domainStrategy4Singbox.ipv4_only") },
+                { value: "ipv6_only", label: t("settings.domainStrategy4Singbox.ipv6_only") },
+              ]}
+            />
+          </SettingRow>
+          <RowToggle
+            icon="travel_explore"
+            title={t("settings.domainSniffing")}
+            sub={t("settings.domainSniffingSub")}
+            on={settings.domainSniffing}
+            onChange={(value) => set("domainSniffing", value)}
+          />
+          <RowToggle
+            icon="route"
+            title={t("settings.routeOnly")}
+            sub={t("settings.routeOnlySub")}
+            on={settings.routeOnly}
+            onChange={(value) => set("routeOnly", value)}
+          />
+        </Disclosure>
       </Card>
     </>
   );

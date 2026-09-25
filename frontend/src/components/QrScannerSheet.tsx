@@ -241,9 +241,7 @@ export function QrScannerSheet({ open, title, onClose, onResult }: Props) {
             >
               <Icon name="image" style={{ fontSize: 40, color: "var(--on-surface-faint)" }} />
               <div style={{ fontSize: 13, lineHeight: 1.5 }}>{cameraNote}</div>
-              <div style={{ fontSize: 12, color: "var(--on-surface-faint)", lineHeight: 1.5 }}>
-                {t("qr.scan.fromImage")}
-              </div>
+              <div className="hint">{t("qr.scan.fromImage")}</div>
             </div>
           ) : (
             <video

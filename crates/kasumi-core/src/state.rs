@@ -200,7 +200,18 @@ pub enum SingboxDomainStrategy {
 }
 
 /// sing-box tun network stack (see the Zod comment / [[singbox-gvisor-stack]]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, specta::Type)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Default,
+    strum::EnumIter,
+    specta::Type,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum SingboxStack {
     #[default]

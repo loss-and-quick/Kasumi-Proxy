@@ -39,7 +39,9 @@ function LoadingScreen({ label }: { label: string }) {
 function getInitialTab(): Tab {
   if (typeof window !== "undefined") {
     const hash = window.location.hash.replace("#", "");
-    if (hash === "profiles" || hash === "subs" || hash === "settings") return hash;
+    if (hash === "profiles" || hash === "subs") return hash;
+    // Settings pages live under "settings/<page>".
+    if (hash === "settings" || hash.startsWith("settings/")) return "settings";
   }
   return "overview";
 }

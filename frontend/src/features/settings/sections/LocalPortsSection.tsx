@@ -59,7 +59,7 @@ export function LocalPortsSection({
           )}
         </div>
         <RowToggle
-          icon="language"
+          icon="lan"
           title={t("settings.allowNonLocalhost")}
           sub={t("settings.allowNonLocalhostSub")}
           on={settings.allowNonLocalhost ?? false}
@@ -69,7 +69,7 @@ export function LocalPortsSection({
           {t("settings.security")}
         </div>
         <RowToggle
-          icon="lock"
+          icon="shield_moon"
           title={t("settings.socksAuth")}
           on={authOpen}
           onChange={toggleAuth}

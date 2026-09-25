@@ -6,7 +6,7 @@
 //! exactly like `bindings.ts` / `schemas.ts`.
 
 use kasumi_core::core::{default_core_for, tun_by_core_options};
-use kasumi_core::enums::editor_option_lists;
+use kasumi_core::enums::{TunEngine, editor_option_lists, tun_knobs};
 use kasumi_core::profile::{Protocol, empty_profile};
 use kasumi_core::state;
 use strum::IntoEnumIterator;
@@ -51,7 +51,6 @@ fn opts_type(name: &str) -> &'static str {
         "ROUTING_MODE_OPTS" => "RoutingMode_Serialize",
         "CORE_ENGINE_OPTS" => "CoreEngine",
         "LOG_TARGET_OPTS" => "LogTarget",
-        "TUN_TUNING_ENGINES" => "TunEngine",
         "NETWORK_OPTS" => "Transport[\"kind\"]",
         "SECURITY_OPTS" => "Security",
         "HEADER_TYPE_OPTS" => "HeaderType",
@@ -164,6 +163,32 @@ pub fn render() -> String {
     out.push_str("export const TUN_BY_CORE = ");
     out.push_str(&by_core_json);
     out.push_str(" as Record<CoreEngine, { default: TunEngine; valid: TunEngine[] }>;\n");
+
+    // Engine-specific settings per TUN engine (Rust `tun_knobs`), so the settings
+    // screen shows each engine's own fields only while that engine is in use.
+    let mut knobs = serde_json::Map::new();
+    for tun in TunEngine::iter() {
+        let specs: Vec<serde_json::Value> = tun_knobs(tun)
+            .iter()
+            .map(|&k| {
+                let mut spec = serde_json::to_value(k.kind()).expect("knob kind");
+                spec["field"] = serde_json::Value::String(wire(k));
+                spec
+            })
+            .collect();
+        knobs.insert(wire(tun), serde_json::Value::Array(specs));
+    }
+    let knobs_json =
+        serde_json::to_string_pretty(&serde_json::Value::Object(knobs)).expect("pretty tun knobs");
+    out.push_str(
+        "\n/** Engine-specific settings each TUN engine reads (Rust `tun_knobs`); shared ones (MTU, excludes, strict route) are not listed. */\n",
+    );
+    out.push_str(
+        "export type TunKnobSpec = { field: keyof AdvancedSettings_Serialize } & ({ kind: \"number\" } | { kind: \"choice\"; options: string[] });\n",
+    );
+    out.push_str("export const TUN_KNOBS_BY_ENGINE = ");
+    out.push_str(&knobs_json);
+    out.push_str(" as Record<TunEngine, TunKnobSpec[]>;\n");
 
     // Per-protocol default core (single-sourced from Rust `default_core_for`): the
     // settings screen's per-protocol core table falls back to it, and the dev mock

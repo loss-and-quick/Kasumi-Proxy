@@ -4,9 +4,9 @@
 // Rendered as a full-screen overlay (.fullpage) over the current screen.
 // ============================================================
 import { useEffect, useMemo, useState } from "react";
-import { AppBar, Card, Chip, ListRow, SectionLabel } from "../../components";
+import { AppBar, Card, ListRow, SectionLabel, Segmented } from "../../components";
 import { IconBtn } from "../../components/icons";
-import { useT } from "../../i18n";
+import { type Translate, useT } from "../../i18n";
 import type { AppEntry } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
@@ -15,9 +15,9 @@ import { useAppStore } from "../../store/useAppStore";
 // pkg:uid uniquely identifies one profile instance of an app.
 const filterKey = (app: AppEntry) => `${app.pkg}:${app.uid}`;
 // userId > 0 means work/secondary profile.
-const profileLabel = (app: AppEntry): string | null => {
+const profileLabel = (app: AppEntry, t: Translate): string | null => {
   const userId = Math.floor(app.uid / 100000);
-  return userId > 0 ? `Profile ${userId}` : null;
+  return userId > 0 ? t("appFilter.userProfile", { n: userId }) : null;
 };
 
 export default function AppFilterPage({ onBack }: { onBack: () => void }) {
@@ -86,21 +86,16 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
       <div className="scroll">
         <SectionLabel>{t("appFilter.captureMode")}</SectionLabel>
         <Card style={{ padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Chip
-              active={captureMode === "all"}
-              onClick={() => setSetting("appCaptureMode", "all")}
-            >
-              {t("appFilter.captureAll")}
-            </Chip>
-            <Chip
-              active={captureMode === "none"}
-              onClick={() => setSetting("appCaptureMode", "none")}
-            >
-              {t("appFilter.captureNone")}
-            </Chip>
-          </div>
-          <div style={{ fontSize: 12, color: "var(--on-surface-faint)", lineHeight: 1.4 }}>
+          <Segmented
+            ariaLabel={t("appFilter.captureMode")}
+            value={captureMode}
+            onChange={(v) => setSetting("appCaptureMode", v)}
+            options={[
+              { value: "all", label: t("appFilter.captureAll") },
+              { value: "none", label: t("appFilter.captureNone") },
+            ]}
+          />
+          <div className="hint">
             {captureMode === "all" ? t("appFilter.captureAllHint") : t("appFilter.captureNoneHint")}
           </div>
         </Card>
@@ -127,7 +122,7 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
             {filtered.map((app) => {
               const key = filterKey(app);
               const mode = appFilter[key] ?? null;
-              const pLabel = profileLabel(app);
+              const pLabel = profileLabel(app, t);
               return (
                 <ListRow
                   key={key}
@@ -145,29 +140,24 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
                   }
                   title={app.label ?? app.pkg}
                   sub={
-                    [app.label ? app.pkg : app.system ? t("appFilter.systemApp") : null, pLabel]
-                      .filter(Boolean)
-                      .join(" · ") || undefined
-                  }
-                  right={
-                    <div
-                      style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}
-                    >
-                      <Chip
-                        active={mode === "bypass"}
-                        onClick={() => setAppFilterMode(key, mode === "bypass" ? null : "bypass")}
-                      >
-                        {t("appFilter.bypass")}
-                      </Chip>
-                      <Chip
-                        active={mode === "force-proxy"}
-                        onClick={() =>
-                          setAppFilterMode(key, mode === "force-proxy" ? null : "force-proxy")
-                        }
-                      >
-                        {t("appFilter.forceProxy")}
-                      </Chip>
-                    </div>
+                    <>
+                      {[app.label ? app.pkg : app.system ? t("appFilter.systemApp") : null, pLabel]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      <div style={{ marginTop: 6 }}>
+                        <Segmented
+                          size="sm"
+                          ariaLabel={app.label ?? app.pkg}
+                          value={mode ?? "default"}
+                          onChange={(v) => setAppFilterMode(key, v === "default" ? null : v)}
+                          options={[
+                            { value: "default", label: t("appFilter.default") },
+                            { value: "bypass", label: t("appFilter.bypass") },
+                            { value: "force-proxy", label: t("appFilter.forceProxy") },
+                          ]}
+                        />
+                      </div>
+                    </>
                   }
                 />
               );
