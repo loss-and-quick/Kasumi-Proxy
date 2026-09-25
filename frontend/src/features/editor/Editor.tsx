@@ -19,7 +19,7 @@ import type {
 } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
-import { chainCandidates, emptyProfile, schemaFor } from "../../lib/profile-utils";
+import { emptyProfile, schemaFor } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
@@ -115,6 +115,20 @@ export default function Editor({
     };
   }, [draft]);
 
+  // Which profiles the draft may dial through is a backend answer (the same chain
+  // check the config builders make), re-asked on every edit like the engine.
+  const [viaIds, setViaIds] = useState<string[]>([]);
+  useEffect(() => {
+    let alive = true;
+    bridge
+      .chainCandidates(draft)
+      .then((ids) => alive && setViaIds(ids))
+      .catch(() => alive && setViaIds([]));
+    return () => {
+      alive = false;
+    };
+  }, [draft]);
+
   const save = () => {
     const result = schemaFor(draft.protocol).safeParse(draft);
     if (!result.success) {
@@ -131,10 +145,10 @@ export default function Editor({
   };
 
   const groupOpts = groups.map((group) => ({ value: group.id, label: group.name }));
-  const viaOpts = chainCandidates(profiles, draft).map((p) => ({
-    value: p.meta.id,
-    label: p.meta.remarks,
-  }));
+  const viaOpts = viaIds.flatMap((id) => {
+    const hop = profiles.find((p) => p.meta.id === id);
+    return hop ? [{ value: id, label: hop.meta.remarks }] : [];
+  });
   const proto = draft.protocol;
   const security = "tls" in draft && draft.tls ? (draft.tls.security ?? "none") : "none";
   const isReality = security === "reality";

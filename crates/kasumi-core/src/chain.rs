@@ -44,6 +44,30 @@ pub fn chain_hops<'a>(p: &Profile, profiles: &'a [Profile]) -> Result<Vec<&'a Pr
     Ok(hops)
 }
 
+/// Ids of the profiles `p` could dial through: every profile that, set as
+/// `p.via`, gives a chain [`chain_hops`] accepts — so the picker offers exactly
+/// what the config builders will take. `p` may be an unsaved draft; it stands in
+/// for its stored copy (same id) while the chains are walked.
+pub fn chain_candidates(p: &Profile, profiles: &[Profile]) -> Vec<String> {
+    let mut state: Vec<Profile> = profiles
+        .iter()
+        .filter(|x| x.meta().id != p.meta().id)
+        .cloned()
+        .collect();
+    let mut draft = p.clone();
+    state.push(draft.clone());
+    let draft_idx = state.len() - 1;
+    profiles
+        .iter()
+        .map(|c| c.meta().id.clone())
+        .filter(|id| {
+            draft.meta_mut().via = Some(id.clone());
+            state[draft_idx] = draft.clone();
+            chain_hops(&draft, &state).is_ok()
+        })
+        .collect()
+}
+
 /// Null every `via` that no longer points at another existing profile (the hop was
 /// deleted, dropped by a subscription update, or is the profile itself), so a
 /// removed hop turns the chain back into a direct connection instead of leaving a
@@ -116,6 +140,37 @@ mod tests {
         .unwrap();
         let all = vec![profile("a", Some("c")), custom];
         assert!(chain_hops(&all[0], &all).unwrap_err().contains("custom"));
+    }
+
+    #[test]
+    fn candidates_are_the_hops_the_builders_accept() {
+        let custom: Profile = serde_json::from_value(json!({
+            "protocol": "custom",
+            "meta": { "id": "raw", "remarks": "raw", "groupId": "g-main" },
+            "raw": "{}",
+        }))
+        .unwrap();
+        // c -> b -> a, plus an unrelated d and a custom profile.
+        let all = vec![
+            profile("a", None),
+            profile("b", Some("a")),
+            profile("c", Some("b")),
+            profile("d", None),
+            custom,
+        ];
+        // a can't dial through b or c (they already go through a), itself, or raw.
+        assert_eq!(chain_candidates(&all[0], &all), ["d"]);
+        assert_eq!(chain_candidates(&all[2], &all), ["a", "b", "d"]);
+        // An unsaved draft (id not stored yet) may use anything but the custom one.
+        let draft = profile("new", None);
+        assert_eq!(chain_candidates(&draft, &all), ["a", "b", "c", "d"]);
+        // The draft's edits count, not its stored copy: once a dials through d,
+        // d can no longer dial through a.
+        let mut a_via_d = all[0].clone();
+        a_via_d.meta_mut().via = Some("d".into());
+        let mut edited = all.clone();
+        edited[0] = a_via_d;
+        assert!(!chain_candidates(&edited[3], &edited).contains(&"a".to_string()));
     }
 
     #[test]

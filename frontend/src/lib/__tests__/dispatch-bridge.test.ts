@@ -122,6 +122,22 @@ describe("dispatch-bridge core resolution", () => {
   });
 });
 
+describe("dispatch-bridge chain candidates", () => {
+  it("chainCandidates ships the draft and unwraps the id list", async () => {
+    const draft = endpointProfile("draft");
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
+      if (cmd.cmd === "chainCandidates") {
+        expect(cmd.profile.meta.id).toBe("draft");
+        return { kind: "profileIds", value: ["a", "b"] } as Response_Serialize;
+      }
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, noPush);
+
+    expect(await bridge.chainCandidates(draft as unknown as Profile)).toEqual(["a", "b"]);
+  });
+});
+
 describe("dispatch-bridge status stream", () => {
   const statusFrame = (extra: Record<string, unknown>) => ({
     state: "connected",
