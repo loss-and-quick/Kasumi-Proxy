@@ -19,7 +19,7 @@ import type {
 } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
-import { emptyProfile, schemaFor } from "../../lib/profile-utils";
+import { chainCandidates, emptyProfile, schemaFor } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
@@ -37,6 +37,7 @@ export default function Editor({
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
+  const profiles = useAppStore((s) => s.profiles);
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
   const t = useT();
@@ -69,6 +70,7 @@ export default function Editor({
         remarks: cur.meta.remarks,
         subId: cur.meta.subId,
         coreType: cur.meta.coreType,
+        via: cur.meta.via,
       };
       if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
       if ("tls" in next && next.tls && "tls" in cur && cur.tls) next.tls = { ...cur.tls };
@@ -129,6 +131,10 @@ export default function Editor({
   };
 
   const groupOpts = groups.map((group) => ({ value: group.id, label: group.name }));
+  const viaOpts = chainCandidates(profiles, draft).map((p) => ({
+    value: p.meta.id,
+    label: p.meta.remarks,
+  }));
   const proto = draft.protocol;
   const security = "tls" in draft && draft.tls ? (draft.tls.security ?? "none") : "none";
   const isReality = security === "reality";
@@ -161,6 +167,7 @@ export default function Editor({
         setEndpoint={setEndpoint}
         errors={errors}
         groupOpts={groupOpts}
+        viaOpts={viaOpts}
         changeProtocol={changeProtocol}
         engineForced={engineForced}
         engineHint={engineHint}

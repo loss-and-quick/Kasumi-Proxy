@@ -154,6 +154,26 @@ export const schemaFor = (p: Protocol) =>
 /* ---------- nested emptyProfile factory ---------- */
 
 /**
+ * Profiles `self` may dial through (`meta.via`): any non-custom profile except
+ * itself and those whose own chain already passes through `self`, which would
+ * loop. The builders reject such chains too; this keeps them out of the picker.
+ */
+export function chainCandidates(profiles: Profile[], self: Profile): Profile[] {
+  const byId = new Map(profiles.map((p) => [p.meta.id, p]));
+  const reaches = (from: Profile): boolean => {
+    const seen = new Set<string>();
+    let cur: Profile | undefined = from;
+    while (cur && !seen.has(cur.meta.id)) {
+      if (cur.meta.id === self.meta.id) return true;
+      seen.add(cur.meta.id);
+      cur = cur.meta.via ? byId.get(cur.meta.via) : undefined;
+    }
+    return false;
+  };
+  return profiles.filter((p) => p.protocol !== "custom" && !reaches(p));
+}
+
+/**
  * A blank profile of the given protocol. Clones the Rust-built template from
  * the generated `EMPTY_PROFILES` (single source — see `kasumi_core::empty_profile`)
  * and stamps a fresh id + the target group. No default value is restated here.

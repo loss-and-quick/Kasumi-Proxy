@@ -217,6 +217,10 @@ const ru = {
   "editor.engine": "Ядро",
   "editor.engineGlobal": "Глобальные настройки",
   "editor.engineResolved": "Будет запущено на: {core}",
+  "editor.via": "Подключаться через",
+  "editor.viaDirect": "Напрямую",
+  "editor.viaHint":
+    "Подключаться к этому серверу через другой профиль (цепочка прокси). Цепочка работает на ядре этого профиля.",
   "editor.engineForced": "Этот профиль может работать только на {core}",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Обфускация",

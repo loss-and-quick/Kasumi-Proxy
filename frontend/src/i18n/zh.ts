@@ -203,6 +203,9 @@ const zh = {
   "editor.engine": "核心引擎",
   "editor.engineGlobal": "全局默认",
   "editor.engineResolved": "将使用：{core}",
+  "editor.via": "通过以下配置连接",
+  "editor.viaDirect": "直接连接",
+  "editor.viaHint": "经由另一个配置连接此服务器（代理链）。代理链使用此配置的内核运行。",
   "editor.engineForced": "此配置只能在 {core} 上运行",
   // editor — hysteria2 / tuic
   "editor.obfsType": "混淆",
