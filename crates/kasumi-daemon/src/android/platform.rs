@@ -98,7 +98,7 @@ fn tun_cfg_path(tun: TunEngine, force: bool) -> &'static str {
     }
 }
 
-/// The sing-box tun stack wire value from settings (`"gvisor"`/`"system"`), for the
+/// The sing-box tun stack wire value from settings (`"gvisor"`/`"system"`/`"mixed"`), for the
 /// sidecar sing-box bridge config. Defaults to gvisor — the root-binary path needs it.
 async fn singbox_stack() -> String {
     read_settings()
@@ -679,6 +679,7 @@ impl Platform for AndroidPlatform {
         // - The sing-box "system" stack can't grab tun connections in this
         //   root-binary data-path without sing-box's own nftables output redirect,
         //   which only catches network-bound sockets when strict_route is on.
+        //   "mixed" runs TCP on that same system stack, so it needs both too.
         //   (gvisor needs neither.)
         // - Root (uid 0) must bypass the tun: the daemon and the core itself run as
         //   root, and this per-uid policy model spares root instead of marking
@@ -690,7 +691,10 @@ impl Platform for AndroidPlatform {
                 if ib.get("type").and_then(Value::as_str) != Some("tun") {
                     continue;
                 }
-                if ib.get("stack").and_then(Value::as_str) == Some("system") {
+                if matches!(
+                    ib.get("stack").and_then(Value::as_str),
+                    Some("system" | "mixed")
+                ) {
                     ib["auto_redirect"] = Value::Bool(true);
                     ib["strict_route"] = Value::Bool(true);
                 }
@@ -846,14 +850,17 @@ mod tests {
         platform.tune_config(CoreEngine::SingBox, &mut cfg);
         assert_eq!(cfg["inbounds"][0]["exclude_uid"], serde_json::json!([0]));
 
-        // The system stack additionally needs sing-box's own output redirect.
-        let mut cfg = serde_json::json!({ "inbounds": [
-            { "type": "tun", "tag": "tun-in", "stack": "system" },
-        ] });
-        platform.tune_config(CoreEngine::SingBox, &mut cfg);
-        assert_eq!(cfg["inbounds"][0]["auto_redirect"], true);
-        assert_eq!(cfg["inbounds"][0]["strict_route"], true);
-        assert_eq!(cfg["inbounds"][0]["exclude_uid"], serde_json::json!([0]));
+        // The system and mixed stacks (kernel TCP) additionally need sing-box's own
+        // output redirect.
+        for stack in ["system", "mixed"] {
+            let mut cfg = serde_json::json!({ "inbounds": [
+                { "type": "tun", "tag": "tun-in", "stack": stack },
+            ] });
+            platform.tune_config(CoreEngine::SingBox, &mut cfg);
+            assert_eq!(cfg["inbounds"][0]["auto_redirect"], true, "{stack}");
+            assert_eq!(cfg["inbounds"][0]["strict_route"], true, "{stack}");
+            assert_eq!(cfg["inbounds"][0]["exclude_uid"], serde_json::json!([0]));
+        }
 
         // Xray configs pass through untouched.
         let mut cfg = serde_json::json!({ "inbounds": [{ "type": "tun" }] });

@@ -643,7 +643,8 @@ export const TUN_KNOBS_BY_ENGINE = {
       "kind": "choice",
       "options": [
         "gvisor",
-        "system"
+        "system",
+        "mixed"
       ]
     }
   ],

@@ -34,7 +34,7 @@ use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{
     AdvancedSettings, DomainStrategy, LogLevel, MuxXudp443, RoutingMode, RoutingRule,
-    SingboxFragment,
+    SingboxFragment, SingboxStack,
 };
 
 // ── valid credential / crypto material (cores validate these) ──
@@ -888,6 +888,25 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             "allow-lan",
             AdvancedSettings {
                 allow_non_localhost: true,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        // Non-default sing-box tun stacks (gvisor is the default, swept above).
+        (
+            "stack-system",
+            AdvancedSettings {
+                singbox_stack: SingboxStack::System,
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
+        (
+            "stack-mixed",
+            AdvancedSettings {
+                singbox_stack: SingboxStack::Mixed,
                 ..Default::default()
             },
             vec![],

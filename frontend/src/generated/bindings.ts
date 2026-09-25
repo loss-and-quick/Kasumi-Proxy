@@ -902,8 +902,12 @@ export type SingboxDomainStrategy = "prefer_ipv4" | "prefer_ipv6" | "ipv4_only" 
  */
 export type SingboxFragment = "record" | "segment" | "both";
 
-/**  sing-box tun network stack (see the Zod comment / [[singbox-gvisor-stack]]). */
-export type SingboxStack = "gvisor" | "system";
+/**
+ *  sing-box tun network stack: `gvisor` terminates everything in userspace,
+ *  `system` hands TCP and UDP to the kernel stack, `mixed` takes TCP from the
+ *  kernel and UDP from gVisor (see [[singbox-gvisor-stack]]).
+ */
+export type SingboxStack = "gvisor" | "system" | "mixed";
 
 export type Socks = {
 	meta: Meta,
