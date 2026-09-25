@@ -92,6 +92,12 @@ impl BackendPaths {
         };
         self.data_dir.join(format!("{name}.log"))
     }
+
+    /// The active sing-box core's cache file. Under `run_dir`, which the privileged
+    /// data path owns on every platform, since the core writes it as root.
+    pub fn singbox_cache(&self) -> PathBuf {
+        self.run_dir.join("singbox-cache.db")
+    }
 }
 
 /// Installed core versions probed off the host. `CoreEngine` isn't hashable, so the
