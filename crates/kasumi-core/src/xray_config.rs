@@ -545,6 +545,16 @@ fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Va
     {
         m.insert("protocol".into(), json!(proto));
     }
+    if let Some(process) = &rule.process
+        && !process.is_empty()
+    {
+        m.insert("process".into(), json!(process));
+    }
+    if let Some(source) = &rule.source_ip
+        && !source.is_empty()
+    {
+        m.insert("sourceIP".into(), json!(source));
+    }
     m.insert("outboundTag".into(), resolve(&rule.outbound_tag).into());
     Value::Object(m)
 }
@@ -714,7 +724,13 @@ fn build_routing(
 
     if s.routing_mode == crate::state::RoutingMode::Rules && !routing_rules.is_empty() {
         let mut rules: Vec<Value> = vec![force_rule, dns_rule];
-        for r in routing_rules.iter().filter(|r| r.enabled) {
+        // xray can't tell which Android package opened a connection. Dropping just
+        // the package condition would widen the rule to every app, so a rule that
+        // names packages is left out on xray entirely.
+        for r in routing_rules
+            .iter()
+            .filter(|r| r.enabled && r.package_name.as_ref().is_none_or(Vec::is_empty))
+        {
             rules.push(build_rule_object(r, resolve));
         }
         rules.push(final_rule);
@@ -916,6 +932,52 @@ mod tests {
             .unwrap()
     }
 
+    fn source_rule(outbound: &str) -> RoutingRule {
+        RoutingRule {
+            id: "r".into(),
+            remarks: "r".into(),
+            enabled: true,
+            outbound_tag: outbound.into(),
+            domain: None,
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        }
+    }
+
+    #[test]
+    fn process_and_source_pass_through_and_package_rules_are_skipped() {
+        let p = sample();
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let rules = vec![
+            RoutingRule {
+                process: Some(vec!["curl".into(), "/opt/games/".into()]),
+                source_ip: Some(vec!["192.168.1.0/24".into()]),
+                ..source_rule("direct")
+            },
+            RoutingRule {
+                domain: Some(vec!["example.com".into()]),
+                package_name: Some(vec!["com.example.app".into()]),
+                ..source_rule("block")
+            },
+        ];
+        let cfg = build_xray_config(&p, &s, &rules, std::slice::from_ref(&p)).unwrap();
+        let emitted = cfg["routing"]["rules"].as_array().unwrap();
+        let r = emitted.iter().find(|r| r.get("process").is_some()).unwrap();
+        assert_eq!(r["process"], json!(["curl", "/opt/games/"]));
+        assert_eq!(r["sourceIP"], json!(["192.168.1.0/24"]));
+        // Emitting the package rule without its package would block example.com
+        // for every app.
+        assert!(emitted.iter().all(|r| r["outboundTag"] != "block"));
+    }
+
     #[test]
     fn force_in_inbound_is_always_present_and_localhost_only() {
         let p = sample();
@@ -959,6 +1021,9 @@ mod tests {
             port: None,
             network: None,
             protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
         };
         let cfg = build_xray_config(&p, &s, std::slice::from_ref(&geo), std::slice::from_ref(&p))
             .unwrap();

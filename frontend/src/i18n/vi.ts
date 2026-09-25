@@ -609,6 +609,16 @@ const vi = {
   "routingSheet.protocols": "Giao thức",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Các giao thức tầng ứng dụng tùy chọn",
+  "routingSheet.processes": "Tiến trình",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Tên, đường dẫn đầy đủ hoặc thư mục kết thúc bằng /. sing-box TUN nhận ra được, hoặc khi ứng dụng dùng trực tiếp cổng proxy cục bộ.",
+  "routingSheet.packages": "Ứng dụng Android",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "Tên gói. Chỉ sing-box: xray bỏ qua các quy tắc nêu tên ứng dụng.",
+  "routingSheet.sourceIps": "Địa chỉ nguồn",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "Địa chỉ hoặc CIDR của các thiết bị dùng cổng proxy chia sẻ.",
   "routingSheet.delete": "Xóa",
   // asset file sheet
   "assetSheet.addTitle": "Thêm tệp tài nguyên",

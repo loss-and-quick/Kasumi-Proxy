@@ -763,6 +763,18 @@ export type RoutingRule_Deserialize = {
 	port?: string | null,
 	network?: RuleNetwork | null,
 	protocol?: string[] | null,
+	/**
+	 *  Local processes that opened the connection: a bare name (`curl`), an
+	 *  absolute path (`/usr/bin/curl`), or a directory ending in `/`. Only
+	 *  connections made on this machine carry a process, and only a core that
+	 *  sees the app's own socket can tell (sing-box's tun, or any core addressed
+	 *  directly through its local proxy port).
+	 */
+	process?: string[] | null,
+	/**  Android package names of the app that opened the connection (sing-box only). */
+	packageName?: string[] | null,
+	/**  Source addresses/CIDRs, e.g. LAN clients using the shared proxy port. */
+	sourceIp?: string[] | null,
 };
 
 /**  A custom routing rule (`RoutingRuleSchema`). */
@@ -776,6 +788,18 @@ export type RoutingRule_Serialize = {
 	port?: string | null,
 	network?: RuleNetwork | null,
 	protocol?: string[] | null,
+	/**
+	 *  Local processes that opened the connection: a bare name (`curl`), an
+	 *  absolute path (`/usr/bin/curl`), or a directory ending in `/`. Only
+	 *  connections made on this machine carry a process, and only a core that
+	 *  sees the app's own socket can tell (sing-box's tun, or any core addressed
+	 *  directly through its local proxy port).
+	 */
+	process?: string[] | null,
+	/**  Android package names of the app that opened the connection (sing-box only). */
+	packageName?: string[] | null,
+	/**  Source addresses/CIDRs, e.g. LAN clients using the shared proxy port. */
+	sourceIp?: string[] | null,
 };
 
 /**  Transport scope of a routing rule. */

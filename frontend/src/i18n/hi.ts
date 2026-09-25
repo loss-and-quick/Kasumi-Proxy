@@ -604,6 +604,16 @@ const hi = {
   "routingSheet.protocols": "प्रोटोकॉल",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "वैकल्पिक एप्लिकेशन प्रोटोकॉल",
+  "routingSheet.processes": "प्रोसेस",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "नाम, पूरा पाथ या / पर खत्म होने वाला फ़ोल्डर। sing-box TUN इन्हें पहचानता है, या जब ऐप सीधे लोकल प्रॉक्सी पोर्ट इस्तेमाल करता है।",
+  "routingSheet.packages": "Android ऐप्स",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "पैकेज नाम। केवल sing-box: xray ऐप वाले नियम छोड़ देता है।",
+  "routingSheet.sourceIps": "स्रोत पते",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint": "साझा प्रॉक्सी पोर्ट इस्तेमाल करने वाले डिवाइसों के पते या CIDR।",
   "routingSheet.delete": "हटाएँ",
   // asset file sheet
   "assetSheet.addTitle": "रिसोर्स फ़ाइल जोड़ें",

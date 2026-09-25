@@ -613,6 +613,17 @@ const pt = {
   "routingSheet.protocols": "Protocolos",
   "routingSheet.protocolsPh": "http\ntls\nbittorrent",
   "routingSheet.protocolsHint": "Protocolos de aplicação opcionais",
+  "routingSheet.processes": "Processos",
+  "routingSheet.processesPh": "firefox\n/usr/bin/curl\n/opt/games/",
+  "routingSheet.processesHint":
+    "Nome, caminho completo ou pasta terminada em /. Visíveis pelo TUN do sing-box, ou quando um app usa diretamente a porta de proxy local.",
+  "routingSheet.packages": "Apps Android",
+  "routingSheet.packagesPh": "com.example.app",
+  "routingSheet.packagesHint": "Nomes de pacote. Só sing-box: o xray ignora regras que citam apps.",
+  "routingSheet.sourceIps": "Endereços de origem",
+  "routingSheet.sourceIpsPh": "192.168.1.0/24",
+  "routingSheet.sourceIpsHint":
+    "Endereços ou CIDRs dos dispositivos que usam a porta de proxy compartilhada.",
   "routingSheet.delete": "Excluir",
   // asset file sheet
   "assetSheet.addTitle": "Adicionar arquivo de recurso",

@@ -121,6 +121,19 @@ pub struct RoutingRule {
     pub network: Option<RuleNetwork>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub protocol: Option<Vec<String>>,
+    /// Local processes that opened the connection: a bare name (`curl`), an
+    /// absolute path (`/usr/bin/curl`), or a directory ending in `/`. Only
+    /// connections made on this machine carry a process, and only a core that
+    /// sees the app's own socket can tell (sing-box's tun, or any core addressed
+    /// directly through its local proxy port).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub process: Option<Vec<String>>,
+    /// Android package names of the app that opened the connection (sing-box only).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub package_name: Option<Vec<String>>,
+    /// Source addresses/CIDRs, e.g. LAN clients using the shared proxy port.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_ip: Option<Vec<String>>,
 }
 
 /// A downloadable asset (geoip/geosite) the daemon keeps current (`AssetFileSchema`).

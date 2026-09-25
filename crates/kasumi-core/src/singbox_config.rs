@@ -762,9 +762,12 @@ fn build_singbox_dns(
                 "proxy" => "remote",
                 _ => continue,
             };
-            if let Some(dr) =
+            if let Some(mut dr) =
                 build_singbox_dns_rule_for_domains(domain, server, &mut dns_rule_set_tags)
             {
+                // Scoped like the route rule, so a per-app rule doesn't move every
+                // app's lookups of these domains to its resolver.
+                push_source_matchers(r, &mut dr);
                 rules.push(dr);
             }
         }
@@ -806,6 +809,60 @@ fn build_singbox_dns(
 
 // ---------- structured routing ----------
 
+/// Match fields that narrow a rule to where the connection came from: the local
+/// process or Android package, or the source address.
+const SOURCE_MATCH_FIELDS: [&str; 5] = [
+    "process_name",
+    "process_path",
+    "process_path_regex",
+    "package_name",
+    "source_ip_cidr",
+];
+
+/// Escape a literal for a Go (RE2) regular expression.
+fn regex_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if r"\.+*?()|[]{}^$".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Add the rule's source matchers to a sing-box route or DNS rule. A process
+/// entry is a bare name, an absolute path, or a directory ending in `/` (the same
+/// forms xray's `process` takes), each mapped to the sing-box field for it.
+fn push_source_matchers(rule: &RoutingRule, out: &mut Value) {
+    for name in rule.process.iter().flatten().map(|x| x.trim()) {
+        if name.is_empty() {
+            continue;
+        }
+        if name.ends_with('/') || name.ends_with('\\') {
+            push_str(
+                out,
+                "process_path_regex",
+                format!("^{}", regex_literal(name)),
+            );
+        } else if name.contains(['/', '\\']) {
+            push_str(out, "process_path", name.to_string());
+        } else {
+            push_str(out, "process_name", name.to_string());
+        }
+    }
+    for pkg in rule.package_name.iter().flatten().map(|x| x.trim()) {
+        if !pkg.is_empty() {
+            push_str(out, "package_name", pkg.to_string());
+        }
+    }
+    for cidr in rule.source_ip.iter().flatten().map(|x| x.trim()) {
+        if !cidr.is_empty() {
+            push_str(out, "source_ip_cidr", cidr.to_string());
+        }
+    }
+}
+
 fn build_base_singbox_rule(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
     let mut out = if rule.outbound_tag == "block" {
         json!({ "action": "reject" })
@@ -834,6 +891,7 @@ fn build_base_singbox_rule(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String)
     {
         out["protocol"] = json!(proto);
     }
+    push_source_matchers(rule, &mut out);
     out
 }
 
@@ -978,7 +1036,11 @@ fn build_structured_singbox_rules(
                 emitted = true;
             }
         }
-        if !emitted && has_match_fields(&base, &["port", "port_range", "network", "protocol"]) {
+        let other_fields = ["port", "port_range", "network", "protocol"];
+        if !emitted
+            && (has_match_fields(&base, &other_fields)
+                || has_match_fields(&base, &SOURCE_MATCH_FIELDS))
+        {
             rules.push(base);
         }
     }
@@ -1459,6 +1521,74 @@ pub fn build_singbox_config(
 mod tests {
     use super::*;
 
+    fn source_rule(outbound: &str) -> RoutingRule {
+        RoutingRule {
+            id: "r".into(),
+            remarks: "r".into(),
+            enabled: true,
+            outbound_tag: outbound.into(),
+            domain: None,
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        }
+    }
+
+    #[test]
+    fn source_matchers_map_to_their_singbox_fields() {
+        let rule = RoutingRule {
+            process: Some(vec![
+                "curl".into(),
+                "/usr/bin/wget".into(),
+                "C:\\Games\\".into(),
+                "/opt/a.b/".into(),
+            ]),
+            package_name: Some(vec!["com.example.app".into()]),
+            source_ip: Some(vec!["192.168.1.0/24".into()]),
+            ..source_rule("direct")
+        };
+        let resolve = |t: &str| t.to_string();
+        let out = build_structured_singbox_rules(std::slice::from_ref(&rule), &resolve);
+        // Source matchers alone still make a rule.
+        assert_eq!(out.rules.len(), 1);
+        let r = &out.rules[0];
+        assert_eq!(r["process_name"], json!(["curl"]));
+        assert_eq!(r["process_path"], json!(["/usr/bin/wget"]));
+        assert_eq!(
+            r["process_path_regex"],
+            json!(["^C:\\\\Games\\\\", "^/opt/a\\.b/"])
+        );
+        assert_eq!(r["package_name"], json!(["com.example.app"]));
+        assert_eq!(r["source_ip_cidr"], json!(["192.168.1.0/24"]));
+        assert_eq!(r["outbound"], "direct");
+    }
+
+    #[test]
+    fn a_scoped_domain_rule_scopes_its_dns_rule_too() {
+        let rule = RoutingRule {
+            domain: Some(vec!["domain:example.com".into()]),
+            package_name: Some(vec!["com.example.app".into()]),
+            ..source_rule("direct")
+        };
+        let s = AdvancedSettings {
+            routing_mode: RoutingMode::Rules,
+            ..Default::default()
+        };
+        let dns = build_singbox_dns(&s, std::slice::from_ref(&rule), &mut Tags::new());
+        let dr = dns["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["domain_suffix"] == json!(["example.com"]))
+            .unwrap();
+        assert_eq!(dr["server"], "local");
+        assert_eq!(dr["package_name"], json!(["com.example.app"]));
+    }
+
     fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
         let mut p = crate::share::parse_share_link(uri, None).unwrap();
         p.meta_mut().id = id.into();
@@ -1926,6 +2056,9 @@ mod tests {
                     port: None,
                     network: None,
                     protocol: None,
+                    process: None,
+                    package_name: None,
+                    source_ip: None,
                 };
                 let dns = build_singbox_dns(&s, &[rule], &mut Tags::new());
                 for r in dns["rules"].as_array().unwrap() {
