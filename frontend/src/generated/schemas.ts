@@ -4,7 +4,7 @@ export const TunEngineSchema = z.union([z.literal("hev"), z.literal("singbox-tun
 export type TunEngine = z.infer<typeof TunEngineSchema>;
 
 
-export const SingboxStackSchema = z.union([z.literal("gvisor"), z.literal("system")]);
+export const SingboxStackSchema = z.union([z.literal("gvisor"), z.literal("mixed"), z.literal("system")]);
 export type SingboxStack = z.infer<typeof SingboxStackSchema>;
 
 

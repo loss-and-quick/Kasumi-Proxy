@@ -199,7 +199,9 @@ pub enum SingboxDomainStrategy {
     Ipv6Only,
 }
 
-/// sing-box tun network stack (see the Zod comment / [[singbox-gvisor-stack]]).
+/// sing-box tun network stack: `gvisor` terminates everything in userspace,
+/// `system` hands TCP and UDP to the kernel stack, `mixed` takes TCP from the
+/// kernel and UDP from gVisor (see [[singbox-gvisor-stack]]).
 #[derive(
     Debug,
     Clone,
@@ -217,6 +219,7 @@ pub enum SingboxStack {
     #[default]
     Gvisor,
     System,
+    Mixed,
 }
 
 /// Mux xudp-over-443 handling.

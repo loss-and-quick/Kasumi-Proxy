@@ -46,7 +46,11 @@ const KNOB_LABEL: Partial<Record<keyof AdvancedSettings_Serialize, DictKey>> = {
 };
 
 // Display names for choice values that are proper names; others show as-is.
-const OPTION_LABEL: Record<string, string> = { gvisor: "gVisor", system: "System" };
+const OPTION_LABEL: Record<string, string> = {
+  gvisor: "gVisor",
+  system: "System",
+  mixed: "Mixed",
+};
 
 // Every engine any core can use, in first-seen order (the settings list order).
 const ENGINES: TunEngine[] = [...new Set(CORE_ENGINE_OPTS.flatMap((c) => TUN_BY_CORE[c].valid))];

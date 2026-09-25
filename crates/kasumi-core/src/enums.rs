@@ -62,7 +62,7 @@ pub fn tun_from_marker(s: &str) -> Option<TunEngine> {
 /// honours and nothing it would silently ignore.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, strum::EnumIter)]
 pub enum TunKnob {
-    /// sing-box TUN network stack (gvisor / system).
+    /// sing-box TUN network stack (gvisor / system / mixed).
     #[serde(rename = "singboxStack")]
     SingboxStack,
     #[serde(rename = "tunConnectTimeoutMs")]
@@ -463,7 +463,7 @@ mod tests {
     fn tun_knob_kinds() {
         assert_eq!(
             serde_json::to_value(TunKnob::SingboxStack.kind()).unwrap(),
-            serde_json::json!({ "kind": "choice", "options": ["gvisor", "system"] })
+            serde_json::json!({ "kind": "choice", "options": ["gvisor", "system", "mixed"] })
         );
         assert_eq!(
             serde_json::to_value(TunKnob::TcpBufferSize.kind()).unwrap(),
