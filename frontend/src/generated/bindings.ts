@@ -527,6 +527,11 @@ export type Meta = {
 	subId?: string | null,
 	/**  Per-profile core override; `None` resolves by protocol/settings. */
 	coreType?: CoreEngine | null,
+	/**
+	 *  Profile this one dials its server through (a proxy chain, see
+	 *  [`crate::chain`]); `None` connects directly.
+	 */
+	via?: string | null,
 };
 
 /**

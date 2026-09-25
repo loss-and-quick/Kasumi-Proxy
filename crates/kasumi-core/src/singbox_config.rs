@@ -5,6 +5,7 @@
 
 use serde_json::{Map, Value, json};
 
+use crate::chain::chain_hops;
 use crate::config_shared::{parse_pem_chain, split_csv, split_list};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
@@ -1237,6 +1238,44 @@ fn build_singbox_profile_targets(
     }
 }
 
+/// Chain the outbound (or wireguard endpoint) built for `p` to its hops
+/// ([`chain_hops`]) with sing-box `detour`: `ob` dials through the first hop, each
+/// hop through the next. Hops not yet in the config are appended — wireguard ones
+/// to `endpoints`, the rest to `outbounds` — tagged by profile id like the routing
+/// targets (`emitted` holds the tags already present).
+fn attach_chain(
+    p: &Profile,
+    ob: &mut Value,
+    s: &AdvancedSettings,
+    profiles: &[Profile],
+    outbounds: &mut Vec<Value>,
+    endpoints: &mut Vec<Value>,
+    emitted: &mut std::collections::HashSet<String>,
+) -> Result<(), String> {
+    let hops = chain_hops(p, profiles)?;
+    let Some(first) = hops.first() else {
+        return Ok(());
+    };
+    ob["detour"] = first.meta().id.as_str().into();
+    for (i, hop) in hops.iter().enumerate() {
+        let tag = &hop.meta().id;
+        if !emitted.insert(tag.clone()) {
+            continue;
+        }
+        let mut hop_ob = build_singbox_outbound(hop, s);
+        hop_ob["tag"] = tag.as_str().into();
+        if let Some(next) = hops.get(i + 1) {
+            hop_ob["detour"] = next.meta().id.as_str().into();
+        }
+        if matches!(hop, Profile::Wireguard(_)) {
+            endpoints.push(hop_ob);
+        } else {
+            outbounds.push(hop_ob);
+        }
+    }
+    Ok(())
+}
+
 /// Build-time inputs the neutral builder can't infer.
 #[derive(Default, Clone, Copy)]
 pub struct SingboxBuildOpts<'a> {
@@ -1255,9 +1294,44 @@ pub fn build_singbox_config(
         return Err("custom profiles run on Xray, not sing-box".to_string());
     }
     let socks_port = s.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-    let proxy = build_singbox_outbound(p, s);
+    let mut proxy = build_singbox_outbound(p, s);
     let is_endpoint = matches!(p, Profile::Wireguard(_));
-    let targets = build_singbox_profile_targets(p, s, routing_rules, profiles);
+    let mut targets = build_singbox_profile_targets(p, s, routing_rules, profiles);
+    let mut hop_outbounds: Vec<Value> = Vec::new();
+    let mut hop_endpoints: Vec<Value> = Vec::new();
+    let mut emitted: std::collections::HashSet<String> = targets
+        .outbounds
+        .iter()
+        .chain(&targets.endpoints)
+        .filter_map(|o| o["tag"].as_str().map(str::to_string))
+        .collect();
+    attach_chain(
+        p,
+        &mut proxy,
+        s,
+        profiles,
+        &mut hop_outbounds,
+        &mut hop_endpoints,
+        &mut emitted,
+    )?;
+    for target in targets
+        .outbounds
+        .iter_mut()
+        .chain(targets.endpoints.iter_mut())
+    {
+        let id = target["tag"].as_str().unwrap_or_default().to_string();
+        if let Some(tp) = profiles.iter().find(|x| x.meta().id == id) {
+            attach_chain(
+                tp,
+                target,
+                s,
+                profiles,
+                &mut hop_outbounds,
+                &mut hop_endpoints,
+                &mut emitted,
+            )?;
+        }
+    }
     let mut shared_rule_set_tags = Tags::new();
     let dns = build_singbox_dns(s, routing_rules, &mut shared_rule_set_tags);
 
@@ -1311,6 +1385,7 @@ pub fn build_singbox_config(
         outbounds.push(proxy.clone());
     }
     outbounds.extend(targets.outbounds.iter().cloned());
+    outbounds.extend(hop_outbounds);
     outbounds.push(direct);
 
     let route = build_singbox_route(
@@ -1338,6 +1413,7 @@ pub fn build_singbox_config(
         endpoints.push(proxy);
     }
     endpoints.extend(targets.endpoints);
+    endpoints.extend(hop_endpoints);
     if !endpoints.is_empty() {
         cfg.as_object_mut()
             .unwrap()
@@ -1349,6 +1425,51 @@ pub fn build_singbox_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
+        let mut p = crate::share::parse_share_link(uri, None).unwrap();
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    }
+
+    #[test]
+    fn chain_detours_each_hop_through_the_next() {
+        let all = vec![
+            chained("tuic://u:pw@exit.ex:443?sni=exit.ex", "exit", Some("mid")),
+            chained(
+                "wireguard://c2s@mid.ex:51820?publickey=cGs&address=10.0.0.2/32",
+                "mid",
+                Some("entry"),
+            ),
+            chained(
+                "trojan://pw@entry.ex:443?security=tls&sni=entry.ex",
+                "entry",
+                None,
+            ),
+        ];
+        let cfg = build_singbox_config(
+            &all[0],
+            &AdvancedSettings::default(),
+            &[],
+            &all,
+            SingboxBuildOpts::default(),
+        )
+        .unwrap();
+        let find = |key: &str, tag: &str| {
+            cfg[key]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["tag"] == tag)
+                .cloned()
+                .unwrap()
+        };
+        assert_eq!(find("outbounds", "proxy")["detour"], "mid");
+        // A wireguard hop is an endpoint, and still detours onward.
+        assert_eq!(find("endpoints", "mid")["detour"], "entry");
+        assert!(find("outbounds", "entry").get("detour").is_none());
+    }
 
     #[test]
     fn sidecar_bridge_forwards_to_socks_with_named_off_route_tun() {

@@ -214,6 +214,7 @@ export const MetaSchema = z.object({
 	groupId: z.string(),
 	subId: z.string().nullable().optional(),
 	coreType: CoreEngineSchema.nullable().optional(),
+	via: z.string().nullable().optional(),
 });
 export type Meta = z.infer<typeof MetaSchema>;
 

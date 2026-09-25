@@ -102,7 +102,7 @@ pub fn same_profile_identity(a: &Profile, b: &Profile) -> bool {
 fn profile_dedup_key(p: &Profile) -> String {
     let mut v = serde_json::to_value(p).expect("profile serializes");
     if let Some(meta) = v.get_mut("meta").and_then(|m| m.as_object_mut()) {
-        for k in ["id", "remarks", "subId", "groupId", "coreType"] {
+        for k in ["id", "remarks", "subId", "groupId", "coreType", "via"] {
             meta.remove(k);
         }
     }
@@ -237,24 +237,30 @@ pub fn next_active_id_after_subscription_update(
     sub_id: &str,
     fresh_mapped: &[Profile],
 ) -> Option<String> {
-    let active = profiles
-        .iter()
-        .find(|p| Some(p.meta().id.as_str()) == active_id);
-    let Some(active) = active else {
-        return active_id.map(str::to_string);
+    refreshed_id(profiles, active_id?, sub_id, fresh_mapped)
+}
+
+/// Where a reference to profile `id` points after `sub_id`'s profiles were
+/// re-created with new ids: unchanged when `id` isn't one of them, else the
+/// refreshed profile with the same identity (then the same name), else `None`.
+fn refreshed_id(
+    profiles: &[Profile],
+    id: &str,
+    sub_id: &str,
+    fresh_mapped: &[Profile],
+) -> Option<String> {
+    let Some(old) = profiles.iter().find(|p| p.meta().id == id) else {
+        return Some(id.to_string());
     };
-    if active.meta().sub_id.as_deref() != Some(sub_id) {
-        return active_id.map(str::to_string);
+    if old.meta().sub_id.as_deref() != Some(sub_id) {
+        return Some(id.to_string());
     }
-    if let Some(exact) = fresh_mapped
-        .iter()
-        .find(|p| same_profile_identity(p, active))
-    {
+    if let Some(exact) = fresh_mapped.iter().find(|p| same_profile_identity(p, old)) {
         return Some(exact.meta().id.clone());
     }
     fresh_mapped
         .iter()
-        .find(|p| p.protocol() == active.protocol() && p.meta().remarks == active.meta().remarks)
+        .find(|p| p.protocol() == old.protocol() && p.meta().remarks == old.meta().remarks)
         .map(|p| p.meta().id.clone())
 }
 
@@ -288,8 +294,24 @@ pub fn apply_subscription_profiles(
         .map(|p| p.meta().sub_id.as_deref() == Some(sub.id.as_str()))
         .unwrap_or(false);
 
+    // A share link carries no chain, so a refreshed profile keeps the `via` the
+    // user gave its previous copy; then every `via` into this subscription follows
+    // its hop to the hop's new id (or is dropped when the hop is gone).
+    let mut fresh: Vec<Profile> = fresh_mapped.to_vec();
+    for f in &mut fresh {
+        if let Some(old) = profiles.iter().find(|p| {
+            p.meta().sub_id.as_deref() == Some(sub.id.as_str()) && same_profile_identity(p, f)
+        }) {
+            f.meta_mut().via = old.meta().via.clone();
+        }
+    }
     let mut new_profiles = remove_profiles_by_sub_id(profiles, &sub.id, sub.group_id.as_deref());
-    new_profiles.extend(fresh_mapped.iter().cloned());
+    new_profiles.extend(fresh);
+    for p in &mut new_profiles {
+        if let Some(via) = p.meta().via.clone() {
+            p.meta_mut().via = refreshed_id(profiles, &via, &sub.id, fresh_mapped);
+        }
+    }
 
     let new_subs = subscriptions
         .iter()
@@ -497,6 +519,69 @@ mod tests {
         assert_eq!(r.active_id.as_deref(), Some(mapped[0].meta().id.as_str())); // followed by name
         assert_eq!(r.subscriptions[0].count, 1);
         assert_eq!(r.subscriptions[0].last_updated, "2026-06-14");
+    }
+
+    #[test]
+    fn apply_keeps_proxy_chains_across_the_refresh() {
+        let s = sub("s1", Some("g-main"));
+        // `exit` (from the sub) dials through the manual `entry`; the manual
+        // `local` dials through the sub's `hop`. Both sub profiles get new ids.
+        let mut exit = p("vless://u@exit.ex:443?type=tcp#Exit");
+        exit.meta_mut().id = "exit".into();
+        exit.meta_mut().sub_id = Some("s1".into());
+        exit.meta_mut().via = Some("entry".into());
+        let mut hop = p("trojan://pw@hop.ex:443#Hop");
+        hop.meta_mut().id = "hop".into();
+        hop.meta_mut().sub_id = Some("s1".into());
+        let mut entry = p("trojan://pw@entry.ex:443#Entry");
+        entry.meta_mut().id = "entry".into();
+        let mut local = p("trojan://pw@local.ex:443#Local");
+        local.meta_mut().id = "local".into();
+        local.meta_mut().via = Some("hop".into());
+
+        let fresh = vec![
+            p("vless://u@exit.ex:443?type=tcp#Exit"),
+            p("trojan://pw@hop.ex:443#Hop"),
+        ];
+        let mapped = map_fetched_subscription_profiles(&fresh, &s, &profile_filter_regex(""));
+        let r = apply_subscription_profiles(
+            &[exit, hop, entry, local],
+            std::slice::from_ref(&s),
+            None,
+            &s,
+            &mapped,
+            "now",
+        );
+        let find = |remarks: &str| {
+            r.profiles
+                .iter()
+                .find(|x| x.meta().remarks == remarks)
+                .unwrap()
+                .meta()
+                .clone()
+        };
+        assert_eq!(find("Exit").via.as_deref(), Some("entry"));
+        assert_eq!(find("Local").via, Some(find("Hop").id));
+
+        // A hop the refresh dropped leaves no dangling reference behind.
+        let r = apply_subscription_profiles(
+            &r.profiles,
+            std::slice::from_ref(&s),
+            None,
+            &s,
+            &mapped[..1],
+            "later",
+        );
+        assert_eq!(find_in(&r.profiles, "Local").via, None);
+    }
+
+    fn find_in(profiles: &[Profile], remarks: &str) -> crate::mixins::Meta {
+        profiles
+            .iter()
+            .find(|x| x.meta().remarks == remarks)
+            .unwrap()
+            .meta()
+            .clone()
     }
 
     fn sub(id: &str, group: Option<&str>) -> Subscription {
