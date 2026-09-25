@@ -477,7 +477,7 @@ const ar = {
   "settings.fragmentLength": "طول التجزئة",
   "settings.fragmentDelay": "تأخير التجزئة",
   "settings.tunMtu": "TUN MTU",
-  "settings.tunHevTuning": "ضبط hev",
+  "settings.tunEngineSettings": "إعدادات المحرك",
   "settings.tunExclude": "استثناءات TUN",
   "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
   "settings.tunExcludeHint":
@@ -755,7 +755,6 @@ const ar = {
   "settings.coresPreset": "النواة لكل بروتوكول",
   "settings.coresPreset.default": "افتراضي",
   "settings.coresPreset.custom": "مخصص",
-  "settings.tunEngineFor": "محرك TUN لـ {core}",
   "settings.logs": "السجلات",
   "settings.page.routing": "التوجيه",
   "settings.page.cores": "النوى و TUN",

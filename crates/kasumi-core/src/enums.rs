@@ -57,14 +57,67 @@ pub fn tun_from_marker(s: &str) -> Option<TunEngine> {
     serde_json::from_value(serde_json::Value::String(s.trim().to_owned())).ok()
 }
 
-/// Whether a TUN engine reads the userspace tuning knobs (connect / read-write
-/// timeouts, buffer sizes) the settings UI surfaces. Only the hev engine consumes
-/// them today; a new engine must opt in here (exhaustive match), so the UI can't
-/// silently hide a tunable engine's knobs — the single source for that decision.
-pub fn tun_has_tuning(tun: TunEngine) -> bool {
+/// A per-engine TUN setting. The wire value is the `AdvancedSettings` field it
+/// reads, so the settings UI can show exactly the fields the chosen engine
+/// honours and nothing it would silently ignore.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, strum::EnumIter)]
+pub enum TunKnob {
+    /// sing-box TUN network stack (gvisor / system).
+    #[serde(rename = "singboxStack")]
+    SingboxStack,
+    #[serde(rename = "tunConnectTimeoutMs")]
+    ConnectTimeout,
+    #[serde(rename = "tunTcpRwTimeoutMs")]
+    TcpRwTimeout,
+    #[serde(rename = "tunUdpRwTimeoutMs")]
+    UdpRwTimeout,
+    #[serde(rename = "tunTcpBufferSize")]
+    TcpBufferSize,
+    #[serde(rename = "tunUdpRecvBufferSize")]
+    UdpRecvBufferSize,
+}
+
+/// How a [`TunKnob`] is edited: a number, or one of a fixed set of wire values.
+/// The UI renders controls from this, so it needs no per-field knowledge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum TunKnobKind {
+    Number,
+    Choice { options: Vec<String> },
+}
+
+impl TunKnob {
+    pub fn kind(self) -> TunKnobKind {
+        match self {
+            TunKnob::SingboxStack => TunKnobKind::Choice {
+                options: wire_values::<crate::state::SingboxStack>(),
+            },
+            TunKnob::ConnectTimeout
+            | TunKnob::TcpRwTimeout
+            | TunKnob::UdpRwTimeout
+            | TunKnob::TcpBufferSize
+            | TunKnob::UdpRecvBufferSize => TunKnobKind::Number,
+        }
+    }
+}
+
+/// The engine-specific settings each TUN engine consumes, beyond the ones every
+/// engine shares (MTU, excluded addresses, strict routing). Must match what the
+/// engine's config builder actually reads: `singbox_tun_inbound` takes the stack,
+/// `build_tun2socks_config` the UDP timeout and TCP buffer, `build_hev_config`
+/// all five tuning knobs. Exhaustive match, so a new engine has to declare its own.
+pub fn tun_knobs(tun: TunEngine) -> &'static [TunKnob] {
+    use TunKnob::*;
     match tun {
-        TunEngine::Hev => true,
-        TunEngine::SingboxTun | TunEngine::Tun2socks => false,
+        TunEngine::SingboxTun => &[SingboxStack],
+        TunEngine::Tun2socks => &[UdpRwTimeout, TcpBufferSize],
+        TunEngine::Hev => &[
+            ConnectTimeout,
+            TcpRwTimeout,
+            UdpRwTimeout,
+            TcpBufferSize,
+            UdpRecvBufferSize,
+        ],
     }
 }
 
@@ -324,8 +377,6 @@ fn wire_values<T: strum::IntoEnumIterator + Serialize>() -> Vec<String> {
 /// single source for the frontend's protocol/transport/security `<Select>`s
 /// (emitted to `frontend/src/generated/defaults.ts`).
 pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
-    use strum::IntoEnumIterator;
-
     use crate::contract::LogTarget;
     use crate::profile::Protocol;
     use crate::state::RoutingMode;
@@ -335,13 +386,6 @@ pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
         ("CORE_ENGINE_OPTS", wire_values::<CoreEngine>()),
         ("TUN_ENGINE_OPTS", wire_values::<TunEngine>()),
         ("LOG_TARGET_OPTS", wire_values::<LogTarget>()),
-        (
-            "TUN_TUNING_ENGINES",
-            TunEngine::iter()
-                .filter(|&t| tun_has_tuning(t))
-                .map(tun_marker)
-                .collect(),
-        ),
         ("NETWORK_OPTS", wire_values::<Network>()),
         ("SECURITY_OPTS", wire_values::<Security>()),
         ("HEADER_TYPE_OPTS", wire_values::<HeaderType>()),
@@ -391,18 +435,40 @@ mod tests {
     }
 
     #[test]
-    fn tun_tuning_engines_is_hev_only() {
-        // Only hev reads the tuning knobs today.
-        assert!(tun_has_tuning(TunEngine::Hev));
-        assert!(!tun_has_tuning(TunEngine::Tun2socks));
-        assert!(!tun_has_tuning(TunEngine::SingboxTun));
-        // The generated list is derived from that predicate (single source).
-        let tuning: Vec<String> = editor_option_lists()
-            .into_iter()
-            .find(|(k, _)| *k == "TUN_TUNING_ENGINES")
-            .map(|(_, v)| v)
-            .unwrap();
-        assert_eq!(tuning, vec!["hev".to_string()]);
+    fn tun_knobs_name_real_settings_fields() {
+        use strum::IntoEnumIterator;
+        // Each knob's wire value must be a serialized `AdvancedSettings` field, or
+        // the UI would render a control bound to nothing.
+        let settings = serde_json::to_value(crate::state::AdvancedSettings::default()).unwrap();
+        for knob in TunKnob::iter() {
+            let field = wire_value(&knob);
+            assert!(
+                settings.get(&field).is_some(),
+                "{field} is not a settings field"
+            );
+        }
+    }
+
+    #[test]
+    fn tun_knobs_per_engine() {
+        assert_eq!(tun_knobs(TunEngine::SingboxTun), &[TunKnob::SingboxStack]);
+        assert_eq!(
+            tun_knobs(TunEngine::Tun2socks),
+            &[TunKnob::UdpRwTimeout, TunKnob::TcpBufferSize]
+        );
+        assert_eq!(tun_knobs(TunEngine::Hev).len(), 5);
+    }
+
+    #[test]
+    fn tun_knob_kinds() {
+        assert_eq!(
+            serde_json::to_value(TunKnob::SingboxStack.kind()).unwrap(),
+            serde_json::json!({ "kind": "choice", "options": ["gvisor", "system"] })
+        );
+        assert_eq!(
+            serde_json::to_value(TunKnob::TcpBufferSize.kind()).unwrap(),
+            serde_json::json!({ "kind": "number" })
+        );
     }
 
     #[test]

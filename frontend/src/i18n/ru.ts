@@ -427,7 +427,7 @@ const ru = {
   "settings.fragmentLength": "Длина фрагмента",
   "settings.fragmentDelay": "Задержка фрагментации",
   "settings.tunMtu": "TUN MTU",
-  "settings.tunHevTuning": "Настройки hev",
+  "settings.tunEngineSettings": "Настройки движка",
   "settings.tunExclude": "Исключения TUN",
   "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
   "settings.tunExcludeHint":
@@ -673,7 +673,6 @@ const ru = {
   "settings.coresPreset": "Ядро для протоколов",
   "settings.coresPreset.default": "По умолчанию",
   "settings.coresPreset.custom": "Свои",
-  "settings.tunEngineFor": "TUN-движок для {core}",
   "settings.logs": "Журналы",
   "settings.page.routing": "Маршрутизация",
   "settings.page.cores": "Ядра и TUN",

@@ -565,21 +565,5 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .nav-row.selected > .list-row, .nav-row.selected + .nav-row > .list-row { border-top-color: transparent; }
 .nav-row.selected .list-row { padding-left: 10px; padding-right: 10px; }
 
-/* TUN engine matrix: one row per core, one radio column per engine. */
-.tun-matrix { display: grid; align-items: center; row-gap: 2px; padding: 6px 0 10px; }
-.tun-matrix .tm-head { font-size: var(--fs-support); font-weight: 500; color: var(--on-surface-variant); text-align: center; padding: 4px 2px 6px; }
-.tun-matrix .tm-core { font-size: var(--fs-title); font-weight: 500; color: var(--on-surface); padding: 8px 0; }
-.tun-matrix .tm-cell { display: flex; justify-content: center; }
-.radio {
-  width: 40px; height: 40px; border-radius: 50%; border: none; background: none; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; transition: background var(--dur-fast);
-}
-.radio:hover:not(:disabled) { background: oklch(1 0 0 / 0.06); }
-.radio:disabled { cursor: not-allowed; opacity: 0.4; }
-.radio::before {
-  content: ""; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
-  border: 2px solid var(--outline); transition: border var(--dur-fast), border-color var(--dur-fast);
-}
-.radio[aria-pressed="true"]::before { border: 6px solid var(--primary); }
 /* Compact number box on the right of a setting row. */
 .input.compact { width: 104px; padding: 8px 10px; font-family: var(--font-ui); text-align: right; }

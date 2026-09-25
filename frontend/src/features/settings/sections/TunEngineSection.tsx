@@ -5,12 +5,22 @@ import {
   Field,
   SectionLabel,
   Segmented,
+  Select,
   SettingRow,
   Switch,
 } from "../../../components";
-import type { CoreEngine, TunEngine } from "../../../generated/bindings";
-import { CORE_ENGINE_OPTS, TUN_BY_CORE, TUN_TUNING_ENGINES } from "../../../generated/defaults";
-import { useT } from "../../../i18n";
+import type {
+  AdvancedSettings_Serialize,
+  CoreEngine,
+  TunEngine,
+} from "../../../generated/bindings";
+import {
+  CORE_ENGINE_OPTS,
+  TUN_BY_CORE,
+  TUN_KNOBS_BY_ENGINE,
+  type TunKnobSpec,
+} from "../../../generated/defaults";
+import { type DictKey, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
 // Display labels for the TUN engines. Presentation only; the selectable engines,
@@ -23,7 +33,22 @@ const ENGINE_LABEL: Record<TunEngine, string> = {
   hev: "hev",
 };
 
-// Every engine any core can use, in first-seen order: the matrix columns.
+// Labels for engine settings fields. Which fields an engine reads, and how each is
+// edited, comes from Rust (`TUN_KNOBS_BY_ENGINE`); this only names them. A field
+// without a label here still renders, under its raw name.
+const KNOB_LABEL: Partial<Record<keyof AdvancedSettings_Serialize, DictKey>> = {
+  singboxStack: "settings.singboxStack",
+  tunConnectTimeoutMs: "settings.tunConnectTimeout",
+  tunTcpRwTimeoutMs: "settings.tunTcpRwTimeout",
+  tunUdpRwTimeoutMs: "settings.tunUdpRwTimeout",
+  tunTcpBufferSize: "settings.tunTcpBuffer",
+  tunUdpRecvBufferSize: "settings.tunUdpRecvBuffer",
+};
+
+// Display names for choice values that are proper names; others show as-is.
+const OPTION_LABEL: Record<string, string> = { gvisor: "gVisor", system: "System" };
+
+// Every engine any core can use, in first-seen order (the settings list order).
 const ENGINES: TunEngine[] = [...new Set(CORE_ENGINE_OPTS.flatMap((c) => TUN_BY_CORE[c].valid))];
 
 export function TunEngineSection({
@@ -40,61 +65,54 @@ export function TunEngineSection({
   const setTunFor = (core: CoreEngine, value: TunEngine) =>
     set("tunByCore", { ...(settings.tunByCore ?? {}), [core]: value });
 
-  // Which engines expose the tuning knobs below is a Rust fact (TUN_TUNING_ENGINES);
-  // only surface the block when at least one core uses such an engine.
-  const showTuning = CORE_ENGINE_OPTS.some((core) => TUN_TUNING_ENGINES.includes(tunFor(core)));
-  // The stack choice only matters when sing-box's own TUN inbound is in use.
-  const singboxTun = CORE_ENGINE_OPTS.some((core) => tunFor(core) === "singbox-tun");
+  // Settings of the engines actually in use, each field once, with the engines
+  // that read it (tun2socks and hev share the UDP timeout and TCP buffer).
+  const inUse = ENGINES.filter((engine) =>
+    CORE_ENGINE_OPTS.some((core) => tunFor(core) === engine),
+  );
+  const knobs: { spec: TunKnobSpec; engines: TunEngine[] }[] = [];
+  for (const engine of inUse) {
+    for (const spec of TUN_KNOBS_BY_ENGINE[engine]) {
+      const seen = knobs.find((k) => k.spec.field === spec.field);
+      if (seen) seen.engines.push(engine);
+      else knobs.push({ spec, engines: [engine] });
+    }
+  }
   const excludeCount = (settings.tunExcludeAddresses ?? "").split(/[\s,]+/).filter(Boolean).length;
 
   return (
     <>
       <SectionLabel>{t("settings.tunEngine")}</SectionLabel>
       <Card style={{ padding: "4px 14px" }}>
-        <div
-          className="tun-matrix"
-          style={{ gridTemplateColumns: `minmax(72px, auto) repeat(${ENGINES.length}, 1fr)` }}
-        >
-          <span />
-          {ENGINES.map((engine) => (
-            <span key={engine} className="tm-head">
-              {ENGINE_LABEL[engine]}
-            </span>
-          ))}
-          {CORE_ENGINE_OPTS.map((core) => (
-            <div key={core} style={{ display: "contents" }}>
-              <span className="tm-core">{core}</span>
-              {ENGINES.map((engine) => (
-                <span key={engine} className="tm-cell">
-                  <button
-                    type="button"
-                    className="radio"
-                    aria-pressed={tunFor(core) === engine}
-                    aria-label={`${t("settings.tunEngineFor", { core })}: ${ENGINE_LABEL[engine]}`}
-                    disabled={!TUN_BY_CORE[core].valid.includes(engine)}
-                    onClick={() => setTunFor(core, engine)}
-                  />
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div className="hint" style={{ paddingBottom: 10 }}>
-          {t("settings.tunEngineHint")}
-        </div>
-        {singboxTun && (
-          <SettingRow title={t("settings.singboxStack")}>
-            <Segmented
-              size="sm"
-              ariaLabel={t("settings.singboxStack")}
-              value={settings.singboxStack}
-              onChange={(value) => set("singboxStack", value)}
-              options={[
-                { value: "gvisor", label: "gVisor" },
-                { value: "system", label: "System" },
-              ]}
+        {CORE_ENGINE_OPTS.map((core) => (
+          <SettingRow key={core} title={core}>
+            <Select
+              style={{ width: 160 }}
+              value={tunFor(core)}
+              disabled={TUN_BY_CORE[core].valid.length < 2}
+              onChange={(v) => setTunFor(core, v)}
+              options={TUN_BY_CORE[core].valid.map((e) => ({ value: e, label: ENGINE_LABEL[e] }))}
             />
           </SettingRow>
+        ))}
+        <div className="hint" style={{ padding: "4px 0 10px" }}>
+          {t("settings.tunEngineHint")}
+        </div>
+        {knobs.length > 0 && (
+          <div style={{ paddingBottom: 6 }}>
+            <div className="field-label" style={{ margin: "4px 0 0" }}>
+              {t("settings.tunEngineSettings")}
+            </div>
+            {knobs.map(({ spec, engines }) => (
+              <TunKnobRow
+                key={spec.field}
+                spec={spec}
+                hint={engines.map((e) => ENGINE_LABEL[e]).join(" · ")}
+                settings={settings}
+                set={set}
+              />
+            ))}
+          </div>
         )}
       </Card>
 
@@ -130,49 +148,53 @@ export function TunEngineSection({
             />
           </Disclosure>
         </div>
-        {showTuning && (
-          <div className="setting-row" style={{ display: "block", padding: 0 }}>
-            <Disclosure label={t("settings.tunHevTuning")}>
-              <HevTuning settings={settings} set={set} />
-            </Disclosure>
-          </div>
-        )}
       </Card>
     </>
   );
 }
 
-/** hev's buffer/timeout knobs as compact number rows instead of full-width fields. */
-function HevTuning({
+/** One engine setting, rendered from its Rust-side description. */
+function TunKnobRow({
+  spec,
+  hint,
   settings,
   set,
 }: {
+  spec: TunKnobSpec;
+  hint: string;
   settings: AdvancedSettings;
   set: <K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) => void;
 }) {
   const t = useT();
-  const rows = [
-    ["tunConnectTimeoutMs", t("settings.tunConnectTimeout")],
-    ["tunTcpRwTimeoutMs", t("settings.tunTcpRwTimeout")],
-    ["tunUdpRwTimeoutMs", t("settings.tunUdpRwTimeout")],
-    ["tunTcpBufferSize", t("settings.tunTcpBuffer")],
-    ["tunUdpRecvBufferSize", t("settings.tunUdpRecvBuffer")],
-  ] as const;
+  const labelKey = KNOB_LABEL[spec.field];
+  const label = labelKey ? t(labelKey) : spec.field;
+  // The spec says what kind of value the field holds; the settings type can't
+  // narrow on a runtime field name, so read and write through a plain record.
+  const current = (settings as Record<string, unknown>)[spec.field];
+  const write = (value: string | number) =>
+    set(spec.field as keyof AdvancedSettings, value as never);
+
   return (
-    <div style={{ paddingBottom: 6 }}>
-      {rows.map(([key, label]) => (
-        <SettingRow key={key} title={label}>
-          <input
-            className="input compact"
-            type="number"
-            inputMode="numeric"
-            aria-label={label}
-            value={settings[key]}
-            onWheel={blurOnWheel}
-            onChange={(e) => set(key, Number(e.target.value))}
-          />
-        </SettingRow>
-      ))}
-    </div>
+    <SettingRow title={label} hint={hint}>
+      {spec.kind === "choice" ? (
+        <Segmented
+          size="sm"
+          ariaLabel={label}
+          value={String(current ?? "")}
+          onChange={write}
+          options={spec.options.map((o) => ({ value: o, label: OPTION_LABEL[o] ?? o }))}
+        />
+      ) : (
+        <input
+          className="input compact"
+          type="number"
+          inputMode="numeric"
+          aria-label={label}
+          value={typeof current === "number" ? current : ""}
+          onWheel={blurOnWheel}
+          onChange={(e) => write(Number(e.target.value))}
+        />
+      )}
+    </SettingRow>
   );
 }

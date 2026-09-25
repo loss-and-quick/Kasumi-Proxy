@@ -412,7 +412,7 @@ const en = {
   "settings.fragmentLength": "Fragment length",
   "settings.fragmentDelay": "Fragment delay",
   "settings.tunMtu": "TUN MTU",
-  "settings.tunHevTuning": "hev tuning",
+  "settings.tunEngineSettings": "Engine settings",
   "settings.tunExclude": "TUN exclusions",
   "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
   "settings.tunExcludeHint":
@@ -644,7 +644,6 @@ const en = {
   "settings.coresPreset": "Core for each protocol",
   "settings.coresPreset.default": "Default",
   "settings.coresPreset.custom": "Custom",
-  "settings.tunEngineFor": "TUN engine for {core}",
   "settings.logs": "Logs",
   "settings.page.routing": "Routing",
   "settings.page.cores": "Cores & TUN",

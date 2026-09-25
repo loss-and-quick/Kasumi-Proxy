@@ -407,7 +407,7 @@ const es = {
   "settings.fragmentLength": "Longitud de los fragmentos",
   "settings.fragmentDelay": "Retardo de fragmentación",
   "settings.tunMtu": "MTU de TUN",
-  "settings.tunHevTuning": "Ajustes de hev",
+  "settings.tunEngineSettings": "Ajustes del motor",
   "settings.tunExclude": "Exclusiones TUN",
   "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
   "settings.tunExcludeHint":
@@ -638,7 +638,6 @@ const es = {
   "settings.coresPreset": "Núcleo por protocolo",
   "settings.coresPreset.default": "Predeterminado",
   "settings.coresPreset.custom": "Personalizado",
-  "settings.tunEngineFor": "Motor TUN para {core}",
   "settings.logs": "Registros",
   "settings.page.routing": "Enrutamiento",
   "settings.page.cores": "Núcleos y TUN",

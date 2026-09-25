@@ -402,7 +402,7 @@ const vi = {
   "settings.fragmentLength": "Độ dài phân mảnh",
   "settings.fragmentDelay": "Độ trễ phân mảnh",
   "settings.tunMtu": "TUN MTU",
-  "settings.tunHevTuning": "Tinh chỉnh hev",
+  "settings.tunEngineSettings": "Cài đặt engine",
   "settings.tunExclude": "Các loại trừ TUN",
   "settings.tunExcludePh": "172.17.0.0/16, 172.18.0.0/16",
   "settings.tunExcludeHint":
@@ -633,7 +633,6 @@ const vi = {
   "settings.coresPreset": "Lõi cho từng giao thức",
   "settings.coresPreset.default": "Mặc định",
   "settings.coresPreset.custom": "Tùy chỉnh",
-  "settings.tunEngineFor": "Engine TUN cho {core}",
   "settings.logs": "Nhật ký",
   "settings.page.routing": "Định tuyến",
   "settings.page.cores": "Lõi và TUN",
