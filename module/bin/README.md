@@ -1,40 +1,20 @@
-# Bundled Binaries
+# Bundled binaries
 
-These binaries are **not committed to git** — the cores and the `geodat2srs`
-converter are fetched/built by `scripts/fetch-binaries.sh android` into
-`bin/arm64-v8a/` and `bin/x86_64/`, and the `kasumi-proxy` daemon is cross-built
-per arch by `scripts/build-daemon-android.sh`. Pinned versions live in
-`scripts/binary-versions.sh`; override via env vars
-`XRAY_VERSION` / `TUN2SOCKS_VERSION` / `SINGBOX_VERSION`.
-
----
-
-## Xray-core
-
-- **Source:** <https://github.com/XTLS/Xray-core>
-- **License:** Mozilla Public License 2.0 — see [`licenses/xray-LICENSE`](licenses/xray-LICENSE)
-- **Role:** Primary proxy core. Handles VLESS, VMess, Trojan, VLESS-XTLS-REALITY, Shadowsocks, and all other non-Hysteria2/TUIC protocols.
-
----
-
-## sing-box
-
-- **Source:** <https://github.com/SagerNet/sing-box>
-- **License:** GNU General Public License v3.0 — see [`licenses/sing-box-LICENSE`](licenses/sing-box-LICENSE)
-- **Role:** Secondary proxy core. Used for Hysteria2 and TUIC profiles. Also provides the tun inbound with `exclude_uid` / `include_uid` for per-profile app filtering.
-
----
-
-## tun2socks
-
-- **Source:** <https://github.com/xjasonlyu/tun2socks>
-- **License:** MIT — see [`licenses/tun2socks-LICENSE`](licenses/tun2socks-LICENSE)
-- **Role:** Userspace SOCKS5-to-tun bridge. Used in xray mode to forward tun-captured traffic into xray's SOCKS inbound.
-
----
-
-## Fetching
+Nothing here is committed except this file and `licenses/`. The binaries are produced at build
+time:
 
 ```sh
-scripts/fetch-binaries.sh android
+scripts/fetch-binaries.sh android   # cores + geodat2srs → bin/{arm64-v8a,x86_64}/
+scripts/build-daemon-android.sh     # kasumi-proxy daemon → the same place
 ```
+
+Versions are pinned in `scripts/binary-versions.sh` and can be overridden through environment
+variables (`XRAY_VERSION`, `SINGBOX_VERSION`, `TUN2SOCKS_VERSION`, `HEV_VERSION`).
+
+| Binary | Role | License |
+| --- | --- | --- |
+| [Xray-core](https://github.com/XTLS/Xray-core) | Main core: VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard | MPL-2.0, [`licenses/xray-LICENSE`](licenses/xray-LICENSE) |
+| [sing-box](https://github.com/SagerNet/sing-box) | Second core: Hysteria2, TUIC, AnyTLS, Naive, ShadowTLS. Also a TUN engine | GPL-3.0, [`licenses/sing-box-LICENSE`](licenses/sing-box-LICENSE) |
+| [tun2socks](https://github.com/xjasonlyu/tun2socks) | TUN → SOCKS5 bridge for Xray | MIT, [`licenses/tun2socks-LICENSE`](licenses/tun2socks-LICENSE) |
+| [hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) | Alternative TUN engine | MIT |
+| [geodat2srs](https://github.com/loss-and-quick/geodat2srs) | Converts geoip/geosite `.dat` → sing-box `.srs`. Built from source | — |
