@@ -11,7 +11,7 @@
 
 ## Affected layer
 
-<!-- Tick all that apply (see AGENTS.md "Layout"). These mirror the auto-applied labels. -->
+<!-- Tick all that apply (layout: CONTRIBUTING.md). These mirror the auto-applied labels. -->
 
 - [ ] `frontend/` — React Web UI
 - [ ] `crates/` · `src-tauri/` — Rust core / backend / Tauri desktop
@@ -22,7 +22,7 @@
 
 ## Verification
 
-<!-- Run the checks relevant to the layer you touched and tick them (AGENTS.md "Verify before declaring done"). The supported Rust path is the nix dev shell. -->
+<!-- Run the checks relevant to the layer you touched and tick them (CONTRIBUTING.md "Checks before a PR"). Plain cargo/bun or `nix develop` both work. -->
 
 Rust (`crates/` · `src-tauri/`):
 
