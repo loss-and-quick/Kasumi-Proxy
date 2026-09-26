@@ -8,6 +8,7 @@ use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
 
 use crate::commands::{self, CommandError, Response};
 use crate::fs::read_text;
+use crate::fsjson::read_json;
 use crate::lifecycle::resolve_and_write_config;
 use crate::platform::StopDataPath;
 use crate::updater::LifecycleControl;
@@ -45,6 +46,10 @@ impl Service {
                     })
                     .await
                     .map_err(|e| e.to_string())?;
+                // Nothing runs until the new start lands, so nothing can be stale:
+                // an edit made just before (a profile switch) or during this start
+                // must not raise "restart to apply" over the restart itself.
+                self.note_data_path_stopped();
                 let (opts, built) = resolve_and_write_config(&*self.platform, id.as_deref())
                     .await
                     .map_err(|e| e.0)?;
@@ -60,6 +65,7 @@ impl Service {
                 // system/pac, cleared otherwise — covers mode switches).
                 self.platform.set_os_proxy(mode, engine, socks_port).await;
                 self.note_data_path_started(built, mode);
+                self.settle_pending_restart().await;
                 Ok(())
             }
             LifecycleCmd::Stop => {
@@ -85,6 +91,7 @@ impl Service {
                         })
                         .await
                         .map_err(|e| e.to_string())?;
+                    self.note_data_path_stopped();
                     let (opts, built) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
@@ -92,6 +99,7 @@ impl Service {
                     match self.platform.start_data_path(opts).await {
                         Ok(()) => {
                             self.note_data_path_started(built, mode);
+                            self.settle_pending_restart().await;
                             Ok(())
                         }
                         Err(e) => {
@@ -120,6 +128,16 @@ impl Service {
     pub(super) fn note_data_path_stopped(&self) {
         *self.running_config.lock().unwrap() = None;
         self.pending_restart.store(false, Ordering::SeqCst);
+    }
+
+    /// Re-diff the fresh baseline against the saved state. The start built its
+    /// config from the state it read up front; an edit that landed after that read
+    /// (while the baseline was empty, so it flagged nothing) is still unapplied.
+    async fn settle_pending_restart(&self) {
+        let _g = self.state_write.lock().await;
+        if let Some(state) = read_json::<AppState>(&self.platform.paths().app_state).await {
+            self.refresh_pending_restart(&state).await;
+        }
     }
 
     /// After a settings mutation, decide what it means for the running data path:

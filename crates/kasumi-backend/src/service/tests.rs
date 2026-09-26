@@ -17,6 +17,11 @@ struct RecordingPlatform {
     paths: BackendPaths,
     calls: StdMutex<Vec<String>>,
     running: AtomicBool,
+    /// When set, `start_data_path` parks until `release` so a test can act while
+    /// a start is in flight.
+    hold_start: AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
 }
 
 impl RecordingPlatform {
@@ -41,6 +46,9 @@ impl RecordingPlatform {
                 paths,
                 calls: StdMutex::new(vec![]),
                 running: AtomicBool::new(false),
+                hold_start: AtomicBool::new(false),
+                entered: tokio::sync::Notify::new(),
+                release: tokio::sync::Notify::new(),
             }),
             dir,
         )
@@ -63,6 +71,10 @@ impl Platform for RecordingPlatform {
     }
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
         self.log(&format!("start:{:?}", opts.engine));
+        if self.hold_start.load(Ordering::SeqCst) {
+            self.entered.notify_one();
+            self.release.notified().await;
+        }
         self.running.store(true, Ordering::SeqCst);
         Ok(())
     }
@@ -355,4 +367,64 @@ async fn stateless_command_still_works_through_service() {
         panic!()
     };
     assert_eq!(c.xray_version, "Xray 1.0");
+}
+
+#[tokio::test]
+async fn profile_switch_restart_never_shows_pending_restart() {
+    use kasumi_core::mutate::MutationIntent;
+    let (platform, _d) = RecordingPlatform::new();
+    let a = sample_vless();
+    let mut b = crate::testutil::vless_at(8443);
+    b.meta_mut().id = "b".into();
+    let mut state = default_app_state();
+    state.active_id = Some(a.meta().id.clone());
+    state.profiles = vec![a, b];
+    crate::state::write_app_state(&*platform, &state)
+        .await
+        .unwrap();
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+
+    // The UI switches by saving the new active id, then starting it. On its own
+    // the saved switch is stale against what runs.
+    svc.dispatch(Command::Mutate {
+        intent: Box::new(MutationIntent::SetActive {
+            id: Some("b".into()),
+        }),
+    })
+    .await
+    .unwrap();
+    assert!(pending_restart(&svc).await);
+
+    // Once the switching start is under way nothing is pending — not even for
+    // an edit that lands mid-start.
+    platform.hold_start.store(true, Ordering::SeqCst);
+    let starting = tokio::spawn({
+        let svc = Arc::clone(&svc);
+        async move {
+            svc.dispatch(Command::Start {
+                profile_id: Some("b".into()),
+            })
+            .await
+        }
+    });
+    platform.entered.notified().await;
+    assert!(!pending_restart(&svc).await);
+    set_settings(&svc, |s| s.fragment = true).await;
+    assert!(!pending_restart(&svc).await);
+
+    // The start built its config before that edit, so once it lands the edit is
+    // the one thing still unapplied.
+    platform.release.notify_one();
+    starting.await.unwrap().unwrap();
+    assert!(pending_restart(&svc).await);
+
+    // A plain switch-and-start with nothing else edited ends clean.
+    platform.hold_start.store(false, Ordering::SeqCst);
+    svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    assert!(!pending_restart(&svc).await);
 }
