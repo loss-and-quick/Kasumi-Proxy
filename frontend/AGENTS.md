@@ -1,70 +1,63 @@
-# AGENTS.md — frontend (Web UI)
+# AGENTS.md — frontend
 
-React 19 + TypeScript, built with **Vite (rolldown)**, state in **Zustand**, validation with
-**Zod**, lint/format with **Biome**. Toolchain is **bun** (not npm/node).
+React 19 + TypeScript, Vite (rolldown), Zustand, Zod, Biome. The toolchain is **bun**, not
+npm/node.
 
 ## Commands
 
 ```sh
-bun install
-bun run dev        # vite + mock bridge — no device needed
-bun run test       # vitest run (unit tests)
-bun run check      # Biome lint + format (must be clean)
-bun run check:i18n # locale dictionaries must stay in sync with en
-bun run build      # tsc -b && vite build
+bun run dev         # vite + mock bridge, no device needed
+bun run test        # vitest
+bun run check       # Biome lint + format (autofix: bunx @biomejs/biome check --write src/)
+bun run check:i18n  # every locale in sync with en
+bun run build       # tsc -b && vite build
 ```
 
-After any change, `bun run test` + `bun run check` must stay green. `bunx tsc -b` must be 0
-errors. Use `bunx @biomejs/biome check --write src/` to auto-fix import order / formatting.
+`test`, `check`, `check:i18n` and `build` must stay green.
 
-## Conventions
+## Rules
 
-- **Strict typing.** No `any`, no `@ts-ignore`, no `as any`. Domain types come from the Zod
-  schemas in `src/lib/schema/` — that's the single source of truth; don't hand-roll parallel
-  types.
-- **Backend access only through the `Bridge` abstraction** (`src/lib/bridge.ts`). The UI
-  **never builds shell strings**. `bridge-provider.ts` picks the live impl: `ws-bridge.ts`
-  (token-guarded WebSocket RPC to the daemon, same on every platform) or `mock-bridge.ts`
-  (dev). Add UI-facing backend calls as `Bridge` methods + impls, not ad-hoc.
-- **Config generators** `lib/xray-config.ts` / `lib/singbox-config.ts` turn a validated
-  `Profile` into core JSON. Shared list helpers live in `lib/config-shared.ts` — reuse them,
-  don't re-duplicate `splitCsv` / `splitList`.
-- **i18n** is a single registry: `i18n/index.ts` `LOCALES`. Adding a language = one entry +
-  its dictionary file; `Lang`, browser-language detection, formatters, and the picker all
-  derive from it. Non-English locale dictionaries are lazy-loaded, so register new locales via
-  the loader entry in `LOCALES`, not eager imports sprinkled around the app. Translation keys
-  are typed from `i18n/en.ts`; prefer typed key maps over free-form template keys. If you add
-  or change any user-visible string, update `i18n/en.ts` and every locale file (`ar.ts`, `es.ts`,
-  `hi.ts`, `pt.ts`, `ru.ts`, `vi.ts`, `zh.ts` and so on ) in the same change — do not leave partial
-  translations behind.
-- The message layer supports plain strings, message functions, and reusable helpers in
-  `i18n/messages.ts` (`plural`, `select`). Use those for count/state-sensitive text instead of
-  `"item(s)"`-style strings or component-local branching.
-- Use the i18n formatter layer (`useFormatters`, `formatDateTime`, `formatList`,
-  `formatNumber`) instead of raw `toLocaleString()` / manual `join(", ")` in components.
-- Do not hardcode user-visible English labels inside config arrays. Store translation keys
-  there and resolve them at render time. Run `bun run check:i18n` after touching locale files.
-- **Icons** are inline SVG masks loaded via `import.meta.glob("../assets/icons/*.svg")` in
-  `components/icons.tsx`; `<Icon name="…">` looks up `src/assets/icons/<name>.svg` and falls
-  back to the `error` glyph when the file is missing (so a missing icon silently renders the
-  fallback — don't reference names you haven't added). The set is **Iconify `material-symbols`
-  (rounded variant)**. When you need a new icon, **download the exact SVG** — do not hand-write
-  the path from memory. Fetch `https://api.iconify.design/material-symbols/<name>-rounded.svg`
-  (some glyphs like `block` have no rounded variant — fall back to
-  `https://api.iconify.design/material-symbols/<name>.svg`), keep the file verbatim
-  (`width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor"`), and save it as
-  `src/assets/icons/<name>.svg` using underscores (e.g. `arrow_back.svg`, `near_me.svg`).
-- Tests live in `src/lib/__tests__/` and `src/store/`. The config generators and share-link
-  parsing are well-covered round-trip — keep them passing when touching those files.
+- **Types come from Rust.** `src/generated/` holds `bindings.ts`, `schemas.ts` and
+  `defaults.ts`. They are generated from the Rust crates (`cargo run -p kasumi-desktop --bin
+  codegen`), so don't edit them or duplicate them with hand-written types. Config builders and
+  share-link parsing also live in Rust (`crates/kasumi-core`).
+- **Strict typing.** No `any`, `as any` or `@ts-ignore`.
+- **Backend access goes through `Bridge` only** (`src/lib/bridge.ts`). `bridge-provider.ts` picks
+  the implementation: `tauri-bridge.ts` (desktop), `ws-bridge.ts` (WebSocket RPC to the Android
+  daemon) or `mock-bridge.ts` (dev). The UI never builds shell strings. A new call is a
+  `Bridge` method plus its implementations.
+- **Live data is pushed, not polled.** The backend pushes status, traffic, logs and job
+  progress, and the UI subscribes to them. Long tasks (tcping, realping, speed test, asset
+  downloads) run as backend jobs, and their results arrive through callbacks such as
+  `realPingAll(ids, onResult)`.
+- `vite.config.ts` keeps `base: "./"`. The bundle is served by the daemon and by the WebView, so
+  absolute paths break it.
 
-## Watch-outs
+## i18n
 
-- The live channel is the WebSocket (`ws-bridge.ts`): RPC requests get a reply by id, and the
-  daemon **pushes** status/traffic/log/subscription events, so the UI subscribes rather than
-  polling. The manager WebUI's only `ksu.exec` is the one-shot `wsInfo` bootstrap. Long work
-  (tcping / realping / speedtest, `downloadAsset`) still runs as a daemon-side job, surfaced
-  via push — see `runTestJob`.
-- `vite.config.ts` uses `base: "./"` (relative asset paths) so the bundle works under the
-  daemon's HTTP server and the WebView — don't switch to absolute `/`.
-- Large components (`features/{profiles,settings,editor}`) are slated for decomposition — see
-  `docs/component-decomposition-plan.md` before splitting them; keep state in the parent.
+- The locale registry is `LOCALES` in `i18n/index.ts`. A new language is one entry there plus a
+  dictionary file. Non-English dictionaries are lazy-loaded.
+- Keys are typed from `i18n/en.ts`. When you change a user-visible string, update `en.ts` **and
+  every** other locale (`ar`, `es`, `hi`, `pt`, `ru`, `vi`, `zh`) in the same change.
+- Plurals and variants go through `plural` / `select` from `i18n/messages.ts`. Format dates,
+  numbers and lists with `useFormatters` / `formatDateTime` / `formatNumber` / `formatList`, not
+  raw `toLocaleString()` or `join(", ")`.
+- Store translation keys in config arrays, not English strings.
+
+## Icons
+
+`<Icon name="…">` (`components/icons.tsx`) loads `src/assets/icons/<name>.svg`. A missing file
+silently renders the `error` glyph. The set is Iconify **material-symbols, rounded**.
+**Download** the SVG rather than typing it from memory:
+
+```
+https://api.iconify.design/material-symbols/<name>-rounded.svg
+https://api.iconify.design/material-symbols/<name>.svg   # when there is no rounded variant
+```
+
+Save the file unchanged as `src/assets/icons/<name_with_underscores>.svg`.
+
+## Tests
+
+Tests live next to the code in `__tests__/` folders (`lib`, `store`, `components`, `i18n`,
+`features/*`) and in `src/store/*.test.ts`.

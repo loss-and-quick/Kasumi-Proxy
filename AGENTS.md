@@ -1,65 +1,42 @@
-# AGENTS.md — Kasumi Proxy (repo root)
+# AGENTS.md
 
-## What this is
+Kasumi Proxy is a transparent proxy built on Xray-core / sing-box. It ships as an **Android root
+module** (Magisk / KernelSU / APatch, routing via `iptables` / `ip rule`) and as a **Tauri 2
+desktop app** (Linux, Windows). Both shells run one Rust backend. Most of the code was written by
+AI, so verify it rather than trusting it.
 
-Kasumi Proxy is a system-wide transparent proxy that runs Xray-core / sing-box + tun2socks: a
-**Magisk / KernelSU / APatch module** on rooted Android (native `iptables` / `ip rule` routing, no
-`VpnService`) and a **Tauri 2 app** on Linux desktop. Both shells drive one shared Rust backend; a
-React Web UI manages it. Fork of `vincentng295/Magic_V2Ray`; most code is AI-written — review
-before trusting.
+The repository layout, build instructions and requirements are in
+[CONTRIBUTING.md](CONTRIBUTING.md). Subdirectories have their own rules in
+[frontend/AGENTS.md](frontend/AGENTS.md) and [module/AGENTS.md](module/AGENTS.md).
 
-## Layout (one workspace, two shells over a shared backend)
+## Rules
 
-- `crates/kasumi-core/` — neutral, IO-free domain: profile/state types (serde + `specta::Type`),
-  share parse/build, xray/sing-box config builders, sub-apply, on-disk migrations.
-- `crates/kasumi-backend/` — neutral orchestration: the `Platform` trait, typed `Command`/`Response`
-  + dispatch, lifecycle/jobs/sub-update, the `Service`. Depends on core. No IO of its own.
-- `crates/kasumi-daemon/` — Android-only bin: axum (HTTP webroot + token-gated WS → the Service) +
-  the Android `Platform`.
-- `src-tauri/` — Tauri 2 desktop app: the same `Service` in managed state, the Linux `Platform`,
-  and the codegen that emits the frontend's bindings/schemas/defaults.
-- `frontend/` — React + TypeScript UI (built into `module/webroot/` for Android).
-- `module/` — the installable Android zip root (Magisk dictates `module.prop`, `customize.sh`,
-  `service.sh`, `action.sh`, `uninstall.sh`, `META-INF/` at the archive root); `package-release.sh`
-  zips from inside it.
-- `scripts/` — `fetch-binaries.sh android|desktop` (cores + extras, asset layout in `binaries.json`, pins in
-  `binary-versions.sh`), `build-daemon-android.sh` (cross-builds the Rust daemon),
-  `build-webroot.sh` (UI → `module/webroot/`), `package-release.sh` (assemble zip).
+- **Rust is the source of truth.** `frontend/src/generated/{bindings,schemas,defaults}.ts` are
+  generated from Rust types. To change a type, default or enum, edit Rust and run codegen. Never
+  copy values into TS by hand. A drift check in CI guards this.
+- **OS-specific code lives behind the `Platform` trait**: Android in `kasumi-daemon`, desktop in
+  `src-tauri`. `kasumi-core` does no IO, and `kasumi-backend` does IO only through `Platform`.
+- **No build artifacts in git**: `module/bin/<abi>/`, `module/webroot/`, `src-tauri/binaries/`
+  and `src-tauri/gen/`. Of `module/bin/` only `README.md` and `licenses/` are tracked.
+- **Comments** explain the domain *why*. Don't write "ported from TypeScript" or call test
+  fixtures "golden" or "oracle".
+- **Renaming the project** touches the data path `/data/adb/kasumi-proxy`, the iptables chain,
+  the `kasumi-proxy` binary, `module.prop` and string literals. Grep every case form.
 
-## Hard rules
+## Checks before finishing
 
-- **One source of truth = Rust.** The frontend's `frontend/src/generated/{bindings,schemas,
-  defaults}.ts` are generated from the Rust types — never hand-copy a Rust default/const/enum into
-  the frontend; change the Rust source and regenerate. A drift test guards this.
-- **No build artifacts in git.** Core/daemon binaries (`module/bin/<abi>/`, geoip/geosite), the
-  built `module/webroot/`, and `src-tauri/gen/` are gitignored on purpose. Only
-  `module/bin/{README.md,licenses/}` are tracked.
-- **Comment style.** Rust documents the domain *why*, never "ported from / equals the TypeScript".
-  Tests diff against committed reference fixtures — don't narrate that as "golden"/"oracle".
-- **Renaming the project** touches the id everywhere: data path `/data/adb/kasumi-proxy`, the
-  iptables chain, the `kasumi-proxy` binary name, `module.prop`, and string literals. Grep all case
-  forms (`kasumi-proxy`, `Kasumi Proxy`, camelCase) before claiming done.
-
-## Verify before declaring done
+Run them with plain `cargo` / `bun`, or inside `nix develop --command …` if you have Nix. The
+Tauri crate needs a built `frontend/dist` and stubs in `src-tauri/binaries/` (see CONTRIBUTING).
 
 ```sh
-# Rust (the supported path is the nix dev shell; no system cargo needed)
-nix develop --command cargo test --workspace
-nix develop --command cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo run -p kasumi-desktop --bin codegen && git diff --exit-code -- frontend/src/generated
 
-# Frontend
-cd frontend && bun install && bun run build && bunx vitest run
-bunx tsc -p frontend/tsconfig.json --noEmit && bunx biome check
-bun run frontend/scripts/check-i18n.ts
+cd frontend && bun run build && bun run test && bun run check && bun run check:i18n
 
-# Codegen drift (a Rust type/default change must regenerate the frontend files)
-nix develop --command cargo run -p kasumi-desktop --bin codegen   # then check git is clean
-
-# Module shell (Android mksh dialect)
 shellcheck -s sh module/*.sh
 ```
 
-CI (`.github/workflows/ci.yml`) runs the Rust gate (fmt + clippy `-D warnings` + test +
-codegen-drift) and the frontend gate on every push — keep both green. The checks need bun,
-shellcheck, zip, jq and curl on PATH; `nix develop` provides them, and the `nix run .#<script>`
-wrappers run the build scripts.
+CI (`.github/workflows/ci.yml`) runs the same Rust and frontend checks on every push.
