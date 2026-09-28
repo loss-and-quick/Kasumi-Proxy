@@ -38,8 +38,8 @@ use super::paths::{
     TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_strict_carveouts,
-    clear_routing_rules, has_force_proxy, protect_local_ports, reload_app_filter_rules,
+    Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, clear_routing_rules,
+    has_force_proxy, protect_local_ports, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::{run_out, silent};
@@ -423,9 +423,6 @@ async fn start_inner(
     // a native sing-box auto_routes its own tun.
     if external {
         bring_up_external_tun(tun, socks_port, tun_opts).await?;
-    } else if read_app_filter().await.strict {
-        // sing-box kill-switch carve-outs so the device stays reachable.
-        apply_strict_carveouts().await;
     }
 
     if !verify_core_alive(core_pid, bin, 6, Duration::from_millis(250)).await {
