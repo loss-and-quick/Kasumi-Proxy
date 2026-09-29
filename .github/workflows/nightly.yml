@@ -209,7 +209,7 @@ jobs:
           # `bundle.createUpdaterArtifacts` so `tauri build` doesn't demand the
           # minisign key (only release.yml signs). The updater never points at
           # nightly, so no .sig is needed here.
-          cargo tauri build --target "$t" \
+          cargo tauri build --verbose --target "$t" \
             --config src-tauri/tauri.bundle.conf.json \
             --config "{\"version\":\"$ver\",\"bundle\":{\"createUpdaterArtifacts\":false}}"
 
