@@ -682,9 +682,7 @@ const vi = {
   "settings.routingRuleNetwork": "mạng: {value}",
   "settings.routingRuleProtocols": "giao thức: {value}",
   "settings.routingRuleNoMatch": "Không có trường khớp",
-  "settings.routingMoveUp": "Di chuyển lên",
-  "settings.routingMoveDown": "Di chuyển xuống",
-  "settings.routingDelete": "Xóa",
+  "settings.routingReorder": "Sắp xếp lại quy tắc",
   "settings.assetFiles": "Tệp tài nguyên",
   "settings.assetHint":
     "Đây là các cơ sở dữ liệu geo của Xray. Các quy tắc kiểu Xray tương tự sẽ được chuyển đổi tự động cho sing-box ở bên trong.",

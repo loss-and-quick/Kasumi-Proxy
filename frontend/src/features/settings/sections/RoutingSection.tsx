@@ -1,16 +1,19 @@
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   Btn,
   Card,
   Chip,
   Disclosure,
   Field,
-  IconBtn,
   ListRow,
   NavRow,
   RowToggle,
   Segmented,
   SettingRow,
+  Sortable,
   Switch,
+  useSortableSensors,
 } from "../../../components";
 import type { RoutingRule } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
@@ -30,7 +33,6 @@ export function RoutingSection({
   addRoutingRule,
   updateRoutingRule,
   reorderRoutingRules,
-  removeRoutingRule,
   onOpenRulesIO,
   onOpenAppFilter,
 }: {
@@ -44,15 +46,21 @@ export function RoutingSection({
   addRoutingRule: (rule: RoutingRule) => void;
   updateRoutingRule: (id: string, patch: Partial<RoutingRule>) => void;
   reorderRoutingRules: (from: number, to: number) => void;
-  removeRoutingRule: (id: string) => void;
   onOpenRulesIO: () => void;
   onOpenAppFilter: () => void;
 }) {
   const t = useT();
   const formatters = useFormatters();
+  const sensors = useSortableSensors();
   // Proxy-mode selection is desktop-only — the Android root module is always tun.
   const isDesktop = getRuntimeBridgeMode() === "tauri";
   const profileName = (tag: string) => profiles.find((p) => p.id === tag)?.remarks;
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = routingRules.findIndex((r) => r.id === active.id);
+    const to = routingRules.findIndex((r) => r.id === over.id);
+    if (from !== -1 && to !== -1) reorderRoutingRules(from, to);
+  };
   const catchAllIndex = routingRules.findIndex(isCatchAllRule);
   const catchAllRedundant = isRedundantCatchAll(routingRules, catchAllIndex);
   const appFilterCount = Object.keys(settings.appFilter ?? {}).length;
@@ -139,61 +147,60 @@ export function RoutingSection({
                 {t("settings.routingEmpty")}
               </div>
             ) : (
-              routingRules.map((rule, index) => (
-                <ListRow
-                  key={rule.id}
-                  icon={ruleIcon(rule)}
-                  title={rule.remarks || t("settings.routingRuleDefault", { n: index + 1 })}
-                  sub={
-                    <>
-                      {ruleSummary(rule, t, formatters, profileName)}
-                      {index === catchAllIndex && (
-                        <div style={{ color: "var(--warn)", marginTop: 2 }}>
-                          {t(
-                            catchAllRedundant
-                              ? "settings.routingCatchAllRedundant"
-                              : "settings.routingCatchAll",
-                          )}
-                        </div>
-                      )}
-                      {catchAllIndex >= 0 && index > catchAllIndex && rule.enabled && (
-                        <div style={{ color: "var(--on-surface-faint)", marginTop: 2 }}>
-                          {t("settings.routingUnreachable")}
-                        </div>
-                      )}
-                    </>
-                  }
-                  onClick={() => onEditRule(rule)}
-                  right={
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <IconBtn
-                        name="arrow_upward"
-                        sm
-                        title={t("settings.routingMoveUp")}
-                        onClick={() => reorderRoutingRules(index, index - 1)}
-                        style={index === 0 ? { opacity: 0.4 } : undefined}
-                      />
-                      <IconBtn
-                        name="arrow_downward"
-                        sm
-                        title={t("settings.routingMoveDown")}
-                        onClick={() => reorderRoutingRules(index, index + 1)}
-                        style={index === routingRules.length - 1 ? { opacity: 0.4 } : undefined}
-                      />
-                      <Switch
-                        on={rule.enabled}
-                        onChange={(value) => updateRoutingRule(rule.id, { enabled: value })}
-                      />
-                      <IconBtn
-                        name="delete"
-                        sm
-                        title={t("settings.routingDelete")}
-                        onClick={() => removeRoutingRule(rule.id)}
-                      />
-                    </div>
-                  }
-                />
-              ))
+              // Delete lives in the rule sheet and reorder is a drag handle, so a
+              // narrow phone row keeps room for the summary instead of four buttons.
+              <div className="routing-rules">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={onDragEnd}
+                >
+                  <SortableContext
+                    items={routingRules.map((r) => r.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {routingRules.map((rule, index) => (
+                      <Sortable key={rule.id} id={rule.id}>
+                        {(bindings) => (
+                          <ListRow
+                            drag={{ bindings, label: t("settings.routingReorder") }}
+                            icon={ruleIcon(rule)}
+                            title={
+                              rule.remarks || t("settings.routingRuleDefault", { n: index + 1 })
+                            }
+                            sub={
+                              <>
+                                {ruleSummary(rule, t, formatters, profileName)}
+                                {index === catchAllIndex && (
+                                  <div style={{ color: "var(--warn)", marginTop: 2 }}>
+                                    {t(
+                                      catchAllRedundant
+                                        ? "settings.routingCatchAllRedundant"
+                                        : "settings.routingCatchAll",
+                                    )}
+                                  </div>
+                                )}
+                                {catchAllIndex >= 0 && index > catchAllIndex && rule.enabled && (
+                                  <div style={{ color: "var(--on-surface-faint)", marginTop: 2 }}>
+                                    {t("settings.routingUnreachable")}
+                                  </div>
+                                )}
+                              </>
+                            }
+                            onClick={() => onEditRule(rule)}
+                            right={
+                              <Switch
+                                on={rule.enabled}
+                                onChange={(value) => updateRoutingRule(rule.id, { enabled: value })}
+                              />
+                            }
+                          />
+                        )}
+                      </Sortable>
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              </div>
             )}
           </div>
         )}

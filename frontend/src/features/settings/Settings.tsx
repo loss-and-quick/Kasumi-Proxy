@@ -248,7 +248,6 @@ export default function Settings({
             addRoutingRule={addRoutingRule}
             updateRoutingRule={updateRoutingRule}
             reorderRoutingRules={reorderRoutingRules}
-            removeRoutingRule={removeRoutingRule}
             onOpenRulesIO={() => setRulesIOOpen(true)}
             onOpenAppFilter={onOpenAppFilter}
           />
