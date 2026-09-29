@@ -19,8 +19,8 @@ const TUN_TABLE_FORCE: &str = "1101";
 const PRIO_TUN: &str = "1010";
 const PRIO_TUN_FORCE: &str = "1011";
 
-// Below sing-box's strict_route rules (pref 9000+), above the OS band, distinct
-// from our xray LAN-bypass rules (5020-5050).
+// Priority of the `iif <uplink> lookup <uplink>` rule older versions installed
+// under sing-box strict_route. Only removed now (see `clear_legacy_strict_carveouts`).
 const STRICT_CARVEOUT_PREF: &str = "8500";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,49 +97,14 @@ async fn capture_mark_rules(ipt: &str, filter: &AppFilter) {
     }
 }
 
-/// Strict-mode carve-out (sing-box): its `strict_route` adds a rule funnelling
-/// every non-loopback-origin packet — including incoming connections and the reply
-/// path of uplink-pinned traffic — into the tunnel. Pin packets arriving on the
-/// physical uplink back to the uplink's own table at higher priority so the device
-/// stays reachable under the kill-switch. xray needs no equivalent (its
-/// REPLY-direction RETURN already spares incoming).
-pub async fn apply_strict_carveouts() {
-    let Some(uplink) = default_uplink().await else {
-        return;
-    };
-    for v6 in [false, true] {
-        ip_rule(
-            v6,
-            &[
-                "rule",
-                "del",
-                "iif",
-                &uplink,
-                "lookup",
-                &uplink,
-                "pref",
-                STRICT_CARVEOUT_PREF,
-            ],
-        )
-        .await;
-        ip_rule(
-            v6,
-            &[
-                "rule",
-                "add",
-                "iif",
-                &uplink,
-                "lookup",
-                &uplink,
-                "pref",
-                STRICT_CARVEOUT_PREF,
-            ],
-        )
-        .await;
-    }
-}
-
-async fn clear_strict_carveouts() {
+/// Older versions pinned packets arriving on the uplink back to the uplink table
+/// under sing-box strict_route. That rule also caught the de-NATed replies for
+/// hotspot/USB-tethering clients and sent them back out the uplink, so tethered
+/// devices lost internet. It is no longer needed: `tune_config` excludes uid 0 from
+/// the tun, and the kernel routes forwarded packets (and their rp_filter checks) as
+/// uid 0, so they already skip sing-box's strict rule. Removed on teardown only, to
+/// clean up after an upgrade.
+async fn clear_legacy_strict_carveouts() {
     for v6 in [false, true] {
         for _ in 0..4 {
             if ip_rule(v6, &["rule", "del", "pref", STRICT_CARVEOUT_PREF]).await != 0 {
@@ -333,7 +298,7 @@ pub async fn protect_local_ports(
 /// Tear down every rule/table/device the xray data-path installed.
 pub async fn clear_routing_rules(st: &RoutingState) {
     remove_mark_rule().await;
-    clear_strict_carveouts().await;
+    clear_legacy_strict_carveouts().await;
     protect_local_ports(Action::Del, &st.filter, st.socks_port, st.http_port).await;
 
     // IPv4 mark chain
