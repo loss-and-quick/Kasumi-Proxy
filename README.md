@@ -22,6 +22,10 @@
 
 Both run the same Rust backend and the same React UI.
 
+<p align="center">
+  <img src="docs/screenshots/hero.webp" width="900" alt="Kasumi Proxy on the desktop and on an Android phone" />
+</p>
+
 > [!NOTE]
 > This is a fork of [vincentng295/Magic_V2Ray](https://github.com/vincentng295/Magic_V2Ray). Most
 > of the code was written by AI, so review it before you trust it.
@@ -49,6 +53,12 @@ Both run the same Rust backend and the same React UI.
 > [!TIP]
 > No root? Use an ordinary client from the
 > [Xray-core GUI list](https://github.com/XTLS/Xray-core#gui-clients).
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/android.webp" width="900" alt="Overview, profiles, subscriptions and routing screens on Android" />
+</p>
 
 ## Install
 
