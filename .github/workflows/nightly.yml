@@ -199,11 +199,7 @@ jobs:
           # the whole job ("failed to run linuxdeploy") after the .deb is built.
           APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
-          # Build + stage the privilege helper as a sidecar (see release.yml).
           t="${{ matrix.target }}"
-          ext=""; case "$t" in *windows*) ext=".exe";; esac
-          cargo build --release --target "$t" --bin kasumi-helper
-          cp "target/$t/release/kasumi-helper$ext" "src-tauri/binaries/kasumi-helper-$t$ext"
           ver=$(scripts/app-version.sh)  # product version from module.prop
           # Nightly artifacts are unsigned: override the global
           # `bundle.createUpdaterArtifacts` so `tauri build` doesn't demand the

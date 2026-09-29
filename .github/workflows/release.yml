@@ -378,13 +378,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # Build + stage the privilege helper as a sidecar so the bundles ship it
-          # next to the app (the Linux GUI spawns it elevated; the Windows build is
-          # an unused stub).
+          # The privilege helper is a bin of the app crate, so `tauri build`
+          # compiles it and ships it next to the app on its own.
           t="${{ matrix.target }}"
-          ext=""; case "$t" in *windows*) ext=".exe";; esac
-          cargo build --release --target "$t" --bin kasumi-helper
-          cp "target/$t/release/kasumi-helper$ext" "src-tauri/binaries/kasumi-helper-$t$ext"
           # Inject the real product version (module.prop is the single source of
           # truth) so the bundles aren't the 0.0.0 placeholder.
           ver=$(scripts/app-version.sh)
