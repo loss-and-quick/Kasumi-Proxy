@@ -677,6 +677,7 @@ const hi = {
   "settings.routingRuleProtocols": "प्रोटोकॉल: {value}",
   "settings.routingRuleNoMatch": "कोई मैच फ़ील्ड नहीं",
   "settings.routingReorder": "नियम का क्रम बदलें",
+  "settings.routingRulesTitle": "नियम",
   "settings.assetFiles": "रिसोर्स फ़ाइलें",
   "settings.assetHint":
     "ये Xray geo databases हैं। वही Xray-शैली नियम अंदरूनी रूप से अपने-आप sing-box में परिवर्तित हो जाते हैं।",

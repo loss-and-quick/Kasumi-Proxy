@@ -688,6 +688,7 @@ const pt = {
   "settings.routingRuleProtocols": "protocolos: {value}",
   "settings.routingRuleNoMatch": "Nenhum campo de correspondência",
   "settings.routingReorder": "Reordenar regra",
+  "settings.routingRulesTitle": "Regras",
   "settings.assetFiles": "Arquivos de recurso",
   "settings.assetHint":
     "Estas são bases geo do Xray. As mesmas regras no estilo Xray são convertidas automaticamente para sing-box internamente.",

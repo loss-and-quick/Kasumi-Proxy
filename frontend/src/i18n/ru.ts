@@ -739,6 +739,7 @@ const ru = {
   "settings.routingRuleProtocols": "протоколы: {value}",
   "settings.routingRuleNoMatch": "Нет полей для сопоставления",
   "settings.routingReorder": "Переместить правило",
+  "settings.routingRulesTitle": "Правила",
   "settings.assetFiles": "Файлы ресурсов",
   "settings.assetHint":
     "Это Xray geo-базы. Те же правила в стиле Xray автоматически конвертируются для sing-box внутри приложения.",

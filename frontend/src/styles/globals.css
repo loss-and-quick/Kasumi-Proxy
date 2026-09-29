@@ -503,6 +503,13 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 /* On a phone the outbound icon repeats what the summary already says ("→ direct");
    dropping it gives the summary the width back. */
 @media (max-width: 480px) { .routing-rules .list-row .lr-icon { display: none; } }
+.routing-rules .list-row { padding: 10px 0; gap: 8px; }
+.routing-rules-head { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.routing-rules-head .group-count { margin-left: 0; margin-right: auto; }
+/* A single chip line that scrolls sideways, bleeding to the card edge. */
+.chip-scroller { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -14px; padding: 0 14px; }
+.chip-scroller::-webkit-scrollbar { display: none; }
+.chip-scroller .chip { flex: 0 0 auto; }
 
 .scrim { position: absolute; inset: 0; background: oklch(0 0 0 / 0.55); z-index: 40; animation: fade var(--dur-base) ease; }
 .scrim.leaving { opacity: 0; transition: opacity var(--dur-slow) ease; }
