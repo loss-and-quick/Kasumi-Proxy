@@ -1,3 +1,13 @@
+## v0.4.7 — 2026-09-29
+
+### Changes
+
+- [`26e1b38`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/26e1b38) fix(desktop): ship kasumi-helper as a bundled bin, not a sidecar
+- [`790fdd2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/790fdd2) build(desktop): run codegen as an example, not a bin
+- [`de7a7e2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/de7a7e2) docs(readme): add screenshots of the desktop and Android UI
+- [`9e3ac41`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/9e3ac41) fix(frontend): give routing rules their own card
+- [`5a3ba16`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5a3ba16) fix(frontend): make routing rules usable on a phone-width screen
+
 ## v0.4.6 — 2026-09-29
 
 ### Core updates
