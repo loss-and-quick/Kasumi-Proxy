@@ -388,7 +388,7 @@ jobs:
           # Inject the real product version (module.prop is the single source of
           # truth) so the bundles aren't the 0.0.0 placeholder.
           ver=$(scripts/app-version.sh)
-          cargo tauri build --target "$t" \
+          cargo tauri build --verbose --target "$t" \
             --config src-tauri/tauri.bundle.conf.json \
             --config "{\"version\":\"$ver\"}"
 
