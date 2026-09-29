@@ -329,10 +329,12 @@ jobs:
         with:
           bun-version: latest
 
+      # Pinned: a minor cli release changes what gets bundled (2.12 started
+      # shipping every src/bin binary). Bump deliberately.
       - name: Install Tauri CLI
         uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
         with:
-          tool: tauri-cli
+          tool: tauri-cli@2.12.0
 
       - name: Linux desktop deps
         if: runner.os == 'Linux'
@@ -378,17 +380,13 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # Build + stage the privilege helper as a sidecar so the bundles ship it
-          # next to the app (the Linux GUI spawns it elevated; the Windows build is
-          # an unused stub).
+          # The privilege helper is a bin of the app crate, so `tauri build`
+          # compiles it and ships it next to the app on its own.
           t="${{ matrix.target }}"
-          ext=""; case "$t" in *windows*) ext=".exe";; esac
-          cargo build --release --target "$t" --bin kasumi-helper
-          cp "target/$t/release/kasumi-helper$ext" "src-tauri/binaries/kasumi-helper-$t$ext"
           # Inject the real product version (module.prop is the single source of
           # truth) so the bundles aren't the 0.0.0 placeholder.
           ver=$(scripts/app-version.sh)
-          cargo tauri build --target "$t" \
+          cargo tauri build --verbose --target "$t" \
             --config src-tauri/tauri.bundle.conf.json \
             --config "{\"version\":\"$ver\"}"
 

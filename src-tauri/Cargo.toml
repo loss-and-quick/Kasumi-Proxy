@@ -4,10 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Kasumi Proxy — Tauri 2 desktop (and future mobile) app over the neutral Rust backend."
-# This crate has a second bin (`codegen`). Without default-run, `cargo tauri build`
-# picks the alphabetically-first binary (`codegen` < `kasumi-desktop`) as the app
-# and bundles THAT — shipping a binary that just runs codegen and crashes on launch
-# (tauri-apps/tauri#4807, #13420). Pin the app binary explicitly.
+# This crate has a second bin (`kasumi-helper`). Without default-run, `cargo tauri
+# build` treats the alphabetically-first binary as the app (tauri-apps/tauri#4807,
+# #13420). Pin the app binary explicitly. Every bin is bundled, so dev tools such as
+# `codegen` live under examples/ instead.
 default-run = "kasumi-desktop"
 
 [lib]

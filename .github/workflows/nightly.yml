@@ -169,10 +169,12 @@ jobs:
         with:
           bun-version: latest
 
+      # Pinned: a minor cli release changes what gets bundled (2.12 started
+      # shipping every src/bin binary). Bump deliberately.
       - name: Install Tauri CLI
         uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2
         with:
-          tool: tauri-cli
+          tool: tauri-cli@2.12.0
 
       - name: Linux desktop deps
         if: runner.os == 'Linux'
@@ -199,17 +201,13 @@ jobs:
           # the whole job ("failed to run linuxdeploy") after the .deb is built.
           APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
-          # Build + stage the privilege helper as a sidecar (see release.yml).
           t="${{ matrix.target }}"
-          ext=""; case "$t" in *windows*) ext=".exe";; esac
-          cargo build --release --target "$t" --bin kasumi-helper
-          cp "target/$t/release/kasumi-helper$ext" "src-tauri/binaries/kasumi-helper-$t$ext"
           ver=$(scripts/app-version.sh)  # product version from module.prop
           # Nightly artifacts are unsigned: override the global
           # `bundle.createUpdaterArtifacts` so `tauri build` doesn't demand the
           # minisign key (only release.yml signs). The updater never points at
           # nightly, so no .sig is needed here.
-          cargo tauri build --target "$t" \
+          cargo tauri build --verbose --target "$t" \
             --config src-tauri/tauri.bundle.conf.json \
             --config "{\"version\":\"$ver\",\"bundle\":{\"createUpdaterArtifacts\":false}}"
 

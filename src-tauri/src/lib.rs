@@ -447,8 +447,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
 
 /// Regenerate every committed codegen artifact under `frontend/src/generated`
 /// from the Rust types — TS bindings, Zod schemas, runtime defaults. One entry
-/// point so the debug build, the `codegen` bin, and the drift test stay in
-/// lock-step (run it with `cargo run -p kasumi-desktop --bin codegen`).
+/// point so the debug build, the `codegen` example, and the drift test stay in
+/// lock-step (run it with `cargo run -p kasumi-desktop --example codegen`).
 pub fn export_generated() {
     specta_builder()
         .export(

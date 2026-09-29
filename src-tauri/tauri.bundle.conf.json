@@ -6,8 +6,7 @@
       "binaries/sing-box",
       "binaries/tun2socks",
       "binaries/hev-socks5-tunnel",
-      "binaries/geodat2srs",
-      "binaries/kasumi-helper"
+      "binaries/geodat2srs"
     ]
   }
 }
