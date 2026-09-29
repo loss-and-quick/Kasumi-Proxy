@@ -1,3 +1,5 @@
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   Btn,
   Card,
@@ -10,7 +12,9 @@ import {
   RowToggle,
   Segmented,
   SettingRow,
+  Sortable,
   Switch,
+  useSortableSensors,
 } from "../../../components";
 import type { RoutingRule } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
@@ -30,7 +34,6 @@ export function RoutingSection({
   addRoutingRule,
   updateRoutingRule,
   reorderRoutingRules,
-  removeRoutingRule,
   onOpenRulesIO,
   onOpenAppFilter,
 }: {
@@ -44,15 +47,21 @@ export function RoutingSection({
   addRoutingRule: (rule: RoutingRule) => void;
   updateRoutingRule: (id: string, patch: Partial<RoutingRule>) => void;
   reorderRoutingRules: (from: number, to: number) => void;
-  removeRoutingRule: (id: string) => void;
   onOpenRulesIO: () => void;
   onOpenAppFilter: () => void;
 }) {
   const t = useT();
   const formatters = useFormatters();
+  const sensors = useSortableSensors();
   // Proxy-mode selection is desktop-only — the Android root module is always tun.
   const isDesktop = getRuntimeBridgeMode() === "tauri";
   const profileName = (tag: string) => profiles.find((p) => p.id === tag)?.remarks;
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = routingRules.findIndex((r) => r.id === active.id);
+    const to = routingRules.findIndex((r) => r.id === over.id);
+    if (from !== -1 && to !== -1) reorderRoutingRules(from, to);
+  };
   const catchAllIndex = routingRules.findIndex(isCatchAllRule);
   const catchAllRedundant = isRedundantCatchAll(routingRules, catchAllIndex);
   const appFilterCount = Object.keys(settings.appFilter ?? {}).length;
@@ -106,98 +115,104 @@ export function RoutingSection({
           </div>
         )}
         {settings.routingMode === "rules" && (
-          <div style={{ padding: "12px 0 8px" }}>
-            <div className="hint" style={{ marginBottom: 10 }}>
-              {t("settings.routingRulesHint")}
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-              <Btn variant="tonal" sm icon="add" onClick={openNewRule}>
-                {t("settings.routingAddRule")}
-              </Btn>
-              <Btn variant="outline" sm icon="swap_vert" onClick={onOpenRulesIO}>
-                {t("settings.routingImportExport")}
-              </Btn>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div className="hint" style={{ marginBottom: 6 }}>
-                {t("settings.rulePresets")}
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {RULE_PRESETS.map((preset) => (
-                  <Chip
-                    key={preset.id}
-                    icon={preset.icon}
-                    onClick={() => addRoutingRule(makePresetRule(preset, t(preset.labelKey)))}
-                  >
-                    {t(preset.labelKey)}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-            {routingRules.length === 0 ? (
-              <div className="hint" style={{ padding: "4px 0 8px" }}>
-                {t("settings.routingEmpty")}
-              </div>
-            ) : (
-              routingRules.map((rule, index) => (
-                <ListRow
-                  key={rule.id}
-                  icon={ruleIcon(rule)}
-                  title={rule.remarks || t("settings.routingRuleDefault", { n: index + 1 })}
-                  sub={
-                    <>
-                      {ruleSummary(rule, t, formatters, profileName)}
-                      {index === catchAllIndex && (
-                        <div style={{ color: "var(--warn)", marginTop: 2 }}>
-                          {t(
-                            catchAllRedundant
-                              ? "settings.routingCatchAllRedundant"
-                              : "settings.routingCatchAll",
-                          )}
-                        </div>
-                      )}
-                      {catchAllIndex >= 0 && index > catchAllIndex && rule.enabled && (
-                        <div style={{ color: "var(--on-surface-faint)", marginTop: 2 }}>
-                          {t("settings.routingUnreachable")}
-                        </div>
-                      )}
-                    </>
-                  }
-                  onClick={() => onEditRule(rule)}
-                  right={
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <IconBtn
-                        name="arrow_upward"
-                        sm
-                        title={t("settings.routingMoveUp")}
-                        onClick={() => reorderRoutingRules(index, index - 1)}
-                        style={index === 0 ? { opacity: 0.4 } : undefined}
-                      />
-                      <IconBtn
-                        name="arrow_downward"
-                        sm
-                        title={t("settings.routingMoveDown")}
-                        onClick={() => reorderRoutingRules(index, index + 1)}
-                        style={index === routingRules.length - 1 ? { opacity: 0.4 } : undefined}
-                      />
-                      <Switch
-                        on={rule.enabled}
-                        onChange={(value) => updateRoutingRule(rule.id, { enabled: value })}
-                      />
-                      <IconBtn
-                        name="delete"
-                        sm
-                        title={t("settings.routingDelete")}
-                        onClick={() => removeRoutingRule(rule.id)}
-                      />
-                    </div>
-                  }
-                />
-              ))
-            )}
+          <div className="hint" style={{ padding: "0 0 12px" }}>
+            {t("settings.routingRulesHint")}
           </div>
         )}
       </Card>
+
+      {settings.routingMode === "rules" && (
+        <Card style={{ padding: "4px 14px 14px", marginTop: 12 }}>
+          <div className="routing-rules-head">
+            <span className="sr-title">{t("settings.routingRulesTitle")}</span>
+            {routingRules.length > 0 && (
+              <span className="group-count">{formatters.formatNumber(routingRules.length)}</span>
+            )}
+            <IconBtn
+              name="swap_vert"
+              sm
+              title={t("settings.routingImportExport")}
+              onClick={onOpenRulesIO}
+            />
+          </div>
+          {routingRules.length === 0 ? (
+            <div className="hint" style={{ padding: "4px 0 8px" }}>
+              {t("settings.routingEmpty")}
+            </div>
+          ) : (
+            // Delete lives in the rule sheet and reorder is a drag handle, so a
+            // narrow phone row keeps room for the summary instead of four buttons.
+            <div className="routing-rules">
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={onDragEnd}
+              >
+                <SortableContext
+                  items={routingRules.map((r) => r.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {routingRules.map((rule, index) => (
+                    <Sortable key={rule.id} id={rule.id}>
+                      {(bindings) => (
+                        <ListRow
+                          drag={{ bindings, label: t("settings.routingReorder") }}
+                          icon={ruleIcon(rule)}
+                          title={rule.remarks || t("settings.routingRuleDefault", { n: index + 1 })}
+                          sub={
+                            <>
+                              {ruleSummary(rule, t, formatters, profileName)}
+                              {index === catchAllIndex && (
+                                <div style={{ color: "var(--warn)", marginTop: 2 }}>
+                                  {t(
+                                    catchAllRedundant
+                                      ? "settings.routingCatchAllRedundant"
+                                      : "settings.routingCatchAll",
+                                  )}
+                                </div>
+                              )}
+                              {catchAllIndex >= 0 && index > catchAllIndex && rule.enabled && (
+                                <div style={{ color: "var(--on-surface-faint)", marginTop: 2 }}>
+                                  {t("settings.routingUnreachable")}
+                                </div>
+                              )}
+                            </>
+                          }
+                          onClick={() => onEditRule(rule)}
+                          right={
+                            <Switch
+                              on={rule.enabled}
+                              onChange={(value) => updateRoutingRule(rule.id, { enabled: value })}
+                            />
+                          }
+                        />
+                      )}
+                    </Sortable>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
+          )}
+          <Btn variant="tonal" sm icon="add" onClick={openNewRule} style={{ marginTop: 10 }}>
+            {t("settings.routingAddRule")}
+          </Btn>
+          <div className="hint" style={{ margin: "14px 0 6px" }}>
+            {t("settings.rulePresets")}
+          </div>
+          {/* One scrollable line: wrapped chips took three rows on a phone. */}
+          <div className="chip-scroller">
+            {RULE_PRESETS.map((preset) => (
+              <Chip
+                key={preset.id}
+                icon={preset.icon}
+                onClick={() => addRoutingRule(makePresetRule(preset, t(preset.labelKey)))}
+              >
+                {t(preset.labelKey)}
+              </Chip>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card style={{ padding: "4px 14px", marginTop: 12 }}>
         <NavRow

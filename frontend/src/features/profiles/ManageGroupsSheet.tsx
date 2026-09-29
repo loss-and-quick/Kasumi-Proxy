@@ -1,22 +1,14 @@
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  type DraggableAttributes,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
-import { Icon, IconBtn, Sheet } from "../../components";
+  Icon,
+  IconBtn,
+  Sheet,
+  Sortable,
+  type SortableBindings,
+  useSortableSensors,
+} from "../../components";
 import type { Group } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
@@ -24,31 +16,6 @@ import { useAppStore } from "../../store/useAppStore";
 const DeleteGroupDialog = lazy(() =>
   import("./DeleteGroupDialog").then((module) => ({ default: module.DeleteGroupDialog })),
 );
-
-type SortableBindings = {
-  setNodeRef: (el: HTMLElement | null) => void;
-  style: React.CSSProperties;
-  attributes: DraggableAttributes;
-  listeners: ReturnType<typeof useSortable>["listeners"];
-  isDragging: boolean;
-};
-
-// Render-prop wrapper so useSortable runs in a real (keyed) component instance,
-// keeping the row JSX inline in the map.
-function Sortable({ id, children }: { id: string; children: (b: SortableBindings) => ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-  });
-  return children({
-    setNodeRef,
-    // Translate only: CSS.Transform also appends scaleX/scaleY, which we never need
-    // for a vertical reorder and which would scale the masked icons.
-    style: { transform: CSS.Translate.toString(transform), transition },
-    attributes,
-    listeners,
-    isDragging,
-  });
-}
 
 export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
@@ -60,10 +27,7 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
   const removeGroup = useAppStore((s) => s.removeGroup);
   const reorderGroups = useAppStore((s) => s.reorderGroups);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
 
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);

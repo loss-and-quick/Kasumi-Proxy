@@ -674,9 +674,8 @@ const zh = {
   "settings.routingRuleNetwork": "网络：{value}",
   "settings.routingRuleProtocols": "协议：{value}",
   "settings.routingRuleNoMatch": "无匹配字段",
-  "settings.routingMoveUp": "上移",
-  "settings.routingMoveDown": "下移",
-  "settings.routingDelete": "删除",
+  "settings.routingReorder": "重新排序规则",
+  "settings.routingRulesTitle": "规则",
   "settings.assetFiles": "资源文件",
   "settings.assetHint":
     "这些是 Xray 的 geo 数据库。相同的 Xray 风格规则会在内部自动转换为 sing-box 可用格式。",

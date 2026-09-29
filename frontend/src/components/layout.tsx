@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from "react";
 import { Switch } from "./forms";
 import { Icon } from "./icons";
+import type { SortableBindings } from "./sortable";
 
 export const AppBar = ({
   title,
@@ -34,6 +35,7 @@ export const ListRow = ({
   right,
   danger,
   disabled,
+  drag,
 }: {
   icon?: string;
   iconSlot?: ReactNode;
@@ -43,6 +45,8 @@ export const ListRow = ({
   right?: ReactNode;
   danger?: boolean;
   disabled?: boolean;
+  /** Makes the row sortable: a drag handle on the left, labelled for screen readers. */
+  drag?: { bindings: SortableBindings; label: string };
 }) => {
   const content = (
     <>
@@ -66,7 +70,21 @@ export const ListRow = ({
   );
 
   return (
-    <div className="list-row">
+    <div
+      className={`list-row${drag?.bindings.isDragging ? " dragging" : ""}`}
+      ref={drag?.bindings.setNodeRef}
+      style={drag?.bindings.style}
+    >
+      {drag && (
+        <span
+          className="lr-drag"
+          title={drag.label}
+          {...drag.bindings.attributes}
+          {...drag.bindings.listeners}
+        >
+          <Icon name="drag_indicator" />
+        </span>
+      )}
       {onClick ? (
         <button
           type="button"

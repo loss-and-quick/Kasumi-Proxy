@@ -693,9 +693,8 @@ const en = {
   "settings.routingRuleNetwork": "network: {value}",
   "settings.routingRuleProtocols": "protocols: {value}",
   "settings.routingRuleNoMatch": "No match fields",
-  "settings.routingMoveUp": "Move up",
-  "settings.routingMoveDown": "Move down",
-  "settings.routingDelete": "Delete",
+  "settings.routingReorder": "Reorder rule",
+  "settings.routingRulesTitle": "Rules",
   "settings.assetFiles": "Resource files",
   "settings.assetHint":
     "These are Xray geo databases. The same Xray-style rules are converted automatically for sing-box internally.",

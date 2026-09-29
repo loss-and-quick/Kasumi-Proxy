@@ -676,9 +676,8 @@ const hi = {
   "settings.routingRuleNetwork": "नेटवर्क: {value}",
   "settings.routingRuleProtocols": "प्रोटोकॉल: {value}",
   "settings.routingRuleNoMatch": "कोई मैच फ़ील्ड नहीं",
-  "settings.routingMoveUp": "ऊपर ले जाएँ",
-  "settings.routingMoveDown": "नीचे ले जाएँ",
-  "settings.routingDelete": "हटाएँ",
+  "settings.routingReorder": "नियम का क्रम बदलें",
+  "settings.routingRulesTitle": "नियम",
   "settings.assetFiles": "रिसोर्स फ़ाइलें",
   "settings.assetHint":
     "ये Xray geo databases हैं। वही Xray-शैली नियम अंदरूनी रूप से अपने-आप sing-box में परिवर्तित हो जाते हैं।",

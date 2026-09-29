@@ -822,9 +822,8 @@ const ar = {
   "settings.routingRuleNetwork": "الشبكة: {value}",
   "settings.routingRuleProtocols": "البروتوكولات: {value}",
   "settings.routingRuleNoMatch": "لا توجد حقول مطابقة",
-  "settings.routingMoveUp": "نقل لأعلى",
-  "settings.routingMoveDown": "نقل لأسفل",
-  "settings.routingDelete": "حذف",
+  "settings.routingReorder": "إعادة ترتيب القاعدة",
+  "settings.routingRulesTitle": "القواعد",
   "settings.assetFiles": "ملفات الموارد",
   "settings.assetHint":
     "هذه قواعد جغرافية خاصة بـ Xray. ويتم تحويل قواعد Xray نفسها تلقائيًا إلى sing-box داخليًا.",
