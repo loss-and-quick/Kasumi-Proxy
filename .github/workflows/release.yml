@@ -41,22 +41,16 @@ jobs:
       version: ${{ steps.bump.outputs.version }}
       skip: ${{ steps.changes.outputs.skip }}
     steps:
-      # The version-bump commit is pushed under a PAT so it bypasses the `main`
-      # ruleset (the default GITHUB_TOKEN / github-actions app is not in the
-      # bypass list and cannot be added on a user-owned repo). RELEASE_TOKEN must
-      # hold a PAT of a user with the bypass role. Checking it here — before the
-      # checkout that used to carry it — turns an expired PAT into a named
-      # failure in seconds instead of a `could not read Username` git prompt.
-      - name: Verify the release token
+      # The version-bump commit is pushed over SSH with a write deploy key: deploy
+      # keys are in the `main` ruleset's bypass list and don't expire (the
+      # GITHUB_TOKEN can't be added to it on a user-owned repo). Without the key,
+      # checkout silently falls back to the token and only the final push fails.
+      - name: Verify the release deploy key
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
         run: |
-          if [ -z "$RELEASE_TOKEN" ]; then
-            echo "::error::RELEASE_TOKEN is unset. Set it to a PAT that bypasses the main ruleset."
-            exit 1
-          fi
-          if ! GH_TOKEN="$RELEASE_TOKEN" gh api user -q .login >/dev/null 2>&1; then
-            echo "::error::RELEASE_TOKEN is expired or revoked. Regenerate the PAT and run: gh secret set RELEASE_TOKEN"
+          if [ -z "$RELEASE_DEPLOY_KEY" ]; then
+            echo "::error::RELEASE_DEPLOY_KEY is unset. Add a write deploy key and store its private half: gh secret set RELEASE_DEPLOY_KEY < key"
             exit 1
           fi
 
@@ -64,6 +58,7 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Check for changes since last release
         id: changes
@@ -232,8 +227,6 @@ jobs:
 
       - name: Commit version bump
         if: steps.changes.outputs.skip != 'true'
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -245,8 +238,7 @@ jobs:
             echo "nothing to commit — version, update.json and changelog already current"
           else
             git commit -m "chore(release): ${{ steps.bump.outputs.version }}"
-            git push "https://x-access-token:${RELEASE_TOKEN}@github.com/${{ github.repository }}" \
-              "HEAD:${{ github.ref_name }}"
+            git push origin "HEAD:${{ github.ref_name }}"
           fi
 
       - name: Create GitHub Release
