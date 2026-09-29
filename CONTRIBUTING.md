@@ -72,7 +72,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 
 # Codegen: after changing Rust types, regenerate and commit the result
-cargo run -p kasumi-desktop --bin codegen
+cargo run -p kasumi-desktop --example codegen
 git diff --exit-code -- frontend/src/generated
 
 # Frontend

@@ -169,7 +169,7 @@ jobs:
             cargo test --workspace
             # The generated frontend bindings/schemas/defaults must match the Rust
             # source — regenerate and fail on any diff.
-            cargo run -p kasumi-desktop --bin codegen
+            cargo run -p kasumi-desktop --example codegen
             git diff --exit-code -- frontend/src/generated
           '
 

@@ -32,7 +32,7 @@ Tauri crate needs a built `frontend/dist` and stubs in `src-tauri/binaries/` (se
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
-cargo run -p kasumi-desktop --bin codegen && git diff --exit-code -- frontend/src/generated
+cargo run -p kasumi-desktop --example codegen && git diff --exit-code -- frontend/src/generated
 
 cd frontend && bun run build && bun run test && bun run check && bun run check:i18n
 

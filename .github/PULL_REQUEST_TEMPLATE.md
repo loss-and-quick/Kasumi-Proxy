@@ -29,7 +29,7 @@ Rust (`crates/` · `src-tauri/`):
 - [ ] `cargo fmt --all --check`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
 - [ ] `cargo test --workspace`
-- [ ] Codegen drift: `cargo run -p kasumi-desktop --bin codegen` leaves `git` clean
+- [ ] Codegen drift: `cargo run -p kasumi-desktop --example codegen` leaves `git` clean
 
 Web UI (`frontend/`):
 
