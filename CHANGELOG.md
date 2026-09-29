@@ -1,3 +1,48 @@
+## v0.4.6 — 2026-09-29
+
+### Core updates
+
+- sing-box: `v1.14.0` → `v1.14.2`
+
+### Changes
+
+- [`e9d7432`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e9d7432) fix(android): stop strict-route carve-out from blackholing tethered clients
+- [`58b6d2b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/58b6d2b) docs(agents): drop the Nix-only workflow and stale references
+- [`6dcce29`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6dcce29) docs: trim README, split build and Nix guides out
+- [`516c6f9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/516c6f9) fix(frontend): hide the restart cue while a start or stop is running
+- [`e9b2fad`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e9b2fad) fix(backend): don't flag a pending restart over a restart in flight
+- [`223486a`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/223486a) feat(settings): process, app and source-address fields in the rule editor
+- [`86a1706`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/86a1706) feat(core): match routing rules by process, Android app and source address
+- [`6daba66`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/6daba66) feat(core): choose how sing-box fragments the TLS handshake
+- [`a90100a`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a90100a) feat(editor): pick the profile to connect through
+- [`38880df`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/38880df) feat(core): proxy chains through another profile
+- [`a6fd50e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a6fd50e) feat(backend): keep a sing-box cache file across core restarts
+- [`72bffb0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/72bffb0) feat(core): offer the mixed sing-box tun stack
+- [`ca2d368`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ca2d368) fix(core): use every remote DNS server on sing-box, not just the first
+- [`e5e6fc8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e5e6fc8) TUN engine settings driven by Rust: each engine shows the fields it reads
+- [`ea4ac81`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ea4ac81) frontend: TUN engine matrix and one type scale for rows, hints and labels
+- [`f8f824f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f8f824f) frontend: settings as categories, segmented controls, searchable selects
+- [`be43bbe`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/be43bbe) feat(settings): asset auto-update controls
+- [`5a8ee20`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5a8ee20) feat(backend): headless geosite/geoip auto-update
+- [`69f6786`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/69f6786) fix(frontend): render newline-joined list settings in a textarea
+- [`fc1d743`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fc1d743) fix(core): keep the wireguard address list non-empty
+- [`a839c86`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a839c86) feat(frontend): parse list settings one-per-line and add hints
+- [`952daac`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/952daac) feat(core): parse list fields on newline or comma
+- [`744a230`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/744a230) feat(frontend): expose TUN exclude-CIDRs in the TUN engine settings
+- [`93a7e32`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/93a7e32) feat(desktop): merge user exclude-CIDRs into the tun bypass
+- [`1635327`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/1635327) feat(core): add TUN exclude-CIDR setting
+- [`903bc66`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/903bc66) feat(core): match DNS responses instead of legacy address filters
+- [`4c7e0e4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4c7e0e4) test(core): list every legacy-DNS offender in the config harness
+- [`c41caf1`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c41caf1) fix(core): keep fake-DNS sing-box configs off response-matched DNS fields
+- [`fed29b0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/fed29b0) feat(core): generate the routing-mode option list from Rust
+- [`d09b349`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d09b349) fix(tray): don't panic when the bundled icon won't decode
+- [`5270909`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5270909) fix(tray): surface pending-restart in the tooltip
+- [`d1406f2`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d1406f2) feat(tray): routing switch, live tooltip/icon, ping in recent list
+- [`f658431`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f658431) feat(frontend): call out a catch-all that only repeats the final fallback
+- [`28a893f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/28a893f) feat(frontend): warn about catch-all rules in the routing list
+- [`b4124ee`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b4124ee) feat(frontend): detect routing rules that match every connection
+- [`daf7e70`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/daf7e70) fix(frontend): drop the duplicate restart button from the pending-restart banner
+
 ## v0.4.4 — 2026-08-03
 
 ### Core updates
