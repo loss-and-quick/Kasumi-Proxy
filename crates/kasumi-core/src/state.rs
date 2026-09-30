@@ -319,6 +319,10 @@ pub struct AdvancedSettings {
     pub ping_concurrency: i64,
     pub speed_concurrency: i64,
     pub auto_start: bool,
+    /// Periodically fetch `delay_test_url` through the running core to tell
+    /// Connected from NoInternet and keep the active profile's ping fresh. Off, the
+    /// status trusts the process state alone and nothing is sent in the background.
+    pub connectivity_check: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mux_xudp_concurrency: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -417,6 +421,7 @@ impl Default for AdvancedSettings {
             ping_concurrency: 3,
             speed_concurrency: 1,
             auto_start: true,
+            connectivity_check: true,
             mux_xudp_concurrency: None,
             mux_xudp443: None,
             fragment: false,

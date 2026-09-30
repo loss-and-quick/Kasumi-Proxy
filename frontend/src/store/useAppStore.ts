@@ -88,6 +88,8 @@ interface Store extends AppState {
   // (tcp-ping · real-ping · speed-test) — see the `TestKind` enum shared with Rust.
   testProfile: (id: string, kind: TestKind) => Promise<void>;
   testAll: (kind: TestKind, groupId?: string) => Promise<void>;
+  // Re-check the running connection now and refresh the active profile's ping.
+  probeActive: () => Promise<void>;
   removeUnreachable: (groupId?: string) => Promise<void>;
   removeDuplicates: (groupId?: string) => Promise<void>;
   selectBest: (groupId?: string) => Promise<void>;
@@ -212,7 +214,14 @@ export const useAppStore = create<Store>((set, get) => {
     // profile switch) must not flash the cue. The closing refreshStatus reports
     // the settled flag.
     const pendingRestart = service.pendingRestart && !get().busy;
-    set({ service: { ...service, pendingRestart }, uploadRate, downloadRate });
+    // The backend's connectivity check measures the live path of the active
+    // profile, so its round trip is that profile's current ping.
+    const { activeId, latencyMs } = service;
+    const freshPing =
+      activeId && latencyMs != null && get().testResults[activeId]?.ping !== latencyMs
+        ? { testResults: withTest(get(), activeId, { ping: latencyMs }) }
+        : {};
+    set({ service: { ...service, pendingRestart }, uploadRate, downloadRate, ...freshPing });
   };
   // The daemon fetched & applied a subscription headlessly (it owns the restart
   // decision too) — re-read the persisted state so the UI reflects the new
@@ -273,6 +282,7 @@ export const useAppStore = create<Store>((set, get) => {
         state: "connecting",
         activeId: nextActiveId,
         pendingRestart: false,
+        latencyMs: null,
       },
     }));
     await waitForUiPaint();
@@ -319,6 +329,7 @@ export const useAppStore = create<Store>((set, get) => {
       core: "",
       engine: null,
       pendingRestart: false,
+      latencyMs: null,
     },
 
     async hydrate() {
@@ -532,6 +543,23 @@ export const useAppStore = create<Store>((set, get) => {
         translateCurrent("activity.profileImported", { count: profiles.length }),
       );
       get().notify(translateCurrent("store.profile.imported", { count: profiles.length }));
+    },
+
+    async probeActive() {
+      const id = get().service.activeId;
+      if (!id || get().pinging.has(id)) return;
+      set((s) => ({ pinging: new Set([...s.pinging, id]) }));
+      let value: number;
+      try {
+        value = await bridge.probeConnection();
+      } catch (e) {
+        value = -2;
+        get().notify(translateCurrent("store.ping.testFailed", { error: errorMessage(e) }));
+      }
+      set((s) => ({
+        testResults: withTest(s, id, { ping: value }),
+        pinging: new Set([...s.pinging].filter((x) => x !== id)),
+      }));
     },
 
     // One diagnostic on one profile. tcp-ping and real-ping write `meta.ping`;

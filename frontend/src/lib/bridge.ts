@@ -63,11 +63,12 @@ export interface AppEntry {
 
 /** ServiceStatus as screens consume it — keeps `error`, the reason carried by
  *  `failed` (couldn't start) and `noInternet` (up but no connectivity).
- *  `pendingRestart` is always concrete here (the parser defaults it), even
- *  though older senders may omit it on the wire. */
+ *  `pendingRestart` and `latencyMs` are always concrete here (the parser defaults
+ *  them), even though older senders may omit them on the wire. */
 export interface ServiceStatus extends Omit<WireServiceStatus, "state"> {
   state: ServiceState;
   pendingRestart: boolean;
+  latencyMs: number | null;
 }
 
 export type ResourceUpdateMode = FetchMode;
@@ -92,6 +93,9 @@ export interface Bridge {
   pingAll(ids: string[], onResult?: BatchProgress): Promise<Record<string, number>>;
   realPing(profileId: string): Promise<number>;
   realPingAll(ids: string[], onResult?: BatchProgress): Promise<Record<string, number>>;
+  // One connectivity check through the running core (not a test core): the live
+  // path's round trip in ms, -1 when unreachable or nothing is running.
+  probeConnection(): Promise<number>;
   speedTest(profileId: string): Promise<number>; // bytes/sec, -1 = unreachable
   speedTestAll(ids: string[], onResult?: BatchProgress): Promise<Record<string, number>>;
   log(input?: { target?: LogTarget; lines?: number }): Promise<string>;
@@ -180,6 +184,7 @@ export function parseServiceStatus(value: unknown): ServiceStatus {
     core: typeof s.core === "string" ? s.core : "",
     engine: s.engine === "xray" || s.engine === "sing-box" ? s.engine : null,
     pendingRestart: s.pendingRestart === true,
+    latencyMs: typeof s.latencyMs === "number" ? s.latencyMs : null,
   };
 }
 

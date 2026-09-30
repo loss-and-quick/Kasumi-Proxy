@@ -36,6 +36,7 @@ const DEFAULT_STATUS: ServiceStatus = {
   core: "Xray",
   engine: null,
   pendingRestart: false,
+  latencyMs: null,
 };
 
 // Nested-model builder: Vless is `meta`/`endpoint`/`transport`/`tls`/ root
@@ -132,6 +133,7 @@ function createBridgeMock(): BridgeMock {
     clearLogs: vi.fn(async () => ({ ok: true })),
     realPing: vi.fn(async () => 0),
     realPingAll: vi.fn(async () => ({})),
+    probeConnection: vi.fn(async () => -1),
     speedTest: vi.fn(async () => 0),
     speedTestAll: vi.fn(async () => ({})),
     capabilities: vi.fn(async () => ({
@@ -483,6 +485,39 @@ describe("useAppStore", () => {
     bridge.speedTest.mockResolvedValueOnce(1_500_000);
     await useAppStore.getState().testProfile("p1", "speed");
     expect(useAppStore.getState().testResults.p1.speed).toBe(1_500_000);
+  });
+
+  it("the connectivity check's latency becomes the running profile's ping", async () => {
+    let statusListener: ((status: ServiceStatus) => void) | undefined;
+    bridge.onStatus.mockImplementation((cb: (status: ServiceStatus) => void) => {
+      statusListener = cb;
+      return () => {};
+    });
+    const p1 = makeVless({ meta: { id: "p1" } });
+    const running = { ...DEFAULT_STATUS, state: "connected" as const, activeId: "p1" };
+    bridge.readState.mockResolvedValue(makeState({ profiles: [p1], activeId: "p1" }));
+    bridge.status.mockResolvedValue(running);
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().testResults.p1?.ping ?? null).toBeNull();
+
+    statusListener?.({ ...running, latencyMs: 73 });
+    expect(useAppStore.getState().testResults.p1.ping).toBe(73);
+    // A frame without a verdict (check off, or not landed yet) keeps the last value.
+    statusListener?.(running);
+    expect(useAppStore.getState().testResults.p1.ping).toBe(73);
+  });
+
+  it("probeActive re-measures the running profile through the live core", async () => {
+    useAppStore.setState({
+      service: { ...DEFAULT_STATUS, state: "connected", activeId: "p1" },
+      testResults: {},
+    });
+    bridge.probeConnection.mockResolvedValueOnce(64);
+    const probing = useAppStore.getState().probeActive();
+    expect(useAppStore.getState().pinging.has("p1")).toBe(true);
+    await probing;
+    expect(useAppStore.getState().pinging.has("p1")).toBe(false);
+    expect(useAppStore.getState().testResults.p1.ping).toBe(64);
   });
 
   it("removeProfile stops service and clears active id when removing active profile", async () => {

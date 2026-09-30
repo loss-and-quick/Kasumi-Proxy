@@ -536,6 +536,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "assetUpdateInterval": 1440,
   "assetUpdateMode": "auto",
   "autoStart": true,
+  "connectivityCheck": true,
   "coreByProtocol": {},
   "dedupOnUpdate": false,
   "dnsViaProxy": true,

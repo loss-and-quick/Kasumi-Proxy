@@ -15,7 +15,7 @@ mod watchers;
 mod tests;
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use tokio::sync::{Mutex, broadcast};
@@ -51,6 +51,9 @@ pub struct Service {
     /// Latest connectivity-probe result; the watchdog refreshes it, `current_status`
     /// overlays it onto a process-up state to tell Connected from NoInternet.
     connectivity: StdMutex<Connectivity>,
+    /// Bumped each time the data path stops or is replaced, so a probe that was in
+    /// flight across the change drops its (now stale) verdict.
+    data_path_generation: AtomicU64,
     /// The exact post-tune build + proxy mode the running data path was started
     /// with — the baseline settings mutations are diffed against. `None` while
     /// stopped. Deliberately in-memory (not the on-disk config): the start path
@@ -81,6 +84,7 @@ impl Service {
             asset_attempts: Mutex::new(HashMap::new()),
             auto_started: AtomicBool::new(false),
             connectivity: StdMutex::new(Connectivity::Unknown),
+            data_path_generation: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
         })
@@ -122,6 +126,18 @@ impl Service {
                 .map_err(CommandError)?;
                 self.emit_status().await;
                 Ok(Response::State(Box::new(state)))
+            }
+            Command::ProbeConnection => {
+                // An explicit check through the running core — also when the
+                // background check is off. `None` = not running or unreachable.
+                let (verdict, changed) = self.probe_and_store().await;
+                if changed {
+                    self.emit_status().await;
+                }
+                Ok(Response::Ping(match verdict {
+                    Connectivity::Reachable { latency_ms } => Some(latency_ms as i64),
+                    _ => None,
+                }))
             }
             other => commands::dispatch(&*self.platform, other).await,
         }

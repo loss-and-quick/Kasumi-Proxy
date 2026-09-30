@@ -127,6 +127,8 @@ impl Service {
     /// that could be stale, so the pending flag clears too.
     pub(super) fn note_data_path_stopped(&self) {
         *self.running_config.lock().unwrap() = None;
+        // The old core's verdict (and its latency) says nothing about the next one.
+        self.reset_connectivity();
         self.pending_restart.store(false, Ordering::SeqCst);
     }
 

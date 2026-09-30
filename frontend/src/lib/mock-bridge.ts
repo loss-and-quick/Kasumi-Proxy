@@ -63,6 +63,7 @@ let serviceState: ServiceStatus = {
   core: "Xray 25.5.16",
   engine: "xray",
   pendingRestart: false,
+  latencyMs: null,
 };
 
 function cloneServiceStatus(): ServiceStatus {
@@ -116,6 +117,7 @@ export const mockBridge: Bridge = {
       uploadBytes: Math.floor(Math.random() * 500000),
       downloadBytes: Math.floor(Math.random() * 2000000),
       uptimeSec: 0,
+      latencyMs: simPing(),
     };
     // Start uptime counter
     setInterval(() => {
@@ -134,6 +136,7 @@ export const mockBridge: Bridge = {
       uploadBytes: 0,
       downloadBytes: 0,
       uptimeSec: 0,
+      latencyMs: null,
     };
     return cloneServiceStatus();
   },
@@ -198,6 +201,11 @@ export const mockBridge: Bridge = {
     await new Promise((r) => setTimeout(r, 800 + Math.random() * 1200));
     const ms = Math.random() < 0.15 ? -1 : simPing();
     return ms;
+  },
+
+  async probeConnection(): Promise<number> {
+    await new Promise((r) => setTimeout(r, 300 + Math.random() * 500));
+    return serviceState.state === "connected" ? simPing() : -1;
   },
 
   async realPingAll(

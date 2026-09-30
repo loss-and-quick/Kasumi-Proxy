@@ -73,6 +73,7 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	pingConcurrency: z.number(),
 	speedConcurrency: z.number(),
 	autoStart: z.boolean(),
+	connectivityCheck: z.boolean(),
 	muxXudpConcurrency: z.number().nullable().optional(),
 	muxXudp443: MuxXudp443Schema.nullable().optional(),
 	fragment: z.boolean(),
@@ -135,6 +136,7 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	pingConcurrency: z.number().optional(),
 	speedConcurrency: z.number().optional(),
 	autoStart: z.boolean().optional(),
+	connectivityCheck: z.boolean().optional(),
 	muxXudpConcurrency: z.number().nullable().optional(),
 	muxXudp443: MuxXudp443Schema.nullable().optional(),
 	fragment: z.boolean().optional(),
@@ -849,6 +851,8 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("ping"),
 	profileId: z.string(),
 }), z.object({
+	cmd: z.literal("probeConnection"),
+}), z.object({
 	cmd: z.literal("readState"),
 }), z.object({
 	cmd: z.literal("realPing"),
@@ -1014,6 +1018,8 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("ping"),
 	profileId: z.string(),
+}), z.object({
+	cmd: z.literal("probeConnection"),
 }), z.object({
 	cmd: z.literal("readState"),
 }), z.object({
@@ -1212,6 +1218,7 @@ export const ServiceStatus_SerializeSchema = z.object({
 	activeId: z.string().nullable(),
 	core: z.string(),
 	pendingRestart: z.boolean(),
+	latencyMs: z.number().nullable(),
 }).and(ServiceState_SerializeSchema);
 export type ServiceStatus_Serialize = z.infer<typeof ServiceStatus_SerializeSchema>;
 
@@ -1220,6 +1227,7 @@ export const ServiceStatus_DeserializeSchema = z.object({
 	activeId: z.string().nullable(),
 	core: z.string(),
 	pendingRestart: z.boolean().optional(),
+	latencyMs: z.number().nullable().optional(),
 }).and(ServiceState_DeserializeSchema);
 export type ServiceStatus_Deserialize = z.infer<typeof ServiceStatus_DeserializeSchema>;
 

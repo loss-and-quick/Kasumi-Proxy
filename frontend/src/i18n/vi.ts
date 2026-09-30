@@ -30,6 +30,7 @@ const vi = {
   "overview.upload": "Tải lên",
   "overview.uptime": "Thời gian hoạt động",
   "overview.ping": "Ping",
+  "overview.pingRefresh": "Kiểm tra kết nối ngay",
   "overview.start": "Bắt đầu",
   "overview.stop": "Dừng",
   "overview.starting_btn": "Đang khởi động",
@@ -452,6 +453,9 @@ const vi = {
   "settings.socksPass": "Mật khẩu",
   "settings.advanced": "Nâng cao",
   "settings.delayTestUrl": "URL kiểm tra độ trễ",
+  "settings.connectivityCheck": "Kiểm tra kết nối",
+  "settings.connectivityCheckSub":
+    'Mỗi phút, một yêu cầu qua proxy phân biệt "Đã kết nối" với "Không có internet" và cập nhật ping. Tắt: không gửi gì trong nền, trạng thái chỉ dựa vào lõi đang chạy.',
   "settings.customRouting": "Quy tắc định tuyến tùy chỉnh (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',

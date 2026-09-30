@@ -29,6 +29,7 @@ const hi = {
   "overview.upload": "अपलोड",
   "overview.uptime": "अपटाइम",
   "overview.ping": "पिंग",
+  "overview.pingRefresh": "अभी कनेक्शन जाँचें",
   "overview.start": "शुरू करें",
   "overview.stop": "रोकें",
   "overview.starting_btn": "शुरू हो रहा है",
@@ -447,6 +448,9 @@ const hi = {
   "settings.socksPass": "पासवर्ड",
   "settings.advanced": "उन्नत",
   "settings.delayTestUrl": "लेटेंसी टेस्ट URL",
+  "settings.connectivityCheck": "कनेक्शन जाँच",
+  "settings.connectivityCheckSub":
+    'हर मिनट प्रॉक्सी के ज़रिए एक अनुरोध "कनेक्टेड" और "इंटरनेट नहीं" में फ़र्क़ करता है और पिंग अपडेट करता है। बंद होने पर बैकग्राउंड में कुछ नहीं भेजा जाता और स्थिति केवल चल रहे कोर पर निर्भर रहती है।',
   "settings.customRouting": "कस्टम रूटिंग नियम (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',

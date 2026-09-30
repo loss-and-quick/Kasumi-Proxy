@@ -1,4 +1,4 @@
-import { Card, Field, SectionLabel } from "../../../components";
+import { Card, Field, RowToggle, SectionLabel } from "../../../components";
 import { useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
@@ -14,7 +14,16 @@ export function AdvancedSection({
   return (
     <>
       <SectionLabel>{t("settings.advanced")}</SectionLabel>
-      <Card style={{ padding: 14 }}>
+      <Card style={{ padding: "4px 14px" }}>
+        <RowToggle
+          icon="speed"
+          title={t("settings.connectivityCheck")}
+          sub={t("settings.connectivityCheckSub")}
+          on={settings.connectivityCheck ?? true}
+          onChange={(value) => set("connectivityCheck", value)}
+        />
+      </Card>
+      <Card style={{ padding: 14, marginTop: 12 }}>
         <Field
           label={t("settings.delayTestUrl")}
           mono={false}

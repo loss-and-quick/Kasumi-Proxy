@@ -29,6 +29,7 @@ const ar = {
   "overview.upload": "الرفع",
   "overview.uptime": "مدة التشغيل",
   "overview.ping": "Ping",
+  "overview.pingRefresh": "افحص الاتصال الآن",
   "overview.start": "بدء",
   "overview.stop": "إيقاف",
   "overview.starting_btn": "جارٍ البدء",
@@ -526,6 +527,9 @@ const ar = {
   "settings.socksPass": "كلمة المرور",
   "settings.advanced": "متقدم",
   "settings.delayTestUrl": "رابط اختبار التأخير",
+  "settings.connectivityCheck": "فحص الاتصال",
+  "settings.connectivityCheckSub":
+    "كل دقيقة، يميّز طلب عبر الوكيل بين «متصل» و«لا يوجد إنترنت» ويحدّث زمن الاستجابة. عند الإيقاف: لا يُرسل شيء في الخلفية وتعتمد الحالة على النواة العاملة فقط.",
   "settings.customRouting": "قواعد توجيه مخصصة (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',
