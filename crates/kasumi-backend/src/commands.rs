@@ -151,6 +151,9 @@ pub enum Command {
     SpeedTest {
         profile_id: String,
     },
+    /// One connectivity check through the running core, on demand; replies with
+    /// its round trip (`Ping`). Stateful: it updates the Service's verdict.
+    ProbeConnection,
     // Lifecycle: stateful, owned by the Service's serialized chain. The stateless
     // `dispatch` rejects them; `Service::dispatch` intercepts and runs them.
     #[serde(rename_all = "camelCase")]
@@ -470,7 +473,8 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         | Command::Stop
         | Command::Restart { .. }
         | Command::ReloadAppFilter
-        | Command::ApplySubscription { .. } => Err(err(
+        | Command::ApplySubscription { .. }
+        | Command::ProbeConnection => Err(err(
             "stateful commands must be dispatched through the Service",
         )),
     }

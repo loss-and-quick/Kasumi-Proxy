@@ -2,7 +2,7 @@
 //! stream both transports subscribe to.
 
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
 
@@ -19,7 +19,10 @@ use super::Service;
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum Connectivity {
     Unknown,
-    Reachable,
+    /// Reached the test URL; the fetch's round trip in ms.
+    Reachable {
+        latency_ms: u64,
+    },
     Unreachable(String),
 }
 
@@ -34,23 +37,32 @@ impl Service {
     /// initial frame a client gets on connect.
     pub async fn current_status(&self) -> Option<ServiceStatus> {
         let mut service = self.platform.service_state().await.ok()?;
+        let state = read_json::<AppState>(&self.platform.paths().app_state).await;
+        let check = state.as_ref().is_none_or(|s| s.settings.connectivity_check);
+        let mut latency_ms = None;
         // The platform reports process-truth (Connecting once the core is up). Refine
         // it with the latest connectivity probe: a running core that actually reaches
         // the internet is Connected; one that can't is NoInternet; before the first
-        // probe lands it stays Connecting.
+        // probe lands it stays Connecting. With the check off there is no probe to
+        // wait for, so a running core counts as Connected.
         if service.state == RunState::Connecting && service.engine.is_some() {
-            match &*self.connectivity.lock().unwrap() {
-                Connectivity::Reachable => service.state = RunState::Connected,
-                Connectivity::Unreachable(reason) => {
-                    service.state = RunState::NoInternet;
-                    service.error = Some(reason.clone());
+            if !check {
+                service.state = RunState::Connected;
+            } else {
+                match &*self.connectivity.lock().unwrap() {
+                    Connectivity::Reachable { latency_ms: ms } => {
+                        service.state = RunState::Connected;
+                        latency_ms = Some(*ms);
+                    }
+                    Connectivity::Unreachable(reason) => {
+                        service.state = RunState::NoInternet;
+                        service.error = Some(reason.clone());
+                    }
+                    Connectivity::Unknown => {}
                 }
-                Connectivity::Unknown => {}
             }
         }
-        let active_id = read_json::<AppState>(&self.platform.paths().app_state)
-            .await
-            .and_then(|s| s.active_id);
+        let active_id = state.and_then(|s| s.active_id);
         let core = match service.engine {
             Some(kasumi_core::enums::CoreEngine::Xray) => self.cores.xray.clone(),
             Some(kasumi_core::enums::CoreEngine::SingBox) => self.cores.singbox.clone(),
@@ -62,6 +74,7 @@ impl Service {
             active_id,
             core,
             pending_restart: self.pending_restart.load(Ordering::SeqCst),
+            latency_ms,
         })
     }
 
@@ -84,6 +97,7 @@ impl Service {
             .and_then(|s| s.settings.delay_test_url)
             .filter(|u| !u.is_empty())
             .unwrap_or_else(|| DEFAULT_DELAY_TEST_URL.to_owned());
+        let t0 = Instant::now();
         match fetch_url(
             &url,
             FetchUrlOptions {
@@ -95,7 +109,9 @@ impl Service {
         )
         .await
         {
-            Ok(_) => Connectivity::Reachable,
+            Ok(_) => Connectivity::Reachable {
+                latency_ms: t0.elapsed().as_millis() as u64,
+            },
             Err(e) => {
                 // Root cause, capped — e.g. "connection timed out", "connection refused".
                 let reason = e.to_string();
@@ -105,15 +121,32 @@ impl Service {
         }
     }
 
-    /// Store the connectivity verdict; returns whether it changed (so a caller only
-    /// re-emits status when there's something new).
-    pub(super) fn set_connectivity(&self, c: Connectivity) -> bool {
+    /// Probe now and store the verdict, unless the data path was stopped or
+    /// restarted while the probe ran (its answer would describe the old core).
+    /// Returns the verdict and whether the stored one changed, so a caller only
+    /// re-emits status when there's something new.
+    pub(super) async fn probe_and_store(&self) -> (Connectivity, bool) {
+        let generation = self.data_path_generation.load(Ordering::SeqCst);
+        let verdict = self.probe_connectivity().await;
         let mut guard = self.connectivity.lock().unwrap();
-        if *guard != c {
-            *guard = c;
-            true
-        } else {
-            false
+        if self.data_path_generation.load(Ordering::SeqCst) != generation || *guard == verdict {
+            return (verdict, false);
         }
+        *guard = verdict.clone();
+        (verdict, true)
+    }
+
+    /// Forget the last verdict (the data path went down or is being replaced). Bumps
+    /// the generation so a probe still in flight can't store a stale answer.
+    pub(super) fn reset_connectivity(&self) -> bool {
+        self.data_path_generation.fetch_add(1, Ordering::SeqCst);
+        let mut guard = self.connectivity.lock().unwrap();
+        let changed = *guard != Connectivity::Unknown;
+        *guard = Connectivity::Unknown;
+        changed
+    }
+
+    pub(super) fn connectivity(&self) -> Connectivity {
+        self.connectivity.lock().unwrap().clone()
     }
 }

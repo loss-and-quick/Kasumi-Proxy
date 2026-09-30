@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use kasumi_core::contract::{AssetsUpdatedEvent, PushFrame, RunState, SubAppliedEvent};
 use kasumi_core::state::AppState;
@@ -17,6 +17,11 @@ use super::lifecycle::LifecycleCmd;
 use super::status::Connectivity;
 
 const WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
+/// How often a healthy connection is re-checked over the network. The local
+/// process check stays on the 5 s watchdog tick; this one sends a request through
+/// the proxy, so it runs rarely — a fixed few-second rhythm of tiny requests to the
+/// server is a traffic pattern of its own and keeps a phone's radio awake.
+const PROBE_INTERVAL: Duration = Duration::from_secs(60);
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
 
 impl Service {
@@ -93,6 +98,7 @@ impl Service {
     pub(super) fn spawn_watchdog(self: &Arc<Self>) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
+            let mut last_probe = None;
             loop {
                 tokio::time::sleep(WATCHDOG_INTERVAL).await;
                 let up = this
@@ -102,7 +108,7 @@ impl Service {
                     .map(|s| s.engine.is_some())
                     .unwrap_or(false);
                 if !up {
-                    if this.set_connectivity(Connectivity::Unknown) {
+                    if this.reset_connectivity() {
                         this.emit_status().await;
                     }
                     continue;
@@ -114,14 +120,31 @@ impl Service {
                     let _ = this.platform.stop_data_path(StopDataPath::default()).await;
                     drop(_g);
                     this.note_data_path_stopped();
-                    this.set_connectivity(Connectivity::Unknown);
                     this.emit_status().await;
                     continue;
                 }
                 // Process is up: probe end-to-end connectivity (outside the lifecycle
                 // lock — it can take seconds) and re-emit only when the verdict changes.
-                let verdict = this.probe_connectivity().await;
-                if this.set_connectivity(verdict) {
+                // Probe at once for a fresh core, every tick while it can't reach the
+                // internet (so recovery shows quickly), and every PROBE_INTERVAL once
+                // it can. Nothing is sent when the user turned the check off.
+                let check = read_json::<AppState>(&this.platform.paths().app_state)
+                    .await
+                    .is_none_or(|s| s.settings.connectivity_check);
+                if !check {
+                    continue;
+                }
+                let due = match this.connectivity() {
+                    Connectivity::Unknown | Connectivity::Unreachable(_) => true,
+                    Connectivity::Reachable { .. } => {
+                        last_probe.is_none_or(|t: Instant| t.elapsed() >= PROBE_INTERVAL)
+                    }
+                };
+                if !due {
+                    continue;
+                }
+                last_probe = Some(Instant::now());
+                if this.probe_and_store().await.1 {
                     this.emit_status().await;
                 }
             }

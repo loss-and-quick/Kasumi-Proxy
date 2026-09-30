@@ -297,12 +297,13 @@ async fn ui_only_mutation_keeps_pending_restart_clear() {
         .await
         .unwrap();
 
-    // Neither setting reaches the built config: no restart needed.
+    // None of these settings reaches the built config: no restart needed.
     set_settings(&svc, |s| {
         s.delay_test_url = Some("https://probe.example/gen".into())
     })
     .await;
     set_settings(&svc, |s| s.log_rotate_max_kb = 1024).await;
+    set_settings(&svc, |s| s.connectivity_check = false).await;
     assert!(!pending_restart(&svc).await);
 }
 
@@ -427,4 +428,51 @@ async fn profile_switch_restart_never_shows_pending_restart() {
         .await
         .unwrap();
     assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
+async fn reachable_verdict_carries_latency_until_restart() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+
+    *svc.connectivity.lock().unwrap() = Connectivity::Reachable { latency_ms: 87 };
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.service.state, RunState::Connected);
+    assert_eq!(status.latency_ms, Some(87));
+
+    // A restart replaces the core: the old verdict and its latency are dropped.
+    svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.service.state, RunState::Connecting);
+    assert_eq!(status.latency_ms, None);
+}
+
+#[tokio::test]
+async fn check_off_trusts_the_process_state() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    set_settings(&svc, |s| s.connectivity_check = false).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.service.state, RunState::Connected);
+    assert_eq!(status.latency_ms, None);
+}
+
+#[tokio::test]
+async fn probe_connection_without_a_running_proxy_is_no_result() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    let reply = svc.dispatch(Command::ProbeConnection).await.unwrap();
+    assert!(matches!(reply, Response::Ping(None)));
 }

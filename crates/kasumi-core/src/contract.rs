@@ -92,6 +92,10 @@ pub struct ServiceStatus {
     /// one restart applies them all. Always `false` while nothing is running.
     #[serde(default)]
     pub pending_restart: bool,
+    /// Round trip of the latest successful connectivity probe through the running
+    /// core, in ms; `null` until one lands, or while the check is off.
+    #[serde(default)]
+    pub latency_ms: Option<u64>,
 }
 
 /// Reply to the `capabilities` RPC.
@@ -194,6 +198,7 @@ mod tests {
             active_id: Some("p1".into()),
             core: "Xray 25.5.16".into(),
             pending_restart: true,
+            latency_ms: Some(42),
         };
         let v: serde_json::Value = serde_json::to_value(&status).unwrap();
         // Flattened ServiceState fields + camelCase keys, error omitted when None.
@@ -205,6 +210,7 @@ mod tests {
         assert_eq!(v["activeId"], "p1");
         assert_eq!(v["core"], "Xray 25.5.16");
         assert_eq!(v["pendingRestart"], true);
+        assert_eq!(v["latencyMs"], 42);
         assert!(v.get("error").is_none());
         // Round-trips.
         assert_eq!(serde_json::from_value::<ServiceStatus>(v).unwrap(), status);
@@ -224,6 +230,7 @@ mod tests {
         });
         let status = serde_json::from_value::<ServiceStatus>(v).unwrap();
         assert!(!status.pending_restart);
+        assert!(status.latency_ms.is_none());
     }
 
     #[test]
