@@ -76,6 +76,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       activeId: lastStatus?.activeId ?? lastState?.activeId ?? null,
       core: lastStatus?.core ?? "",
       pendingRestart: lastStatus?.pendingRestart ?? false,
+      latencyMs: lastStatus?.latencyMs ?? null,
     });
   }
 
@@ -152,6 +153,9 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
 
     async realPing(profileId) {
       return asPing(await dispatch({ cmd: "realPing", profileId }));
+    },
+    async probeConnection() {
+      return asPing(await dispatch({ cmd: "probeConnection" }));
     },
     async realPingAll(ids, onResult) {
       const out: Record<string, number> = {};

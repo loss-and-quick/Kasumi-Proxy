@@ -79,6 +79,9 @@ export const bridge: Bridge = {
   async realPing(profileId) {
     return (await loadBridge()).realPing(profileId);
   },
+  async probeConnection() {
+    return (await loadBridge()).probeConnection();
+  },
   async realPingAll(ids, onResult) {
     return (await loadBridge()).realPingAll(ids, onResult);
   },

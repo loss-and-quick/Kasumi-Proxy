@@ -31,6 +31,7 @@ const en = {
   "overview.upload": "Upload",
   "overview.uptime": "Uptime",
   "overview.ping": "Ping",
+  "overview.pingRefresh": "Check the connection now",
   "overview.start": "Start",
   "overview.stop": "Stop",
   "overview.starting_btn": "Starting",
@@ -462,6 +463,9 @@ const en = {
   "settings.socksPass": "Password",
   "settings.advanced": "Advanced",
   "settings.delayTestUrl": "Latency test URL",
+  "settings.connectivityCheck": "Check connection",
+  "settings.connectivityCheckSub":
+    'Every minute, a request through the proxy tells "Connected" from "No internet" and refreshes the ping. Off: nothing is sent in the background, and the status trusts the running core.',
   "settings.customRouting": "Custom routing rules (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',

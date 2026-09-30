@@ -29,6 +29,7 @@ const zh = {
   "overview.upload": "上传",
   "overview.uptime": "运行时长",
   "overview.ping": "延迟",
+  "overview.pingRefresh": "立即检查连接",
   "overview.start": "启动",
   "overview.stop": "停止",
   "overview.starting_btn": "启动中",
@@ -447,6 +448,9 @@ const zh = {
   "settings.socksPass": "密码",
   "settings.advanced": "高级",
   "settings.delayTestUrl": "延迟测试 URL",
+  "settings.connectivityCheck": "连接检查",
+  "settings.connectivityCheckSub":
+    "每分钟通过代理发送一次请求，以区分“已连接”和“无网络”并刷新延迟。关闭后不会在后台发送任何请求，状态仅依据正在运行的核心。",
   "settings.customRouting": "自定义路由规则（JSON）",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',

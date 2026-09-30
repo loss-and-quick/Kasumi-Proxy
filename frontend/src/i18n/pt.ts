@@ -30,6 +30,7 @@ const pt = {
   "overview.upload": "Upload",
   "overview.uptime": "Tempo ativo",
   "overview.ping": "Ping",
+  "overview.pingRefresh": "Verificar a conexão agora",
   "overview.start": "Iniciar",
   "overview.stop": "Parar",
   "overview.starting_btn": "Iniciando",
@@ -456,6 +457,9 @@ const pt = {
   "settings.socksPass": "Senha",
   "settings.advanced": "Avançado",
   "settings.delayTestUrl": "URL de teste de latência",
+  "settings.connectivityCheck": "Verificar conexão",
+  "settings.connectivityCheckSub":
+    'A cada minuto, uma solicitação pelo proxy distingue "Conectado" de "Sem internet" e atualiza o ping. Desativado: nada é enviado em segundo plano e o status confia apenas no núcleo em execução.',
   "settings.customRouting": "Regras de roteamento personalizadas (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',

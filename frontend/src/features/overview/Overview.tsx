@@ -14,6 +14,7 @@ import {
   ProtoTag,
   pingLabel,
   SectionLabel,
+  Spinner,
 } from "../../components";
 import { useT } from "../../i18n";
 import { isServiceUp } from "../../lib/bridge";
@@ -48,6 +49,7 @@ export default function Overview({
   const restart = useAppStore((s) => s.restart);
   const testAll = useAppStore((s) => s.testAll);
   const pinging = useAppStore((s) => s.pinging);
+  const probeActive = useAppStore((s) => s.probeActive);
   const speedTesting = useAppStore((s) => s.speedTesting);
   const removeUnreachable = useAppStore((s) => s.removeUnreachable);
   const selectBest = useAppStore((s) => s.selectBest);
@@ -218,6 +220,10 @@ export default function Overview({
                 label={t("overview.ping")}
                 value={active ? pingLabel(activePing) : "—"}
                 color={active && activePing != null && activePing < 0 ? "var(--error)" : undefined}
+                // Tap = check the running connection now (through the live core).
+                onClick={up && activeId ? probeActive : undefined}
+                busy={activeId != null && pinging.has(activeId)}
+                actionLabel={t("overview.pingRefresh")}
               />
             </div>
           </div>
@@ -367,14 +373,22 @@ function Stat({
   label,
   value,
   color,
+  onClick,
+  busy,
+  actionLabel,
 }: {
   icon: string;
   label: string;
   value: string;
   color?: string;
+  /** Makes the stat a button (e.g. re-measure the ping). */
+  onClick?: () => void;
+  /** Shows a spinner in place of the value while the action runs. */
+  busy?: boolean;
+  actionLabel?: string;
 }) {
-  return (
-    <div>
+  const body = (
+    <>
       <div
         style={{
           display: "flex",
@@ -389,14 +403,38 @@ function Stat({
       >
         <Icon name={icon} style={{ fontSize: 14, color: color || "var(--on-surface-faint)" }} />
         {label}
+        {onClick && <Icon name="refresh" style={{ fontSize: 13 }} />}
       </div>
       <div
         className="mono"
-        style={{ fontSize: 15, fontWeight: 600, marginTop: 3, whiteSpace: "nowrap", color }}
+        style={{
+          fontSize: 15,
+          fontWeight: 600,
+          marginTop: 3,
+          whiteSpace: "nowrap",
+          color,
+          minHeight: 20,
+          display: "flex",
+          alignItems: "center",
+        }}
       >
-        {value}
+        {busy ? <Spinner /> : value}
       </div>
-    </div>
+    </>
+  );
+  return onClick ? (
+    <button
+      type="button"
+      className="btn-reset"
+      onClick={onClick}
+      disabled={busy}
+      aria-label={actionLabel}
+      title={actionLabel}
+    >
+      {body}
+    </button>
+  ) : (
+    <div>{body}</div>
   );
 }
 

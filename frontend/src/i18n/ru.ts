@@ -30,6 +30,7 @@ const ru = {
   "overview.upload": "Отдача",
   "overview.uptime": "Время работы",
   "overview.ping": "Пинг",
+  "overview.pingRefresh": "Проверить подключение сейчас",
   "overview.start": "Запустить",
   "overview.stop": "Остановить",
   "overview.starting_btn": "Запуск",
@@ -477,6 +478,9 @@ const ru = {
   "settings.socksPass": "Пароль",
   "settings.advanced": "Дополнительно",
   "settings.delayTestUrl": "URL для теста задержки",
+  "settings.connectivityCheck": "Проверка подключения",
+  "settings.connectivityCheckSub":
+    "Раз в минуту запрос через прокси отличает «Подключено» от «Нет интернета» и обновляет пинг. Если выключить, в фоне ничего не отправляется, а статус опирается только на запущенное ядро.",
   "settings.customRouting": "Кастомные правила маршрутизации (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',
