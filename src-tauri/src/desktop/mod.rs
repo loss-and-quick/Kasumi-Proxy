@@ -28,7 +28,7 @@ pub use platform::DesktopPlatform;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{LinuxOs as OsSeam, network, resume, routing};
+pub(crate) use linux::{LinuxOs as OsSeam, autostart, network, resume, routing};
 
 // Privilege separation: the GUI stays unprivileged, a privileged process owns the
 // data-path — a root helper on Linux, a LocalSystem service on Windows.

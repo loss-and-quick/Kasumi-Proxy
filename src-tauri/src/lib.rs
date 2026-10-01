@@ -99,6 +99,60 @@ fn update_tray(
     Ok(())
 }
 
+/// Passed by the login entry so the app comes up in the tray instead of opening
+/// its window over the desktop.
+pub(crate) const AUTOSTART_ARG: &str = "--autostart";
+
+/// Whether the app is registered to start on login.
+#[tauri::command]
+#[specta::specta]
+fn autostart_enabled(app: tauri::AppHandle) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        desktop::autostart::is_enabled()
+    }
+    #[cfg(all(desktop, not(target_os = "linux")))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        app.autolaunch().is_enabled().unwrap_or(false)
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        false
+    }
+}
+
+/// Register or unregister the app to start on login. Linux writes its own XDG
+/// entry (see `desktop::autostart`); elsewhere the autostart plugin's Run key /
+/// LaunchAgent already points at a stable path.
+#[tauri::command]
+#[specta::specta]
+fn set_autostart(app: tauri::AppHandle, on: bool) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        desktop::autostart::set_enabled(on).map_err(|e| e.to_string())
+    }
+    #[cfg(all(desktop, not(target_os = "linux")))]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let manager = app.autolaunch();
+        let result = if on {
+            manager.enable()
+        } else {
+            manager.disable()
+        };
+        result.map_err(|e| e.to_string())
+    }
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, on);
+        Ok(())
+    }
+}
+
 /// Update only the tray tooltip + state icon (not the menu). Called on every status
 /// tick, so it stays cheap: the menu is rebuilt separately via [`update_tray`] only
 /// when its own contents change. (Tooltips are honoured on Windows/macOS; the Linux
@@ -431,6 +485,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             app_version,
+            autostart_enabled,
+            set_autostart,
             dispatch,
             update_tray,
             set_tray_status
@@ -486,11 +542,16 @@ pub fn run() {
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 show_main(app);
             }))
-            .plugin(tauri_plugin_window_state::Builder::default().build())
-            .plugin(tauri_plugin_autostart::init(
-                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                None,
-            ))
+            // Visibility is decided at startup (shown, or left in the tray when the
+            // login entry started the app), so the window state must not restore it.
+            .plugin(
+                tauri_plugin_window_state::Builder::default()
+                    .with_state_flags(
+                        tauri_plugin_window_state::StateFlags::all()
+                            - tauri_plugin_window_state::StateFlags::VISIBLE,
+                    )
+                    .build(),
+            )
             .plugin(tauri_plugin_updater::Builder::new().build())
             // A native error modal for a fatal startup failure (see the setup hook),
             // plus the open/save file pickers the UI uses for backup & routing
@@ -502,6 +563,15 @@ pub fn run() {
             // Native clipboard for the UI's copy / paste helpers (with a
             // navigator.clipboard fallback in the non-Tauri shells).
             .plugin(tauri_plugin_clipboard_manager::init());
+        // Linux keeps its own XDG entry (desktop::autostart): the plugin's entry
+        // runs the absolute exe path, which on NixOS is the unwrapped store binary.
+        #[cfg(not(target_os = "linux"))]
+        {
+            tb = tb.plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec![AUTOSTART_ARG]),
+            ));
+        }
     }
 
     tb.invoke_handler(builder.invoke_handler())
@@ -541,7 +611,18 @@ pub fn run() {
             app.handle().plugin(log_builder.build())?;
 
             #[cfg(desktop)]
-            setup_tray(app)?;
+            {
+                setup_tray(app)?;
+                // The window starts hidden (tauri.conf.json); a login start stays in
+                // the tray, any other start shows it.
+                if !std::env::args().any(|a| a == AUTOSTART_ARG) {
+                    show_main(app.handle());
+                }
+            }
+            #[cfg(target_os = "linux")]
+            if let Err(e) = desktop::autostart::heal() {
+                log::warn!("autostart entry: {e}");
+            }
 
             // Publish the Service through a watch channel and bring it up off-thread:
             // `setup` must not block on the privileged data-path (UAC + helper), or the

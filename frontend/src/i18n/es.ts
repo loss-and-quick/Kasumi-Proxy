@@ -397,8 +397,10 @@ const es = {
   "settings.speedConcurrencySub": "Tests de velocidad en paralelo (1–5)",
   "settings.autoStart": "Inicio automático",
   "settings.autoStartSub": "Iniciar el proxy automáticamente al arrancar el dispositivo",
-  "settings.launchOnLogin": "Iniciar al iniciar sesión",
-  "settings.launchOnLoginSub": "Iniciar Kasumi Proxy automáticamente al iniciar sesión",
+  "settings.launchOnLogin": "Iniciar con el sistema",
+  "settings.launchOnLoginSub": "Abrir Kasumi Proxy en la bandeja al iniciar sesión",
+  "settings.autoStartDesktop": "Conectar al iniciar",
+  "settings.autoStartDesktopSub": "Conectar el perfil activo en cuanto se inicia Kasumi Proxy",
   "settings.dedupOnUpdate": "Dedup al actualizar sub",
   "settings.dedupOnUpdateSub":
     "Eliminar perfiles duplicados automáticamente tras cada actualización de suscripción",

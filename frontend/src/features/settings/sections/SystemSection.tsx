@@ -17,8 +17,8 @@ import {
 } from "../../../lib/autostart";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
-/** Desktop-only "launch the app on login" toggle (OS-level, via the autostart
- * plugin). Renders nothing where unsupported (the Android WebUI). */
+/** Desktop-only "start with the system" toggle (OS-level, via the shell's
+ * autostart commands). Renders nothing where unsupported (the Android WebUI). */
 function LaunchOnLoginRow() {
   const t = useT();
   const [on, setOn] = useState(false);
@@ -62,6 +62,7 @@ export function SystemSection({
 }) {
   const t = useT();
   const { lang, setLang } = useLang();
+  const desktop = autostartSupported();
 
   return (
     <>
@@ -78,14 +79,16 @@ export function SystemSection({
             }))}
           />
         </SettingRow>
+        <LaunchOnLoginRow />
+        {/* On a phone the service starts with the device; on desktop it runs
+            inside the app, so the same setting means "connect when it starts". */}
         <RowToggle
           icon="autorenew"
-          title={t("settings.autoStart")}
-          sub={t("settings.autoStartSub")}
+          title={t(desktop ? "settings.autoStartDesktop" : "settings.autoStart")}
+          sub={t(desktop ? "settings.autoStartDesktopSub" : "settings.autoStartSub")}
           on={settings.autoStart ?? true}
           onChange={(value) => set("autoStart", value)}
         />
-        <LaunchOnLoginRow />
         <RowToggle
           icon="content_copy"
           title={t("settings.dedupOnUpdate")}

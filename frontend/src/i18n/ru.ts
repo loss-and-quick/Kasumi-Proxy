@@ -417,8 +417,10 @@ const ru = {
   "settings.speedConcurrencySub": "Параллельные тесты скорости (1–5)",
   "settings.autoStart": "Автозапуск при загрузке",
   "settings.autoStartSub": "Запускать прокси автоматически при загрузке устройства",
-  "settings.launchOnLogin": "Запуск при входе",
-  "settings.launchOnLoginSub": "Автоматически запускать Kasumi Proxy при входе в систему",
+  "settings.launchOnLogin": "Запуск вместе с системой",
+  "settings.launchOnLoginSub": "Kasumi Proxy запустится свёрнутым в трей при входе в систему",
+  "settings.autoStartDesktop": "Подключаться при запуске",
+  "settings.autoStartDesktopSub": "Сразу подключать активный профиль после запуска Kasumi Proxy",
   "settings.dedupOnUpdate": "Дедупликация при обновлении подписки",
   "settings.dedupOnUpdateSub":
     "Автоматически удалять дубликаты профилей после каждого обновления подписки",
