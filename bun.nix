@@ -7,9 +7,12 @@
 # it manually.
 {
   copyPathToStore,
+  fetchFromGitHub,
+  fetchgit,
   fetchurl,
   ...
-}: {
+}:
+{
   "@alloc/quick-lru@5.2.0" = fetchurl {
     url = "https://registry.npmjs.org/@alloc/quick-lru/-/quick-lru-5.2.0.tgz";
     hash = "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==";
