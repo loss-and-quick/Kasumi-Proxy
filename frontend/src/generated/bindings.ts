@@ -13,6 +13,14 @@ export const commands = {
 	 *  the config but not the binary's baked-in `CARGO_PKG_VERSION` (a 0.0.0 placeholder).
 	 */
 	appVersion: () => __TAURI_INVOKE<string>("app_version"),
+	/**  Whether the app is registered to start on login. */
+	autostartEnabled: () => __TAURI_INVOKE<boolean>("autostart_enabled"),
+	/**
+	 *  Register or unregister the app to start on login. Linux writes its own XDG
+	 *  entry (see `desktop::autostart`); elsewhere the autostart plugin's Run key /
+	 *  LaunchAgent already points at a stable path.
+	 */
+	setAutostart: (on: boolean) => typedError<null, string>(__TAURI_INVOKE("set_autostart", { on })),
 	/**
 	 *  The single entry every UI action funnels through: run one typed [`Command`] and
 	 *  return its typed [`Response`]. Lifecycle commands serialize inside the Service;
