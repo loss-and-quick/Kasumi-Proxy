@@ -28,7 +28,7 @@ pub use platform::DesktopPlatform;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{LinuxOs as OsSeam, autostart, network, resume, routing};
+pub(crate) use linux::{LinuxOs as OsSeam, apps, autostart, network, resume, routing};
 
 // Privilege separation: the GUI stays unprivileged, a privileged process owns the
 // data-path — a root helper on Linux, a LocalSystem service on Windows.
@@ -38,7 +38,7 @@ pub mod privhelper;
 #[cfg(target_os = "windows")]
 mod windows;
 #[cfg(target_os = "windows")]
-pub(crate) use windows::{WindowsOs as OsSeam, network, resume, routing};
+pub(crate) use windows::{WindowsOs as OsSeam, apps, network, resume, routing};
 
 use kasumi_backend::proc::{RunOpts, run};
 use kasumi_core::state::ProxyMode;

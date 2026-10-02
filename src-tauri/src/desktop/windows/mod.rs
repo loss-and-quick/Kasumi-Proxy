@@ -4,6 +4,7 @@
 //! ([`os`]). The shared `Platform` impl, paths and command/DNS helpers live one level
 //! up in [`super`].
 
+pub(crate) mod apps;
 pub(crate) mod network;
 mod os;
 pub(crate) mod resume;

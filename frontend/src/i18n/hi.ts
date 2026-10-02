@@ -825,7 +825,9 @@ const hi = {
   "appFilter.captureNoneHint": "डिफ़ॉल्ट रूप से कोई ऐप प्रॉक्सी से नहीं जाता। «फ़ोर्स» से शामिल करें।",
   "appFilter.bypass": "बायपास",
   "appFilter.forceProxy": "फ़ोर्स प्रॉक्सी",
-  "appFilter.search": "पैकेज नाम खोजें…",
+  "appFilter.search": "ऐप खोजें…",
+  "appFilter.unavailableTun":
+    "TUN मोड में ऐप फ़िल्टर केवल sing-box कोर और उसके अपने TUN इंजन के साथ काम करता है: बाहरी TUN इंजन हर कनेक्शन को अपने नाम से कोर को देता है, इसलिए कोर नहीं जान पाता कि कौन सा ऐप उसे खोल रहा है। अन्य सभी प्रॉक्सी मोड में यह काम करता है।",
   "appFilter.systemApp": "सिस्टम",
   "appFilter.empty": "कोई ऐप नहीं मिला",
   "appFilter.openPage": "ऐप फ़िल्टर",

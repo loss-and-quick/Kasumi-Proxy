@@ -36,7 +36,7 @@ struct RouteState {
 }
 
 /// Run a PowerShell one-liner, returning trimmed stdout (empty on failure).
-async fn powershell(script: &str) -> String {
+pub(super) async fn powershell(script: &str) -> String {
     let (code, out) = run_out(&[
         "powershell",
         "-NoProfile",

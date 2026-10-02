@@ -22,8 +22,8 @@ use kasumi_backend::lifecycle::{
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
-    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
-    StopDataPath, TestCore, spawn_local_test_core,
+    AppFilterCapability, AppInfo, BackendPaths, Engine, InstalledCores, Platform,
+    PlatformCapabilities, StartDataPath, StopDataPath, TestCore, spawn_local_test_core,
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
@@ -404,6 +404,20 @@ fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
+/// Desktop per-app filter: the launcher's programs, matched by process name in the
+/// core's own routing (`kasumi_core::app_process`). The filter is baked into the
+/// built config, so a change shows up as a pending restart instead of a reload.
+#[async_trait]
+impl AppFilterCapability for DesktopPlatform {
+    async fn list_apps(&self) -> anyhow::Result<Vec<AppInfo>> {
+        Ok(crate::desktop::apps::list_apps().await)
+    }
+
+    async fn reload_app_filter(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl Platform for DesktopPlatform {
     fn paths(&self) -> &BackendPaths {
@@ -620,6 +634,10 @@ impl Platform for DesktopPlatform {
             http_port,
             force_port: force_socks_port(port, http_port),
         })
+    }
+
+    fn app_filter(&self) -> Option<&dyn AppFilterCapability> {
+        Some(self)
     }
 
     fn tune_config(&self, engine: Engine, config: &mut Value) {

@@ -844,7 +844,9 @@ const es = {
     "Ninguna app va por el proxy por defecto. Usa «Forzar» para incluir.",
   "appFilter.bypass": "Excluir",
   "appFilter.forceProxy": "Forzar proxy",
-  "appFilter.search": "Buscar nombre de paquete…",
+  "appFilter.search": "Buscar aplicaciones…",
+  "appFilter.unavailableTun":
+    "En modo TUN el filtro de aplicaciones solo funciona con el núcleo sing-box y su propio motor TUN: un motor TUN externo entrega todas las conexiones al núcleo como suyas, así que el núcleo no sabe qué aplicación las abrió. Funciona en los demás modos de proxy.",
   "appFilter.systemApp": "sistema",
   "appFilter.empty": "No se encontraron apps",
   "appFilter.openPage": "Filtro de apps",

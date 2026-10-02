@@ -785,7 +785,9 @@ const en = {
     "No apps go through proxy by default. Use Force Proxy to include specific apps.",
   "appFilter.bypass": "Bypass",
   "appFilter.forceProxy": "Force proxy",
-  "appFilter.search": "Search package name…",
+  "appFilter.search": "Search apps…",
+  "appFilter.unavailableTun":
+    "In TUN mode the app filter only works with the sing-box core and its own TUN engine: an external TUN engine hands every connection to the core as its own, so the core can't tell which app made it. It works in every other proxy mode.",
   "appFilter.systemApp": "system",
   "appFilter.empty": "No apps found",
   "appFilter.openPage": "App filter",

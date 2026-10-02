@@ -284,9 +284,16 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     async listApps(): Promise<AppEntry[]> {
       const r = await dispatch({ cmd: "listApps" });
       if (r.kind !== "apps") return [];
-      return r.value.filter(
-        (x): x is AppEntry => !!x && typeof x.pkg === "string" && typeof x.uid === "number",
-      );
+      return r.value
+        .filter((x) => !!x && typeof x.pkg === "string" && typeof x.uid === "number")
+        .map((x) => ({
+          pkg: x.pkg,
+          uid: x.uid,
+          system: x.system,
+          label: x.label ?? undefined,
+          iconUrl: x.icon ?? undefined,
+          exe: x.exe ?? undefined,
+        }));
     },
     async reloadAppFilter() {
       return okResult(() => dispatch({ cmd: "reloadAppFilter" }));
