@@ -133,22 +133,28 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
 /// below and loop the marked traffic. A host may lack the 32766 main rule
 /// altogether (some VPNs delete it), which leaves the `goto` unresolved and the
 /// kernel skips it — the `unreachable` backstop right behind then hard-fails
-/// marked traffic instead of letting it loop. Idempotent — sweeps the
+/// marked traffic instead of letting it loop.
+///
+/// Right behind them goes the LAN rule (`SINGBOX_LAN_RULE_PRIO`): non-DNS traffic
+/// takes a specific main-table route when one exists, so the LAN and replies to
+/// connections opened from it stay off the tun. Idempotent — sweeps the
 /// priorities first.
 pub async fn apply_singbox_escape_rule() {
     use kasumi_core::singbox_config::{
         SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_MARK, SINGBOX_ESCAPE_RULE_PRIO,
+        SINGBOX_LAN_RULE_PRIO,
     };
 
     let prio = SINGBOX_ESCAPE_RULE_PRIO.to_string();
     let backstop = SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO.to_string();
+    let lan = SINGBOX_LAN_RULE_PRIO.to_string();
     let mark = format!("{SINGBOX_ESCAPE_MARK:#x}");
     for v6 in [false, true] {
         let mut base = vec![IP];
         if v6 {
             base.push("-6");
         }
-        for p in [&prio, &backstop] {
+        for p in [&prio, &backstop, &lan] {
             let mut del = base.clone();
             del.extend(["rule", "del", "priority", p]);
             while silent(&del).await == 0 {}
@@ -158,7 +164,7 @@ pub async fn apply_singbox_escape_rule() {
             "rule", "add", "priority", &prio, "fwmark", &mark, "goto", "32766",
         ]);
         silent(&add).await;
-        let mut add = base;
+        let mut add = base.clone();
         add.extend([
             "rule",
             "add",
@@ -167,6 +173,21 @@ pub async fn apply_singbox_escape_rule() {
             "fwmark",
             &mark,
             "unreachable",
+        ]);
+        silent(&add).await;
+        let mut add = base;
+        add.extend([
+            "rule",
+            "add",
+            "priority",
+            &lan,
+            "not",
+            "dport",
+            "53",
+            "lookup",
+            "main",
+            "suppress_prefixlength",
+            "0",
         ]);
         silent(&add).await;
     }
@@ -185,13 +206,17 @@ pub async fn apply_singbox_escape_rule() {
 pub async fn clear_singbox_autoroute(tun_iface_file: &str, tun2_iface_file: &str) {
     use kasumi_core::singbox_config::{
         SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_RULE_PRIO, SINGBOX_FORCE_RULE_PRIO,
-        SINGBOX_FORCE_TABLE, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
+        SINGBOX_FORCE_TABLE, SINGBOX_LAN_RULE_PRIO, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
     };
 
-    // The fwmark escape rules (goto + unreachable backstop) are ours, not
-    // sing-box's, but they orphan the same way when the data-path dies uncleanly
-    // (both families; v6 exists when installed).
-    for prio in [SINGBOX_ESCAPE_RULE_PRIO, SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO] {
+    // The fwmark escape rules (goto + unreachable backstop) and the LAN rule are
+    // ours, not sing-box's, but they orphan the same way when the data-path dies
+    // uncleanly (both families; v6 exists when installed).
+    for prio in [
+        SINGBOX_ESCAPE_RULE_PRIO,
+        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO,
+        SINGBOX_LAN_RULE_PRIO,
+    ] {
         let p = prio.to_string();
         while silent(&[IP, "rule", "del", "priority", &p]).await == 0 {}
         while silent(&[IP, "-6", "rule", "del", "priority", &p]).await == 0 {}
