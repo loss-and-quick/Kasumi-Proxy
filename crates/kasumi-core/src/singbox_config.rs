@@ -41,6 +41,17 @@ pub const SINGBOX_ESCAPE_MARK: u32 = 0x4b53;
 pub const SINGBOX_ESCAPE_RULE_PRIO: u32 = 8990;
 pub const SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO: u32 = 8991;
 
+/// ip-rule priority of the desktop LAN rule: `not dport 53 lookup main
+/// suppress_prefixlength 0`, ahead of the `auto_route` rules. sing-tun installs
+/// the same rule itself, but behind its own `lookup <table>
+/// suppress_prefixlength 0`. That ordering only works while its table holds a
+/// single `/0`; any `route_exclude_address` (the desktop always excludes the
+/// proxy server) splits it into the complement prefixes (`…, 192.0.0.0/4, …`),
+/// which then capture the LAN. Repeating the rule first lets the main table's
+/// specific routes (the LAN, docker bridges) win again, while DNS keeps going
+/// to the tun for hijacking.
+pub const SINGBOX_LAN_RULE_PRIO: u32 = 8992;
+
 fn wire<T: serde::Serialize>(v: &T) -> String {
     serde_json::to_value(v)
         .ok()
