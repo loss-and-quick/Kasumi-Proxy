@@ -23,12 +23,6 @@ const PRIO_TUN_FORCE: &str = "1011";
 // under sing-box strict_route. Only removed now (see `clear_legacy_strict_carveouts`).
 const STRICT_CARVEOUT_PREF: &str = "8500";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Action {
-    Add,
-    Del,
-}
-
 /// The per-app capture configuration the routing rules are built from.
 pub struct AppFilter {
     pub capture_mode: AppCaptureMode,
@@ -247,16 +241,129 @@ async fn local_ipv6_exclusions() {
     }
 }
 
-/// Reject loopback proxy-port access from bypass-mode apps so they can't probe the
-/// running proxy. Removes existing rules first to avoid stacking.
-pub async fn protect_local_ports(
-    action: Action,
-    filter: &AppFilter,
-    socks_port: u16,
-    http_port: u16,
-) {
-    let socks = socks_port.to_string();
-    let http = http_port.to_string();
+/// Filter-table chain holding the per-app guards (see [`guard_rules`]), hooked
+/// from `OUTPUT` and rebuilt whole whenever the data path starts or the app filter
+/// changes, so a removed app never keeps a stale rule.
+const GUARD_CHAIN: &str = "KASUMI_PROXY_GUARD";
+
+/// The guards an app outside the proxy must not get around, for one iptables
+/// family. Each entry is the argument list of one `-A GUARD_CHAIN` rule.
+///
+/// - A bypass-mode app is refused on the local proxy ports (socks, http and the
+///   always-noauth force-in), so it can't learn the proxy's exit address by
+///   dialing the core itself.
+/// - An app the filter keeps off the tun can still ask for it by name or index
+///   (`SO_BINDTODEVICE`, unprivileged since Linux 5.7): routing never runs for
+///   such a socket, so its packets would reach the core all the same. Packets
+///   leaving through a tun are dropped for those uids — the bypass list in
+///   capture-all mode; in capture-none mode everything but the force-proxy apps
+///   and root (the daemon). `--socket-exists` keeps packets with no owning socket
+///   (a kernel reply for a closed connection) out of that catch-all.
+fn guard_rules(filter: &AppFilter, ports: &[u16], tuns: &[&str]) -> Vec<Vec<String>> {
+    let uids = |want: AppFilterMode| -> Vec<&str> {
+        filter
+            .entries
+            .iter()
+            .filter(|(_, m)| **m == want)
+            .filter_map(|(k, _)| uid_of(k))
+            .collect()
+    };
+    let bypass = uids(AppFilterMode::Bypass);
+    let rule = |parts: &[&str]| parts.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let mut rules = Vec::new();
+    for uid in &bypass {
+        for port in ports {
+            let port = port.to_string();
+            rules.push(rule(&[
+                "-o",
+                "lo",
+                "-p",
+                "tcp",
+                "--dport",
+                &port,
+                "-m",
+                "owner",
+                "--uid-owner",
+                uid,
+                "-j",
+                "REJECT",
+                "--reject-with",
+                "tcp-reset",
+            ]));
+        }
+    }
+    for tun in tuns {
+        match filter.capture_mode {
+            AppCaptureMode::All => {
+                for uid in &bypass {
+                    rules.push(rule(&[
+                        "-o",
+                        tun,
+                        "-m",
+                        "owner",
+                        "--uid-owner",
+                        uid,
+                        "-j",
+                        "DROP",
+                    ]));
+                }
+            }
+            AppCaptureMode::None => {
+                let allowed = std::iter::once("0").chain(uids(AppFilterMode::ForceProxy));
+                for uid in allowed {
+                    rules.push(rule(&[
+                        "-o",
+                        tun,
+                        "-m",
+                        "owner",
+                        "--uid-owner",
+                        uid,
+                        "-j",
+                        "ACCEPT",
+                    ]));
+                }
+                rules.push(rule(&[
+                    "-o",
+                    tun,
+                    "-m",
+                    "owner",
+                    "--socket-exists",
+                    "-j",
+                    "DROP",
+                ]));
+            }
+        }
+    }
+    rules
+}
+
+/// Install (or refresh) the per-app guards for both families. The tun names are
+/// the running data path's; `ports` are its local proxy ports.
+pub async fn apply_guards(filter: &AppFilter, ports: &[u16], tuns: &[&str]) {
+    for ipt in [IPTABLES, IP6TABLES] {
+        silent(&[ipt, "-N", GUARD_CHAIN]).await;
+        silent(&[ipt, "-F", GUARD_CHAIN]).await;
+        while silent(&[ipt, "-D", "OUTPUT", "-j", GUARD_CHAIN]).await == 0 {}
+        silent(&[ipt, "-I", "OUTPUT", "-j", GUARD_CHAIN]).await;
+        for r in guard_rules(filter, ports, tuns) {
+            let mut args = vec![ipt, "-A", GUARD_CHAIN];
+            args.extend(r.iter().map(String::as_str));
+            silent(&args).await;
+        }
+    }
+}
+
+async fn clear_guards() {
+    for ipt in [IPTABLES, IP6TABLES] {
+        while silent(&[ipt, "-D", "OUTPUT", "-j", GUARD_CHAIN]).await == 0 {}
+        silent(&[ipt, "-F", GUARD_CHAIN]).await;
+        silent(&[ipt, "-X", GUARD_CHAIN]).await;
+    }
+}
+
+/// Older versions added the bypass-app port rejects straight to `OUTPUT`, one
+/// rule per uid and port. Removed on teardown only, to clean up after an upgrade.
+async fn clear_legacy_port_rules(filter: &AppFilter, socks_port: u16, http_port: u16) {
     for (key, mode) in &filter.entries {
         if *mode != AppFilterMode::Bypass {
             continue;
@@ -264,15 +371,18 @@ pub async fn protect_local_ports(
         let Some(uid) = uid_of(key) else {
             continue;
         };
-        for port in [socks.as_str(), http.as_str()] {
+        for port in [socks_port.to_string(), http_port.to_string()] {
             for ipt in [IPTABLES, IP6TABLES] {
-                let rule = [
+                silent(&[
+                    ipt,
+                    "-D",
+                    "OUTPUT",
                     "-o",
                     "lo",
                     "-p",
                     "tcp",
                     "--dport",
-                    port,
+                    &port,
                     "-m",
                     "owner",
                     "--uid-owner",
@@ -281,15 +391,8 @@ pub async fn protect_local_ports(
                     "REJECT",
                     "--reject-with",
                     "tcp-reset",
-                ];
-                let mut del = vec![ipt, "-D", "OUTPUT"];
-                del.extend_from_slice(&rule);
-                silent(&del).await;
-                if action == Action::Add {
-                    let mut add = vec![ipt, "-A", "OUTPUT"];
-                    add.extend_from_slice(&rule);
-                    silent(&add).await;
-                }
+                ])
+                .await;
             }
         }
     }
@@ -299,7 +402,8 @@ pub async fn protect_local_ports(
 pub async fn clear_routing_rules(st: &RoutingState) {
     remove_mark_rule().await;
     clear_legacy_strict_carveouts().await;
-    protect_local_ports(Action::Del, &st.filter, st.socks_port, st.http_port).await;
+    clear_guards().await;
+    clear_legacy_port_rules(&st.filter, st.socks_port, st.http_port).await;
 
     // IPv4 mark chain
     silent(&[IPTABLES, "-t", "mangle", "-D", "OUTPUT", "-j", MARK_CHAIN]).await;
@@ -697,6 +801,59 @@ mod tests {
         assert_eq!(uid_of("10123"), Some("10123"));
         assert_eq!(uid_of("com.app:abc"), None);
         assert_eq!(uid_of("com.app:"), None);
+    }
+
+    fn filter(mode: AppCaptureMode, entries: &[(&str, AppFilterMode)]) -> AppFilter {
+        AppFilter {
+            capture_mode: mode,
+            entries: entries.iter().map(|(k, m)| (k.to_string(), *m)).collect(),
+            strict: false,
+        }
+    }
+
+    fn joined(rules: &[Vec<String>]) -> Vec<String> {
+        rules.iter().map(|r| r.join(" ")).collect()
+    }
+
+    #[test]
+    fn guards_bypass_apps_in_capture_all() {
+        let f = filter(
+            AppCaptureMode::All,
+            &[
+                ("bank:10123", AppFilterMode::Bypass),
+                ("game:10200", AppFilterMode::ForceProxy),
+            ],
+        );
+        let rules = joined(&guard_rules(&f, &[10808, 10809, 10810], &["t0", "t1"]));
+        assert_eq!(
+            rules,
+            [
+                "-o lo -p tcp --dport 10808 -m owner --uid-owner 10123 -j REJECT --reject-with tcp-reset",
+                "-o lo -p tcp --dport 10809 -m owner --uid-owner 10123 -j REJECT --reject-with tcp-reset",
+                "-o lo -p tcp --dport 10810 -m owner --uid-owner 10123 -j REJECT --reject-with tcp-reset",
+                "-o t0 -m owner --uid-owner 10123 -j DROP",
+                "-o t1 -m owner --uid-owner 10123 -j DROP",
+            ]
+        );
+    }
+
+    #[test]
+    fn capture_none_lets_only_root_and_force_apps_onto_the_tun() {
+        let f = filter(
+            AppCaptureMode::None,
+            &[("game:10200", AppFilterMode::ForceProxy)],
+        );
+        let rules = joined(&guard_rules(&f, &[10808], &["t0"]));
+        assert_eq!(
+            rules,
+            [
+                "-o t0 -m owner --uid-owner 0 -j ACCEPT",
+                "-o t0 -m owner --uid-owner 10200 -j ACCEPT",
+                "-o t0 -m owner --socket-exists -j DROP",
+            ]
+        );
+        // No tun (not up yet): nothing to guard there.
+        assert!(guard_rules(&f, &[10808], &[]).is_empty());
     }
 
     #[test]
