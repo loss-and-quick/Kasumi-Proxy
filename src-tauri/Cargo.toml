@@ -48,6 +48,7 @@ tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
 strum = { version = "0.26", features = ["derive"] }
 
 kasumi-core = { path = "../crates/kasumi-core" }
+base64 = "0.22"
 kasumi-backend = { path = "../crates/kasumi-backend" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
@@ -68,7 +69,9 @@ libc = "0.2"
 caps = "0.5"
 
 # logind `PrepareForSleep` subscription over the system bus (desktop/linux/resume.rs).
+# Icon-theme lookup for the per-app filter's app list (desktop/linux/apps.rs).
 [target.'cfg(target_os = "linux")'.dependencies]
+freedesktop-icons = "0.4"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 futures-util = "0.3"
 

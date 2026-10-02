@@ -12,10 +12,12 @@ import { bridge } from "../../lib/bridge-provider";
 import { fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
 import { useAppStore } from "../../store/useAppStore";
 
-// pkg:uid uniquely identifies one profile instance of an app.
-const filterKey = (app: AppEntry) => `${app.pkg}:${app.uid}`;
-// userId > 0 means work/secondary profile.
+// Android: pkg:uid identifies one profile instance of an app. Desktop: the program
+// the launcher runs, matched by process name in the core's routing.
+const filterKey = (app: AppEntry) => (app.exe ? `exe:${app.exe}` : `${app.pkg}:${app.uid}`);
+// userId > 0 means work/secondary profile (Android only).
 const profileLabel = (app: AppEntry, t: Translate): string | null => {
+  if (app.exe) return null;
   const userId = Math.floor(app.uid / 100000);
   return userId > 0 ? t("appFilter.userProfile", { n: userId }) : null;
 };
@@ -25,6 +27,11 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
   const settings = useAppStore((s) => s.settings);
   const setSetting = useAppStore((s) => s.setSetting);
   const setAppFilterMode = useAppStore((s) => s.setAppFilterMode);
+  // Desktop: a core behind an external tun helper only sees the helper's
+  // connections, so the filter can't apply there (the backend says which).
+  const unavailable = useAppStore((s) =>
+    s.activeId ? s.coreResolutions[s.activeId]?.seesProcesses === false : false,
+  );
 
   const [apps, setApps] = useState<AppEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +47,7 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
         const seen = new Set<string>();
         setApps(
           list.filter((a) => {
-            const k = `${a.pkg}:${a.uid}`;
+            const k = filterKey(a);
             return seen.has(k) ? false : seen.add(k);
           }),
         );
@@ -55,7 +62,7 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
       return apps
         .map((app) => ({
           app,
-          score: fuzzyScore(`${app.label ?? ""} ${app.pkg}`, q),
+          score: fuzzyScore(`${app.label ?? ""} ${app.pkg} ${app.exe ?? ""}`, q),
         }))
         .filter((entry) => entry.score > NO_MATCH)
         .sort((a, b) => b.score - a.score || a.app.pkg.localeCompare(b.app.pkg))
@@ -100,6 +107,12 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
           </div>
         </Card>
 
+        {unavailable && (
+          <Card style={{ padding: 14, marginTop: 12 }}>
+            <div className="hint">{t("appFilter.unavailableTun")}</div>
+          </Card>
+        )}
+
         <SectionLabel>{t("appFilter.openPage")}</SectionLabel>
         <input
           className="input"
@@ -118,7 +131,13 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
             {t("appFilter.empty")}
           </div>
         ) : (
-          <Card style={{ padding: "4px 14px" }}>
+          <Card
+            style={{
+              padding: "4px 14px",
+              ...(unavailable ? { opacity: 0.5, pointerEvents: "none" } : {}),
+            }}
+            aria-disabled={unavailable || undefined}
+          >
             {filtered.map((app) => {
               const key = filterKey(app);
               const mode = appFilter[key] ?? null;
@@ -141,7 +160,11 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
                   title={app.label ?? app.pkg}
                   sub={
                     <>
-                      {[app.label ? app.pkg : app.system ? t("appFilter.systemApp") : null, pLabel]
+                      {[
+                        app.exe ??
+                          (app.label ? app.pkg : app.system ? t("appFilter.systemApp") : null),
+                        pLabel,
+                      ]
                         .filter(Boolean)
                         .join(" · ")}
                       <div style={{ marginTop: 6 }}>

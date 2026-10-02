@@ -246,11 +246,29 @@ export const AnytlsSchema = z.object({
 export type Anytls = z.infer<typeof AnytlsSchema>;
 
 
-export const AppInfoSchema = z.object({
+export const AppInfo_SerializeSchema = z.object({
 	pkg: z.string(),
 	uid: z.number(),
 	system: z.boolean(),
+	exe: z.string().nullable().optional(),
+	label: z.string().nullable().optional(),
+	icon: z.string().nullable().optional(),
 });
+export type AppInfo_Serialize = z.infer<typeof AppInfo_SerializeSchema>;
+
+
+export const AppInfo_DeserializeSchema = z.object({
+	pkg: z.string(),
+	uid: z.number(),
+	system: z.boolean(),
+	exe: z.string().nullable().optional(),
+	label: z.string().nullable().optional(),
+	icon: z.string().nullable().optional(),
+});
+export type AppInfo_Deserialize = z.infer<typeof AppInfo_DeserializeSchema>;
+
+
+export const AppInfoSchema = z.union([AppInfo_DeserializeSchema, AppInfo_SerializeSchema]);
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 
 
@@ -1063,6 +1081,7 @@ export type Command = z.infer<typeof CommandSchema>;
 export const CoreResolutionSchema = z.object({
 	resolved: CoreEngineSchema,
 	forced: CoreEngineSchema.nullable(),
+	seesProcesses: z.boolean().optional(),
 });
 export type CoreResolution = z.infer<typeof CoreResolutionSchema>;
 
@@ -1099,7 +1118,7 @@ export type ServiceState_Serialize = z.infer<typeof ServiceState_SerializeSchema
 
 export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("apps"),
-	value: z.array(AppInfoSchema),
+	value: z.array(AppInfo_SerializeSchema),
 }), z.object({
 	kind: z.literal("assets"),
 	value: z.array(z.string()),
@@ -1155,7 +1174,7 @@ export type ServiceState_Deserialize = z.infer<typeof ServiceState_DeserializeSc
 
 export const Response_DeserializeSchema = z.union([z.object({
 	kind: z.literal("apps"),
-	value: z.array(AppInfoSchema),
+	value: z.array(AppInfo_DeserializeSchema),
 }), z.object({
 	kind: z.literal("assets"),
 	value: z.array(z.string()),

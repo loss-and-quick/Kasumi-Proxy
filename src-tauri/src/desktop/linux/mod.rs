@@ -4,6 +4,7 @@
 //! shared `Platform` impl, paths and command/DNS helpers live one level up in
 //! [`super`]. No Magisk, no per-uid app filter.
 
+pub(crate) mod apps;
 pub(crate) mod autostart;
 pub(crate) mod network;
 mod os;

@@ -821,7 +821,9 @@ const zh = {
   "appFilter.captureNoneHint": "默认不走代理，使用「强制代理」包含特定应用。",
   "appFilter.bypass": "绕过",
   "appFilter.forceProxy": "强制代理",
-  "appFilter.search": "搜索包名…",
+  "appFilter.search": "搜索应用…",
+  "appFilter.unavailableTun":
+    "在 TUN 模式下，应用过滤仅适用于 sing-box 内核及其自带的 TUN 引擎：外部 TUN 引擎会以自身名义把所有连接交给内核，内核无法分辨是哪个应用发起的。在其他代理模式下均可使用。",
   "appFilter.systemApp": "系统",
   "appFilter.empty": "未找到应用",
   "appFilter.openPage": "应用过滤",

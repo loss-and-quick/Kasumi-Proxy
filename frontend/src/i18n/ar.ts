@@ -1031,7 +1031,9 @@ const ar = {
   "appFilter.captureNoneHint": "لا يمر أي تطبيق عبر الوكيل. استخدم «إجبار» للتضمين.",
   "appFilter.bypass": "تجاوز",
   "appFilter.forceProxy": "إجبار",
-  "appFilter.search": "البحث باسم الحزمة…",
+  "appFilter.search": "ابحث عن التطبيقات…",
+  "appFilter.unavailableTun":
+    "في وضع TUN يعمل مرشح التطبيقات فقط مع نواة sing-box ومحرك TUN الخاص بها: محرك TUN الخارجي يسلّم كل الاتصالات إلى النواة باسمه، فلا تعرف النواة أي تطبيق فتحها. يعمل المرشح في أوضاع البروكسي الأخرى.",
   "appFilter.systemApp": "نظام",
   "appFilter.empty": "لم يتم العثور على تطبيقات",
   "appFilter.openPage": "تصفية التطبيقات",

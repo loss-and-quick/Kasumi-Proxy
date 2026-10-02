@@ -28,6 +28,11 @@ pub enum LogTarget {
 pub struct CoreResolution {
     pub resolved: CoreEngine,
     pub forced: Option<CoreEngine>,
+    /// Whether that core can tell which program opened a connection in the current
+    /// proxy mode — what the desktop per-app filter needs
+    /// (`app_process::sees_processes`).
+    #[serde(default)]
+    pub sees_processes: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

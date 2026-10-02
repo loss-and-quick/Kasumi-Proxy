@@ -275,14 +275,54 @@ export type AppCaptureMode = "all" | "none";
 export type AppFilterMode = "force-proxy" | "bypass";
 
 /**
- *  One app in the per-app filter list. Android-shaped (a PackageManager uid matched
- *  by `iptables --uid-owner`); the only cross-platform contract is the opaque
- *  `appFilter` key in the core schema, interpreted solely by the platform's routing.
+ *  One app in the per-app filter list. On Android a package and its uid (matched by
+ *  `iptables --uid-owner`, keyed `pkg:uid`); on desktop a launcher entry and the
+ *  program it runs (matched by process name, keyed `exe:<path>` — see
+ *  `kasumi_core::app_process`). The `appFilter` key is the only contract the
+ *  routing reads.
  */
-export type AppInfo = {
+export type AppInfo = AppInfo_Serialize | AppInfo_Deserialize;
+
+/**
+ *  One app in the per-app filter list. On Android a package and its uid (matched by
+ *  `iptables --uid-owner`, keyed `pkg:uid`); on desktop a launcher entry and the
+ *  program it runs (matched by process name, keyed `exe:<path>` — see
+ *  `kasumi_core::app_process`). The `appFilter` key is the only contract the
+ *  routing reads.
+ */
+export type AppInfo_Deserialize = {
+	/**  Android package name; on desktop the launcher entry's id. */
 	pkg: string,
+	/**  Android uid; `0` on desktop. */
 	uid: number,
 	system: boolean,
+	/**  Desktop: the program's resolved path. */
+	exe?: string | null,
+	/**  Desktop: the launcher's display name. */
+	label?: string | null,
+	/**  Desktop: the launcher icon as a `data:` URL. */
+	icon?: string | null,
+};
+
+/**
+ *  One app in the per-app filter list. On Android a package and its uid (matched by
+ *  `iptables --uid-owner`, keyed `pkg:uid`); on desktop a launcher entry and the
+ *  program it runs (matched by process name, keyed `exe:<path>` — see
+ *  `kasumi_core::app_process`). The `appFilter` key is the only contract the
+ *  routing reads.
+ */
+export type AppInfo_Serialize = {
+	/**  Android package name; on desktop the launcher entry's id. */
+	pkg: string,
+	/**  Android uid; `0` on desktop. */
+	uid: number,
+	system: boolean,
+	/**  Desktop: the program's resolved path. */
+	exe?: string | null,
+	/**  Desktop: the launcher's display name. */
+	label?: string | null,
+	/**  Desktop: the launcher icon as a `data:` URL. */
+	icon?: string | null,
 };
 
 /**  The persisted top-level state (`AppStateSchema`). */
@@ -438,6 +478,12 @@ export type CoreEngine = "xray" | "sing-box";
 export type CoreResolution = {
 	resolved: CoreEngine,
 	forced: CoreEngine | null,
+	/**
+	 *  Whether that core can tell which program opened a connection in the current
+	 *  proxy mode — what the desktop per-app filter needs
+	 *  (`app_process::sees_processes`).
+	 */
+	seesProcesses?: boolean,
 };
 
 export type Custom = {
@@ -747,7 +793,7 @@ export type QuicTransport = {
 export type Response = Response_Serialize | Response_Deserialize;
 
 /**  One reply. The tag `kind` selects the payload shape under `value`. */
-export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo[] } | { kind: "status"; value: ServiceState_Deserialize } | { kind: "wsInfo"; value: WsInfo | null } | 
+export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo_Deserialize[] } | { kind: "status"; value: ServiceState_Deserialize } | { kind: "wsInfo"; value: WsInfo | null } | 
 /**  Per-profile core resolutions, in the request's profile order. */
 { kind: "coreResolutions"; value: CoreResolution[] } | 
 /**  Profile ids, in stored order. */
@@ -760,7 +806,7 @@ export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize 
 ({ kind: "ok" }) & { value?: never };
 
 /**  One reply. The tag `kind` selects the payload shape under `value`. */
-export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo[] } | { kind: "status"; value: ServiceState_Serialize } | { kind: "wsInfo"; value: WsInfo | null } | 
+export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo_Serialize[] } | { kind: "status"; value: ServiceState_Serialize } | { kind: "wsInfo"; value: WsInfo | null } | 
 /**  Per-profile core resolutions, in the request's profile order. */
 { kind: "coreResolutions"; value: CoreResolution[] } | 
 /**  Profile ids, in stored order. */

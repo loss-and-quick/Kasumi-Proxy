@@ -59,6 +59,8 @@ export interface AppEntry {
   system: boolean;
   label?: string;
   iconUrl?: string;
+  /** Desktop: the program the launcher runs (the filter matches it by process). */
+  exe?: string;
 }
 
 /** ServiceStatus as screens consume it — keeps `error`, the reason carried by

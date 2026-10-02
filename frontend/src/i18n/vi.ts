@@ -831,7 +831,9 @@ const vi = {
   "appFilter.captureNoneHint": "Mặc định không qua proxy. Dùng Buộc proxy để bao gồm.",
   "appFilter.bypass": "Bỏ qua",
   "appFilter.forceProxy": "Buộc proxy",
-  "appFilter.search": "Tìm tên gói…",
+  "appFilter.search": "Tìm ứng dụng…",
+  "appFilter.unavailableTun":
+    "Ở chế độ TUN, bộ lọc ứng dụng chỉ hoạt động với lõi sing-box và engine TUN riêng của nó: engine TUN bên ngoài chuyển mọi kết nối cho lõi dưới tên của chính nó, nên lõi không biết ứng dụng nào đã mở kết nối. Ở các chế độ proxy khác bộ lọc vẫn hoạt động.",
   "appFilter.systemApp": "hệ thống",
   "appFilter.empty": "Không tìm thấy ứng dụng",
   "appFilter.openPage": "Lọc ứng dụng",
