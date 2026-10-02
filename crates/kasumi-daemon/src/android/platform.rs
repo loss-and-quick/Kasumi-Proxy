@@ -38,8 +38,8 @@ use super::paths::{
     TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    Action, AppFilter, FWMARK, RoutingState, apply_external_tun_routing, clear_routing_rules,
-    has_force_proxy, protect_local_ports, reload_app_filter_rules,
+    AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
+    has_force_proxy, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::{run_out, silent};
@@ -186,6 +186,20 @@ async fn read_iface(file: &str) -> Option<String> {
         .await
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+}
+
+/// (Re)install the per-app guards for the running data path: its local proxy
+/// ports and the tun devices it brought up (see `routing::guard_rules`).
+async fn refresh_guards(socks_port: u16) {
+    let http = http_port().await;
+    let ports = [socks_port, http, force_socks_port(socks_port, http)];
+    let tun = read_iface(TUN_IFACE_FILE).await;
+    let tun2 = read_iface(TUN2_IFACE_FILE).await;
+    let tuns: Vec<&str> = [tun.as_deref(), tun2.as_deref()]
+        .into_iter()
+        .flatten()
+        .collect();
+    apply_guards(&read_app_filter().await, &ports, &tuns).await;
 }
 
 async fn ensure_tun_node() {
@@ -429,17 +443,12 @@ async fn start_inner(
         return fail(&format!("core exited on startup — see {log}")).await;
     }
 
-    // Shield local proxy ports from bypass-mode apps (both engines). Deferred until
-    // the core is up so our iptables don't contend with sing-box's system-stack
-    // `auto_redirect`, which installs its own iptables during startup and shells
-    // `iptables` without `-w` — a shared xtables.lock race would fail its start.
-    protect_local_ports(
-        Action::Add,
-        &read_app_filter().await,
-        socks_port,
-        http_port().await,
-    )
-    .await;
+    // Guard the proxy against apps kept outside it (both engines): no local proxy
+    // ports, no binding to the tun. Deferred until the core is up so our iptables
+    // don't contend with sing-box's system-stack `auto_redirect`, which installs its
+    // own iptables during startup and shells `iptables` without `-w` — a shared
+    // xtables.lock race would fail its start.
+    refresh_guards(socks_port).await;
     // Process-up: `started_at` marks it (vs the bring-up `connecting`) and drives
     // uptime; the wire state stays Connecting until the Service's connectivity probe
     // refines it to Connected / NoInternet.
@@ -785,6 +794,12 @@ impl AppFilterCapability for AndroidPlatform {
             return Ok(());
         }
         reload_app_filter_rules(&read_app_filter().await).await;
+        let socks_port = read_state()
+            .await
+            .map(|d| d.socks_port)
+            .filter(|&p| p != 0)
+            .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+        refresh_guards(socks_port).await;
         Ok(())
     }
 }
