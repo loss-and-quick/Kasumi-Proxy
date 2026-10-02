@@ -18,6 +18,7 @@
 //! - [`state`] — groups/subscriptions/rules/assets + settings/AppState
 //! - [`share`] — share-link parse/build
 
+pub mod app_process;
 pub mod chain;
 pub mod config_shared;
 pub mod contract;

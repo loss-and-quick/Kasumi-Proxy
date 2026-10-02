@@ -772,6 +772,7 @@ impl AppFilterCapability for AndroidPlatform {
                     pkg: pkg.to_string(),
                     uid,
                     system: uid < 10000,
+                    ..Default::default()
                 });
             }
         }

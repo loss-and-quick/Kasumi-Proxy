@@ -1267,10 +1267,12 @@ fn build_singbox_route(
     // per-app force path adds the tun-force rule the same way when enabled. Both sit
     // ahead of the geo/user rules.
     rules.insert(0, json!({ "inbound": ["force-in"], "outbound": "proxy" }));
+    // Only a uid entry gets a tun-force inbound (`build_singbox_tun_inbounds`); a
+    // desktop program entry is routed by process (`app_process`).
     let has_force = s
         .app_filter
-        .values()
-        .any(|m| *m == AppFilterMode::ForceProxy);
+        .iter()
+        .any(|(k, m)| *m == AppFilterMode::ForceProxy && uid_of(k).is_some());
     if has_force {
         rules.insert(0, json!({ "inbound": ["tun-force"], "outbound": "proxy" }));
     }

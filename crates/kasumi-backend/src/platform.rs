@@ -118,14 +118,28 @@ pub struct PlatformCapabilities {
     pub bridge: String,
 }
 
-/// One app in the per-app filter list. Android-shaped (a PackageManager uid matched
-/// by `iptables --uid-owner`); the only cross-platform contract is the opaque
-/// `appFilter` key in the core schema, interpreted solely by the platform's routing.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
+/// One app in the per-app filter list. On Android a package and its uid (matched by
+/// `iptables --uid-owner`, keyed `pkg:uid`); on desktop a launcher entry and the
+/// program it runs (matched by process name, keyed `exe:<path>` — see
+/// `kasumi_core::app_process`). The `appFilter` key is the only contract the
+/// routing reads.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct AppInfo {
+    /// Android package name; on desktop the launcher entry's id.
     pub pkg: String,
+    /// Android uid; `0` on desktop.
     pub uid: i32,
     pub system: bool,
+    /// Desktop: the program's resolved path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe: Option<String>,
+    /// Desktop: the launcher's display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Desktop: the launcher icon as a `data:` URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 /// Options for [`Platform::start_data_path`].

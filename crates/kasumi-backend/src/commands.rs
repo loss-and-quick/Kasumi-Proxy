@@ -259,6 +259,11 @@ pub(crate) async fn build_profile_config(
             &settings,
         );
     }
+    if platform.supports_proxy_modes() {
+        // Desktop: the per-app filter matches programs by executable (Android
+        // routes its uid entries in the platform instead).
+        kasumi_core::app_process::apply_process_filter(built.engine, &settings, &mut built.config);
+    }
     platform.tune_config(built.engine, &mut built.config);
     Ok(built)
 }
@@ -446,9 +451,15 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             Ok(Response::CoreResolutions(
                 profiles
                     .iter()
-                    .map(|p| CoreResolution {
-                        resolved: resolve_core(p, &settings),
-                        forced: forced_core(p),
+                    .map(|p| {
+                        let resolved = resolve_core(p, &settings);
+                        CoreResolution {
+                            resolved,
+                            forced: forced_core(p),
+                            sees_processes: kasumi_core::app_process::sees_processes(
+                                resolved, &settings,
+                            ),
+                        }
                     })
                     .collect(),
             ))
