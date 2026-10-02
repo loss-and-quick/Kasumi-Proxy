@@ -867,9 +867,87 @@ pub fn build_xray_config(
     }))
 }
 
+/// Answer DNS that reaches the local inbounds with xray's own DNS module, instead of
+/// forwarding the query to the address it was sent to. Used when a desktop tun
+/// sends the system's DNS into the core: that address is often the LAN router,
+/// which the proxy server cannot reach. The port-53 rule now goes to a `dns`
+/// outbound (A/AAAA through `dns.servers`, fake DNS and `hosts`; other query types
+/// are refused at once rather than left to time out), and the module's own
+/// upstream queries take the outbound the rule used to name, so "DNS via proxy"
+/// still decides how DNS leaves. Idempotent.
+pub fn hijack_inbound_dns(cfg: &mut Value) {
+    const DNS_OUT: &str = "dns-out";
+    const DNS_MODULE: &str = "dns-module";
+    let Some(rules) = cfg
+        .get_mut("routing")
+        .and_then(|r| r.get_mut("rules"))
+        .and_then(Value::as_array_mut)
+    else {
+        return;
+    };
+    let Some(rule) = rules.iter_mut().find(|r| {
+        r.get("port").is_some_and(|p| p == 53 || p == "53")
+            && r.get("inboundTag")
+                .and_then(Value::as_array)
+                .is_some_and(|t| t.iter().any(|t| t == "socks-in"))
+    }) else {
+        return;
+    };
+    let Some(upstream) = rule
+        .get("outboundTag")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    else {
+        return;
+    };
+    if upstream == DNS_OUT {
+        return;
+    }
+    rule["outboundTag"] = DNS_OUT.into();
+    rules.insert(
+        0,
+        json!({ "type": "field", "inboundTag": [DNS_MODULE], "outboundTag": upstream }),
+    );
+    if let Some(outbounds) = cfg.get_mut("outbounds").and_then(Value::as_array_mut) {
+        outbounds.push(json!({
+            "tag": DNS_OUT, "protocol": "dns", "settings": { "nonIPQuery": "reject" },
+        }));
+    }
+    if let Some(dns) = cfg.get_mut("dns").and_then(Value::as_object_mut) {
+        dns.insert("tag".into(), DNS_MODULE.into());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hijacks_inbound_dns_into_the_dns_module() {
+        let s = AdvancedSettings {
+            dns_via_proxy: true,
+            ..Default::default()
+        };
+        let p = crate::share::parse_share_link(
+            "vless://b831381d-6324-4d53-ad4f-8cda48b30811@srv.example:443?security=tls#x",
+            None,
+        )
+        .unwrap();
+        let mut cfg = build_xray_config(&p, &s, &[], &[]).unwrap();
+        hijack_inbound_dns(&mut cfg);
+        let once = cfg.clone();
+        hijack_inbound_dns(&mut cfg);
+        assert_eq!(cfg, once, "idempotent");
+
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+        assert_eq!(rules[0]["inboundTag"], json!(["dns-module"]));
+        assert_eq!(rules[0]["outboundTag"], "proxy");
+        let port53 = rules.iter().find(|r| r["port"] == 53).unwrap();
+        assert_eq!(port53["outboundTag"], "dns-out");
+        assert_eq!(cfg["dns"]["tag"], "dns-module");
+        let out = cfg["outbounds"].as_array().unwrap();
+        assert_eq!(out.iter().filter(|o| o["protocol"] == "dns").count(), 1);
+    }
 
     fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
         let mut p = crate::share::parse_share_link(uri, None).unwrap();
