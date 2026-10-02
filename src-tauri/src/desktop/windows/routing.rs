@@ -1,8 +1,8 @@
 //! Windows desktop routing for an external-tun data-path. The core exposes a local SOCKS;
 //! tun2socks bridges a wintun device to it. To put all traffic through the tun
 //! while keeping the core's own connection to the VPN server (and DNS bring-up) off it:
-//!   - host-route the resolved server IPs (+ the active DNS servers) via the real
-//!     uplink gateway, and
+//!   - host-route the resolved server IPs (+ the active DNS servers, for a core
+//!     that resolves through them itself) via the real uplink gateway, and
 //!   - install a split-default (0.0.0.0/1 + 128.0.0.0/1) into the tun, which
 //!     overrides the existing `0.0.0.0/0` without deleting it (classic VPN trick).
 //!
@@ -100,12 +100,22 @@ pub async fn read_resolvers() -> Vec<String> {
         .collect()
 }
 
-/// Resolve every server host in the core config to bypass CIDRs, plus the active
-/// DNS servers and the user's TUN-exclude CIDRs (e.g. docker networks). The config
-/// parsing + resolution is shared with Linux; only the resolver source is
-/// Windows-specific (WMI vs /etc/resolv.conf).
-pub async fn resolve_bypass_cidrs(cfg_text: &str, tun_exclude: &[String]) -> Vec<String> {
-    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await, tun_exclude).await
+/// The tun bypass set for the resolved proxy servers and the user's TUN-exclude
+/// CIDRs (e.g. docker networks). `keep_resolvers` also routes the system's DNS
+/// servers (WMI) off the tun, for a core that resolves through them itself
+/// (a socks-only sing-box); an xray core reaches its servers through pinned
+/// `dns.hosts` instead, so its system DNS goes through the tun.
+pub async fn bypass_cidrs(
+    servers: &std::collections::BTreeMap<String, Vec<String>>,
+    tun_exclude: &[String],
+    keep_resolvers: bool,
+) -> Vec<String> {
+    let resolvers = if keep_resolvers {
+        read_resolvers().await
+    } else {
+        Vec::new()
+    };
+    crate::desktop::net::bypass_cidrs(servers, &resolvers, tun_exclude)
 }
 
 /// `1.2.3.4/32` → `("1.2.3.4", true)`; `2001:db8::1/128` → `("2001:db8::1", false)`.
@@ -120,6 +130,9 @@ fn split_cidr(cidr: &str) -> (&str, bool) {
 pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
+    // No Windows counterpart yet: route selection there is longest-prefix only, so
+    // a resolver on the LAN keeps being asked directly.
+    _capture_dns: bool,
     route_state_file: &str,
 ) -> anyhow::Result<()> {
     let Some((gw, uplink)) = read_default_route().await else {

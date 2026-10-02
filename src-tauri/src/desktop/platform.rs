@@ -302,11 +302,20 @@ impl DesktopPlatform {
 
         // External userspace tun in front of a socks-only core.
         self.os.precheck_external_tun(&self.p).await?;
-        // Resolve the server-bypass set before any tun route is up (needs DNS),
-        // plus the user's TUN-exclude CIDRs (e.g. docker networks) so they route
-        // straight out instead of through the proxy.
+        // Resolve the proxy servers before any tun route is up (needs DNS). They,
+        // plus the user's TUN-exclude CIDRs (e.g. docker networks), route straight
+        // out instead of through the proxy.
+        let servers = crate::desktop::net::resolve_servers(&cfg_text).await;
+        // An xray core whose egress is bound to the uplink takes the system's DNS
+        // through the tun too, so it follows the core's DNS settings instead of
+        // going straight to the network's resolver. It reaches its own servers
+        // through the addresses pinned below, not through that DNS. A socks-only
+        // sing-box resolves server names through the system resolver itself, so its
+        // resolvers stay off the tun.
+        let bound = can_bind_uplink();
+        let capture_dns = bound && engine == CoreEngine::Xray;
         let bypass =
-            routing::resolve_bypass_cidrs(&cfg_text, &self.tun_exclude_cidrs().await).await;
+            routing::bypass_cidrs(&servers, &self.tun_exclude_cidrs().await, !capture_dns).await;
 
         // Bind the core's own egress outbounds (proxy + direct) to the physical
         // uplink so they escape the tun at the socket layer instead of looping back
@@ -316,8 +325,11 @@ impl DesktopPlatform {
         // harmless no-op in unprivileged in-process dev, where there's no managed
         // tun to escape. (sing-box's native `auto_route` path escapes via its own
         // `auto_detect_interface` and is bound elsewhere.)
-        if can_bind_uplink() {
+        if bound {
             inject_uplink_bind(engine, Path::new(&cfg)).await;
+        }
+        if capture_dns {
+            pin_xray_servers(Path::new(&cfg), &servers).await;
         }
 
         self.spawn_core_verify(&core_bin, &cfg, &log).await?;
@@ -347,7 +359,8 @@ impl DesktopPlatform {
         .await;
         // The helper creates the tun device; wait for it before addressing/routing.
         self.os.await_tun_up(&iface).await?;
-        routing::apply_external_tun_routing(&iface, &bypass, &self.p.route_state_file).await?;
+        routing::apply_external_tun_routing(&iface, &bypass, capture_dns, &self.p.route_state_file)
+            .await?;
         Ok(())
     }
 }
@@ -704,6 +717,31 @@ async fn inject_uplink_bind(engine: Engine, cfg_path: &Path) -> bool {
         return false;
     };
     kasumi_core::outbound_bind::bind_uplink_outbounds(engine, &mut cfg, &dev, source.as_deref());
+    match serde_json::to_string(&cfg) {
+        Ok(s) => write_text(cfg_path, &s).await.is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Prepare the on-disk xray config for DNS sent through the tun: pin the proxy
+/// servers' pre-resolved addresses (see
+/// `kasumi_core::outbound_bind::pin_xray_server_hosts`) and answer inbound DNS
+/// with the core's DNS module.
+async fn pin_xray_servers(
+    cfg_path: &Path,
+    servers: &std::collections::BTreeMap<String, Vec<String>>,
+) -> bool {
+    let Some(text) = read_text(cfg_path).await else {
+        return false;
+    };
+    let Ok(mut cfg) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
+    kasumi_core::outbound_bind::pin_xray_server_hosts(&mut cfg, servers);
+    // The system's DNS now arrives at the core addressed to whatever the network
+    // resolver is (often the LAN router, which the proxy server can't reach), so
+    // answer it with xray's DNS module rather than forwarding it there.
+    kasumi_core::xray_config::hijack_inbound_dns(&mut cfg);
     match serde_json::to_string(&cfg) {
         Ok(s) => write_text(cfg_path, &s).await.is_ok(),
         Err(_) => false,
