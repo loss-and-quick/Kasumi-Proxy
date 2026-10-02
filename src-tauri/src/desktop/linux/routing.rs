@@ -1,10 +1,13 @@
 //! Linux desktop routing for an external-tun data-path. The core exposes a local SOCKS;
 //! tun2socks bridges a userspace tun to it. To put all traffic through the tun
 //! while keeping the core's own connection to the VPN server (and DNS bring-up) off it:
-//!   - host-route the resolved server IPs (+ /etc/resolv.conf nameservers) via the
-//!     real uplink gateway, and
+//!   - host-route the resolved server IPs (+ the /etc/resolv.conf nameservers, for
+//!     a core that resolves through them itself) via the real uplink gateway, and
 //!   - install a split-default (0.0.0.0/1 + 128.0.0.0/1) into the tun, which
 //!     overrides the existing `default` without deleting it (classic VPN trick).
+//!   - With `capture_dns`, steer every DNS query into the tun as well: a resolver
+//!     on the LAN (the router) has a connected route more specific than the
+//!     split-default and would otherwise be asked directly, past the core.
 //!
 //! The exact set of installed routes is persisted so teardown is idempotent.
 
@@ -17,6 +20,15 @@ use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
 
 use super::os::{IP, TUN_ADDR};
+
+/// Route table + ip-rule priority of the external tun's DNS capture
+/// (`dport 53 lookup <table>`, the table holding one `default dev <tun>`). Next to
+/// the native sing-box ones (`kasumi_core::singbox_config`) without overlapping
+/// them, so either teardown leaves the other alone. The core's own DNS dials are
+/// bound to the uplink (`SO_BINDTODEVICE`), so the tun route doesn't match their
+/// lookup and they fall through to the main table.
+const DNS_TABLE: &str = "2024";
+const DNS_RULE_PRIO: &str = "8995";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
@@ -69,11 +81,22 @@ async fn read_resolvers() -> Vec<String> {
     ips
 }
 
-/// Resolve every server host in the core config to bypass CIDRs, plus the resolv.conf
-/// nameservers and the user's TUN-exclude CIDRs (e.g. docker networks). The config
-/// parsing + resolution is shared; only the resolver source is Linux-specific.
-pub async fn resolve_bypass_cidrs(cfg_text: &str, tun_exclude: &[String]) -> Vec<String> {
-    crate::desktop::net::resolve_bypass_cidrs(cfg_text, &read_resolvers().await, tun_exclude).await
+/// The tun bypass set for the resolved proxy servers and the user's TUN-exclude
+/// CIDRs (e.g. docker networks). `keep_resolvers` also routes the system's DNS
+/// servers (/etc/resolv.conf) off the tun, for a core that resolves through them itself
+/// (a socks-only sing-box); an xray core reaches its servers through pinned
+/// `dns.hosts` instead, so its system DNS goes through the tun.
+pub async fn bypass_cidrs(
+    servers: &std::collections::BTreeMap<String, Vec<String>>,
+    tun_exclude: &[String],
+    keep_resolvers: bool,
+) -> Vec<String> {
+    let resolvers = if keep_resolvers {
+        read_resolvers().await
+    } else {
+        Vec::new()
+    };
+    crate::desktop::net::bypass_cidrs(servers, &resolvers, tun_exclude)
 }
 
 /// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address + up
@@ -81,6 +104,7 @@ pub async fn resolve_bypass_cidrs(cfg_text: &str, tun_exclude: &[String]) -> Vec
 pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
+    capture_dns: bool,
     route_state_file: &str,
 ) -> anyhow::Result<()> {
     let Some((gw, dev)) = read_default_route().await else {
@@ -98,6 +122,26 @@ pub async fn apply_external_tun_routing(
     silent(&[IP, "route", "replace", "0.0.0.0/1", "dev", tun]).await;
     silent(&[IP, "route", "replace", "128.0.0.0/1", "dev", tun]).await;
 
+    clear_dns_capture().await;
+    if capture_dns {
+        silent(&[
+            IP, "route", "replace", "default", "dev", tun, "table", DNS_TABLE,
+        ])
+        .await;
+        silent(&[
+            IP,
+            "rule",
+            "add",
+            "priority",
+            DNS_RULE_PRIO,
+            "dport",
+            "53",
+            "lookup",
+            DNS_TABLE,
+        ])
+        .await;
+    }
+
     let state = RouteState {
         tun: tun.to_string(),
         gw,
@@ -111,6 +155,9 @@ pub async fn apply_external_tun_routing(
 
 /// Tear down everything `apply_external_tun_routing` installed. Idempotent.
 pub async fn clear_external_tun_routing(route_state_file: &str) {
+    // Not part of the persisted state: swept unconditionally, so a capture left
+    // by an unclean exit can't keep sending DNS into a dead tun.
+    clear_dns_capture().await;
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };
@@ -120,6 +167,12 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
         silent(&[IP, "route", "del", c]).await;
     }
     kasumi_backend::fs::remove_file(route_state_file).await;
+}
+
+/// Remove the DNS capture rule and its table. Idempotent.
+async fn clear_dns_capture() {
+    while silent(&[IP, "rule", "del", "priority", DNS_RULE_PRIO]).await == 0 {}
+    silent(&[IP, "route", "flush", "table", DNS_TABLE]).await;
 }
 
 /// Install the fwmark escape rule for a native sing-box tun. The core stamps its

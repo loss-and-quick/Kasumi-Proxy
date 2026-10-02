@@ -3,7 +3,7 @@
 //! of proxy-server hosts out of a built xray config, reused by both the Linux and
 //! Windows routing back-ends.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use serde_json::Value;
 
@@ -155,23 +155,32 @@ fn collect_singbox_servers(cfg: &Value) -> HashSet<String> {
     hosts
 }
 
-/// Resolve every proxy-server host in the built config to bypass CIDRs, plus the
-/// `extra_hosts` the OS routing back-end supplies (its DNS resolvers, so name
-/// resolution keeps working while the tun is up). Handles both the xray and the
-/// sing-box config shapes (their server keys are disjoint, so the union is safe).
-pub async fn resolve_bypass_cidrs(
-    cfg_text: &str,
+/// Every proxy-server host in the built config (xray and sing-box shapes — their
+/// server keys are disjoint, so the union is safe), resolved to its IPs. A host
+/// that fails to resolve maps to `[]`.
+pub async fn resolve_servers(cfg_text: &str) -> BTreeMap<String, Vec<String>> {
+    let cfg: Value = serde_json::from_str(cfg_text).unwrap_or(Value::Null);
+    let mut servers = collect_xray_servers(&cfg);
+    servers.extend(collect_singbox_servers(&cfg));
+    let mut out = BTreeMap::new();
+    for host in servers {
+        let ips = resolve_ips(&host).await;
+        out.insert(host, ips);
+    }
+    out
+}
+
+/// The tun bypass set: every resolved proxy-server IP, plus the `extra_hosts` the
+/// OS routing back-end supplies (its DNS resolvers, when they must stay off the
+/// tun) and the user's TUN-exclude CIDRs.
+pub fn bypass_cidrs(
+    servers: &BTreeMap<String, Vec<String>>,
     extra_hosts: &[String],
     tun_exclude: &[String],
 ) -> Vec<String> {
-    let cfg: Value = serde_json::from_str(cfg_text).unwrap_or(Value::Null);
     let mut out = HashSet::new();
-    let mut servers = collect_xray_servers(&cfg);
-    servers.extend(collect_singbox_servers(&cfg));
-    for host in servers {
-        for ip in resolve_ips(&host).await {
-            out.insert(cidr(&ip));
-        }
+    for ip in servers.values().flatten() {
+        out.insert(cidr(ip));
     }
     for host in extra_hosts {
         out.insert(cidr(host));
@@ -282,7 +291,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolve_bypass_cidrs_for_literal_servers_and_extra_hosts() {
+    async fn bypass_cidrs_for_literal_servers_and_extra_hosts() {
         // Literal IPs resolve to themselves (no DNS), so the aggregation is
         // deterministic: every server host and every extra host becomes a CIDR.
         let cfg = serde_json::json!({
@@ -292,12 +301,11 @@ mod tests {
             ]
         })
         .to_string();
-        let cidrs = resolve_bypass_cidrs(
-            &cfg,
+        let cidrs = bypass_cidrs(
+            &resolve_servers(&cfg).await,
             &["8.8.8.8".to_string()],
             &["172.17.0.0/16".to_string()],
-        )
-        .await;
+        );
         assert!(cidrs.contains(&"1.2.3.4/32".to_string()));
         assert!(cidrs.contains(&"2001:db8::1/128".to_string()));
         assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
@@ -311,7 +319,7 @@ mod tests {
             "dns": { "servers": ["1.1.1.1", "8.8.8.8", {"address": "223.5.5.5"}, "dns.google"] }
         })
         .to_string();
-        let cidrs: Vec<String> = resolve_bypass_cidrs(&cfg, &[], &[]).await;
+        let cidrs: Vec<String> = bypass_cidrs(&resolve_servers(&cfg).await, &[], &[]);
         assert!(cidrs.contains(&"1.1.1.1/32".to_string()));
         assert!(cidrs.contains(&"8.8.8.8/32".to_string()));
         assert!(cidrs.contains(&"223.5.5.5/32".to_string()));
