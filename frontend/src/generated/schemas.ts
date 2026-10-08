@@ -738,6 +738,7 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("addGroup"),
 	id: z.string(),
 	name: z.string(),
+	subId: z.string().nullable(),
 }), z.object({
 	kind: z.literal("addProfiles"),
 	profiles: z.array(ProfileSchema),
@@ -777,6 +778,7 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("removeSub"),
 	id: z.string(),
+	deleteGroup: z.boolean(),
 }), z.object({
 	kind: z.literal("renameGroup"),
 	id: z.string(),
@@ -910,6 +912,7 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("addGroup"),
 	id: z.string(),
 	name: z.string(),
+	subId: z.string().nullable().optional(),
 }), z.object({
 	kind: z.literal("addProfiles"),
 	profiles: z.array(ProfileSchema),
@@ -949,6 +952,7 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("removeSub"),
 	id: z.string(),
+	deleteGroup: z.boolean().optional(),
 }), z.object({
 	kind: z.literal("renameGroup"),
 	id: z.string(),

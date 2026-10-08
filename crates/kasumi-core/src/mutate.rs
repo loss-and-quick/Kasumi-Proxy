@@ -74,14 +74,21 @@ pub enum MutationIntent {
     },
 
     // ---- groups ----
+    /// Add a group. `sub_id` marks a group made for that subscription: it follows
+    /// the subscription's renames and can be removed along with it.
+    #[serde(rename_all = "camelCase")]
     AddGroup {
         id: String,
         name: String,
+        #[serde(default)]
+        sub_id: Option<String>,
     },
     RenameGroup {
         id: String,
         name: String,
     },
+    /// Remove a group and its profiles. Subscriptions that fetched into it move to
+    /// the base group.
     RemoveGroup {
         id: String,
     },
@@ -97,8 +104,13 @@ pub enum MutationIntent {
         subscription: Box<Subscription>,
     },
     /// Remove a subscription and prune the profiles it still owns in its group.
+    /// With `delete_group`, also remove the group made for it when nothing else
+    /// is left in it.
+    #[serde(rename_all = "camelCase")]
     RemoveSub {
         id: String,
+        #[serde(default)]
+        delete_group: bool,
     },
 
     // ---- routing rules ----
@@ -207,11 +219,11 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             state.profiles = kept;
         }
 
-        MutationIntent::AddGroup { id, name } => {
+        MutationIntent::AddGroup { id, name, sub_id } => {
             state.groups.push(crate::state::Group {
                 id: id.clone(),
                 name: name.clone(),
-                sub_id: None,
+                sub_id: sub_id.clone(),
             });
         }
         MutationIntent::RenameGroup { id, name } => {
@@ -225,9 +237,14 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 return;
             }
             state.groups.retain(|g| g.id != *id);
-            // The group's profiles go with it; the orphaned-group middleware would
-            // also catch any stragglers, but prune here so the intent is complete.
             state.profiles.retain(|p| p.meta().group_id != *id);
+            // A subscription left pointing at the removed group would stamp its
+            // next fetch with a group nobody lists, and its profiles would vanish.
+            for sub in &mut state.subscriptions {
+                if sub.group_id.as_deref() == Some(id.as_str()) {
+                    sub.group_id = Some(BASE_GROUP_ID.into());
+                }
+            }
         }
         MutationIntent::ReorderGroups { from, to } => {
             // g-main stays pinned at index 0: never move it, never drop above it.
@@ -246,6 +263,7 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
         }
 
         MutationIntent::UpsertSub { subscription } => {
+            rename_owned_group(state, subscription);
             // A subscription drags its profiles with its group. The sub currently in
             // state is still the old one here, so compare groups and move the
             // profiles before replacing it — the intent owns its own migration.
@@ -283,7 +301,7 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             }
             upsert_by_id(&mut state.subscriptions, (**subscription).clone());
         }
-        MutationIntent::RemoveSub { id } => {
+        MutationIntent::RemoveSub { id, delete_group } => {
             let group = state
                 .subscriptions
                 .iter()
@@ -291,6 +309,15 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 .and_then(|s| s.group_id.clone());
             state.profiles = remove_profiles_by_sub_id(&state.profiles, id, group.as_deref());
             state.subscriptions.retain(|s| s.id != *id);
+            if *delete_group && let Some(g) = group.filter(|g| owned_group_is_empty(state, id, g)) {
+                state.groups.retain(|x| x.id != g);
+            }
+            // A group this subscription made is an ordinary one from now on.
+            for g in &mut state.groups {
+                if g.sub_id.as_deref() == Some(id.as_str()) {
+                    g.sub_id = None;
+                }
+            }
         }
 
         MutationIntent::UpsertRoutingRule { rule } => {
@@ -349,6 +376,42 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
         MutationIntent::ReplaceState { state: replacement } => {
             *state = (**replacement).clone();
         }
+    }
+}
+
+/// Whether `group` was made for subscription `sub_id` and holds nothing else: no
+/// profiles and no other subscription fetching into it. Only such a group goes
+/// away with its subscription.
+pub fn owned_group_is_empty(state: &AppState, sub_id: &str, group: &str) -> bool {
+    group != BASE_GROUP_ID
+        && state
+            .groups
+            .iter()
+            .any(|g| g.id == group && g.sub_id.as_deref() == Some(sub_id))
+        && !state.profiles.iter().any(|p| p.meta().group_id == group)
+        && !state
+            .subscriptions
+            .iter()
+            .any(|s| s.id != sub_id && s.group_id.as_deref() == Some(group))
+}
+
+/// A group made for a subscription carries its name until the user renames the
+/// group: when the subscription's name changes and the group still has the old
+/// one, the group follows.
+fn rename_owned_group(state: &mut AppState, next: &Subscription) {
+    let Some(prev) = state.subscriptions.iter().find(|s| s.id == next.id) else {
+        return;
+    };
+    if prev.remarks == next.remarks {
+        return;
+    }
+    let old = prev.remarks.clone();
+    if let Some(g) = state.groups.iter_mut().find(|g| {
+        Some(g.id.as_str()) == next.group_id.as_deref()
+            && g.sub_id.as_deref() == Some(next.id.as_str())
+            && g.name == old
+    }) {
+        g.name = next.remarks.clone();
     }
 }
 
@@ -551,6 +614,7 @@ mod tests {
             &MutationIntent::AddGroup {
                 id: "g3".into(),
                 name: "Three".into(),
+                sub_id: None,
             },
         );
         assert!(s.groups.iter().any(|g| g.id == "g3"));
@@ -622,7 +686,13 @@ mod tests {
         let mut moved = with_id("trojan://pw@b.com:443#B", "b", "g2");
         moved.meta_mut().sub_id = Some("s1".into());
         s.profiles = vec![owned, moved];
-        apply_mutation(&mut s, &MutationIntent::RemoveSub { id: "s1".into() });
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveSub {
+                id: "s1".into(),
+                delete_group: false,
+            },
+        );
         assert!(s.subscriptions.is_empty());
         let ids: Vec<&str> = s.profiles.iter().map(|p| p.meta().id.as_str()).collect();
         assert_eq!(ids, vec!["b"]);
@@ -854,6 +924,119 @@ mod tests {
         );
         assert!(s.profiles.is_empty());
         assert_eq!(s.active_id.as_deref(), Some("z"));
+    }
+
+    fn owned_group(s: &mut AppState, id: &str, name: &str, sub: &str) {
+        s.groups.push(Group {
+            id: id.into(),
+            name: name.into(),
+            sub_id: Some(sub.into()),
+        });
+    }
+
+    #[test]
+    fn remove_group_moves_its_subs_to_main() {
+        let mut s = base();
+        s.subscriptions = vec![mksub("s1", Some("g2")), mksub("s2", Some("g-main"))];
+        apply_mutation(&mut s, &MutationIntent::RemoveGroup { id: "g2".into() });
+        assert_eq!(s.subscriptions[0].group_id.as_deref(), Some("g-main"));
+        assert_eq!(s.subscriptions[1].group_id.as_deref(), Some("g-main"));
+    }
+
+    #[test]
+    fn remove_sub_takes_its_own_empty_group() {
+        let mut s = base();
+        owned_group(&mut s, "gs", "S", "s1");
+        s.subscriptions = vec![mksub("s1", Some("gs"))];
+        s.profiles = vec![owned("trojan://pw@a.com:443#A", "a", "gs", "s1")];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveSub {
+                id: "s1".into(),
+                delete_group: true,
+            },
+        );
+        assert!(!s.groups.iter().any(|g| g.id == "gs"));
+        assert!(s.profiles.is_empty());
+    }
+
+    #[test]
+    fn remove_sub_keeps_a_group_that_still_holds_something() {
+        // A hand-added profile in the group.
+        let mut s = base();
+        owned_group(&mut s, "gs", "S", "s1");
+        s.subscriptions = vec![mksub("s1", Some("gs"))];
+        s.profiles = vec![with_id("trojan://pw@b.com:443#B", "b", "gs")];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveSub {
+                id: "s1".into(),
+                delete_group: true,
+            },
+        );
+        let g = s.groups.iter().find(|g| g.id == "gs").unwrap();
+        assert_eq!(g.sub_id, None);
+
+        // Another subscription fetching into it.
+        let mut s = base();
+        owned_group(&mut s, "gs", "S", "s1");
+        s.subscriptions = vec![mksub("s1", Some("gs")), mksub("s2", Some("gs"))];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveSub {
+                id: "s1".into(),
+                delete_group: true,
+            },
+        );
+        assert!(s.groups.iter().any(|g| g.id == "gs"));
+
+        // A group the subscription didn't make.
+        let mut s = base();
+        s.subscriptions = vec![mksub("s1", Some("g2"))];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveSub {
+                id: "s1".into(),
+                delete_group: true,
+            },
+        );
+        assert!(s.groups.iter().any(|g| g.id == "g2"));
+    }
+
+    #[test]
+    fn renaming_a_sub_renames_the_group_made_for_it() {
+        let mut s = base();
+        owned_group(&mut s, "gs", "S", "s1");
+        s.subscriptions = vec![mksub("s1", Some("gs"))];
+        let mut next = mksub("s1", Some("gs"));
+        next.remarks = "Provider".into();
+        apply_mutation(
+            &mut s,
+            &MutationIntent::UpsertSub {
+                subscription: Box::new(next.clone()),
+            },
+        );
+        assert_eq!(
+            s.groups.iter().find(|g| g.id == "gs").unwrap().name,
+            "Provider"
+        );
+
+        // Once the user names the group themselves, it keeps that name.
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RenameGroup {
+                id: "gs".into(),
+                name: "Mine".into(),
+            },
+        );
+        next.remarks = "Other".into();
+        apply_mutation(
+            &mut s,
+            &MutationIntent::UpsertSub {
+                subscription: Box::new(next),
+            },
+        );
+        assert_eq!(s.groups.iter().find(|g| g.id == "gs").unwrap().name, "Mine");
     }
 
     #[test]

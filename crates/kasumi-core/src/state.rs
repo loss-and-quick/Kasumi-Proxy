@@ -523,6 +523,32 @@ pub fn fixup_active_id(state: &mut AppState) {
     }
 }
 
+/// Point everything that names a missing group back at the base group: profiles
+/// in it would be listed nowhere, and a subscription fetching into it would make
+/// its profiles vanish. Also forget an owning subscription that no longer
+/// exists. Pure; idempotent; assumes the base group exists.
+pub fn fixup_dangling_groups(state: &mut AppState) {
+    let known: std::collections::HashSet<String> =
+        state.groups.iter().map(|g| g.id.clone()).collect();
+    for p in &mut state.profiles {
+        if !known.contains(&p.meta().group_id) {
+            p.meta_mut().group_id = BASE_GROUP_ID.into();
+        }
+    }
+    for sub in &mut state.subscriptions {
+        if sub.group_id.as_ref().is_some_and(|g| !known.contains(g)) {
+            sub.group_id = Some(BASE_GROUP_ID.into());
+        }
+    }
+    let subs: std::collections::HashSet<&str> =
+        state.subscriptions.iter().map(|s| s.id.as_str()).collect();
+    for g in &mut state.groups {
+        if g.sub_id.as_deref().is_some_and(|id| !subs.contains(id)) {
+            g.sub_id = None;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

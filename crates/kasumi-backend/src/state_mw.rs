@@ -26,7 +26,7 @@
 //! not scattered across init sites.
 
 use kasumi_core::chain::fixup_dangling_via;
-use kasumi_core::state::{AppState, fixup_active_id};
+use kasumi_core::state::{AppState, fixup_active_id, fixup_dangling_groups};
 
 /// A single write-side rule. Pure: no I/O, deterministic, trivially unit-testable.
 ///
@@ -111,6 +111,22 @@ impl WriteMiddleware for FixupDanglingVia {
     }
 }
 
+/// Point profiles and subscriptions that name a missing group at the base group,
+/// and forget a group's owner once that subscription is gone. A backup restore or
+/// a hand edit can leave such references; left alone, the profiles would be
+/// listed nowhere.
+pub struct FixupDanglingGroups;
+
+impl WriteMiddleware for FixupDanglingGroups {
+    fn name(&self) -> &'static str {
+        "fixup-dangling-groups"
+    }
+
+    fn apply(&self, _prev: &AppState, next: &mut AppState) {
+        fixup_dangling_groups(next);
+    }
+}
+
 /// Build the canonical chain of write-side rules, in dependency order.
 ///
 /// Centralizing construction here keeps rule ordering auditable in one spot;
@@ -118,6 +134,7 @@ impl WriteMiddleware for FixupDanglingVia {
 /// the sequence. Add new rules here as the dependency graph grows.
 pub fn default_chain() -> WriteChain {
     let mut chain = WriteChain::new();
+    chain.push(FixupDanglingGroups);
     // Runs last so it sees the final profile set; add profile-removing rules before
     // it as the graph grows.
     chain.push(FixupDanglingActiveId);
@@ -173,8 +190,19 @@ mod tests {
     }
 
     #[test]
+    fn fixup_moves_profiles_of_a_missing_group_to_main() {
+        let mut a = p("vless://u1@e.x:443?type=tcp#A");
+        a.meta_mut().group_id = "gone".into();
+        let prev = default_app_state();
+        let mut next = default_app_state();
+        next.profiles = vec![a];
+        default_chain().run(&prev, &mut next);
+        assert_eq!(next.profiles[0].meta().group_id, "g-main");
+    }
+
+    #[test]
     fn default_chain_has_the_fixup_rules() {
-        assert_eq!(default_chain().len(), 2);
+        assert_eq!(default_chain().len(), 3);
     }
 
     #[test]

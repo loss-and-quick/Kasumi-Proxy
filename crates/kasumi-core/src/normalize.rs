@@ -13,15 +13,18 @@
 //! fixes). Pure and idempotent — running it twice equals running it once.
 
 use crate::chain::fixup_dangling_via;
-use crate::state::{AppState, BASE_GROUP_ID, BASE_GROUP_NAME, Group, fixup_active_id};
+use crate::state::{
+    AppState, BASE_GROUP_ID, BASE_GROUP_NAME, Group, fixup_active_id, fixup_dangling_groups,
+};
 
 /// Legacy locked asset ids that used to ship as built-in defaults; dropped on read.
 const LEGACY_DEFAULT_ASSET_IDS: [&str; 2] = ["asset-geoip", "asset-geosite"];
 
-/// Normalize a freshly-read [`AppState`] in place: ensure the base group exists,
-/// drop legacy default assets, and null a dangling `active_id` and `via`s.
+/// Normalize a freshly-read [`AppState`] in place: ensure the base group exists
+/// and nothing names a missing group, drop legacy default assets, and null a dangling `active_id` and `via`s.
 pub fn normalize_app_state(state: &mut AppState) {
     ensure_base_group(state);
+    fixup_dangling_groups(state);
     strip_legacy_default_assets(state);
     fixup_active_id(state);
     fixup_dangling_via(state);
@@ -119,6 +122,31 @@ mod tests {
         s.active_id = Some("ghost".into());
         normalize_app_state(&mut s);
         assert_eq!(s.active_id, None);
+    }
+
+    #[test]
+    fn points_whatever_names_a_missing_group_at_main() {
+        let mut s = default_app_state();
+        let mut p = crate::share::parse_share_link("trojan://pw@a.com:443#A", None).unwrap();
+        p.meta_mut().group_id = "gone".into();
+        s.profiles = vec![p];
+        s.subscriptions = vec![
+            serde_json::from_value(serde_json::json!({
+                "id": "s1", "remarks": "S", "url": "", "enabled": true, "groupId": "gone",
+                "autoUpdate": false, "interval": 60, "allowInsecure": false,
+                "userAgent": "", "filter": "", "lastUpdated": "", "count": 0
+            }))
+            .unwrap(),
+        ];
+        s.groups.push(Group {
+            id: "g2".into(),
+            name: "Two".into(),
+            sub_id: Some("removed-sub".into()),
+        });
+        normalize_app_state(&mut s);
+        assert_eq!(s.profiles[0].meta().group_id, BASE_GROUP_ID);
+        assert_eq!(s.subscriptions[0].group_id.as_deref(), Some(BASE_GROUP_ID));
+        assert_eq!(s.groups[1].sub_id, None);
     }
 
     #[test]
