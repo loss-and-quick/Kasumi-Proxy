@@ -1,7 +1,8 @@
-import { Field, SectionLabel, Segmented, Select } from "../../../components";
-import type { CoreEngine, Profile, Protocol } from "../../../generated/bindings";
+import { Field, GroupPicker, SectionLabel, Segmented, Select } from "../../../components";
+import type { CoreEngine, Group, Profile, Protocol } from "../../../generated/bindings";
 import { CORE_ENGINE_OPTS, PROTOCOL_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
+import type { GroupChoice } from "../../../lib/groups";
 import type { EndpointSetter, FieldErrors, MetaSetter } from "../types";
 
 const PROTOCOL_LABELS: Record<Protocol, string> = {
@@ -31,7 +32,9 @@ export function BasicsSection({
   setMeta,
   setEndpoint,
   errors,
-  groupOpts,
+  groups,
+  group,
+  setGroup,
   viaOpts,
   changeProtocol,
   engineForced,
@@ -41,7 +44,9 @@ export function BasicsSection({
   setMeta: MetaSetter;
   setEndpoint: EndpointSetter;
   errors: FieldErrors;
-  groupOpts: Array<{ value: string; label: string }>;
+  groups: Group[];
+  group: GroupChoice;
+  setGroup: (value: GroupChoice) => void;
   viaOpts: Array<{ value: string; label: string }>;
   changeProtocol: (proto: Protocol) => void;
   engineForced: CoreEngine | null;
@@ -90,12 +95,12 @@ export function BasicsSection({
         </div>
       )}
 
-      <Select
-        label={t("editor.group")}
-        value={draft.meta.groupId}
-        options={groupOpts}
-        onChange={(value) => setMeta({ groupId: value })}
-      />
+      <GroupPicker label={t("editor.group")} groups={groups} value={group} onChange={setGroup} />
+      {errors.group && (
+        <div className="hint error" style={{ marginTop: -8, marginBottom: 10 }}>
+          {errors.group}
+        </div>
+      )}
 
       {draft.protocol !== "custom" && (
         <Select

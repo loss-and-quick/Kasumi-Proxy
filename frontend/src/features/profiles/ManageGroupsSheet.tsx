@@ -10,7 +10,7 @@ import {
   useSortableSensors,
 } from "../../components";
 import type { Group } from "../../generated/bindings";
-import { useT } from "../../i18n";
+import { useFormatters, useT } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
 
 const DeleteGroupDialog = lazy(() =>
@@ -19,7 +19,9 @@ const DeleteGroupDialog = lazy(() =>
 
 export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
+  const { formatList } = useFormatters();
   const groups = useAppStore((s) => s.groups);
+  const subscriptions = useAppStore((s) => s.subscriptions);
   const profiles = useAppStore((s) => s.profiles);
   const activeId = useAppStore((s) => s.activeId);
   const addGroup = useAppStore((s) => s.addGroup);
@@ -41,6 +43,8 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
 
   const activeGroupId = profiles.find((p) => p.meta.id === activeId)?.meta.groupId ?? null;
   const countOf = (id: string) => profiles.filter((p) => p.meta.groupId === id).length;
+  const subsOf = (id: string) =>
+    subscriptions.filter((s) => s.groupId === id).map((s) => s.remarks);
   // g-main stays pinned at the top and out of the sortable set.
   const sortableIds = groups.filter((g) => g.id !== "g-main").map((g) => g.id);
 
@@ -110,6 +114,8 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
               <div className="lr-title">{group.name}</div>
               <div className="lr-sub">
                 {t("profiles.groups.count", { count: countOf(group.id) })}
+                {subsOf(group.id).length > 0 &&
+                  ` · ${t("profiles.groups.fromSubs", { names: formatList(subsOf(group.id)) })}`}
               </div>
             </>
           )}
@@ -189,6 +195,7 @@ export function ManageGroupsSheet({ open, onClose }: { open: boolean; onClose: (
         <DeleteGroupDialog
           group={confirmDel}
           count={confirmDel ? countOf(confirmDel.id) : 0}
+          subs={confirmDel ? subsOf(confirmDel.id) : []}
           onClose={() => setConfirmDel(null)}
           onConfirm={(group) => {
             void removeGroup(group.id);

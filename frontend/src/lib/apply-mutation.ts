@@ -24,6 +24,17 @@ function dedupKey(p: Profile): string {
   return `${p.protocol}|${ep?.address ?? ""}|${ep?.port ?? "null"}|${secret}`;
 }
 
+/** Mirrors `owned_group_is_empty`: the group was made for `subId` and nothing
+ *  else is left in it. `state` is taken after the sub and its profiles are gone. */
+export function ownedGroupIsEmpty(state: AppState, subId: string, group: string): boolean {
+  return (
+    group !== BASE_GROUP_ID &&
+    state.groups.some((g) => g.id === group && g.subId === subId) &&
+    !state.profiles.some((p) => p.meta.groupId === group) &&
+    !state.subscriptions.some((s) => s.id !== subId && s.groupId === group)
+  );
+}
+
 /** Drop duplicate endpoints within scope, always keeping the active one. */
 function deduplicate(
   profiles: Profile[],
@@ -104,7 +115,13 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       };
 
     case "addGroup":
-      return { ...state, groups: [...state.groups, { id: intent.id, name: intent.name }] };
+      return {
+        ...state,
+        groups: [
+          ...state.groups,
+          { id: intent.id, name: intent.name, ...(intent.subId ? { subId: intent.subId } : {}) },
+        ],
+      };
     case "renameGroup":
       return {
         ...state,
@@ -116,6 +133,9 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         ...state,
         groups: state.groups.filter((g) => g.id !== intent.id),
         profiles: state.profiles.filter((p) => p.meta.groupId !== intent.id),
+        subscriptions: state.subscriptions.map((s) =>
+          s.groupId === intent.id ? { ...s, groupId: BASE_GROUP_ID } : s,
+        ),
       };
     case "reorderGroups": {
       const pinned = state.groups[0]?.id === BASE_GROUP_ID ? 1 : 0;
@@ -145,8 +165,18 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
           );
         }
       }
+      // A group made for the sub follows its renames while it still has the old name.
+      const groups =
+        old && old.remarks !== intent.subscription.remarks
+          ? state.groups.map((g) =>
+              g.id === newG && g.subId === old.id && g.name === old.remarks
+                ? { ...g, name: intent.subscription.remarks }
+                : g,
+            )
+          : state.groups;
       return {
         ...state,
+        groups,
         profiles,
         subscriptions: upsertById(state.subscriptions, intent.subscription),
       };
@@ -159,11 +189,15 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         if (group != null && p.meta.groupId !== group) return true;
         return false;
       });
-      return {
-        ...state,
-        profiles,
-        subscriptions: state.subscriptions.filter((s) => s.id !== intent.id),
-      };
+      const subscriptions = state.subscriptions.filter((s) => s.id !== intent.id);
+      const dropGroup =
+        intent.deleteGroup &&
+        group != null &&
+        ownedGroupIsEmpty({ ...state, profiles, subscriptions }, intent.id, group);
+      const groups = state.groups
+        .filter((g) => !(dropGroup && g.id === group))
+        .map((g) => (g.subId === intent.id ? { id: g.id, name: g.name } : g));
+      return { ...state, groups, profiles, subscriptions };
     }
 
     case "upsertRoutingRule":

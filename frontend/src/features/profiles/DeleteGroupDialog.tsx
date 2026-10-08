@@ -1,19 +1,23 @@
 import { Btn, Dialog } from "../../components";
 import type { Group } from "../../generated/bindings";
-import { useT } from "../../i18n";
+import { useFormatters, useT } from "../../i18n";
 
 export function DeleteGroupDialog({
   group,
   count,
+  subs = [],
   onClose,
   onConfirm,
 }: {
   group: Group | null;
   count: number;
+  /** Names of the subscriptions that fetch into the group; they move to Main. */
+  subs?: string[];
   onClose: () => void;
   onConfirm: (group: Group) => void;
 }) {
   const t = useT();
+  const { formatList } = useFormatters();
 
   return (
     <Dialog
@@ -35,6 +39,14 @@ export function DeleteGroupDialog({
     >
       <b style={{ color: "var(--on-surface)" }}>{group?.name}</b>{" "}
       {t("profiles.confirmDelGroup.body", { count })}
+      {subs.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {t("profiles.confirmDelGroup.subsMoved", {
+            count: subs.length,
+            names: formatList(subs),
+          })}
+        </div>
+      )}
     </Dialog>
   );
 }

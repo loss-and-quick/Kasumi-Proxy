@@ -10,6 +10,7 @@ import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { fuzzyFilterSort } from "../../lib/fuzzy";
+import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { profileSearchText } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "./clipboard";
@@ -43,7 +44,14 @@ const ManageGroupsSheet = lazy(() =>
   import("./ManageGroupsSheet").then((module) => ({ default: module.ManageGroupsSheet })),
 );
 
-export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string | "new") => void }) {
+export default function Profiles({
+  onOpenEditor,
+  initialGroup = null,
+}: {
+  onOpenEditor: (id: string | "new") => void;
+  /** Open filtered to this group instead of all of them. */
+  initialGroup?: string | null;
+}) {
   const profiles = useAppStore((s) => s.profiles);
   const testResults = useAppStore((s) => s.testResults);
   const groups = useAppStore((s) => s.groups);
@@ -62,11 +70,12 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const removeDuplicates = useAppStore((s) => s.removeDuplicates);
   const selectBest = useAppStore((s) => s.selectBest);
   const addProfiles = useAppStore((s) => s.addProfiles);
+  const resolveGroup = useAppStore((s) => s.resolveGroup);
   const t = useT();
 
   const [pingSheetOpen, setPingSheetOpen] = useState(false);
 
-  const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [groupFilter, setGroupFilter] = useState<string>(initialGroup ?? "all");
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState<SortMode>("name");
@@ -75,10 +84,10 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
-  const [importGroup, setImportGroup] = useState<string>(groups[0]?.id ?? "g-main");
+  const [importGroup, setImportGroup] = useState<GroupChoice>({ id: BASE_GROUP_ID });
   const [bulkMode, setBulkMode] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [moveGroup, setMoveGroup] = useState<string>(groups[0]?.id ?? "g-main");
+  const [moveGroup, setMoveGroup] = useState<GroupChoice>({ id: BASE_GROUP_ID });
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [qrPayload, setQrPayload] = useState<{ title: string; text: string } | null>(null);
   const [testLogTarget, setTestLogTarget] = useState<{ profile: Profile; kind: TestKind } | null>(
@@ -165,14 +174,26 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
     }
   }
 
+  // Imports land in the group being looked at, if any.
+  function openImport() {
+    setImportGroup({ id: groupFilter !== "all" ? groupFilter : BASE_GROUP_ID });
+    setImportOpen(true);
+  }
+
   async function importProfilesFromText(text: string) {
     const parsed = await bridge.parseShareLinks(text);
     if (!parsed.length) {
       notify(t("profiles.import.none"));
       return false;
     }
-    addProfiles(
-      parsed.map((profile) => ({ ...profile, meta: { ...profile.meta, groupId: importGroup } })),
+    if (!groupChoiceReady(importGroup)) {
+      notify(t("groups.picker.needName"));
+      return false;
+    }
+    const groupId = await resolveGroup(importGroup, "");
+    setImportGroup({ id: groupId });
+    await addProfiles(
+      parsed.map((profile) => ({ ...profile, meta: { ...profile.meta, groupId } })),
     );
     setImportText("");
     setImportOpen(false);
@@ -198,9 +219,15 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
     notify(t("profiles.bulkPingDone", { count: selectedIds.length }));
   }
 
-  function doBulkMove() {
+  async function doBulkMove() {
     if (!selectedIds.length) return;
-    moveProfiles(selectedIds, moveGroup);
+    if (!groupChoiceReady(moveGroup)) {
+      notify(t("groups.picker.needName"));
+      return;
+    }
+    const groupId = await resolveGroup(moveGroup, "");
+    setMoveGroup({ id: groupId });
+    await moveProfiles(selectedIds, groupId);
     notify(t("profiles.bulkMoveDone", { count: selectedIds.length }));
   }
 
@@ -243,7 +270,7 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
         setMoveGroup={setMoveGroup}
         onBulkPing={() => void doBulkPing()}
         onBulkShare={() => void doShareSelected()}
-        onBulkMove={doBulkMove}
+        onBulkMove={() => void doBulkMove()}
         onBulkDelete={doBulkDelete}
         onBulkDedup={doBulkDedup}
       />
@@ -346,11 +373,11 @@ export default function Profiles({ onOpenEditor }: { onOpenEditor: (id: string |
             }}
             onPaste={() => {
               setAddOpen(false);
-              setImportOpen(true);
+              openImport();
             }}
             onScanQr={() => {
               setAddOpen(false);
-              setImportOpen(true);
+              openImport();
               setQrScannerOpen(true);
             }}
             onNewGroup={() => {

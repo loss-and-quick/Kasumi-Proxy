@@ -439,6 +439,61 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().profiles[0].meta.remarks).toBe("Two updated");
   });
 
+  it("saveSubscription makes the new group on save and reuses one by name", async () => {
+    useAppStore.setState({
+      profiles: [],
+      groups: [{ id: "g-main", name: "Main" }],
+      subscriptions: [],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+    const { saveSubscription } = useAppStore.getState();
+    // An empty name stands for the subscription's own.
+    await saveSubscription(makeSub({ id: "s1", remarks: "Provider" }), { newName: "" });
+    let { groups, subscriptions } = useAppStore.getState();
+    const made = groups.find((g) => g.name === "Provider");
+    expect(made?.subId).toBe("s1");
+    expect(subscriptions[0].groupId).toBe(made?.id);
+
+    // The same name, in another case, lands in that group instead of a twin.
+    await saveSubscription(makeSub({ id: "s2", remarks: "Other" }), { newName: "provider" });
+    ({ groups, subscriptions } = useAppStore.getState());
+    expect(groups).toHaveLength(2);
+    expect(subscriptions[1].groupId).toBe(made?.id);
+  });
+
+  it("removeSub takes the group made for it only when asked and left empty", async () => {
+    useAppStore.setState({
+      profiles: [makeVless({ meta: { id: "p1", groupId: "gs", subId: "s1" } })],
+      groups: [
+        { id: "g-main", name: "Main" },
+        { id: "gs", name: "Sub", subId: "s1" },
+      ],
+      subscriptions: [makeSub({ id: "s1", groupId: "gs" })],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+    await useAppStore.getState().removeSub("s1", true);
+    const s = useAppStore.getState();
+    expect(s.groups.map((g) => g.id)).toEqual(["g-main"]);
+    expect(s.profiles).toHaveLength(0);
+  });
+
+  it("removeGroup moves the subscriptions fetching into it to Main", async () => {
+    useAppStore.setState({
+      profiles: [],
+      groups: [
+        { id: "g-main", name: "Main" },
+        { id: "g2", name: "Two" },
+      ],
+      subscriptions: [makeSub({ id: "s1", groupId: "g2" })],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+    await useAppStore.getState().removeGroup("g2");
+    expect(useAppStore.getState().subscriptions[0].groupId).toBe("g-main");
+  });
+
   it("cloneProfile detaches the subscription link and leaves the copy untested", async () => {
     const src = makeVless({ meta: { id: "p1", remarks: "Node", subId: "s1" } });
     useAppStore.setState({
