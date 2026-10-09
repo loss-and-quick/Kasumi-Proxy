@@ -226,9 +226,11 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
     case "importBackup": {
       const incoming = intent.incoming;
       if (intent.mode === "replace") {
+        // Current profiles stay; the backup's are added unless one shares an id.
+        const known = new Set(state.profiles.map((p) => p.meta.id));
         return {
           ...incoming,
-          profiles: state.profiles,
+          profiles: [...state.profiles, ...incoming.profiles.filter((p) => !known.has(p.meta.id))],
           settings: mergeSettings(incoming.settings),
         };
       }

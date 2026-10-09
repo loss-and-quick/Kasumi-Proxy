@@ -517,6 +517,22 @@ describe("useAppStore", () => {
     expect(toasts.filter((x) => x.includes("disk full"))).toHaveLength(1);
   });
 
+  it("restoring an older backup without rules keeps the current rules", async () => {
+    const rule = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block" };
+    useAppStore.setState({ ...makeState({ routingRules: [rule] }) });
+    // A backup from before rules were exported: no routingRules key at all.
+    // (`profiles: []` is what the real schema defaults it to; the mock doesn't.)
+    const legacy = JSON.stringify({
+      profiles: [],
+      groups: [{ id: "g-main", name: "Main" }],
+      subscriptions: [],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+    await useAppStore.getState().importBackup(legacy, "replace");
+    expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1"]);
+  });
+
   it("cloneProfile detaches the subscription link and leaves the copy untested", async () => {
     const src = makeVless({ meta: { id: "p1", remarks: "Node", subId: "s1" } });
     useAppStore.setState({

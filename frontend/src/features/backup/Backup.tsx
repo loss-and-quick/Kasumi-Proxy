@@ -23,6 +23,12 @@ const QrScannerSheet = lazy(() =>
 export default function Backup({ onClose }: { onClose: () => void }) {
   const groups = useAppStore((s) => s.groups);
   const subscriptions = useAppStore((s) => s.subscriptions);
+  const allProfiles = useAppStore((s) => s.profiles);
+  const routingRules = useAppStore((s) => s.routingRules);
+  const assetFiles = useAppStore((s) => s.assetFiles);
+  // Profiles a subscription brings are fetched again after a restore; the ones
+  // made by hand (or pasted) exist nowhere else, so they go in the backup.
+  const profiles = useMemo(() => allProfiles.filter((p) => !p.meta.subId), [allProfiles]);
   const settings = useAppStore((s) => s.settings);
   const activeId = useAppStore((s) => s.activeId);
   const importBackup = useAppStore((s) => s.importBackup);
@@ -30,8 +36,13 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const t = useT();
 
   const backupJson = useMemo(
-    () => JSON.stringify({ groups, subscriptions, settings, activeId }, null, 2),
-    [groups, subscriptions, settings, activeId],
+    () =>
+      JSON.stringify(
+        { profiles, groups, subscriptions, routingRules, assetFiles, settings, activeId },
+        null,
+        2,
+      ),
+    [profiles, groups, subscriptions, routingRules, assetFiles, settings, activeId],
   );
   const [importText, setImportText] = useState("");
   const [qrOpen, setQrOpen] = useState(false);
@@ -67,6 +78,7 @@ export default function Backup({ onClose }: { onClose: () => void }) {
         mono
         hint={t("backup.summary", {
           groups: groups.length,
+          profiles: profiles.length,
           subscriptions: subscriptions.length,
         })}
       />

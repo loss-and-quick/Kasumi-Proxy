@@ -935,7 +935,15 @@ export const useAppStore = create<Store>((set, get) => {
       }
       // `safeParse` yields the `Serialize | Deserialize` union; narrow to the
       // all-fields phase the importBackup intent carries.
-      const incoming = parsed.data as AppState_Serialize;
+      const parsedState = parsed.data as AppState_Serialize;
+      // Older backups carry no routing rules or resource files. Reading those as
+      // "none" would wipe the current ones on Replace, so they stay as they are.
+      const raw = parsedJson as Record<string, unknown>;
+      const incoming: AppState_Serialize = {
+        ...parsedState,
+        routingRules: "routingRules" in raw ? parsedState.routingRules : get().routingRules,
+        assetFiles: "assetFiles" in raw ? parsedState.assetFiles : get().assetFiles,
+      };
       // AppStateSchema silently drops invalid profiles (logged with reasons via
       // console.warn). Surface how many were skipped so a partial import is visible.
       const rawProfiles = (parsedJson as { profiles?: unknown }).profiles;

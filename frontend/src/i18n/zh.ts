@@ -342,7 +342,7 @@ const zh = {
   "confirm.dedup.action": "删除",
   "confirm.backupReplace.title": "用备份替换？",
   "confirm.backupReplace.body":
-    "分组、订阅、路由规则、资源文件和设置将被备份中的内容替换。配置保持不变。",
+    "分组、订阅、路由规则、资源文件和设置将被备份中的内容替换。你的配置保持不变，备份中的配置会被添加进来。",
   "confirm.rulesReplace.title": plural("count", {
     one: "替换 # 条路由规则？",
     other: "替换全部 # 条路由规则？",

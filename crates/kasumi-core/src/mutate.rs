@@ -350,10 +350,22 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
 
         MutationIntent::ImportBackup { incoming, mode } => match mode {
             ImportMode::Replace => {
-                // Keep the current profiles (backups carry none); take everything
-                // else from the backup. A now-dangling active_id is nulled by the
-                // middleware that runs after this.
-                let profiles = std::mem::take(&mut state.profiles);
+                // Take everything else from the backup, but never drop a profile:
+                // keep the current ones and add the backup's (its hand-made
+                // profiles; subscription ones are fetched again). A profile the
+                // backup shares by id is the one already here. A now-dangling
+                // active_id, or a profile whose group the backup lacks, is fixed
+                // by the middleware that runs after this.
+                let mut profiles = std::mem::take(&mut state.profiles);
+                let known: std::collections::HashSet<String> =
+                    profiles.iter().map(|p| p.meta().id.clone()).collect();
+                profiles.extend(
+                    incoming
+                        .profiles
+                        .iter()
+                        .filter(|p| !known.contains(&p.meta().id))
+                        .cloned(),
+                );
                 *state = (**incoming).clone();
                 state.profiles = profiles;
             }
@@ -875,6 +887,28 @@ mod tests {
         assert_eq!(s.profiles.len(), 1);
         assert!(s.groups.iter().any(|g| g.id == "gx"));
         assert_eq!(s.active_id.as_deref(), Some("ghost"));
+    }
+
+    #[test]
+    fn import_backup_replace_adds_the_backups_profiles() {
+        let mut s = base();
+        s.profiles = vec![with_id("trojan://pw@a.com:443#A", "a", "g-main")];
+        let mut incoming = default_app_state();
+        incoming.profiles = vec![
+            // Already here by id: the current one wins.
+            with_id("trojan://pw@other.com:443#A2", "a", "g-main"),
+            with_id("trojan://pw@b.com:443#B", "b", "g-main"),
+        ];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::ImportBackup {
+                incoming: Box::new(incoming),
+                mode: ImportMode::Replace,
+            },
+        );
+        let ids: Vec<&str> = s.profiles.iter().map(|p| p.meta().id.as_str()).collect();
+        assert_eq!(ids, vec!["a", "b"]);
+        assert_eq!(s.profiles[0].meta().remarks, "A");
     }
 
     #[test]

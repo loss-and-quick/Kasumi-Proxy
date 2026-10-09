@@ -352,7 +352,7 @@ const es = {
   "confirm.dedup.action": "Quitar",
   "confirm.backupReplace.title": "¿Reemplazar con la copia?",
   "confirm.backupReplace.body":
-    "Los grupos, suscripciones, reglas de enrutamiento, archivos de recursos y ajustes se reemplazan por los de la copia. Los perfiles se quedan.",
+    "Los grupos, suscripciones, reglas de enrutamiento, archivos de recursos y ajustes se reemplazan por los de la copia. Tus perfiles se quedan y se añaden los de la copia.",
   "confirm.rulesReplace.title": plural("count", {
     one: "¿Reemplazar # regla de enrutamiento?",
     other: "¿Reemplazar las # reglas de enrutamiento?",

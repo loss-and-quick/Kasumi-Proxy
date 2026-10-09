@@ -352,7 +352,7 @@ const pt = {
   "confirm.dedup.action": "Remover",
   "confirm.backupReplace.title": "Substituir pelo backup?",
   "confirm.backupReplace.body":
-    "Grupos, assinaturas, regras de roteamento, arquivos de recursos e configurações são substituídos pelos do backup. Os perfis ficam.",
+    "Grupos, assinaturas, regras de roteamento, arquivos de recursos e configurações são substituídos pelos do backup. Seus perfis ficam, e os perfis do backup são adicionados.",
   "confirm.rulesReplace.title": plural("count", {
     one: "Substituir # regra de roteamento?",
     other: "Substituir todas as # regras de roteamento?",
