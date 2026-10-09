@@ -600,6 +600,8 @@ const ru = {
   "logs.clearConfirm": "Очистить все файлы логов?",
   "logs.cleared": "Логи очищены",
   "logs.clearFailed": "Не удалось очистить логи",
+  "logs.clearFailedReason": "Не удалось очистить логи: {error}",
+  "logs.loadFailed": "Не удалось прочитать лог: {error}",
   "testlog.open": "Показать лог ошибки",
   "testlog.titlePing": "Лог проверки пинга",
   "testlog.titleSpeed": "Лог теста скорости",
@@ -639,6 +641,9 @@ const ru = {
   "common.mode.direct": "Только напрямую",
   "common.proxyNotRunning": "Перед режимом «Только через прокси» сначала запустите прокси.",
   "common.openFile": "Открыть файл…",
+  "common.retry": "Повторить",
+  "common.openFileFailed": "Не удалось открыть файл: {error}",
+  "common.saveFileFailed": "Не удалось сохранить файл: {error}",
   // qr
   "qr.scan.title": "Сканировать QR-код",
   "qr.scan.starting": "Запуск камеры…",
@@ -1009,6 +1014,7 @@ const ru = {
     "В режиме TUN фильтр приложений работает только с ядром sing-box и его собственным TUN-движком: внешний TUN-движок передаёт ядру все соединения от своего имени, и ядро не видит, какое приложение их открыло. В остальных режимах прокси фильтр работает.",
   "appFilter.systemApp": "системное",
   "appFilter.empty": "Приложения не найдены",
+  "appFilter.loadFailed": "Не удалось получить список приложений: {error}",
   "appFilter.openPage": "Фильтр приложений",
   "appFilter.openPageSub": "Правила прокси для каждого приложения",
 } satisfies Record<string, MessageValue>;

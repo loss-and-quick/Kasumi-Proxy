@@ -539,6 +539,8 @@ const hi = {
   "logs.clearConfirm": "क्या सभी लॉग फ़ाइलें साफ़ करनी हैं?",
   "logs.cleared": "लॉग साफ़ कर दिए गए",
   "logs.clearFailed": "लॉग साफ़ नहीं हो सके",
+  "logs.clearFailedReason": "लॉग साफ़ नहीं हो सके: {error}",
+  "logs.loadFailed": "लॉग पढ़ा नहीं जा सका: {error}",
   "testlog.open": "त्रुटि लॉग दिखाएँ",
   "testlog.titlePing": "पिंग जाँच लॉग",
   "testlog.titleSpeed": "स्पीड टेस्ट लॉग",
@@ -578,6 +580,9 @@ const hi = {
   "common.mode.direct": "केवल direct",
   "common.proxyNotRunning": "Proxy only mode उपयोग करने से पहले प्रॉक्सी शुरू करें।",
   "common.openFile": "फ़ाइल खोलें…",
+  "common.retry": "फिर से कोशिश करें",
+  "common.openFileFailed": "फ़ाइल खोली नहीं जा सकी: {error}",
+  "common.saveFileFailed": "फ़ाइल सहेजी नहीं जा सकी: {error}",
   // qr
   "qr.scan.title": "QR कोड स्कैन करें",
   "qr.scan.starting": "कैमरा शुरू हो रहा है…",
@@ -884,6 +889,7 @@ const hi = {
     "TUN मोड में ऐप फ़िल्टर केवल sing-box कोर और उसके अपने TUN इंजन के साथ काम करता है: बाहरी TUN इंजन हर कनेक्शन को अपने नाम से कोर को देता है, इसलिए कोर नहीं जान पाता कि कौन सा ऐप उसे खोल रहा है। अन्य सभी प्रॉक्सी मोड में यह काम करता है।",
   "appFilter.systemApp": "सिस्टम",
   "appFilter.empty": "कोई ऐप नहीं मिला",
+  "appFilter.loadFailed": "ऐप्स की सूची नहीं मिल सकी: {error}",
   "appFilter.openPage": "ऐप फ़िल्टर",
   "appFilter.openPageSub": "प्रत्येक ऐप के लिए प्रॉक्सी नियम",
 } satisfies Record<string, MessageValue>;

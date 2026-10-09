@@ -535,6 +535,8 @@ const zh = {
   "logs.clearConfirm": "要清空所有日志文件吗？",
   "logs.cleared": "日志已清空",
   "logs.clearFailed": "清空日志失败",
+  "logs.clearFailedReason": "清空日志失败：{error}",
+  "logs.loadFailed": "无法读取日志：{error}",
   "testlog.open": "查看错误日志",
   "testlog.titlePing": "Ping 检测日志",
   "testlog.titleSpeed": "测速日志",
@@ -573,6 +575,9 @@ const zh = {
   "common.mode.direct": "仅直连",
   "common.proxyNotRunning": "使用“仅代理”模式前，请先启动代理。",
   "common.openFile": "打开文件…",
+  "common.retry": "重试",
+  "common.openFileFailed": "无法打开文件：{error}",
+  "common.saveFileFailed": "无法保存文件：{error}",
   // qr
   "qr.scan.title": "扫描二维码",
   "qr.scan.starting": "正在启动摄像头…",
@@ -877,6 +882,7 @@ const zh = {
     "在 TUN 模式下，应用过滤仅适用于 sing-box 内核及其自带的 TUN 引擎：外部 TUN 引擎会以自身名义把所有连接交给内核，内核无法分辨是哪个应用发起的。在其他代理模式下均可使用。",
   "appFilter.systemApp": "系统",
   "appFilter.empty": "未找到应用",
+  "appFilter.loadFailed": "无法获取应用列表：{error}",
   "appFilter.openPage": "应用过滤",
   "appFilter.openPageSub": "按应用设置代理规则",
 } satisfies Record<string, MessageValue>;

@@ -9,6 +9,7 @@ import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
+import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "../profiles/clipboard";
 import { parseRoutingRulesJson } from "./helpers";
@@ -93,7 +94,7 @@ export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose:
                   filters: JSON_FILTER,
                 });
               } catch (e) {
-                notify(e instanceof Error ? e.message : String(e));
+                notify(t("common.saveFileFailed", { error: errorMessage(e) }));
               }
               return;
             }
@@ -129,7 +130,7 @@ export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose:
                 const text = await openTextFile({ filters: JSON_FILTER });
                 if (text !== null) setImportText(text);
               } catch (e) {
-                notify(e instanceof Error ? e.message : String(e));
+                notify(t("common.openFileFailed", { error: errorMessage(e) }));
               }
             }}
           >

@@ -619,6 +619,8 @@ const ar = {
   "logs.clearConfirm": "هل تريد مسح جميع ملفات السجل؟",
   "logs.cleared": "تم مسح السجلات",
   "logs.clearFailed": "تعذر مسح السجلات",
+  "logs.clearFailedReason": "تعذر مسح السجلات: {error}",
+  "logs.loadFailed": "تعذرت قراءة السجل: {error}",
   "testlog.open": "عرض سجل الخطأ",
   "testlog.titlePing": "سجل فحص البينغ",
   "testlog.titleSpeed": "سجل اختبار السرعة",
@@ -680,6 +682,9 @@ const ar = {
   "common.mode.direct": "مباشر فقط",
   "common.proxyNotRunning": "شغّل الوكيل أولًا قبل استخدام وضع " + '"عبر الوكيل فقط".',
   "common.openFile": "فتح ملف…",
+  "common.retry": "إعادة المحاولة",
+  "common.openFileFailed": "تعذر فتح الملف: {error}",
+  "common.saveFileFailed": "تعذر حفظ الملف: {error}",
   // qr
   "qr.scan.title": "مسح رمز QR",
   "qr.scan.starting": "جارٍ تشغيل الكاميرا…",
@@ -1091,6 +1096,7 @@ const ar = {
     "في وضع TUN يعمل مرشح التطبيقات فقط مع نواة sing-box ومحرك TUN الخاص بها: محرك TUN الخارجي يسلّم كل الاتصالات إلى النواة باسمه، فلا تعرف النواة أي تطبيق فتحها. يعمل المرشح في أوضاع البروكسي الأخرى.",
   "appFilter.systemApp": "نظام",
   "appFilter.empty": "لم يتم العثور على تطبيقات",
+  "appFilter.loadFailed": "تعذر عرض قائمة التطبيقات: {error}",
   "appFilter.openPage": "تصفية التطبيقات",
   "appFilter.openPageSub": "قواعد الوكيل لكل تطبيق",
 } satisfies Record<string, MessageValue>;

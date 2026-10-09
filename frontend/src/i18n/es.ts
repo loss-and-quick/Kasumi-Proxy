@@ -557,6 +557,8 @@ const es = {
   "logs.clearConfirm": "¿Borrar todos los archivos de registro?",
   "logs.cleared": "Registros borrados",
   "logs.clearFailed": "No se pudieron borrar los registros",
+  "logs.clearFailedReason": "No se pudieron borrar los registros: {error}",
+  "logs.loadFailed": "No se pudo leer el registro: {error}",
   "testlog.open": "Ver registro de error",
   "testlog.titlePing": "Registro de comprobación de ping",
   "testlog.titleSpeed": "Registro de prueba de velocidad",
@@ -596,6 +598,9 @@ const es = {
   "common.mode.direct": "Solo directo",
   "common.proxyNotRunning": "Inicia el proxy antes de usar el modo Solo proxy.",
   "common.openFile": "Abrir archivo…",
+  "common.retry": "Reintentar",
+  "common.openFileFailed": "No se pudo abrir el archivo: {error}",
+  "common.saveFileFailed": "No se pudo guardar el archivo: {error}",
   // qr
   "qr.scan.title": "Escanear código QR",
   "qr.scan.starting": "Iniciando cámara…",
@@ -911,6 +916,7 @@ const es = {
     "En modo TUN el filtro de aplicaciones solo funciona con el núcleo sing-box y su propio motor TUN: un motor TUN externo entrega todas las conexiones al núcleo como suyas, así que el núcleo no sabe qué aplicación las abrió. Funciona en los demás modos de proxy.",
   "appFilter.systemApp": "sistema",
   "appFilter.empty": "No se encontraron apps",
+  "appFilter.loadFailed": "No se pudo obtener la lista de apps: {error}",
   "appFilter.openPage": "Filtro de apps",
   "appFilter.openPageSub": "Reglas de proxy por app",
 } satisfies Record<string, MessageValue>;

@@ -561,6 +561,8 @@ const en = {
   "logs.clearConfirm": "Clear all log files?",
   "logs.cleared": "Logs cleared",
   "logs.clearFailed": "Failed to clear logs",
+  "logs.clearFailedReason": "Couldn't clear the logs: {error}",
+  "logs.loadFailed": "Couldn't read the log: {error}",
   // test-core error log (tap an `err` ping / speed result)
   "testlog.open": "Show error log",
   "testlog.titlePing": "Ping check log",
@@ -601,6 +603,9 @@ const en = {
   "common.mode.direct": "Direct only",
   "common.proxyNotRunning": "Start the proxy before using Proxy only mode.",
   "common.openFile": "Open file…",
+  "common.retry": "Try again",
+  "common.openFileFailed": "Couldn't open the file: {error}",
+  "common.saveFileFailed": "Couldn't save the file: {error}",
   // qr
   "qr.scan.title": "Scan QR code",
   "qr.scan.starting": "Starting camera…",
@@ -849,6 +854,7 @@ const en = {
     "In TUN mode the app filter only works with the sing-box core and its own TUN engine: an external TUN engine hands every connection to the core as its own, so the core can't tell which app made it. It works in every other proxy mode.",
   "appFilter.systemApp": "system",
   "appFilter.empty": "No apps found",
+  "appFilter.loadFailed": "Couldn't list the apps: {error}",
   "appFilter.openPage": "App filter",
   "appFilter.openPageSub": "Per-app proxy rules",
   // store notifications
