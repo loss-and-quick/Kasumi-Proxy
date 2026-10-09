@@ -13,20 +13,15 @@ import { fuzzyFilterSort } from "../../lib/fuzzy";
 import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { profileSearchText } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
+import { AddSheet } from "../add/AddSheet";
 import { copyText } from "./clipboard";
 import { PingActionsSheet } from "./PingActionsSheet";
 import { ProfilesList } from "./ProfilesList";
 import { ProfilesToolbar } from "./ProfilesToolbar";
 import type { SortMode } from "./types";
 
-const AddProfileSheet = lazy(() =>
-  import("./AddProfileSheet").then((module) => ({ default: module.AddProfileSheet })),
-);
 const DeleteProfileDialog = lazy(() =>
   import("./DeleteProfileDialog").then((module) => ({ default: module.DeleteProfileDialog })),
-);
-const ImportProfilesSheet = lazy(() =>
-  import("./ImportProfilesSheet").then((module) => ({ default: module.ImportProfilesSheet })),
 );
 const ProfileActionsSheet = lazy(() =>
   import("./ProfileActionsSheet").then((module) => ({ default: module.ProfileActionsSheet })),
@@ -36,9 +31,6 @@ const TestLogSheet = lazy(() =>
 );
 const QrCodeSheet = lazy(() =>
   import("../../components/QrCodeSheet").then((module) => ({ default: module.QrCodeSheet })),
-);
-const QrScannerSheet = lazy(() =>
-  import("../../components/QrScannerSheet").then((module) => ({ default: module.QrScannerSheet })),
 );
 const ManageGroupsSheet = lazy(() =>
   import("./ManageGroupsSheet").then((module) => ({ default: module.ManageGroupsSheet })),
@@ -69,7 +61,6 @@ export default function Profiles({
   const removeUnreachable = useAppStore((s) => s.removeUnreachable);
   const removeDuplicates = useAppStore((s) => s.removeDuplicates);
   const selectBest = useAppStore((s) => s.selectBest);
-  const addProfiles = useAppStore((s) => s.addProfiles);
   const resolveGroup = useAppStore((s) => s.resolveGroup);
   const t = useT();
 
@@ -82,13 +73,13 @@ export default function Profiles({
   const [sheetProfile, setSheetProfile] = useState<Profile | null>(null);
   const [confirmDel, setConfirmDel] = useState<Profile | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
-  const [importGroup, setImportGroup] = useState<GroupChoice>({ id: BASE_GROUP_ID });
+  const addDefaultGroup = useMemo<GroupChoice>(
+    () => ({ id: groupFilter !== "all" ? groupFilter : BASE_GROUP_ID }),
+    [groupFilter],
+  );
   const [bulkMode, setBulkMode] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [moveGroup, setMoveGroup] = useState<GroupChoice>({ id: BASE_GROUP_ID });
-  const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [qrPayload, setQrPayload] = useState<{ title: string; text: string } | null>(null);
   const [testLogTarget, setTestLogTarget] = useState<{ profile: Profile; kind: TestKind } | null>(
     null,
@@ -172,33 +163,6 @@ export default function Profiles({
     } catch {
       notify(t("profiles.qr.unsupported"));
     }
-  }
-
-  // Imports land in the group being looked at, if any.
-  function openImport() {
-    setImportGroup({ id: groupFilter !== "all" ? groupFilter : BASE_GROUP_ID });
-    setImportOpen(true);
-  }
-
-  async function importProfilesFromText(text: string) {
-    const parsed = await bridge.parseShareLinks(text);
-    if (!parsed.length) {
-      notify(t("profiles.import.none"));
-      return false;
-    }
-    if (!groupChoiceReady(importGroup)) {
-      notify(t("groups.picker.needName"));
-      return false;
-    }
-    const groupId = await resolveGroup(importGroup, "");
-    setImportGroup({ id: groupId });
-    await addProfiles(
-      parsed.map((profile) => ({ ...profile, meta: { ...profile.meta, groupId } })),
-    );
-    setImportText("");
-    setImportOpen(false);
-    setAddOpen(false);
-    return true;
   }
 
   async function openProfileQr(profile: Profile) {
@@ -362,58 +326,20 @@ export default function Profiles({
         </Suspense>
       )}
 
-      {addOpen && (
-        <Suspense fallback={null}>
-          <AddProfileSheet
-            open={addOpen}
-            onClose={() => setAddOpen(false)}
-            onManual={() => {
-              setAddOpen(false);
-              onOpenEditor("new");
-            }}
-            onPaste={() => {
-              setAddOpen(false);
-              openImport();
-            }}
-            onScanQr={() => {
-              setAddOpen(false);
-              openImport();
-              setQrScannerOpen(true);
-            }}
-            onNewGroup={() => {
-              setAddOpen(false);
-              setManageGroupsOpen(true);
-            }}
-          />
-        </Suspense>
-      )}
-
-      {importOpen && (
-        <Suspense fallback={null}>
-          <ImportProfilesSheet
-            open={importOpen}
-            onClose={() => setImportOpen(false)}
-            importText={importText}
-            setImportText={setImportText}
-            importGroup={importGroup}
-            setImportGroup={setImportGroup}
-            groups={groups}
-            onImport={() => void importProfilesFromText(importText)}
-            onScanQr={() => setQrScannerOpen(true)}
-          />
-        </Suspense>
-      )}
-
-      {qrScannerOpen && (
-        <Suspense fallback={null}>
-          <QrScannerSheet
-            open={qrScannerOpen}
-            title={t("qr.scan.title")}
-            onClose={() => setQrScannerOpen(false)}
-            onResult={(text) => importProfilesFromText(text)}
-          />
-        </Suspense>
-      )}
+      <AddSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        // Pasted profiles land in the group being looked at, if any.
+        defaultGroup={addDefaultGroup}
+        onManualProfile={() => {
+          setAddOpen(false);
+          onOpenEditor("new");
+        }}
+        onDone={({ subs, profiles: added, profileGroup }) => {
+          if (subs) notify(t("subs.imported", { count: subs }));
+          if (added && profileGroup) setGroupFilter(profileGroup);
+        }}
+      />
 
       {manageGroupsOpen && (
         <Suspense fallback={null}>

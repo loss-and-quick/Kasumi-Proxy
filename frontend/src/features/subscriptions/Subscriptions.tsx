@@ -2,7 +2,7 @@
 // features/subscriptions/Subscriptions.tsx
 // Manage remote profile sources.
 // ============================================================
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   Btn,
@@ -16,7 +16,6 @@ import {
   RowToggle,
   SettingGroup,
   Sheet,
-  SheetAction,
   Switch,
   UpdateModeControl,
 } from "../../components";
@@ -31,7 +30,8 @@ import {
 } from "../../lib/groups";
 import { isInsecureHttpUrl, isLocalOrPrivateHost, minutesToClock, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
-import { copyText, readText } from "../profiles/clipboard";
+import { AddSheet } from "../add/AddSheet";
+import { copyText } from "../profiles/clipboard";
 
 const ManageGroupsSheet = lazy(() =>
   import("../profiles/ManageGroupsSheet").then((module) => ({
@@ -56,6 +56,7 @@ export default function Subscriptions({
   const t = useT();
 
   const [addOpen, setAddOpen] = useState(false);
+  const addDefaultGroup = useMemo<GroupChoice>(() => ({ id: BASE_GROUP_ID }), []);
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [delGroupToo, setDelGroupToo] = useState(true);
@@ -67,13 +68,6 @@ export default function Subscriptions({
     : undefined;
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [exportOpen, setExportOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
-  // Each imported subscription gets a group of its own unless one is picked.
-  const [importEach, setImportEach] = useState(true);
-  const [importGroup, setImportGroup] = useState<GroupChoice>({ id: BASE_GROUP_ID });
-  const [importAutoUpdate, setImportAutoUpdate] = useState(false);
-  const [importInterval, setImportInterval] = useState(360); // minutes (06:00)
 
   const enabledCount = subs.filter((s) => s.enabled).length;
   const importedCount = subs.reduce((n, s) => n + s.count, 0);
@@ -110,56 +104,6 @@ export default function Subscriptions({
       updateMode: s.updateMode,
     }));
     return exportCopy(JSON.stringify(payload, null, 2), payload.length);
-  };
-
-  const openImport = () => {
-    setImportOpen(true);
-    // Prefill from the clipboard (native under Tauri, web Clipboard API otherwise);
-    // leave the field untouched if something is typed there or the clipboard is
-    // empty or unreadable.
-    if (importText.trim()) return;
-    readText().then((txt) => {
-      const v = txt?.trim();
-      if (v) setImportText((cur) => (cur.trim() ? cur : v));
-    });
-  };
-
-  const importSubs = async () => {
-    const text = importText.trim();
-    if (!text) return notify(t("subs.importEmpty"));
-    let parsed: Subscription[];
-    try {
-      parsed = parseSubscriptionsInput(text, {
-        autoUpdate: importAutoUpdate,
-        interval: importInterval,
-      });
-    } catch {
-      return notify(t("subs.importInvalid"));
-    }
-    if (!parsed.length) return notify(t("subs.importInvalid"));
-    if (!importEach && !groupChoiceReady(importGroup)) return notify(t("groups.picker.needName"));
-    // Sequential so each write sees the previous one: a shared new group is made
-    // once, and two subscriptions from the same host land in one group.
-    try {
-      for (const sub of parsed) {
-        // Unless a group is picked, a JSON dump keeps the group it names when
-        // that group still exists.
-        const kept = groups.find((g) => g.id === sub.groupId);
-        const choice: GroupChoice = !importEach
-          ? importGroup
-          : kept
-            ? { id: kept.id }
-            : { newName: "" };
-        await saveSubscription(sub, choice);
-      }
-    } catch (e) {
-      notify(t("store.service.error", { error: String(e instanceof Error ? e.message : e) }));
-      return;
-    }
-    setImportText("");
-    setImportOpen(false);
-    notify(t("subs.imported", { count: parsed.length }));
-    for (const sub of parsed) if (sub.enabled) await updateSub(sub.id);
   };
 
   return (
@@ -233,80 +177,20 @@ export default function Subscriptions({
         </Card>
       </div>
 
-      <Sheet open={addOpen} title={t("subs.addBtn")} onClose={() => setAddOpen(false)}>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <SheetAction
-            icon="edit_note"
-            label={t("subs.add.manual")}
-            sub={t("subs.add.manualSub")}
-            onClick={() => {
-              setAddOpen(false);
-              setEdit("new");
-            }}
-          />
-          <SheetAction
-            icon="content_paste"
-            label={t("subs.add.paste")}
-            sub={t("subs.add.pasteSub")}
-            onClick={() => {
-              setAddOpen(false);
-              openImport();
-            }}
-          />
-        </div>
-      </Sheet>
-
-      <Sheet open={importOpen} title={t("subs.import")} onClose={() => setImportOpen(false)}>
-        <Field
-          label={t("subs.importLabel")}
-          value={importText}
-          onChange={setImportText}
-          area
-          mono={false}
-          hint={t("subs.importHint")}
-        />
-        <RowToggle
-          icon="create_new_folder"
-          title={t("subs.import.groupEach")}
-          sub={t("subs.import.groupEachSub")}
-          on={importEach}
-          onChange={setImportEach}
-        />
-        {!importEach && (
-          <GroupPicker
-            label={t("subs.edit.targetGroup")}
-            groups={groups}
-            value={importGroup}
-            onChange={setImportGroup}
-          />
-        )}
-        <div style={{ marginTop: 14 }}>
-          <RowToggle
-            icon="autorenew"
-            title={t("subs.autoUpdate")}
-            sub={t("subs.autoUpdateSub")}
-            on={importAutoUpdate}
-            onChange={setImportAutoUpdate}
-          />
-          {importAutoUpdate && (
-            <div style={{ paddingLeft: 54 }}>
-              <IntervalField
-                label={t("subs.interval")}
-                minutes={importInterval}
-                onChange={setImportInterval}
-              />
-            </div>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-          <Btn variant="text" onClick={() => setImportOpen(false)}>
-            {t("subs.confirmDel.cancel")}
-          </Btn>
-          <Btn variant="filled" onClick={() => void importSubs()} disabled={!importText.trim()}>
-            {t("subs.importBtn")}
-          </Btn>
-        </div>
-      </Sheet>
+      <AddSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        defaultGroup={addDefaultGroup}
+        onManualSub={() => {
+          setAddOpen(false);
+          setEdit("new");
+        }}
+        onDone={({ subs: added, profiles, profileGroup }) => {
+          if (added) notify(t("subs.imported", { count: added }));
+          // Pasted profile links live on the Profiles screen; show them there.
+          if (profiles && profileGroup) onOpenGroup(profileGroup);
+        }}
+      />
 
       <Sheet open={exportOpen} title={t("subs.export")} onClose={() => setExportOpen(false)}>
         <div style={{ fontSize: 12.5, color: "var(--on-surface-variant)", marginBottom: 12 }}>
@@ -388,50 +272,6 @@ export default function Subscriptions({
       )}
     </div>
   );
-}
-
-// Parse the import text into subscriptions. JSON (an exported dump, object or
-// array) is read field-by-field; anything else is treated as a whitespace-
-// separated list of URLs. Throws on malformed JSON so the caller can report it.
-function parseSubscriptionsInput(
-  text: string,
-  defaults: { autoUpdate: boolean; interval: number },
-): Subscription[] {
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-  const make = (p: Partial<Subscription> & { url: string }): Subscription => ({
-    id: uid(),
-    remarks: p.remarks?.trim() || hostOf(p.url),
-    url: p.url.trim(),
-    enabled: p.enabled ?? true,
-    groupId: p.groupId ?? null,
-    autoUpdate: p.autoUpdate ?? defaults.autoUpdate,
-    interval: p.interval ?? defaults.interval,
-    allowInsecure: p.allowInsecure ?? false,
-    userAgent: p.userAgent ?? "",
-    filter: p.filter ?? "",
-    updateMode: p.updateMode ?? "auto",
-    lastUpdated: "",
-    count: 0,
-    lastError: null,
-  });
-  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
-    const parsed: unknown = JSON.parse(trimmed);
-    const arr = Array.isArray(parsed) ? parsed : [parsed];
-    return arr
-      .filter(
-        (x): x is Partial<Subscription> & { url: string } =>
-          !!x &&
-          typeof (x as { url?: unknown }).url === "string" &&
-          (x as { url: string }).url.trim() !== "",
-      )
-      .map(make);
-  }
-  return trimmed
-    .split(/\s+/)
-    .map((u) => u.trim())
-    .filter(Boolean)
-    .map((url) => make({ url }));
 }
 
 function SubCard({
