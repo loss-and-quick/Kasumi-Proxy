@@ -114,6 +114,7 @@ export const mockBridge: Bridge = {
     serviceState = {
       ...serviceState,
       state: "connected",
+      pendingRestart: false,
       uploadBytes: Math.floor(Math.random() * 500000),
       downloadBytes: Math.floor(Math.random() * 2000000),
       uptimeSec: 0,
@@ -288,6 +289,9 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     // No backend in dev: apply the intent locally with the same logic the Rust
     // backend runs, then return the canonical state.
     state = applyMutation(state, intent);
+    // Like the backend: a settings change while running waits for a restart.
+    if (intent.kind === "setSettings" && serviceState.state === "connected")
+      serviceState = { ...serviceState, pendingRestart: true };
     return this.readState();
   },
 

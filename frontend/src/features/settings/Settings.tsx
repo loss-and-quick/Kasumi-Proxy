@@ -16,6 +16,7 @@ import { uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { coresPreset } from "./helpers";
 import { pageFromHash, SETTINGS_PAGES, type SettingsPage } from "./pages";
+import { RestartBanner } from "./RestartBanner";
 import { AboutSection } from "./sections/AboutSection";
 import { AdvancedSection } from "./sections/AdvancedSection";
 import { AssetFilesSection } from "./sections/AssetFilesSection";
@@ -336,6 +337,7 @@ export default function Settings({
           >
             <AppBar title={pageTitle} />
             <div className="scroll">
+              <RestartBanner />
               {page && pageBody(page)}
               <div style={{ height: 10 }} />
             </div>
@@ -348,6 +350,7 @@ export default function Settings({
             left={<IconBtn name="arrow_back" title={t("settings.title")} onClick={closePage} />}
           />
           <div className="scroll">
+            <RestartBanner />
             {pageBody(page)}
             <div style={{ height: 10 }} />
           </div>
@@ -355,7 +358,10 @@ export default function Settings({
       ) : (
         <>
           <AppBar title={t("settings.title")} subtitle={t("settings.subtitle")} />
-          <div className="scroll">{list}</div>
+          <div className="scroll">
+            <RestartBanner />
+            {list}
+          </div>
         </>
       )}
 
