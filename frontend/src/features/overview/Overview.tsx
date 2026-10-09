@@ -193,9 +193,29 @@ export default function Overview({
                 </div>
               </button>
             ) : (
-              <div style={{ fontSize: 17, color: "var(--on-surface-variant)" }}>
-                {t("overview.noActiveProfile")}
-              </div>
+              // Start stays disabled without a profile, so this is the way forward.
+              <button
+                type="button"
+                className="btn-reset"
+                onClick={() => onNavigate("profiles")}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <span style={{ fontSize: 17, color: "var(--on-surface-variant)" }}>
+                  {t("overview.noActiveProfile")}
+                </span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "var(--primary)",
+                  }}
+                >
+                  {profiles.length ? t("overview.pickProfile") : t("overview.addProfile")}
+                  <Icon name="chevron_right" style={{ fontSize: 18 }} />
+                </span>
+              </button>
             )}
 
             <div style={{ display: "flex", gap: 22, marginTop: 18, flexWrap: "wrap" }}>
@@ -241,8 +261,21 @@ export default function Overview({
               </div>
             )}
             {needsAssets && !up && (
-              <div style={{ fontSize: 13, color: "var(--error)", paddingBottom: 4 }}>
-                {t("overview.needsAssets")}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--error)" }}>
+                  {t("overview.needsAssets")}
+                </span>
+                {/* The files are downloaded on the Resources page. */}
+                <Btn
+                  variant="tonal"
+                  sm
+                  icon="download"
+                  onClick={() => {
+                    window.location.hash = "settings/resources";
+                  }}
+                >
+                  {t("overview.openResources")}
+                </Btn>
               </div>
             )}
             <div className="primary-actions" style={{ display: "flex", gap: 10 }}>

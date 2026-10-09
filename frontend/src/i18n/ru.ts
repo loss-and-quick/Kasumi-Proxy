@@ -24,6 +24,9 @@ const ru = {
   "overview.noInternet": "Нет интернета",
   "overview.failed": "Ошибка",
   "overview.noActiveProfile": "Активный профиль не выбран",
+  "overview.pickProfile": "Выбрать",
+  "overview.addProfile": "Добавить",
+  "overview.openResources": "Ресурсы",
   "overview.needsAssets":
     "Скачайте файлы геоданных перед использованием этого режима маршрутизации.",
   "overview.download": "Скачивание",
