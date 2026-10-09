@@ -432,6 +432,9 @@ const en = {
   "settings.strictRoute": "Strict routing (kill-switch)",
   "settings.singboxStack": "sing-box TUN stack",
   "settings.strictRouteSub": "Force every app through the tunnel with no leaks.",
+  "settings.proxyTethering": "Proxy hotspot & tethering traffic",
+  "settings.proxyTetheringSub":
+    "Send devices on your hotspot, USB or Bluetooth tethering through the proxy. Applies within seconds; IPv4 only.",
   "settings.domainStrategy4Xray": "Domain strategy (Xray core)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

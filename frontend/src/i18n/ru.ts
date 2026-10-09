@@ -469,6 +469,9 @@ const ru = {
   "settings.strictRoute": "Строгая маршрутизация (kill-switch)",
   "settings.singboxStack": "Стек TUN sing-box",
   "settings.strictRouteSub": "Весь трафик идёт через туннель без утечек.",
+  "settings.proxyTethering": "Проксировать трафик точки доступа и USB-модема",
+  "settings.proxyTetheringSub":
+    "Пускать устройства с точки доступа, USB- и Bluetooth-модема через прокси. Применяется за секунды; только IPv4.",
   "settings.domainStrategy4Xray": "Доменная стратегия (ядро Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

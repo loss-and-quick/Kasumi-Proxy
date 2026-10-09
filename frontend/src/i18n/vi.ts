@@ -416,6 +416,9 @@ const vi = {
   "settings.strictRoute": "Định tuyến nghiêm ngặt (kill-switch)",
   "settings.singboxStack": "Ngăn xếp TUN sing-box",
   "settings.strictRouteSub": "Buộc mọi lưu lượng đi qua đường hầm, không rò rỉ.",
+  "settings.proxyTethering": "Proxy lưu lượng điểm phát sóng và chia sẻ kết nối",
+  "settings.proxyTetheringSub":
+    "Cho thiết bị dùng điểm phát Wi-Fi, USB hoặc Bluetooth đi qua proxy. Áp dụng trong vài giây; chỉ IPv4.",
   "settings.domainStrategy4Xray": "Chiến lược tên miền (nhân lõi Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

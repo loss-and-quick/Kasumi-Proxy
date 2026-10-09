@@ -426,6 +426,9 @@ const es = {
   "settings.strictRoute": "Enrutamiento estricto (kill-switch)",
   "settings.singboxStack": "Pila TUN de sing-box",
   "settings.strictRouteSub": "Fuerza todo el tráfico por el túnel sin fugas.",
+  "settings.proxyTethering": "Proxy para el tráfico de zona Wi-Fi y anclaje",
+  "settings.proxyTetheringSub":
+    "Envía por el proxy los dispositivos de tu zona Wi-Fi o anclaje USB/Bluetooth. Se aplica en segundos; solo IPv4.",
   "settings.domainStrategy4Xray": "Estrategia de dominio (núcleo Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

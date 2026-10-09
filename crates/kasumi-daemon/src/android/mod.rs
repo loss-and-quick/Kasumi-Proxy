@@ -9,6 +9,7 @@ pub mod paths;
 pub mod platform;
 pub mod routing;
 pub mod sysctl;
+pub mod tethering;
 
 pub use platform::AndroidPlatform;
 

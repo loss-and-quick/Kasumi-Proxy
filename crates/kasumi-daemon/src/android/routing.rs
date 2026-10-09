@@ -7,6 +7,7 @@ use kasumi_core::state::{AppCaptureMode, AppFilterMode};
 use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_CIDR};
 
 use super::paths::{IP, IP6TABLES, IPTABLES};
+use super::tethering::clear_tethering;
 use super::{default_uplink, silent};
 
 pub const FWMARK: u32 = 255;
@@ -14,7 +15,7 @@ const RULE_PRIORITY: &str = "1000";
 const MARK_CHAIN: &str = "KASUMI_PROXY_MARK";
 
 // Our own route-table numbers (v4 and v6 share them).
-const TUN_TABLE: &str = "1100";
+pub(super) const TUN_TABLE: &str = "1100";
 const TUN_TABLE_FORCE: &str = "1101";
 const PRIO_TUN: &str = "1010";
 const PRIO_TUN_FORCE: &str = "1011";
@@ -50,7 +51,7 @@ fn uid_of(key: &str) -> Option<&str> {
 }
 
 /// `ip [-6] <args>`.
-async fn ip_rule(v6: bool, args: &[&str]) -> i32 {
+pub(super) async fn ip_rule(v6: bool, args: &[&str]) -> i32 {
     let mut a: Vec<&str> = vec![IP];
     if v6 {
         a.push("-6");
@@ -403,6 +404,9 @@ pub async fn clear_routing_rules(st: &RoutingState) {
     remove_mark_rule().await;
     clear_legacy_strict_carveouts().await;
     clear_guards().await;
+    // Whatever the tethering option installed, whether or not it is on right now:
+    // the setting may have been flipped while the data path ran.
+    clear_tethering().await;
     clear_legacy_port_rules(&st.filter, st.socks_port, st.http_port).await;
 
     // IPv4 mark chain

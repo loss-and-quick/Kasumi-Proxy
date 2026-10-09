@@ -410,6 +410,9 @@ const zh = {
   "settings.strictRoute": "严格路由（断网保护）",
   "settings.singboxStack": "sing-box TUN 栈",
   "settings.strictRouteSub": "强制所有流量走隧道，无泄漏。",
+  "settings.proxyTethering": "代理热点与共享网络流量",
+  "settings.proxyTetheringSub":
+    "让通过热点、USB 或蓝牙共享上网的设备走代理。数秒内生效；仅限 IPv4。",
   "settings.domainStrategy4Xray": "域名策略（Xray core）",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",
