@@ -24,6 +24,9 @@ const ru = {
   "overview.noInternet": "Нет интернета",
   "overview.failed": "Ошибка",
   "overview.noActiveProfile": "Активный профиль не выбран",
+  "overview.pickProfile": "Выбрать",
+  "overview.addProfile": "Добавить",
+  "overview.openResources": "Ресурсы",
   "overview.needsAssets":
     "Скачайте файлы геоданных перед использованием этого режима маршрутизации.",
   "overview.download": "Скачивание",
@@ -138,6 +141,9 @@ const ru = {
   "profiles.bulkDelete": "Удалить",
   "profiles.bulkDedup": "Дубли",
   "profiles.noResults": "Подходящие профили не найдены",
+  "profiles.emptyTitle": "Профилей пока нет",
+  "profiles.emptyBody":
+    "Вставьте ссылку на подписку или ссылки на профили либо отсканируйте QR-код.",
   "profiles.fabNew": "Создать",
   "profiles.sheet.useProfile": "Использовать этот профиль",
   "profiles.sheet.edit": "Изменить",
@@ -767,6 +773,7 @@ const ru = {
   "settings.routingEmpty": "Правил маршрутизации пока нет.",
   "settings.routingRuleDefault": "Правило {n}",
   "common.none": "Нет",
+  "common.close": "Закрыть",
   "common.search": "Поиск",
   "common.noMatches": "Ничего не найдено",
   "common.modeShort.auto": "Авто",

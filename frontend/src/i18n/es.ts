@@ -24,6 +24,9 @@ const es = {
   "overview.noInternet": "Sin internet",
   "overview.failed": "Error",
   "overview.noActiveProfile": "No hay ningún perfil activo seleccionado",
+  "overview.pickProfile": "Elegir",
+  "overview.addProfile": "Añadir",
+  "overview.openResources": "Recursos",
   "overview.needsAssets":
     "Descarga los archivos de recursos geográficos antes de usar este modo de enrutamiento.",
   "overview.download": "Descarga",
@@ -128,6 +131,9 @@ const es = {
   "profiles.bulkDelete": "Eliminar",
   "profiles.bulkDedup": "Dedup",
   "profiles.noResults": "No hay perfiles coincidentes",
+  "profiles.emptyTitle": "Aún no hay perfiles",
+  "profiles.emptyBody":
+    "Pega un enlace de suscripción o enlaces de perfiles, o escanea un código QR.",
   "profiles.fabNew": "Crear",
   "profiles.sheet.useProfile": "Usar este perfil",
   "profiles.sheet.edit": "Editar",
@@ -709,6 +715,7 @@ const es = {
   "settings.routingEmpty": "Aún no hay reglas de enrutamiento.",
   "settings.routingRuleDefault": "Regla {n}",
   "common.none": "Ninguno",
+  "common.close": "Cerrar",
   "common.search": "Buscar",
   "common.noMatches": "Sin resultados",
   "common.modeShort.auto": "Auto",

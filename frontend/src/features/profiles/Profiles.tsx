@@ -5,7 +5,7 @@
 // ============================================================
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { confirm, Icon } from "../../components";
+import { Btn, Card, confirm, Icon } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
@@ -279,6 +279,32 @@ export default function Profiles({
         bulkMode={bulkMode}
         selected={selected}
         emptyText={t("profiles.noResults")}
+        empty={
+          // First run: "no matching profiles" would read as a failed search.
+          profiles.length === 0 ? (
+            <Card
+              className="flat"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+                padding: "28px 16px",
+                textAlign: "center",
+                marginTop: 4,
+              }}
+            >
+              <Icon name="dns" style={{ fontSize: 32, color: "var(--on-surface-variant)" }} />
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{t("profiles.emptyTitle")}</div>
+              <div style={{ fontSize: 13, color: "var(--on-surface-variant)", maxWidth: 300 }}>
+                {t("profiles.emptyBody")}
+              </div>
+              <Btn variant="filled" icon="add" onClick={() => setAddOpen(true)}>
+                {t("add.submit")}
+              </Btn>
+            </Card>
+          ) : undefined
+        }
         onToggleSelected={toggleSelected}
         onToggleGroup={(ids, on) => setSelectedMany(ids, on)}
         onUse={(id) => void setActive(id)}
