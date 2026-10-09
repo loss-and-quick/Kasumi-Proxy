@@ -58,6 +58,8 @@ export default function App() {
   const [backupOpen, setBackupOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [appFilterOpen, setAppFilterOpen] = useState(false);
+  // The group Profiles opens filtered to, when another screen sends the user there.
+  const [profilesGroup, setProfilesGroup] = useState<string | null>(null);
   const isWide = useIsWide();
   const sheetOpen = useSheetOpen();
   useTraySync();
@@ -76,7 +78,8 @@ export default function App() {
 
   const nav = useMemo(
     () => ({
-      go(next: Tab) {
+      go(next: Tab, group: string | null = null) {
+        setProfilesGroup(group);
         setEditorId(null);
         setBackupOpen(false);
         setLogsOpen(false);
@@ -117,9 +120,9 @@ export default function App() {
     tab === "overview" ? (
       <Overview onNavigate={nav.go} onOpenLogs={nav.openLogs} onOpenBackup={nav.openBackup} />
     ) : tab === "profiles" ? (
-      <Profiles onOpenEditor={nav.openEditor} />
+      <Profiles onOpenEditor={nav.openEditor} initialGroup={profilesGroup} />
     ) : tab === "subs" ? (
-      <Subscriptions />
+      <Subscriptions onOpenGroup={(group) => nav.go("profiles", group)} />
     ) : (
       <Settings
         onOpenBackup={nav.openBackup}

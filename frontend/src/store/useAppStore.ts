@@ -24,6 +24,7 @@ import type {
 } from "../lib/bridge";
 import { isServiceUp } from "../lib/bridge";
 import { bridge } from "../lib/bridge-provider";
+import { BASE_GROUP_ID, type GroupChoice, groupNamed } from "../lib/groups";
 import { showNativeToast } from "../lib/ksu-webui";
 import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
@@ -95,14 +96,21 @@ interface Store extends AppState {
   selectBest: (groupId?: string) => Promise<void>;
 
   // groups
-  addGroup: (name: string) => Promise<string>;
+  /** Add a group; `subId` marks it as made for that subscription. */
+  addGroup: (name: string, subId?: string) => Promise<string>;
+  /** The id a form's group choice saves to, creating the group when it's new
+   *  (or reusing one with the same name). An empty name falls back to `fallbackName`. */
+  resolveGroup: (choice: GroupChoice, fallbackName: string, subId?: string) => Promise<string>;
   renameGroup: (id: string, name: string) => Promise<void>;
   removeGroup: (id: string) => Promise<void>;
   reorderGroups: (from: number, to: number) => Promise<void>;
 
   // subscriptions
   upsertSub: (s: Subscription) => Promise<void>;
-  removeSub: (id: string) => Promise<void>;
+  /** With `deleteGroup`, the group made for the subscription goes too when it's left empty. */
+  removeSub: (id: string, deleteGroup?: boolean) => Promise<void>;
+  /** Save a subscription into its chosen group, creating the group if it's new. */
+  saveSubscription: (sub: Subscription, group: GroupChoice) => Promise<void>;
   updateSub: (id: string) => Promise<void>;
   updateAllSubs: () => Promise<void>;
 
@@ -710,10 +718,17 @@ export const useAppStore = create<Store>((set, get) => {
       get().notify(translateCurrent("store.dedup.done", { count: removed }));
     },
 
-    async addGroup(name) {
+    async addGroup(name, subId) {
       const id = uid();
-      await mutate({ kind: "addGroup", id, name });
+      await mutate({ kind: "addGroup", id, name, subId: subId ?? null });
       return id;
+    },
+    async resolveGroup(choice, fallbackName, subId) {
+      if ("id" in choice) return choice.id;
+      const name = choice.newName.trim() || fallbackName.trim();
+      if (!name) return BASE_GROUP_ID;
+      const existing = groupNamed(get().groups, name);
+      return existing ? existing.id : get().addGroup(name, subId);
     },
     renameGroup(id, name) {
       return mutate({ kind: "renameGroup", id, name });
@@ -726,7 +741,10 @@ export const useAppStore = create<Store>((set, get) => {
       const { profiles, activeId } = get();
       const activeProfile = profiles.find((p) => p.meta.id === activeId);
       // The group holding the active profile is protected from deletion.
-      if (activeProfile?.meta.groupId === id) return;
+      if (activeProfile?.meta.groupId === id) {
+        get().notify(translateCurrent("profiles.groups.lockedActive"));
+        return;
+      }
       await mutate({ kind: "removeGroup", id });
     },
 
@@ -735,12 +753,16 @@ export const useAppStore = create<Store>((set, get) => {
       // edited subscription is picked up within a minute — no wakeup needed.
       await mutate({ kind: "upsertSub", subscription: sub });
     },
-    async removeSub(id) {
+    async saveSubscription(sub, group) {
+      const groupId = await get().resolveGroup(group, sub.remarks, sub.id);
+      await mutate({ kind: "upsertSub", subscription: { ...sub, groupId } });
+    },
+    async removeSub(id, deleteGroup = false) {
       const { profiles, activeId } = get();
       const activeProfile = profiles.find((p) => p.meta.id === activeId);
       if (activeProfile?.meta.subId === id)
         await stopServiceIfRunning(translateCurrent("store.service.stoppedSubRemoved"));
-      await mutate({ kind: "removeSub", id });
+      await mutate({ kind: "removeSub", id, deleteGroup });
     },
     async updateSub(id) {
       const { subscriptions, service } = get();

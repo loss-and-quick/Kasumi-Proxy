@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use fancy_regex::Regex;
 
 use crate::profile::Profile;
-use crate::state::Subscription;
+use crate::state::{BASE_GROUP_ID, Subscription};
 
 /// A compiled profile filter (a leading `(?i)` selects case-insensitive).
 pub struct ProfileFilter(Option<Regex>);
@@ -221,9 +221,7 @@ pub fn map_fetched_subscription_profiles(
         .map(|mut p| {
             let m = p.meta_mut();
             m.sub_id = Some(sub.id.clone());
-            if let Some(g) = &sub.group_id {
-                m.group_id = g.clone();
-            }
+            m.group_id = sub.group_id.as_deref().unwrap_or(BASE_GROUP_ID).to_string();
             p
         })
         .collect()

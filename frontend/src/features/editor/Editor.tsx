@@ -19,6 +19,7 @@ import type {
 } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
+import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { emptyProfile, schemaFor } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { BasicsSection } from "./sections/BasicsSection";
@@ -40,12 +41,15 @@ export default function Editor({
   const profiles = useAppStore((s) => s.profiles);
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
+  const resolveGroup = useAppStore((s) => s.resolveGroup);
   const t = useT();
 
   const [draft, setDraft] = useState<Profile>(
     () => existing ?? emptyProfile("vless", groups[0]?.id ?? "g-main"),
   );
   const [errors, setErrors] = useState<FieldErrors>({});
+  // The group is picked apart from the draft: a new one is only created on save.
+  const [group, setGroup] = useState<GroupChoice>(() => ({ id: draft.meta.groupId }));
 
   const setMeta = (patch: Partial<Meta>) =>
     setDraft((d) => ({ ...d, meta: { ...d.meta, ...patch } }));
@@ -129,22 +133,26 @@ export default function Editor({
     };
   }, [draft]);
 
-  const save = () => {
+  const save = async () => {
     const result = schemaFor(draft.protocol).safeParse(draft);
+    const next: FieldErrors = {};
     if (!result.success) {
-      const next: FieldErrors = {};
       // Key errors by the leaf field name (sni/path/publicKey/…) so each section
       // can surface them, regardless of the nested sub-object the field lives in.
       for (const issue of result.error.issues)
         next[String(issue.path[issue.path.length - 1])] = issue.message;
+    }
+    if (!groupChoiceReady(group)) next.group = t("groups.picker.needName");
+    if (!result.success || Object.keys(next).length) {
       setErrors(next);
       return;
     }
-    upsert(result.data as Profile);
+    const profile = result.data as Profile;
+    const groupId = await resolveGroup(group, "");
+    await upsert({ ...profile, meta: { ...profile.meta, groupId } });
     onClose();
   };
 
-  const groupOpts = groups.map((group) => ({ value: group.id, label: group.name }));
   const viaOpts = viaIds.flatMap((id) => {
     const hop = profiles.find((p) => p.meta.id === id);
     return hop ? [{ value: id, label: hop.meta.remarks }] : [];
@@ -170,7 +178,7 @@ export default function Editor({
       title={existing ? t("editor.editTitle") : t("editor.newTitle")}
       onClose={onClose}
       headRight={
-        <Btn variant="filled" sm icon="check" onClick={save}>
+        <Btn variant="filled" sm icon="check" onClick={() => void save()}>
           {t("editor.save")}
         </Btn>
       }
@@ -180,7 +188,9 @@ export default function Editor({
         setMeta={setMeta}
         setEndpoint={setEndpoint}
         errors={errors}
-        groupOpts={groupOpts}
+        groups={groups}
+        group={group}
+        setGroup={setGroup}
         viaOpts={viaOpts}
         changeProtocol={changeProtocol}
         engineForced={engineForced}
@@ -225,7 +235,7 @@ export default function Editor({
         <Btn variant="outline" block onClick={onClose}>
           {t("editor.cancel")}
         </Btn>
-        <Btn variant="filled" block onClick={save}>
+        <Btn variant="filled" block onClick={() => void save()}>
           {t("editor.save")}
         </Btn>
       </div>
