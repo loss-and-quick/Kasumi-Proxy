@@ -29,6 +29,7 @@ import {
   ownedGroupLeftEmpty,
 } from "../../lib/groups";
 import { isInsecureHttpUrl, isLocalOrPrivateHost, minutesToClock, uid } from "../../lib/utils";
+import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
 import { copyText } from "../profiles/clipboard";
@@ -215,7 +216,10 @@ export default function Subscriptions({
           try {
             await saveSubscription(data, group);
           } catch (e) {
-            notify(t("store.service.error", { error: String(e instanceof Error ? e.message : e) }));
+            if (!wasReported(e))
+              notify(
+                t("store.service.error", { error: String(e instanceof Error ? e.message : e) }),
+              );
             return;
           }
           setEdit(null);

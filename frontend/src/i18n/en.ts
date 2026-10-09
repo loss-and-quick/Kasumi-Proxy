@@ -852,6 +852,7 @@ const en = {
   "store.service.started": "Service started",
   "store.service.selectActiveFirst": "Select an active profile first",
   "store.service.error": "Service error: {error}",
+  "store.write.failed": "Couldn't save: {error}",
   "store.service.restarted": "Restarted",
   "store.service.stoppedProfileRemoved": "Service stopped because the active profile was removed",
   "store.service.stoppedProfileDeleted": "Service stopped because the active profile was deleted",

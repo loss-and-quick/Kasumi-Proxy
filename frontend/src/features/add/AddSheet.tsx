@@ -18,6 +18,7 @@ import { useT } from "../../i18n";
 import { classifyAddInput } from "../../lib/add-input";
 import { bridge } from "../../lib/bridge-provider";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
+import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { readText } from "../profiles/clipboard";
 
@@ -150,7 +151,8 @@ export function AddSheet({
         }
       }
     } catch (e) {
-      notify(t("store.service.error", { error: String(e instanceof Error ? e.message : e) }));
+      if (!wasReported(e))
+        notify(t("store.service.error", { error: String(e instanceof Error ? e.message : e) }));
       setSaving(false);
       return;
     }

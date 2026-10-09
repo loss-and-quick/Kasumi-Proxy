@@ -128,6 +128,7 @@ export function SystemSection({
         </SettingRow>
         <div style={{ padding: "8px 0 0" }}>
           <Field
+            commitOnBlur
             label={t("settings.logRotateMaxKb")}
             type="number"
             min={64}

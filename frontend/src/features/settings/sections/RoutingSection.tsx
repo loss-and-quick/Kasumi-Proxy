@@ -105,6 +105,7 @@ export function RoutingSection({
         {settings.routingMode === "custom" && (
           <div style={{ padding: "8px 0 4px" }}>
             <Field
+              commitOnBlur
               area
               label={t("settings.customRouting")}
               value={settings.customRouting ?? ""}

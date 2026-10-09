@@ -977,6 +977,7 @@ const ar = {
   "store.service.started": "تم تشغيل الخدمة",
   "store.service.selectActiveFirst": "اختر ملفًا تعريفيًا نشطًا أولًا",
   "store.service.error": "خطأ في الخدمة: {error}",
+  "store.write.failed": "تعذّر الحفظ: {error}",
   "store.service.restarted": "تمت إعادة التشغيل",
   "store.service.stoppedProfileRemoved": "تم إيقاف الخدمة لأن الملف التعريفي النشط تمت إزالته",
   "store.service.stoppedProfileDeleted": "تم إيقاف الخدمة لأن الملف التعريفي النشط تم حذفه",

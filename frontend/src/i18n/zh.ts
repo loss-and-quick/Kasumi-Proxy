@@ -802,6 +802,7 @@ const zh = {
   "store.service.started": "服务已启动",
   "store.service.selectActiveFirst": "请先选择活动配置",
   "store.service.error": "服务错误：{error}",
+  "store.write.failed": "保存失败：{error}",
   "store.service.restarted": "已重启",
   "store.service.stoppedProfileRemoved": "活动配置被移除，因此服务已停止",
   "store.service.stoppedProfileDeleted": "活动配置被删除，因此服务已停止",

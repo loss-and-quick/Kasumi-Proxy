@@ -25,6 +25,7 @@ export function AdvancedSection({
       </Card>
       <Card style={{ padding: 14, marginTop: 12 }}>
         <Field
+          commitOnBlur
           label={t("settings.delayTestUrl")}
           mono={false}
           value={settings.delayTestUrl ?? ""}
@@ -32,6 +33,7 @@ export function AdvancedSection({
           onChange={(value) => set("delayTestUrl", value)}
         />
         <Field
+          commitOnBlur
           label={t("settings.pingConcurrency")}
           hint={t("settings.pingConcurrencySub")}
           value={settings.pingConcurrency ?? 3}
@@ -39,6 +41,7 @@ export function AdvancedSection({
           onChange={(value) => set("pingConcurrency", Math.min(20, Math.max(1, Number(value))))}
         />
         <Field
+          commitOnBlur
           label={t("settings.speedTestUrl")}
           mono={false}
           value={settings.speedTestUrl ?? ""}
@@ -46,6 +49,7 @@ export function AdvancedSection({
           onChange={(value) => set("speedTestUrl", value)}
         />
         <Field
+          commitOnBlur
           label={t("settings.speedConcurrency")}
           hint={t("settings.speedConcurrencySub")}
           value={settings.speedConcurrency ?? 1}

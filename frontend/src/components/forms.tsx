@@ -97,7 +97,7 @@ export function Segmented<T extends string>({
   );
 }
 
-export const Field = ({
+export function Field({
   label,
   value,
   onChange,
@@ -108,6 +108,7 @@ export const Field = ({
   error,
   area,
   min,
+  commitOnBlur,
 }: {
   label?: string;
   value: string | number;
@@ -119,43 +120,111 @@ export const Field = ({
   error?: string;
   area?: boolean;
   min?: number;
-}) => (
-  <div className="field">
-    {label && <div className="field-label">{label}</div>}
-    {area ? (
-      <textarea
-        className="input"
-        style={mono ? undefined : { fontFamily: "var(--font-ui)" }}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    ) : (
-      <input
-        className="input"
-        style={{
-          ...(mono && type !== "number" ? null : { fontFamily: "var(--font-ui)" }),
-          ...(error ? { borderBottomColor: "var(--error)" } : null),
-        }}
-        type={type}
-        min={min}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        onWheel={type === "number" ? blurOnWheel : undefined}
-      />
-    )}
-    {error ? (
-      <div className="hint error" style={{ marginTop: 5 }}>
-        {error}
-      </div>
-    ) : hint ? (
-      <div className="hint" style={{ marginTop: 5 }}>
-        {hint}
-      </div>
-    ) : null}
-  </div>
-);
+  /** Edit a local copy and hand it over when the field loses focus (or on
+   *  Enter, for one line) instead of on every keystroke. For values that are
+   *  written to the backend: typing stays smooth, the cursor stays put, and a
+   *  number field can be cleared while retyping without saving 0. */
+  commitOnBlur?: boolean;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = commitOnBlur && draft !== null ? draft : value;
+  const edit = (v: string) => (commitOnBlur ? setDraft(v) : onChange(v));
+  const commit = () => {
+    if (draft === null) return;
+    setDraft(null);
+    // An emptied number field means "not done typing": keep the saved value.
+    if (type === "number" && draft.trim() === "") return;
+    if (draft !== String(value)) onChange(draft);
+  };
+  const lazy = commitOnBlur ? { onBlur: commit } : null;
+  return (
+    <div className="field">
+      {label && <div className="field-label">{label}</div>}
+      {area ? (
+        <textarea
+          className="input"
+          style={mono ? undefined : { fontFamily: "var(--font-ui)" }}
+          value={shown}
+          placeholder={placeholder}
+          onChange={(e) => edit(e.target.value)}
+          {...lazy}
+        />
+      ) : (
+        <input
+          className="input"
+          style={{
+            ...(mono && type !== "number" ? null : { fontFamily: "var(--font-ui)" }),
+            ...(error ? { borderBottomColor: "var(--error)" } : null),
+          }}
+          type={type}
+          min={min}
+          value={shown}
+          placeholder={placeholder}
+          onChange={(e) => edit(e.target.value)}
+          onKeyDown={
+            commitOnBlur
+              ? (e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }
+              : undefined
+          }
+          onWheel={type === "number" ? blurOnWheel : undefined}
+          {...lazy}
+        />
+      )}
+      {error ? (
+        <div className="hint error" style={{ marginTop: 5 }}>
+          {error}
+        </div>
+      ) : hint ? (
+        <div className="hint" style={{ marginTop: 5 }}>
+          {hint}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** A bare number box that commits on blur or Enter, like `Field`'s
+ *  `commitOnBlur`: clearing it to retype doesn't save 0, and nothing is written
+ *  until the number is finished. */
+export function NumberInput({
+  value,
+  onCommit,
+  className = "input compact",
+  ariaLabel,
+  style,
+}: {
+  value: number | null | undefined;
+  onCommit: (n: number) => void;
+  className?: string;
+  ariaLabel?: string;
+  style?: CSSProperties;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    setDraft(null);
+    const n = Number(draft);
+    if (draft.trim() !== "" && Number.isFinite(n) && n !== value) onCommit(n);
+  };
+  return (
+    <input
+      className={className}
+      type="number"
+      inputMode="numeric"
+      aria-label={ariaLabel}
+      style={style}
+      value={draft ?? (typeof value === "number" ? value : "")}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+      onWheel={blurOnWheel}
+    />
+  );
+}
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 

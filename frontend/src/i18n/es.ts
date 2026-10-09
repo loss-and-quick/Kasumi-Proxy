@@ -829,6 +829,7 @@ const es = {
   "store.service.started": "Servicio iniciado",
   "store.service.selectActiveFirst": "Selecciona primero un perfil activo",
   "store.service.error": "Error del servicio: {error}",
+  "store.write.failed": "No se pudo guardar: {error}",
   "store.service.restarted": "Reiniciado",
   "store.service.stoppedProfileRemoved": "El servicio se detuvo porque se eliminó el perfil activo",
   "store.service.stoppedProfileDeleted": "El servicio se detuvo porque se borró el perfil activo",

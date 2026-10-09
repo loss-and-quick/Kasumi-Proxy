@@ -45,6 +45,7 @@ export function DnsSection({
         />
         <div style={{ padding: "8px 4px 4px" }}>
           <Field
+            commitOnBlur
             label={t("settings.dnsRemote")}
             value={settings.remoteDns ?? ""}
             placeholder={t("settings.dnsRemotePh")}
@@ -52,6 +53,7 @@ export function DnsSection({
             onChange={(value) => set("remoteDns", value)}
           />
           <Field
+            commitOnBlur
             label={t("settings.dnsDomestic")}
             value={settings.domesticDns ?? ""}
             placeholder={t("settings.dnsDomesticPh")}
@@ -59,6 +61,7 @@ export function DnsSection({
             onChange={(value) => set("domesticDns", value)}
           />
           <Field
+            commitOnBlur
             area
             label={t("settings.dnsHosts")}
             value={settings.dnsHosts ?? ""}

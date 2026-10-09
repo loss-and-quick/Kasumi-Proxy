@@ -494,6 +494,29 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().subscriptions[0].groupId).toBe("g-main");
   });
 
+  it("setSetting keeps both of two edits made back to back", async () => {
+    useAppStore.setState({
+      settings: { ...DEFAULT_SETTINGS, socksUsername: "u", socksPassword: "p" },
+    });
+    const { setSetting } = useAppStore.getState();
+    // Turning SOCKS auth off clears both fields in one tick.
+    void setSetting("socksUsername", undefined);
+    void setSetting("socksPassword", undefined);
+    await setSetting("tunMtu", 1400);
+    const s = useAppStore.getState().settings;
+    expect(s.socksUsername ?? null).toBeNull();
+    expect(s.socksPassword ?? null).toBeNull();
+    expect(s.tunMtu).toBe(1400);
+  });
+
+  it("a rejected write is reported to the user once", async () => {
+    useAppStore.setState({ settings: DEFAULT_SETTINGS, toasts: [] });
+    bridge.mutate.mockRejectedValueOnce(new Error("disk full"));
+    await expect(useAppStore.getState().setSetting("tunMtu", 1400)).rejects.toThrow("disk full");
+    const toasts = useAppStore.getState().toasts.map((x) => x.msg);
+    expect(toasts.filter((x) => x.includes("disk full"))).toHaveLength(1);
+  });
+
   it("cloneProfile detaches the subscription link and leaves the copy untested", async () => {
     const src = makeVless({ meta: { id: "p1", remarks: "Node", subId: "s1" } });
     useAppStore.setState({

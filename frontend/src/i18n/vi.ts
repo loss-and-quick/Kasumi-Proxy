@@ -816,6 +816,7 @@ const vi = {
   "store.service.started": "Dịch vụ đã khởi động",
   "store.service.selectActiveFirst": "Hãy chọn một hồ sơ đang hoạt động trước",
   "store.service.error": "Lỗi dịch vụ: {error}",
+  "store.write.failed": "Không lưu được: {error}",
   "store.service.restarted": "Đã khởi động lại",
   "store.service.stoppedProfileRemoved": "Dịch vụ đã dừng vì hồ sơ đang hoạt động đã bị gỡ",
   "store.service.stoppedProfileDeleted": "Dịch vụ đã dừng vì hồ sơ đang hoạt động đã bị xóa",

@@ -1,8 +1,8 @@
 import {
-  blurOnWheel,
   Card,
   Disclosure,
   Field,
+  NumberInput,
   SectionLabel,
   Segmented,
   Select,
@@ -125,14 +125,10 @@ export function TunEngineSection({
           <Switch on={settings.strictRoute} onChange={(value) => set("strictRoute", value)} />
         </SettingRow>
         <SettingRow title={t("settings.tunMtu")}>
-          <input
-            className="input compact"
-            type="number"
-            inputMode="numeric"
-            aria-label={t("settings.tunMtu")}
+          <NumberInput
+            ariaLabel={t("settings.tunMtu")}
             value={settings.tunMtu}
-            onWheel={blurOnWheel}
-            onChange={(e) => set("tunMtu", Number(e.target.value))}
+            onCommit={(n) => set("tunMtu", n)}
           />
         </SettingRow>
         <div className="setting-row" style={{ display: "block", padding: 0 }}>
@@ -144,6 +140,7 @@ export function TunEngineSection({
             }
           >
             <Field
+              commitOnBlur
               area
               value={settings.tunExcludeAddresses ?? ""}
               placeholder={t("settings.tunExcludePh")}
@@ -189,14 +186,10 @@ function TunKnobRow({
           options={spec.options.map((o) => ({ value: o, label: OPTION_LABEL[o] ?? o }))}
         />
       ) : (
-        <input
-          className="input compact"
-          type="number"
-          inputMode="numeric"
-          aria-label={label}
-          value={typeof current === "number" ? current : ""}
-          onWheel={blurOnWheel}
-          onChange={(e) => write(Number(e.target.value))}
+        <NumberInput
+          ariaLabel={label}
+          value={typeof current === "number" ? current : null}
+          onCommit={(n) => write(n)}
         />
       )}
     </SettingRow>
