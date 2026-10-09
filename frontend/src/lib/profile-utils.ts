@@ -26,6 +26,7 @@ import {
   VmessSchema,
   WireguardSchema,
 } from "../generated/schemas";
+import { translateCurrent } from "../i18n";
 
 /** Stable unique id generator (crypto.randomUUID with a non-crypto fallback). */
 export const uid = (): string =>
@@ -117,31 +118,52 @@ const PROTOCOL_SCHEMA = {
 
 const TRANSPORT_NEEDS_PATH = new Set(["ws", "httpupgrade", "xhttp"]);
 
-// Same cross-field rules as the Rust schema, read off the nested draft. Issue
-// paths use the leaf field name so the editor sections can key errors by field.
+const UUID_PROTOCOLS = new Set<Protocol>(["vless", "vmess", "tuic"]);
+const PASSWORD_PROTOCOLS = new Set<Protocol>([
+  "trojan",
+  "shadowsocks",
+  "hysteria2",
+  "tuic",
+  "anytls",
+]);
+
+// Same cross-field rules as the Rust schema, plus the fields a profile can't
+// connect without, read off the nested draft. Issue paths use the leaf field
+// name so the editor sections can key errors by field.
 function refineProfile(value: unknown, ctx: z.RefinementCtx): void {
   const p = value as Profile;
+  const need = (field: string, key: Parameters<typeof translateCurrent>[0]) =>
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: translateCurrent(key) });
+  const blank = (v: unknown) => typeof v !== "string" || !v.trim();
+
+  if (blank(p.meta.remarks)) need("remarks", "editor.validation.remarks");
+  if ("endpoint" in p && p.endpoint) {
+    if (blank(p.endpoint.address)) need("address", "editor.validation.address");
+    const port = Number(p.endpoint.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) need("port", "editor.validation.port");
+  }
+  if (UUID_PROTOCOLS.has(p.protocol) && "uuid" in p && blank(p.uuid))
+    need("uuid", "editor.validation.uuid");
+  const passwordNeeded =
+    PASSWORD_PROTOCOLS.has(p.protocol) ||
+    // ShadowTLS v1 has no password; v2 and v3 authenticate with one.
+    (p.protocol === "shadowtls" && p.version !== 1);
+  if (passwordNeeded && "password" in p && blank(p.password))
+    need("password", "editor.validation.password");
+  if (p.protocol === "wireguard") {
+    if (blank(p.secretKey)) need("secretKey", "editor.validation.secretKey");
+    if (blank(p.peerPublicKey)) need("peerPublicKey", "editor.validation.peerPublicKey");
+  }
+
   if ("transport" in p && p.transport && TRANSPORT_NEEDS_PATH.has(p.transport.kind)) {
     const path = "path" in p.transport ? p.transport.path : "";
-    if (!path)
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["path"], message: "Path required" });
+    if (!path) need("path", "editor.validation.path");
   }
   if ("tls" in p && p.tls && p.tls.security === "reality") {
-    if (!p.tls.sni)
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["sni"],
-        message: "SNI required for Reality",
-      });
-    if (!p.tls.publicKey)
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["publicKey"],
-        message: "Public key required",
-      });
+    if (!p.tls.sni) need("sni", "editor.validation.realitySni");
+    if (!p.tls.publicKey) need("publicKey", "editor.validation.publicKey");
   }
-  if (p.protocol === "custom" && !p.raw?.trim())
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["raw"], message: "Config JSON required" });
+  if (p.protocol === "custom" && !p.raw?.trim()) need("raw", "editor.validation.raw");
 }
 
 /** Pick the right single-protocol schema for the editor form resolver. */
