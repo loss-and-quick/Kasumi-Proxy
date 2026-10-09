@@ -533,6 +533,27 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1"]);
   });
 
+  it("updateSub ignores a second tap while the first fetch runs", async () => {
+    useAppStore.setState({ ...makeState({ subscriptions: [makeSub({ id: "s1" })] }) });
+    const { updateSub } = useAppStore.getState();
+    const first = updateSub("s1");
+    expect(useAppStore.getState().updatingSubs.has("s1")).toBe(true);
+    await updateSub("s1");
+    await first;
+    expect(bridge.applySubscription).toHaveBeenCalledTimes(1);
+    expect(useAppStore.getState().updatingSubs.size).toBe(0);
+  });
+
+  it("updateAllSubs says so when no subscription is enabled", async () => {
+    useAppStore.setState({
+      ...makeState({ subscriptions: [makeSub({ id: "s1", enabled: false })] }),
+      toasts: [],
+    });
+    await useAppStore.getState().updateAllSubs();
+    expect(bridge.applySubscription).not.toHaveBeenCalled();
+    expect(useAppStore.getState().toasts).toHaveLength(1);
+  });
+
   it("cloneProfile detaches the subscription link and leaves the copy untested", async () => {
     const src = makeVless({ meta: { id: "p1", remarks: "Node", subId: "s1" } });
     useAppStore.setState({

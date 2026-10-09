@@ -1015,6 +1015,7 @@ const ar = {
   "store.dedup.none": "لا توجد تكرارات",
   "store.sub.updateFailed": "فشل التحديث: {name}",
   "store.sub.updating": "جارٍ تحديث {name}…",
+  "store.sub.noneEnabled": "لا توجد اشتراكات مفعّلة للتحديث",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(

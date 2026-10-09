@@ -881,6 +881,7 @@ const en = {
   "store.dedup.none": "No duplicates found",
   "store.sub.updateFailed": "Update failed: {name}",
   "store.sub.updating": "Updating {name}…",
+  "store.sub.noneEnabled": "No enabled subscriptions to update",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# profile", other: "# profiles" }, runtime)}`;

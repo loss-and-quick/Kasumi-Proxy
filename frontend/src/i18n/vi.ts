@@ -841,6 +841,7 @@ const vi = {
   "store.dedup.none": "Không tìm thấy mục trùng",
   "store.sub.updateFailed": "Cập nhật thất bại: {name}",
   "store.sub.updating": "Đang cập nhật {name}…",
+  "store.sub.noneEnabled": "Không có gói đăng ký nào đang bật để cập nhật",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# hồ sơ", other: "# hồ sơ" }, runtime)}`;

@@ -827,6 +827,7 @@ const zh = {
   "store.dedup.none": "未发现重复配置",
   "store.sub.updateFailed": "更新失败：{name}",
   "store.sub.updating": "正在更新 {name}…",
+  "store.sub.noneEnabled": "没有已启用的订阅可更新",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}：${pluralPart(Number(count), { one: "# 个配置", other: "# 个配置" }, runtime)}`;
