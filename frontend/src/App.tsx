@@ -55,6 +55,7 @@ export default function App() {
 
   const [tab, setTab] = useState<Tab>(getInitialTab);
   const [editorId, setEditorId] = useState<string | "new" | null>(null);
+  const [editorGroup, setEditorGroup] = useState<string | undefined>(undefined);
   const [backupOpen, setBackupOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [appFilterOpen, setAppFilterOpen] = useState(false);
@@ -87,7 +88,8 @@ export default function App() {
         setTab(next);
         window.location.hash = next;
       },
-      openEditor(id: string | "new") {
+      openEditor(id: string | "new", groupId?: string) {
+        setEditorGroup(groupId);
         setEditorId(id);
       },
       openBackup() {
@@ -177,7 +179,7 @@ export default function App() {
 
       {editorId && (
         <Suspense fallback={null}>
-          <Editor profileId={editorId} onClose={() => setEditorId(null)} />
+          <Editor profileId={editorId} newGroupId={editorGroup} onClose={() => setEditorId(null)} />
         </Suspense>
       )}
       {backupOpen && (

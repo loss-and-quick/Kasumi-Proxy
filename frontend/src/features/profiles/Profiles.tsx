@@ -40,7 +40,8 @@ export default function Profiles({
   onOpenEditor,
   initialGroup = null,
 }: {
-  onOpenEditor: (id: string | "new") => void;
+  /** `groupId` is where a new profile goes. */
+  onOpenEditor: (id: string | "new", groupId?: string) => void;
   /** Open filtered to this group instead of all of them. */
   initialGroup?: string | null;
 }) {
@@ -331,9 +332,11 @@ export default function Profiles({
         onClose={() => setAddOpen(false)}
         // Pasted profiles land in the group being looked at, if any.
         defaultGroup={addDefaultGroup}
+        inGroup={groupFilter !== "all"}
         onManualProfile={() => {
           setAddOpen(false);
-          onOpenEditor("new");
+          // A profile made while looking at a group belongs to that group.
+          onOpenEditor("new", groupFilter !== "all" ? groupFilter : undefined);
         }}
         onDone={({ subs, profiles: added, profileGroup }) => {
           if (subs) notify(t("subs.imported", { count: subs }));
