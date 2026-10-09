@@ -411,6 +411,9 @@ const hi = {
   "settings.strictRoute": "सख्त रूटिंग (किल-स्विच)",
   "settings.singboxStack": "sing-box TUN स्टैक",
   "settings.strictRouteSub": "हर ऐप का ट्रैफ़िक टनल से होकर जाए, कोई लीक नहीं।",
+  "settings.proxyTethering": "हॉटस्पॉट और टेदरिंग ट्रैफ़िक प्रॉक्सी करें",
+  "settings.proxyTetheringSub":
+    "हॉटस्पॉट, USB या ब्लूटूथ टेदरिंग से जुड़े डिवाइस प्रॉक्सी से जाएँ। कुछ सेकंड में लागू; केवल IPv4।",
   "settings.domainStrategy4Xray": "डोमेन रणनीति (Xray core)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

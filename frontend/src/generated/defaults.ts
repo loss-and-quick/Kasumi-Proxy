@@ -552,6 +552,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "pingConcurrency": 3,
   "preferIpv6": false,
   "proxyMode": "tun",
+  "proxyTethering": false,
   "routeOnly": false,
   "routingMode": "global",
   "singboxFragment": "record",

@@ -22,6 +22,7 @@ import {
 } from "../../../generated/defaults";
 import { type DictKey, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
+import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
 
 // Display labels for the TUN engines. Presentation only; the selectable engines,
 // per-core defaults and validity all come from the generated `TUN_BY_CORE`
@@ -63,6 +64,8 @@ export function TunEngineSection({
   set: <K extends keyof AdvancedSettings>(key: K, value: AdvancedSettings[K]) => void;
 }) {
   const t = useT();
+  // Tethering clients exist only on the phone; the desktop has no hotspot to proxy.
+  const isDesktop = getRuntimeBridgeMode() === "tauri";
 
   const tunFor = (core: CoreEngine): TunEngine =>
     settings.tunByCore?.[core] ?? TUN_BY_CORE[core].default;
@@ -124,6 +127,14 @@ export function TunEngineSection({
         <SettingRow title={t("settings.strictRoute")} hint={t("settings.strictRouteSub")}>
           <Switch on={settings.strictRoute} onChange={(value) => set("strictRoute", value)} />
         </SettingRow>
+        {!isDesktop && (
+          <SettingRow title={t("settings.proxyTethering")} hint={t("settings.proxyTetheringSub")}>
+            <Switch
+              on={settings.proxyTethering}
+              onChange={(value) => set("proxyTethering", value)}
+            />
+          </SettingRow>
+        )}
         <SettingRow title={t("settings.tunMtu")}>
           <NumberInput
             ariaLabel={t("settings.tunMtu")}

@@ -310,6 +310,10 @@ pub struct AdvancedSettings {
     pub domain_strategy: DomainStrategy,
     pub domain_strategy4_singbox: SingboxDomainStrategy,
     pub strict_route: bool,
+    /// Android only: also route the traffic of devices tethered to the phone (Wi-Fi
+    /// hotspot, USB, Bluetooth) through the proxy. Off, tethered clients go out
+    /// directly as they always did. Takes effect live, without a restart.
+    pub proxy_tethering: bool,
     pub singbox_stack: SingboxStack,
     pub dns_via_proxy: bool,
     pub fake_dns: bool,
@@ -412,6 +416,7 @@ impl Default for AdvancedSettings {
             domain_strategy: DomainStrategy::IpIfNonMatch,
             domain_strategy4_singbox: SingboxDomainStrategy::PreferIpv4,
             strict_route: false,
+            proxy_tethering: false,
             singbox_stack: SingboxStack::Gvisor,
             dns_via_proxy: true,
             fake_dns: false,

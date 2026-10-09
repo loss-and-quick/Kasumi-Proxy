@@ -491,6 +491,9 @@ const ar = {
   "settings.singboxStack": "حزمة TUN لـ sing-box",
   "settings.strictRouteSub":
     "إجبار كل التطبيقات على المرور عبر النفق دون تسريب. يبقى اتصال النظام (فحص Wi-Fi وخادم SSH) متاحًا.",
+  "settings.proxyTethering": "تمرير حركة نقطة الاتصال والتوصيل عبر الوكيل",
+  "settings.proxyTetheringSub":
+    "تمرير أجهزة نقطة الاتصال أو التوصيل عبر USB أو بلوتوث عبر الوكيل. يُطبَّق خلال ثوانٍ؛ IPv4 فقط.",
   "settings.domainStrategy4Xray": "استراتيجية النطاق (نواة Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",
