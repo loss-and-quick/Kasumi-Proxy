@@ -809,6 +809,7 @@ const hi = {
   "store.service.started": "सेवा शुरू हो गई",
   "store.service.selectActiveFirst": "पहले एक सक्रिय प्रोफ़ाइल चुनें",
   "store.service.error": "सेवा त्रुटि: {error}",
+  "store.write.failed": "सहेजा नहीं जा सका: {error}",
   "store.service.restarted": "पुनः प्रारंभ किया गया",
   "store.service.stoppedProfileRemoved": "सेवा रोक दी गई क्योंकि सक्रिय प्रोफ़ाइल हटा दी गई थी",
   "store.service.stoppedProfileDeleted": "सेवा रोक दी गई क्योंकि सक्रिय प्रोफ़ाइल मिटा दी गई थी",

@@ -3,7 +3,7 @@
 // Runtime log viewer with copy / refresh.
 // ============================================================
 import { useCallback, useEffect, useState } from "react";
-import { Btn, blurOnWheel, Dialog, Select, Sheet } from "../../components";
+import { Btn, Dialog, NumberInput, Select, Sheet } from "../../components";
 import { LOG_TARGET_OPTS } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import type { LogTarget } from "../../lib/bridge";
@@ -85,12 +85,11 @@ export default function Logs({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <div className="field-label">{t("logs.lines")}</div>
-            <input
+            <NumberInput
               className="input"
-              type="number"
+              ariaLabel={t("logs.lines")}
               value={lines}
-              onChange={(e) => setLines(Number(e.target.value || 300))}
-              onWheel={blurOnWheel}
+              onCommit={(n) => setLines(n > 0 ? n : 300)}
               style={{ width: 100 }}
             />
           </div>

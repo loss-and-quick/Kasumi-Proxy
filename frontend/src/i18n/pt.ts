@@ -827,6 +827,7 @@ const pt = {
   "store.service.started": "Serviço iniciado",
   "store.service.selectActiveFirst": "Selecione primeiro um perfil ativo",
   "store.service.error": "Erro do serviço: {error}",
+  "store.write.failed": "Não foi possível salvar: {error}",
   "store.service.restarted": "Reiniciado",
   "store.service.stoppedProfileRemoved": "O serviço foi parado porque o perfil ativo foi removido",
   "store.service.stoppedProfileDeleted": "O serviço foi parado porque o perfil ativo foi excluído",

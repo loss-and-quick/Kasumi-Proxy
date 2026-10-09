@@ -30,7 +30,7 @@ import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
 import { ActivityService } from "./activity";
 import { EMPTY_SETTINGS, mergeSettings } from "./defaults";
-import { errorMessage } from "./errors";
+import { errorMessage, ReportedError } from "./errors";
 
 /** A queued, auto-dismissing notification shown by the <Toaster>. */
 export interface ToastItem {
@@ -200,7 +200,36 @@ export const useAppStore = create<Store>((set, get) => {
   };
   // The single write path: dispatch one domain intent and render the canonical
   // AppState the backend returns. No local invariant logic, no full-state shipping.
-  const mutate = (intent: MutationIntent) => bridge.mutate(intent).then(applyState);
+  // A rejected write is never silent: the user hears about it here, once, and
+  // the caller still sees the failure (as a ReportedError) for its own flow.
+  const mutate = (intent: MutationIntent) =>
+    bridge
+      .mutate(intent)
+      .then(applyState)
+      .catch((e: unknown) => {
+        get().notify(translateCurrent("store.write.failed", { error: errorMessage(e) }));
+        throw new ReportedError(e);
+      });
+  // Settings edits are merged and written in order. Each write sends the whole
+  // settings block, built from the store, which only updates once the backend
+  // answers; two edits in a row (or in one tick) would otherwise each start from
+  // the old block and the second would undo the first.
+  let settingsPatch: Partial<AdvancedSettings> | null = null;
+  let settingsChain: Promise<void> = Promise.resolve();
+  const writeSettings = (patch: Partial<AdvancedSettings>): Promise<void> => {
+    const startsFlush = settingsPatch === null;
+    settingsPatch = { ...(settingsPatch ?? {}), ...patch };
+    if (startsFlush) {
+      settingsChain = settingsChain
+        .catch(() => {})
+        .then(() => {
+          const merged = settingsPatch ?? {};
+          settingsPatch = null;
+          return mutate({ kind: "setSettings", settings: { ...get().settings, ...merged } });
+        });
+    }
+    return settingsChain;
+  };
   let lastTrafficSample: { uploadBytes: number; downloadBytes: number; at: number } | null = null;
   // hydrate() can run more than once (tests, dev StrictMode) — register the
   // background watchers a single time.
@@ -879,14 +908,15 @@ export const useAppStore = create<Store>((set, get) => {
     },
 
     setSetting(k, v) {
-      return mutate({ kind: "setSettings", settings: { ...get().settings, [k]: v } });
+      return writeSettings({ [k]: v });
     },
 
     setAppFilterMode(key, mode) {
-      const appFilter = { ...(get().settings.appFilter ?? {}) };
+      // Start from an edit still waiting to be written, so quick taps add up.
+      const appFilter = { ...(settingsPatch?.appFilter ?? get().settings.appFilter ?? {}) };
       if (mode === null) delete appFilter[key];
       else appFilter[key] = mode;
-      return mutate({ kind: "setSettings", settings: { ...get().settings, appFilter } });
+      return writeSettings({ appFilter });
     },
 
     async importBackup(json, mode) {

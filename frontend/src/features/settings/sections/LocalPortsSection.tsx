@@ -38,12 +38,14 @@ export function LocalPortsSection({
       <Card style={{ padding: 14 }}>
         <div className="input-row" style={{ marginBottom: 14 }}>
           <Field
+            commitOnBlur
             label={t("settings.socks")}
             value={settings.localSocksPort ?? DEFAULT_LOCAL_SOCKS_PORT}
             type="number"
             onChange={(value) => set("localSocksPort", Number(value))}
           />
           <Field
+            commitOnBlur
             label={t("settings.http")}
             value={settings.localHttpPort ?? DEFAULT_LOCAL_HTTP_PORT}
             type="number"
@@ -51,6 +53,7 @@ export function LocalPortsSection({
           />
           {isDesktop && (
             <Field
+              commitOnBlur
               label={t("settings.pac")}
               value={settings.localPacPort ?? DEFAULT_LOCAL_PAC_PORT}
               type="number"
@@ -77,11 +80,13 @@ export function LocalPortsSection({
         {authOpen && (
           <div className="input-row" style={{ marginTop: 10 }}>
             <Field
+              commitOnBlur
               label={t("settings.socksUser")}
               value={settings.socksUsername ?? ""}
               onChange={(value) => set("socksUsername", value || undefined)}
             />
             <Field
+              commitOnBlur
               label={t("settings.socksPass")}
               value={settings.socksPassword ?? ""}
               type="password"

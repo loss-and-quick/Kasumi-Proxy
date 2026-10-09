@@ -21,6 +21,7 @@ import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { emptyProfile, schemaFor } from "../../lib/profile-utils";
+import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
@@ -175,7 +176,8 @@ export default function Editor({
       await upsert({ ...profile, meta: { ...profile.meta, groupId } });
     } catch (e) {
       // Keep the form open so nothing typed is lost.
-      notify(t("store.service.error", { error: e instanceof Error ? e.message : String(e) }));
+      if (!wasReported(e))
+        notify(t("store.service.error", { error: e instanceof Error ? e.message : String(e) }));
       return;
     } finally {
       setSaving(false);

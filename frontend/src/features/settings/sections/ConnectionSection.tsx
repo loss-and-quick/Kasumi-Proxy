@@ -42,12 +42,14 @@ export function ConnectionSection({
         {settings.mux && (
           <SettingGroup>
             <Field
+              commitOnBlur
               label={t("settings.muxConcurrency")}
               value={settings.muxConcurrency}
               type="number"
               onChange={(value) => set("muxConcurrency", Number(value))}
             />
             <Field
+              commitOnBlur
               label={t("settings.xudpConcurrency")}
               value={settings.muxXudpConcurrency ?? ""}
               type="number"
@@ -91,12 +93,14 @@ export function ConnectionSection({
               />
             </SettingRow>
             <Field
+              commitOnBlur
               label={t("settings.fragmentLength")}
               value={settings.fragmentLength ?? "50-100"}
               onChange={(value) => set("fragmentLength", value)}
               mono={false}
             />
             <Field
+              commitOnBlur
               label={t("settings.fragmentDelay")}
               value={settings.fragmentDelay ?? "10-20"}
               onChange={(value) => set("fragmentDelay", value)}
