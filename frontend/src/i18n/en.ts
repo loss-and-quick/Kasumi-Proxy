@@ -359,7 +359,7 @@ const en = {
   "confirm.dedup.action": "Remove",
   "confirm.backupReplace.title": "Replace with the backup?",
   "confirm.backupReplace.body":
-    "Groups, subscriptions, routing rules, resource files and settings are replaced by the backup's. Profiles stay.",
+    "Groups, subscriptions, routing rules, resource files and settings are replaced by the backup's. Your profiles stay, and the backup's profiles are added.",
   "confirm.rulesReplace.title": plural("count", {
     one: "Replace # routing rule?",
     other: "Replace all # routing rules?",

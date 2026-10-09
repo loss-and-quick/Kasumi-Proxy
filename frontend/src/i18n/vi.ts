@@ -345,7 +345,7 @@ const vi = {
   "confirm.dedup.action": "Xóa",
   "confirm.backupReplace.title": "Thay bằng bản sao lưu?",
   "confirm.backupReplace.body":
-    "Nhóm, gói đăng ký, quy tắc định tuyến, tệp tài nguyên và cài đặt được thay bằng bản sao lưu. Hồ sơ được giữ lại.",
+    "Nhóm, gói đăng ký, quy tắc định tuyến, tệp tài nguyên và cài đặt được thay bằng bản sao lưu. Hồ sơ của bạn được giữ lại và hồ sơ trong bản sao lưu được thêm vào.",
   "confirm.rulesReplace.title": plural("count", {
     one: "Thay # quy tắc định tuyến?",
     other: "Thay toàn bộ # quy tắc định tuyến?",
