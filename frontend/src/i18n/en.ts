@@ -888,6 +888,7 @@ const en = {
   "store.ping.complete": "Ping complete",
   "store.speed.started": "Testing speed…",
   "store.speed.complete": "Speed test complete",
+  "store.rule.addedAboveCatchAll": "Added above “{name}”, which catches all traffic",
   "store.ping.removeUnreachable": plural("count", {
     one: "Removed # unreachable profile",
     other: "Removed # unreachable profiles",

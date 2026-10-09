@@ -26,6 +26,7 @@ import { isServiceUp } from "../lib/bridge";
 import { bridge } from "../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupNamed } from "../lib/groups";
 import { showNativeToast } from "../lib/ksu-webui";
+import { isCatchAllRule } from "../lib/routing-rules";
 import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
 import { ActivityService } from "./activity";
@@ -865,8 +866,20 @@ export const useAppStore = create<Store>((set, get) => {
       for (const sub of enabled) await get().updateSub(sub.id);
     },
 
-    addRoutingRule(rule) {
-      return mutate({ kind: "upsertRoutingRule", rule });
+    async addRoutingRule(rule) {
+      const before = get().routingRules;
+      const isNew = !before.some((r) => r.id === rule.id);
+      const catchAll = before.findIndex(isCatchAllRule);
+      await mutate({ kind: "upsertRoutingRule", rule });
+      // Appended below a rule that matches everything, a new rule would never
+      // match; it goes just above that rule instead.
+      if (!isNew || catchAll < 0 || isCatchAllRule(rule)) return;
+      const at = get().routingRules.findIndex((r) => r.id === rule.id);
+      if (at <= catchAll) return;
+      await mutate({ kind: "reorderRoutingRules", from: at, to: catchAll });
+      get().notify(
+        translateCurrent("store.rule.addedAboveCatchAll", { name: before[catchAll].remarks }),
+      );
     },
     updateRoutingRule(id, rulePatch) {
       const rule = get().routingRules.find((r) => r.id === id);

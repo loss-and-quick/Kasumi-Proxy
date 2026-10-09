@@ -1015,6 +1015,7 @@ const ar = {
   "store.ping.complete": "اكتمل اختبار Ping",
   "store.speed.started": "جارٍ اختبار السرعة…",
   "store.speed.complete": "اكتمل اختبار السرعة",
+  "store.rule.addedAboveCatchAll": "أُضيفت فوق «{name}»، الذي يلتقط كل حركة المرور",
   "store.ping.removeUnreachable": plural("count", {
     one: "تم حذف ملف تعريفي واحد غير متاح",
     two: "تم حذف ملفين تعريفيين غير متاحين",

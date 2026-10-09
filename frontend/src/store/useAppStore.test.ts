@@ -533,6 +533,46 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1"]);
   });
 
+  it("a new rule goes above a rule that catches everything", async () => {
+    const ads = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block", domain: ["x"] };
+    const all = {
+      id: "r2",
+      remarks: "Rest",
+      enabled: true,
+      outboundTag: "direct",
+      port: "1-65535",
+    };
+    useAppStore.setState({ ...makeState({ routingRules: [ads, all] }), toasts: [] });
+    await useAppStore.getState().addRoutingRule({
+      id: "r3",
+      remarks: "QUIC",
+      enabled: true,
+      outboundTag: "block",
+      port: "443",
+    });
+    expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1", "r3", "r2"]);
+    expect(useAppStore.getState().toasts.map((x) => x.msg)).toEqual([
+      "Added above “Rest”, which catches all traffic",
+    ]);
+  });
+
+  it("a new rule is appended when nothing catches everything, or when it does itself", async () => {
+    const ads = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block", domain: ["x"] };
+    useAppStore.setState({ ...makeState({ routingRules: [ads] }), toasts: [] });
+    const all = {
+      id: "r2",
+      remarks: "Rest",
+      enabled: true,
+      outboundTag: "direct",
+      port: "1-65535",
+    };
+    await useAppStore.getState().addRoutingRule(all);
+    const second = { ...all, id: "r3", remarks: "Rest 2" };
+    await useAppStore.getState().addRoutingRule(second);
+    expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1", "r2", "r3"]);
+    expect(useAppStore.getState().toasts).toEqual([]);
+  });
+
   it("updateSub ignores a second tap while the first fetch runs", async () => {
     useAppStore.setState({ ...makeState({ subscriptions: [makeSub({ id: "s1" })] }) });
     const { updateSub } = useAppStore.getState();

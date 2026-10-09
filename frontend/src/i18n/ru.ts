@@ -958,6 +958,7 @@ const ru = {
   "store.ping.complete": "Пинг завершён",
   "store.speed.started": "Измеряю скорость…",
   "store.speed.complete": "Тест скорости завершён",
+  "store.rule.addedAboveCatchAll": "Добавлено выше «{name}» — это правило ловит весь трафик",
   "store.ping.removeUnreachable": plural("count", {
     one: "Удалён # недоступный профиль",
     few: "Удалено # недоступных профиля",

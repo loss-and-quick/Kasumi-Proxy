@@ -843,6 +843,7 @@ const hi = {
   "store.ping.complete": "पिंग पूरा हुआ",
   "store.speed.started": "स्पीड जाँची जा रही है…",
   "store.speed.complete": "स्पीड टेस्ट पूरा हुआ",
+  "store.rule.addedAboveCatchAll": "“{name}” के ऊपर जोड़ा गया, जो सारा ट्रैफ़िक पकड़ता है",
   "store.ping.removeUnreachable": plural("count", {
     one: "# अनुपलब्ध प्रोफ़ाइल हटाई",
     other: "# अनुपलब्ध प्रोफ़ाइलें हटाईं",

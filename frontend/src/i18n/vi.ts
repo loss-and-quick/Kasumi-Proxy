@@ -850,6 +850,7 @@ const vi = {
   "store.ping.complete": "Ping hoàn tất",
   "store.speed.started": "Đang đo tốc độ…",
   "store.speed.complete": "Đã đo tốc độ xong",
+  "store.rule.addedAboveCatchAll": "Đã thêm phía trên “{name}”, quy tắc khớp mọi lưu lượng",
   "store.ping.removeUnreachable": plural("count", {
     one: "Đã xóa # hồ sơ không thể kết nối",
     other: "Đã xóa # hồ sơ không thể kết nối",

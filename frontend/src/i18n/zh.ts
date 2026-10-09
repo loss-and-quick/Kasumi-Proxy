@@ -835,6 +835,7 @@ const zh = {
   "store.ping.complete": "测速完成",
   "store.speed.started": "正在测速…",
   "store.speed.complete": "测速完成",
+  "store.rule.addedAboveCatchAll": "已添加到“{name}”之上，该规则会匹配所有流量",
   "store.ping.removeUnreachable": plural("count", {
     one: "已删除 # 个不可达配置",
     other: "已删除 # 个不可达配置",

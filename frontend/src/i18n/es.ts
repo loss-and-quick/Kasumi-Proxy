@@ -865,6 +865,7 @@ const es = {
   "store.ping.complete": "Ping completado",
   "store.speed.started": "Midiendo la velocidad…",
   "store.speed.complete": "Prueba de velocidad terminada",
+  "store.rule.addedAboveCatchAll": "Añadida encima de «{name}», que captura todo el tráfico",
   "store.ping.removeUnreachable": plural("count", {
     one: "Se eliminó # perfil inaccesible",
     other: "Se eliminaron # perfiles inaccesibles",
