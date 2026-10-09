@@ -342,7 +342,8 @@ export default function Overview({
           }}
         />
 
-        <SectionLabel>{t("overview.recentActivity")}</SectionLabel>
+        {/* A heading over nothing reads as broken; it shows up with the first event. */}
+        {recentActivity.length > 0 && <SectionLabel>{t("overview.recentActivity")}</SectionLabel>}
         {recentActivity.length > 0 && (
           <Card style={{ padding: "4px 14px" }}>
             {recentActivity.map((l) => (

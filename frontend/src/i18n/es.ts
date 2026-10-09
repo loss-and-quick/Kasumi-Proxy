@@ -128,6 +128,9 @@ const es = {
   "profiles.bulkDelete": "Eliminar",
   "profiles.bulkDedup": "Dedup",
   "profiles.noResults": "No hay perfiles coincidentes",
+  "profiles.emptyTitle": "Aún no hay perfiles",
+  "profiles.emptyBody":
+    "Pega un enlace de suscripción o enlaces de perfiles, o escanea un código QR.",
   "profiles.fabNew": "Crear",
   "profiles.sheet.useProfile": "Usar este perfil",
   "profiles.sheet.edit": "Editar",

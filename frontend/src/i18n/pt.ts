@@ -128,6 +128,8 @@ const pt = {
   "profiles.bulkDelete": "Excluir",
   "profiles.bulkDedup": "Dedup",
   "profiles.noResults": "Nenhum perfil correspondente",
+  "profiles.emptyTitle": "Ainda não há perfis",
+  "profiles.emptyBody": "Cole um link de assinatura ou links de perfis, ou leia um QR code.",
   "profiles.fabNew": "Criar",
   "profiles.sheet.useProfile": "Usar este perfil",
   "profiles.sheet.edit": "Editar",

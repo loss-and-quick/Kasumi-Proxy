@@ -138,6 +138,9 @@ const ru = {
   "profiles.bulkDelete": "Удалить",
   "profiles.bulkDedup": "Дубли",
   "profiles.noResults": "Подходящие профили не найдены",
+  "profiles.emptyTitle": "Профилей пока нет",
+  "profiles.emptyBody":
+    "Вставьте ссылку на подписку или ссылки на профили либо отсканируйте QR-код.",
   "profiles.fabNew": "Создать",
   "profiles.sheet.useProfile": "Использовать этот профиль",
   "profiles.sheet.edit": "Изменить",

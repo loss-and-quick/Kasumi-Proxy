@@ -129,6 +129,8 @@ const en = {
   "profiles.bulkDelete": "Delete",
   "profiles.bulkDedup": "Dedup",
   "profiles.noResults": "No matching profiles",
+  "profiles.emptyTitle": "No profiles yet",
+  "profiles.emptyBody": "Paste a subscription link or share links, or scan a QR code.",
   "profiles.fabNew": "New",
   "profiles.sheet.useProfile": "Use this profile",
   "profiles.sheet.edit": "Edit",

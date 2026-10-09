@@ -125,6 +125,8 @@ const vi = {
   "profiles.bulkDelete": "Xóa",
   "profiles.bulkDedup": "Xóa trùng",
   "profiles.noResults": "Không có hồ sơ khớp",
+  "profiles.emptyTitle": "Chưa có hồ sơ nào",
+  "profiles.emptyBody": "Dán liên kết gói đăng ký hoặc liên kết hồ sơ, hoặc quét mã QR.",
   "profiles.fabNew": "Tạo",
   "profiles.sheet.useProfile": "Dùng hồ sơ này",
   "profiles.sheet.edit": "Chỉnh sửa",
