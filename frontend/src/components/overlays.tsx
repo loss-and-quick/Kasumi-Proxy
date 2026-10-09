@@ -23,18 +23,27 @@ export const Sheet = ({
   onClose,
   children,
   headRight,
+  beforeClose,
 }: {
   open: boolean;
   title?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   headRight?: ReactNode;
+  /** Asked before any close (swipe, scrim, Escape, ✕); false keeps the sheet open. */
+  beforeClose?: () => boolean | Promise<boolean>;
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
   // Play an exit animation before unmounting so every close path
   // (swipe, close button, scrim) slides out instead of popping.
   const [closing, setClosing] = useState(false);
-  const requestClose = useCallback(() => setClosing(true), []);
+  const beforeCloseRef = useRef(beforeClose);
+  beforeCloseRef.current = beforeClose;
+  const requestClose = useCallback(async () => {
+    const ask = beforeCloseRef.current;
+    if (ask && !(await ask())) return;
+    setClosing(true);
+  }, []);
   const swipe = useSwipeDownToDismiss(sheetRef, requestClose);
 
   // Escape slides the sheet out like every other close path.
@@ -58,7 +67,7 @@ export const Sheet = ({
   if (!open) return null;
   return (
     <>
-      <Scrim onClose={requestClose} leaving={closing} />
+      <Scrim onClose={() => void requestClose()} leaving={closing} />
       <div
         ref={sheetRef}
         className={`sheet${closing ? " leaving" : ""}`}
@@ -79,7 +88,7 @@ export const Sheet = ({
           <div className="sheet-head">
             <div className="sheet-title">{title}</div>
             {headRight}
-            <IconBtn name="close" sm onClick={requestClose} />
+            <IconBtn name="close" sm onClick={() => void requestClose()} />
           </div>
         </div>
         <div className="sheet-body">{children}</div>

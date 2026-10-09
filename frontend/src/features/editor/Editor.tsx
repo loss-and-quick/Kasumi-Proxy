@@ -6,8 +6,8 @@
 // runs against the per-protocol Zod schema on save.
 // ============================================================
 
-import { useEffect, useState } from "react";
-import { Btn, Sheet } from "../../components";
+import { useEffect, useRef, useState } from "react";
+import { Btn, confirm, Sheet } from "../../components";
 import type {
   CoreResolution,
   Endpoint,
@@ -53,6 +53,22 @@ export default function Editor({
   const [errors, setErrors] = useState<FieldErrors>({});
   // The group is picked apart from the draft: a new one is only created on save.
   const [group, setGroup] = useState<GroupChoice>(() => ({ id: draft.meta.groupId }));
+  const [saving, setSaving] = useState(false);
+  const notify = useAppStore((s) => s.notify);
+  // What the form opened with, to tell whether closing would lose anything.
+  const opened = useRef(JSON.stringify([draft, group]));
+  const dirty = () => JSON.stringify([draft, group]) !== opened.current;
+
+  // Every way out (swipe, scrim, Escape, ✕, Cancel) asks first when there are
+  // unsaved changes.
+  const mayClose = async () =>
+    !dirty() ||
+    confirm({
+      icon: "edit_note",
+      title: t("editor.discard.title"),
+      body: t("editor.discard.body"),
+      confirmLabel: t("editor.discard.action"),
+    });
 
   const setMeta = (patch: Partial<Meta>) =>
     setDraft((d) => ({ ...d, meta: { ...d.meta, ...patch } }));
@@ -148,11 +164,22 @@ export default function Editor({
     if (!groupChoiceReady(group)) next.group = t("groups.picker.needName");
     if (!result.success || Object.keys(next).length) {
       setErrors(next);
+      // The offending field may be scrolled out of view.
+      notify(t("editor.validation.fix"));
       return;
     }
     const profile = result.data as Profile;
-    const groupId = await resolveGroup(group, "");
-    await upsert({ ...profile, meta: { ...profile.meta, groupId } });
+    setSaving(true);
+    try {
+      const groupId = await resolveGroup(group, "");
+      await upsert({ ...profile, meta: { ...profile.meta, groupId } });
+    } catch (e) {
+      // Keep the form open so nothing typed is lost.
+      notify(t("store.service.error", { error: e instanceof Error ? e.message : String(e) }));
+      return;
+    } finally {
+      setSaving(false);
+    }
     onClose();
   };
 
@@ -180,8 +207,9 @@ export default function Editor({
       open
       title={existing ? t("editor.editTitle") : t("editor.newTitle")}
       onClose={onClose}
+      beforeClose={mayClose}
       headRight={
-        <Btn variant="filled" sm icon="check" onClick={() => void save()}>
+        <Btn variant="filled" sm icon="check" disabled={saving} onClick={() => void save()}>
           {t("editor.save")}
         </Btn>
       }
@@ -235,7 +263,13 @@ export default function Editor({
       {sharePreview && <SharePreview shareText={sharePreview} />}
 
       <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-        <Btn variant="outline" block onClick={onClose}>
+        <Btn
+          variant="outline"
+          block
+          onClick={async () => {
+            if (await mayClose()) onClose();
+          }}
+        >
           {t("editor.cancel")}
         </Btn>
         <Btn variant="filled" block onClick={() => void save()}>
