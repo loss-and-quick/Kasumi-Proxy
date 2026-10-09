@@ -22,6 +22,9 @@ export function ProfilesToolbar({
   sort,
   setSort,
   selectedCount,
+  visibleCount,
+  allVisibleSelected,
+  onSelectAll,
   moveGroup,
   setMoveGroup,
   onBulkPing,
@@ -47,6 +50,11 @@ export function ProfilesToolbar({
   sort: SortMode;
   setSort: (value: SortMode) => void;
   selectedCount: number;
+  /** Profiles the filter and search leave on screen. */
+  visibleCount: number;
+  allVisibleSelected: boolean;
+  /** Select everything on screen, or clear it when it's all selected. */
+  onSelectAll: () => void;
   moveGroup: GroupChoice;
   setMoveGroup: (value: GroupChoice) => void;
   onBulkPing: () => void;
@@ -189,6 +197,18 @@ export function ProfilesToolbar({
               <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
                 {selectedCount}
               </span>
+              <div style={{ flex: 1 }} />
+              <Btn
+                variant="text"
+                sm
+                icon={allVisibleSelected ? "check_box" : "check_box_outline_blank"}
+                onClick={onSelectAll}
+                disabled={visibleCount === 0}
+              >
+                {allVisibleSelected
+                  ? t("profiles.bulkSelectNone")
+                  : t("profiles.bulkSelectAll", { count: visibleCount })}
+              </Btn>
             </div>
             {/* Even two-column grid: Move pairs with its target select; Delete
                 stays on its own row, away from the move selector. */}

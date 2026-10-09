@@ -90,6 +90,13 @@ export default function Profiles({
 
   const toggleSelected = (id: string) =>
     setSelected((current) => ({ ...current, [id]: !current[id] }));
+  // Select or clear many at once: a whole group, or everything on screen.
+  const setSelectedMany = (ids: string[], on: boolean) =>
+    setSelected((current) => {
+      const next = { ...current };
+      for (const id of ids) next[id] = on;
+      return next;
+    });
   const selectedIds = useMemo(
     () =>
       Object.entries(selected)
@@ -126,6 +133,9 @@ export default function Profiles({
     byGroup[profile.meta.groupId] = groupProfiles;
   });
   const orderedGroups = groups.filter((group) => byGroup[group.id]?.length);
+  // "All" means what the group filter and the search leave on screen.
+  const visibleIds = list.map((profile) => profile.meta.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected[id]);
 
   const closeSheetProfile = () => setSheetProfile(null);
 
@@ -245,6 +255,9 @@ export default function Profiles({
         sort={sort}
         setSort={setSort}
         selectedCount={selectedIds.length}
+        visibleCount={visibleIds.length}
+        allVisibleSelected={allVisibleSelected}
+        onSelectAll={() => setSelectedMany(visibleIds, !allVisibleSelected)}
         moveGroup={moveGroup}
         setMoveGroup={setMoveGroup}
         onBulkPing={() => void doBulkPing()}
@@ -262,6 +275,7 @@ export default function Profiles({
         selected={selected}
         emptyText={t("profiles.noResults")}
         onToggleSelected={toggleSelected}
+        onToggleGroup={(ids, on) => setSelectedMany(ids, on)}
         onUse={(id) => void setActive(id)}
         onEdit={onOpenEditor}
         onMore={setSheetProfile}
