@@ -24,6 +24,9 @@ const es = {
   "overview.noInternet": "Sin internet",
   "overview.failed": "Error",
   "overview.noActiveProfile": "No hay ningún perfil activo seleccionado",
+  "overview.pickProfile": "Elegir",
+  "overview.addProfile": "Añadir",
+  "overview.openResources": "Recursos",
   "overview.needsAssets":
     "Descarga los archivos de recursos geográficos antes de usar este modo de enrutamiento.",
   "overview.download": "Descarga",

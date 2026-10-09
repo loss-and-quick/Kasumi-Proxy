@@ -24,6 +24,9 @@ const pt = {
   "overview.noInternet": "Sem internet",
   "overview.failed": "Falhou",
   "overview.noActiveProfile": "Nenhum perfil ativo selecionado",
+  "overview.pickProfile": "Escolher",
+  "overview.addProfile": "Adicionar",
+  "overview.openResources": "Recursos",
   "overview.needsAssets":
     "Baixe os arquivos de recursos geográficos antes de usar este modo de roteamento.",
   "overview.download": "Download",

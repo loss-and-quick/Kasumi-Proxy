@@ -24,6 +24,9 @@ const vi = {
   "overview.noInternet": "Không có internet",
   "overview.failed": "Lỗi",
   "overview.noActiveProfile": "Chưa chọn hồ sơ đang hoạt động",
+  "overview.pickProfile": "Chọn",
+  "overview.addProfile": "Thêm",
+  "overview.openResources": "Tài nguyên",
   "overview.needsAssets":
     "Tải xuống các tệp tài nguyên địa lý trước khi sử dụng chế độ định tuyến này.",
   "overview.download": "Tải xuống",
