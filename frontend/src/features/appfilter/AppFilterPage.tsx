@@ -10,6 +10,7 @@ import { type Translate, useT } from "../../i18n";
 import type { AppEntry } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
+import { useEscapeToClose } from "../../lib/useEscapeToClose";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -33,6 +34,9 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
   const unavailable = useAppStore((s) =>
     s.activeId ? s.coreResolutions[s.activeId]?.seesProcesses === false : false,
   );
+
+  // A full page over the settings, so Escape and Back leave it like a sheet.
+  useEscapeToClose(true, onBack);
 
   const [apps, setApps] = useState<AppEntry[]>([]);
   const [loading, setLoading] = useState(true);
