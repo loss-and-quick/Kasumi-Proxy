@@ -772,6 +772,10 @@ const ru = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Удалить",
+  "assetSheet.validation.filename": "Укажите имя файла",
+  "assetSheet.validation.filenameUnsafe": 'Имя файла не может содержать /, \\, " или ..',
+  "assetSheet.validation.filenameTaken": "Файл с таким именем уже есть",
+  "assetSheet.validation.url": "Укажите ссылку http:// или https://",
   // settings extra
   "settings.routingRulesEditor": "Редактор правил",
   "settings.routingRulesHint":
@@ -859,6 +863,7 @@ const ru = {
     other: "Каждые # дня",
   }),
   "settings.assetDownload": "Скачать",
+  "settings.assetRedownload": "Скачать заново",
   "settings.assetDelete": "Удалить",
   "settings.assetLinks": "Готовые ссылки для geoip.dat / geosite.dat",
   "settings.assetUse": "Использовать",

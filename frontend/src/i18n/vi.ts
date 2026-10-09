@@ -700,6 +700,10 @@ const vi = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Xóa",
+  "assetSheet.validation.filename": "Cần nhập tên tệp",
+  "assetSheet.validation.filenameUnsafe": 'Tên tệp không được chứa /, \\, " hoặc ..',
+  "assetSheet.validation.filenameTaken": "Đã có tệp khác trùng tên này",
+  "assetSheet.validation.url": "Nhập liên kết http:// hoặc https://",
   // settings extra
   "settings.routingRulesEditor": "Trình sửa quy tắc",
   "settings.routingRulesHint":
@@ -763,6 +767,7 @@ const vi = {
   "settings.assetIntervalHours": plural("count", { other: "Mỗi # giờ" }),
   "settings.assetIntervalDays": plural("count", { other: "Mỗi # ngày" }),
   "settings.assetDownload": "Tải xuống",
+  "settings.assetRedownload": "Tải lại",
   "settings.assetDelete": "Xóa",
   "settings.assetLinks": "Liên kết sẵn cho geoip.dat / geosite.dat",
   "settings.assetUse": "Sử dụng",

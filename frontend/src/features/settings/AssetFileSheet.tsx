@@ -4,11 +4,7 @@ import type { AssetFile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { uid } from "../../lib/utils";
 import { confirmAssetDelete } from "./confirmations";
-
-type Draft = {
-  remarks: string;
-  url: string;
-};
+import { assetDraftErrors, type AssetDraft as Draft } from "./helpers";
 
 function makeDraft(asset?: AssetFile | null): Draft {
   return {
@@ -20,27 +16,39 @@ function makeDraft(asset?: AssetFile | null): Draft {
 export function AssetFileSheet({
   open,
   asset,
+  takenNames,
   onClose,
   onSave,
   onDelete,
 }: {
   open: boolean;
   asset: AssetFile | null;
+  /** File names the other entries already use. */
+  takenNames: string[];
   onClose: () => void;
   onSave: (asset: AssetFile) => void;
   onDelete: (id: string) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(makeDraft(asset));
+  // Errors show once Save was pressed, then follow the typing.
+  const [tried, setTried] = useState(false);
   const t = useT();
 
   useEffect(() => {
-    if (open) setDraft(makeDraft(asset));
+    if (open) {
+      setDraft(makeDraft(asset));
+      setTried(false);
+    }
   }, [open, asset]);
 
+  const errors = assetDraftErrors(draft, takenNames, t);
+  const shown = tried ? errors : {};
+
   const save = () => {
+    setTried(true);
+    if (Object.keys(errors).length) return;
     const name = draft.remarks.trim();
     const url = draft.url.trim();
-    if (!name || !url) return;
     onSave({
       id: asset?.id ?? uid(),
       remarks: name,
@@ -67,6 +75,7 @@ export function AssetFileSheet({
         value={draft.remarks}
         onChange={(value) => setDraft((current) => ({ ...current, remarks: value }))}
         placeholder={t("assetSheet.filenamePh")}
+        error={shown.remarks}
         mono={false}
       />
       <Field
@@ -74,6 +83,7 @@ export function AssetFileSheet({
         value={draft.url}
         onChange={(value) => setDraft((current) => ({ ...current, url: value }))}
         placeholder={t("assetSheet.urlPh")}
+        error={shown.url}
         mono={false}
       />
       {asset && !asset.locked && (

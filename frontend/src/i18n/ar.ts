@@ -821,6 +821,10 @@ const ar = {
   "assetSheet.url": "الرابط",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "حذف",
+  "assetSheet.validation.filename": "اسم الملف مطلوب",
+  "assetSheet.validation.filenameUnsafe": 'لا يمكن أن يحتوي اسم الملف على / أو \\ أو " أو ..',
+  "assetSheet.validation.filenameTaken": "يوجد ملف آخر بهذا الاسم",
+  "assetSheet.validation.url": "أدخل رابط http:// أو https://",
   // settings extra
   "settings.routingRulesEditor": "محرر القواعد",
   "settings.routingRulesHint":
@@ -917,6 +921,7 @@ const ar = {
     other: "كل # يوم",
   }),
   "settings.assetDownload": "تنزيل",
+  "settings.assetRedownload": "تنزيل مرة أخرى",
   "settings.assetDelete": "حذف",
   "settings.assetLinks": "روابط جاهزة لـ geoip.dat / geosite.dat",
   "settings.assetUse": "استخدام",
