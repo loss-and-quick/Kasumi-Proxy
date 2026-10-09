@@ -480,6 +480,8 @@ const vi = {
   "settings.tunTcpBuffer": "Kích thước bộ đệm TCP (byte)",
   "settings.tunUdpRecvBuffer": "Bộ đệm nhận UDP (byte)",
   "settings.tunEngine": "Công cụ TUN",
+  "settings.tunUnusedHint":
+    "Chỉ dùng ở chế độ TUN. Chế độ proxy hiện tại (Định tuyến) không dùng các cài đặt này.",
   "settings.tunEngineHint":
     "Công cụ kết nối thiết bị TUN với mỗi lõi. sing-box có thể dùng TUN gốc của nó; xray cần công cụ ngoài.",
   "settings.security": "Bảo mật",
@@ -590,7 +592,7 @@ const vi = {
   "qr.scan.hint": "Hướng camera vào mã QR.",
   "qr.scan.fromImage": "Quét từ ảnh",
   "qr.scan.imageProcessing": "Đang xử lý ảnh…",
-  "qr.scan.unsupported": "Camera không khả dụng trong WebView/trình duyệt này.",
+  "qr.scan.unsupported": "Không dùng được camera ở đây. Hãy chọn ảnh chứa mã QR.",
   "qr.scan.denied": "Quyền truy cập camera bị từ chối hoặc không khả dụng.",
   "qr.scan.noCode": "Không tìm thấy mã QR.",
   "qr.scan.close": "Đóng",

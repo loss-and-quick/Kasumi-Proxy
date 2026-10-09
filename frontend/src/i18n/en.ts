@@ -496,6 +496,8 @@ const en = {
   "settings.tunTcpBuffer": "TCP buffer size (bytes)",
   "settings.tunUdpRecvBuffer": "UDP receive buffer (bytes)",
   "settings.tunEngine": "TUN engine",
+  "settings.tunUnusedHint":
+    "Used only in TUN mode. The current proxy mode (Routing) doesn't use these settings.",
   "settings.tunEngineHint":
     "Which engine bridges the TUN device to each core. sing-box can use its own native TUN; xray needs an external one.",
   "settings.security": "Security",
@@ -607,7 +609,7 @@ const en = {
   "qr.scan.hint": "Point the camera at a QR code.",
   "qr.scan.fromImage": "Scan from image",
   "qr.scan.imageProcessing": "Processing image…",
-  "qr.scan.unsupported": "Camera is not available in this WebView/browser.",
+  "qr.scan.unsupported": "The camera isn't available here. Pick a picture of the QR code instead.",
   "qr.scan.denied": "Camera permission was denied or is unavailable.",
   "qr.scan.noCode": "No QR code found.",
   "qr.scan.close": "Close",

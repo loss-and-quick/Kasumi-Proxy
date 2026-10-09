@@ -535,6 +535,8 @@ const ru = {
   "settings.tunTcpBuffer": "Размер буфера TCP (байты)",
   "settings.tunUdpRecvBuffer": "Буфер приёма UDP (байты)",
   "settings.tunEngine": "Движок TUN",
+  "settings.tunUnusedHint":
+    "Работает только в режиме TUN. Текущий режим прокси (Маршрутизация) эти настройки не использует.",
   "settings.tunEngineHint":
     "Какой движок связывает TUN-устройство с каждым ядром. sing-box умеет собственный нативный TUN; xray требует внешний.",
   "settings.security": "Безопасность",
@@ -645,7 +647,7 @@ const ru = {
   "qr.scan.hint": "Наведите камеру на QR-код.",
   "qr.scan.fromImage": "Сканировать с изображения",
   "qr.scan.imageProcessing": "Обработка изображения…",
-  "qr.scan.unsupported": "Камера недоступна в этом WebView/браузере.",
+  "qr.scan.unsupported": "Камера здесь недоступна. Выберите изображение с QR-кодом.",
   "qr.scan.denied": "Доступ к камере запрещён или недоступен.",
   "qr.scan.noCode": "QR-код не найден.",
   "qr.scan.close": "Закрыть",

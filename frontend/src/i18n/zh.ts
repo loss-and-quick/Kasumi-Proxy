@@ -472,6 +472,7 @@ const zh = {
   "settings.tunTcpBuffer": "TCP 缓冲区大小（字节）",
   "settings.tunUdpRecvBuffer": "UDP 接收缓冲区（字节）",
   "settings.tunEngine": "TUN 引擎",
+  "settings.tunUnusedHint": "仅在 TUN 模式下使用。当前代理模式（路由）不使用这些设置。",
   "settings.tunEngineHint":
     "为每个内核桥接 TUN 设备的引擎。sing-box 可使用自带的原生 TUN；xray 需要外部引擎。",
   "settings.security": "安全",
@@ -579,7 +580,7 @@ const zh = {
   "qr.scan.hint": "请将摄像头对准二维码。",
   "qr.scan.fromImage": "从图片扫描",
   "qr.scan.imageProcessing": "处理中…",
-  "qr.scan.unsupported": "此 WebView/浏览器中无法使用摄像头。",
+  "qr.scan.unsupported": "此处无法使用摄像头。请改为选择二维码图片。",
   "qr.scan.denied": "摄像头权限被拒绝或不可用。",
   "qr.scan.noCode": "未找到二维码。",
   "qr.scan.close": "关闭",
