@@ -835,6 +835,7 @@ const vi = {
   }),
   "store.ping.started": "Đang ping…",
   "store.ping.complete": "Ping hoàn tất",
+  "store.rule.addedAboveCatchAll": "Đã thêm phía trên “{name}”, quy tắc khớp mọi lưu lượng",
   "store.ping.removeUnreachable": plural("count", {
     one: "Đã xóa # hồ sơ không thể kết nối",
     other: "Đã xóa # hồ sơ không thể kết nối",

@@ -1000,6 +1000,7 @@ const ar = {
   }),
   "store.ping.started": "جارٍ اختبار Ping…",
   "store.ping.complete": "اكتمل اختبار Ping",
+  "store.rule.addedAboveCatchAll": "أُضيفت فوق «{name}»، الذي يلتقط كل حركة المرور",
   "store.ping.removeUnreachable": plural("count", {
     one: "تم حذف ملف تعريفي واحد غير متاح",
     two: "تم حذف ملفين تعريفيين غير متاحين",

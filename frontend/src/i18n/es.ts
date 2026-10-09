@@ -850,6 +850,7 @@ const es = {
   }),
   "store.ping.started": "Haciendo ping…",
   "store.ping.complete": "Ping completado",
+  "store.rule.addedAboveCatchAll": "Añadida encima de «{name}», que captura todo el tráfico",
   "store.ping.removeUnreachable": plural("count", {
     one: "Se eliminó # perfil inaccesible",
     other: "Se eliminaron # perfiles inaccesibles",

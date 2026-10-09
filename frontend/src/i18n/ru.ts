@@ -943,6 +943,7 @@ const ru = {
   }),
   "store.ping.started": "Пингуем…",
   "store.ping.complete": "Пинг завершён",
+  "store.rule.addedAboveCatchAll": "Добавлено выше «{name}» — это правило ловит весь трафик",
   "store.ping.removeUnreachable": plural("count", {
     one: "Удалён # недоступный профиль",
     few: "Удалено # недоступных профиля",

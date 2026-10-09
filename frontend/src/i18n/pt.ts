@@ -847,6 +847,7 @@ const pt = {
   }),
   "store.ping.started": "Testando ping…",
   "store.ping.complete": "Teste de ping concluído",
+  "store.rule.addedAboveCatchAll": "Adicionada acima de “{name}”, que captura todo o tráfego",
   "store.ping.removeUnreachable": plural("count", {
     one: "# perfil inacessível removido",
     other: "# perfis inacessíveis removidos",
