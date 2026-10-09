@@ -469,6 +469,8 @@ const hi = {
   "settings.tunTcpBuffer": "TCP बफ़र आकार (बाइट)",
   "settings.tunUdpRecvBuffer": "UDP रिसीव बफ़र (बाइट)",
   "settings.tunEngine": "TUN इंजन",
+  "settings.tunUnusedHint":
+    "केवल TUN मोड में उपयोग होता है। मौजूदा प्रॉक्सी मोड (रूटिंग) ये सेटिंग्स इस्तेमाल नहीं करता।",
   "settings.tunEngineHint":
     "कौन सा इंजन TUN डिवाइस को प्रत्येक कोर से जोड़ता है। sing-box अपना नेटिव TUN उपयोग कर सकता है; xray को बाहरी इंजन चाहिए।",
   "settings.security": "सुरक्षा",
@@ -579,7 +581,7 @@ const hi = {
   "qr.scan.hint": "कैमरे को QR कोड पर रखें।",
   "qr.scan.fromImage": "छवि से स्कैन करें",
   "qr.scan.imageProcessing": "छवि संसाधित हो रही है…",
-  "qr.scan.unsupported": "यह WebView/browser में कैमरा उपलब्ध नहीं है।",
+  "qr.scan.unsupported": "यहाँ कैमरा उपलब्ध नहीं है। इसके बजाय QR कोड की तस्वीर चुनें।",
   "qr.scan.denied": "कैमरा अनुमति अस्वीकृत की गई या उपलब्ध नहीं है।",
   "qr.scan.noCode": "कोई QR कोड नहीं मिला।",
   "qr.scan.close": "बंद करें",

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Btn, confirm, Field, RowToggle, Segmented, Select, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import { getRuntimeBridgeMode } from "../../lib/ksu-webui";
 import { normalizeList, toText, uid } from "../../lib/utils";
 
 type Draft = {
@@ -57,6 +58,7 @@ export function RoutingRuleSheet({
     ? (draft.outboundTag as "proxy" | "direct" | "block")
     : "profile";
   const t = useT();
+  const isDesktop = getRuntimeBridgeMode() === "tauri";
 
   useEffect(() => {
     if (open) setDraft(makeDraft(rule));
@@ -199,14 +201,18 @@ export function RoutingRuleSheet({
         placeholder={t("routingSheet.processesPh")}
         hint={t("routingSheet.processesHint")}
       />
-      <Field
-        area
-        label={t("routingSheet.packages")}
-        value={draft.packageText}
-        onChange={(value) => setDraft((current) => ({ ...current, packageText: value }))}
-        placeholder={t("routingSheet.packagesPh")}
-        hint={t("routingSheet.packagesHint")}
-      />
+      {/* Android package names match nothing on a desktop; a rule that already
+          names some (imported from the phone) still shows them. */}
+      {(!isDesktop || draft.packageText.trim() !== "") && (
+        <Field
+          area
+          label={t("routingSheet.packages")}
+          value={draft.packageText}
+          onChange={(value) => setDraft((current) => ({ ...current, packageText: value }))}
+          placeholder={t("routingSheet.packagesPh")}
+          hint={t("routingSheet.packagesHint")}
+        />
+      )}
       <Field
         area
         label={t("routingSheet.sourceIps")}

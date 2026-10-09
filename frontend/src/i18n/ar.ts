@@ -549,6 +549,8 @@ const ar = {
   "settings.tunTcpBuffer": "حجم مخزن TCP (بايت)",
   "settings.tunUdpRecvBuffer": "مخزن استقبال UDP (بايت)",
   "settings.tunEngine": "محرك TUN",
+  "settings.tunUnusedHint":
+    "يُستخدم في وضع TUN فقط. وضع الوكيل الحالي (التوجيه) لا يستخدم هذه الإعدادات.",
   "settings.tunEngineHint":
     "المحرك الذي يربط جهاز TUN بكل نواة. يمكن لـ sing-box استخدام TUN الأصلي الخاص به؛ بينما يحتاج xray إلى محرك خارجي.",
   "settings.security": "الأمان",
@@ -681,7 +683,7 @@ const ar = {
   "qr.scan.hint": "وجّه الكاميرا إلى رمز QR.",
   "qr.scan.fromImage": "المسح من صورة",
   "qr.scan.imageProcessing": "جارٍ معالجة الصورة…",
-  "qr.scan.unsupported": "الكاميرا غير متاحة في هذا WebView/المتصفح.",
+  "qr.scan.unsupported": "الكاميرا غير متاحة هنا. اختر صورة لرمز QR بدلًا من ذلك.",
   "qr.scan.denied": "تم رفض إذن الكاميرا أو أنها غير متاحة.",
   "qr.scan.noCode": "لم يتم العثور على رمز QR.",
   "qr.scan.close": "إغلاق",
