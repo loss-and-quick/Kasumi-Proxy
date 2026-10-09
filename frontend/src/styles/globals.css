@@ -254,6 +254,9 @@ body {
   white-space: normal; line-height: 1.2; text-align: center;
 }
 
+/* Bulk mode: a group header's count doubles as its select-all checkbox. */
+.group-select { display: inline-flex; align-items: center; gap: 6px; color: var(--on-surface-variant); }
+
 /* A subscription card's group: a link to that group's profiles. */
 .sub-group-link {
   display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-top: 6px;
