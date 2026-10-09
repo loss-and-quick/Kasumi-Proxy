@@ -32,9 +32,12 @@ import type { FieldErrors } from "./types";
 
 export default function Editor({
   profileId,
+  newGroupId,
   onClose,
 }: {
   profileId: string | "new";
+  /** The group a new profile starts in (the one the user was looking at). */
+  newGroupId?: string;
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
@@ -45,7 +48,7 @@ export default function Editor({
   const t = useT();
 
   const [draft, setDraft] = useState<Profile>(
-    () => existing ?? emptyProfile("vless", groups[0]?.id ?? "g-main"),
+    () => existing ?? emptyProfile("vless", newGroupId ?? groups[0]?.id ?? "g-main"),
   );
   const [errors, setErrors] = useState<FieldErrors>({});
   // The group is picked apart from the draft: a new one is only created on save.
