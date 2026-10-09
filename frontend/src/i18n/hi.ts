@@ -693,6 +693,7 @@ const hi = {
   "settings.routingEmpty": "अभी कोई रूटिंग नियम नहीं हैं।",
   "settings.routingRuleDefault": "नियम {n}",
   "common.none": "कोई नहीं",
+  "common.close": "बंद करें",
   "common.search": "खोजें",
   "common.noMatches": "कोई मेल नहीं",
   "common.modeShort.auto": "ऑटो",

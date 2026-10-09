@@ -184,6 +184,7 @@ export function RoutingSection({
                             <Switch
                               on={rule.enabled}
                               onChange={(value) => updateRoutingRule(rule.id, { enabled: value })}
+                              label={rule.remarks}
                             />
                           }
                         />

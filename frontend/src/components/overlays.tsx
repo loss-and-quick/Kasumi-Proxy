@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useT } from "../i18n";
 import { acquireSheet } from "../lib/sheetPresence";
 import { useEscapeToClose } from "../lib/useEscapeToClose";
 import { useSwipeDownToDismiss } from "../lib/useSwipeDownToDismiss";
@@ -6,11 +7,12 @@ import type { ToastItem } from "../store/useAppStore";
 import { Icon, IconBtn } from "./icons";
 
 function Scrim({ onClose, leaving }: { onClose: () => void; leaving?: boolean }) {
+  const t = useT();
   return (
     <button
       type="button"
       className={`scrim${leaving ? " leaving" : ""}`}
-      aria-label="Close"
+      aria-label={t("common.close")}
       onClick={onClose}
       style={{ appearance: "none", border: "none", padding: 0 }}
     />
@@ -33,6 +35,7 @@ export const Sheet = ({
   /** Asked before any close (swipe, scrim, Escape, ✕); false keeps the sheet open. */
   beforeClose?: () => boolean | Promise<boolean>;
 }) => {
+  const t = useT();
   const sheetRef = useRef<HTMLDivElement>(null);
   // Play an exit animation before unmounting so every close path
   // (swipe, close button, scrim) slides out instead of popping.
@@ -88,7 +91,12 @@ export const Sheet = ({
           <div className="sheet-head">
             <div className="sheet-title">{title}</div>
             {headRight}
-            <IconBtn name="close" sm onClick={() => void requestClose()} />
+            <IconBtn
+              name="close"
+              sm
+              title={t("common.close")}
+              onClick={() => void requestClose()}
+            />
           </div>
         </div>
         <div className="sheet-body">{children}</div>

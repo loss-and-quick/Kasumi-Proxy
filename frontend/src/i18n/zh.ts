@@ -688,6 +688,7 @@ const zh = {
   "settings.routingEmpty": "暂无路由规则。",
   "settings.routingRuleDefault": "规则 {n}",
   "common.none": "无",
+  "common.close": "关闭",
   "common.search": "搜索",
   "common.noMatches": "无匹配项",
   "common.modeShort.auto": "自动",

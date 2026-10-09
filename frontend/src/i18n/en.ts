@@ -716,6 +716,7 @@ const en = {
   "settings.routingEmpty": "No routing rules yet.",
   "settings.routingRuleDefault": "Rule {n}",
   "common.none": "None",
+  "common.close": "Close",
   "common.search": "Search",
   "common.noMatches": "No matches",
   "common.modeShort.auto": "Auto",

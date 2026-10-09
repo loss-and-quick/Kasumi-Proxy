@@ -710,6 +710,7 @@ const pt = {
   "settings.routingEmpty": "Ainda não há regras de roteamento.",
   "settings.routingRuleDefault": "Regra {n}",
   "common.none": "Nenhum",
+  "common.close": "Fechar",
   "common.search": "Pesquisar",
   "common.noMatches": "Nenhum resultado",
   "common.modeShort.auto": "Auto",

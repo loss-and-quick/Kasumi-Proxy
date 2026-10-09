@@ -712,6 +712,7 @@ const es = {
   "settings.routingEmpty": "Aún no hay reglas de enrutamiento.",
   "settings.routingRuleDefault": "Regla {n}",
   "common.none": "Ninguno",
+  "common.close": "Cerrar",
   "common.search": "Buscar",
   "common.noMatches": "Sin resultados",
   "common.modeShort.auto": "Auto",

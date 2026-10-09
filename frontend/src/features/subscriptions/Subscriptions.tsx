@@ -335,7 +335,7 @@ function SubCard({
             </span>
           </div>
         </div>
-        <Switch on={s.enabled} onChange={onToggle} />
+        <Switch on={s.enabled} onChange={onToggle} label={s.remarks} />
       </div>
       <button
         type="button"
