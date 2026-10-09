@@ -710,6 +710,10 @@ const en = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Delete",
+  "assetSheet.validation.filename": "File name required",
+  "assetSheet.validation.filenameUnsafe": "A file name can't contain /, \\, \" or ..",
+  "assetSheet.validation.filenameTaken": "Another file already has this name",
+  "assetSheet.validation.url": "Enter an http:// or https:// link",
   // settings extra
   "settings.routingRulesEditor": "Rules editor",
   "settings.routingRulesHint":
@@ -773,6 +777,7 @@ const en = {
   "settings.assetIntervalHours": plural("count", { one: "Every # hour", other: "Every # hours" }),
   "settings.assetIntervalDays": plural("count", { one: "Every # day", other: "Every # days" }),
   "settings.assetDownload": "Download",
+  "settings.assetRedownload": "Download again",
   "settings.assetDelete": "Delete",
   "settings.assetLinks": "Ready links for geoip.dat / geosite.dat",
   "settings.assetUse": "Use",

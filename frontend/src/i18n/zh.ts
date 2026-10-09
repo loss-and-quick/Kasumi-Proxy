@@ -682,6 +682,10 @@ const zh = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "删除",
+  "assetSheet.validation.filename": "请填写文件名",
+  "assetSheet.validation.filenameUnsafe": '文件名不能包含 /、\\、" 或 ..',
+  "assetSheet.validation.filenameTaken": "已有其他文件使用此名称",
+  "assetSheet.validation.url": "请输入 http:// 或 https:// 链接",
   // settings extra
   "settings.routingRulesEditor": "规则编辑器",
   "settings.routingRulesHint":
@@ -743,6 +747,7 @@ const zh = {
   "settings.assetIntervalHours": plural("count", { other: "每 # 小时" }),
   "settings.assetIntervalDays": plural("count", { other: "每 # 天" }),
   "settings.assetDownload": "下载",
+  "settings.assetRedownload": "重新下载",
   "settings.assetDelete": "删除",
   "settings.assetLinks": "geoip.dat / geosite.dat 现成链接",
   "settings.assetUse": "使用",
