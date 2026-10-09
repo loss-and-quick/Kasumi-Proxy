@@ -580,6 +580,8 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .divider { height: 1px; background: var(--outline-variant); margin: 14px 0; border: none; }
 .spin { animation: spin 0.9s linear infinite; }
+/* A button whose action is running spins its icon. */
+.btn-busy .material-symbols-rounded { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: no-preference) { .screen-enter { animation: screenin var(--dur-slow) ease; } }

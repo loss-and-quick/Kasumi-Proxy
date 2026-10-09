@@ -58,6 +58,7 @@ interface Store extends AppState {
   hydrated: boolean;
   busy: boolean; // true while a service lifecycle op is in flight
   pinging: Set<string>; // profile ids currently being pinged
+  updatingSubs: Set<string>; // subscription ids being fetched
   speedTesting: Set<string>; // profile ids currently being speed-tested
   testResults: Record<string, ProfileTest>; // last ping/speed per profile id (ephemeral)
   // Which core each profile runs on, resolved by the backend (`resolveCores`) and
@@ -230,6 +231,52 @@ export const useAppStore = create<Store>((set, get) => {
     }
     return settingsChain;
   };
+  // Fetch one subscription and reflect the result (the body of `updateSub`).
+  const fetchSub = async (id: string): Promise<void> => {
+    const { subscriptions, service } = get();
+    const sub = subscriptions.find((x) => x.id === id);
+    if (!sub) return;
+
+    // "proxy" mode can only fetch through a live core — guard it client-side so
+    // the failure is explained up front rather than as a fetch timeout (the
+    // backend can't tell a stopped proxy from an unreachable URL).
+    if (sub.updateMode === "proxy" && !isServiceUp(service.state)) {
+      await mutate({
+        kind: "upsertSub",
+        subscription: { ...sub, lastError: translateCurrent("common.proxyNotRunning") },
+      });
+      get().notify(translateCurrent("common.proxyNotRunning"));
+      return;
+    }
+
+    get().notify(translateCurrent("store.sub.updating", { name: sub.remarks }));
+    let next: AppState;
+    try {
+      // The backend fetches, maps, dedups, applies, persists, and restarts the
+      // active data-path when affected; we just reflect the result.
+      next = await bridge.applySubscription(id);
+    } catch (e: unknown) {
+      await mutate({ kind: "upsertSub", subscription: { ...sub, lastError: errorMessage(e) } });
+      get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
+      return;
+    }
+
+    applyState(next);
+    await get().refreshStatus();
+
+    const updated = next.subscriptions.find((x) => x.id === id);
+    if (updated?.lastError) {
+      get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
+      return;
+    }
+    get().notify(
+      translateCurrent("store.sub.updatedProfiles", {
+        count: updated?.count ?? 0,
+        name: sub.remarks,
+      }),
+    );
+    pushActivity("cloud_sync", translateCurrent("activity.subUpdated", { name: sub.remarks }));
+  };
   let lastTrafficSample: { uploadBytes: number; downloadBytes: number; at: number } | null = null;
   // hydrate() can run more than once (tests, dev StrictMode) — register the
   // background watchers a single time.
@@ -359,6 +406,7 @@ export const useAppStore = create<Store>((set, get) => {
     hydrated: false,
     busy: false,
     pinging: new Set<string>(),
+    updatingSubs: new Set<string>(),
     speedTesting: new Set<string>(),
     testResults: {},
     coreResolutions: {},
@@ -799,54 +847,22 @@ export const useAppStore = create<Store>((set, get) => {
       await mutate({ kind: "removeSub", id, deleteGroup });
     },
     async updateSub(id) {
-      const { subscriptions, service } = get();
-      const sub = subscriptions.find((x) => x.id === id);
-      if (!sub) return;
-
-      // "proxy" mode can only fetch through a live core — guard it client-side so
-      // the failure is explained up front rather than as a fetch timeout (the
-      // backend can't tell a stopped proxy from an unreachable URL).
-      if (sub.updateMode === "proxy" && !isServiceUp(service.state)) {
-        await mutate({
-          kind: "upsertSub",
-          subscription: { ...sub, lastError: translateCurrent("common.proxyNotRunning") },
-        });
-        get().notify(translateCurrent("common.proxyNotRunning"));
-        return;
-      }
-
-      get().notify(translateCurrent("store.sub.updating", { name: sub.remarks }));
-      let next: AppState;
+      // One fetch per subscription at a time; a second tap waits for the first.
+      if (get().updatingSubs.has(id)) return;
+      set((s) => ({ updatingSubs: new Set([...s.updatingSubs, id]) }));
       try {
-        // The backend fetches, maps, dedups, applies, persists, and restarts the
-        // active data-path when affected; we just reflect the result.
-        next = await bridge.applySubscription(id);
-      } catch (e: unknown) {
-        await mutate({ kind: "upsertSub", subscription: { ...sub, lastError: errorMessage(e) } });
-        get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
-        return;
+        await fetchSub(id);
+      } finally {
+        set((s) => ({ updatingSubs: new Set([...s.updatingSubs].filter((x) => x !== id)) }));
       }
-
-      applyState(next);
-      await get().refreshStatus();
-
-      const updated = next.subscriptions.find((x) => x.id === id);
-      if (updated?.lastError) {
-        get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
-        return;
-      }
-      get().notify(
-        translateCurrent("store.sub.updatedProfiles", {
-          count: updated?.count ?? 0,
-          name: sub.remarks,
-        }),
-      );
-      pushActivity("cloud_sync", translateCurrent("activity.subUpdated", { name: sub.remarks }));
     },
     async updateAllSubs() {
-      for (const sub of get().subscriptions.filter((s) => s.enabled)) {
-        await get().updateSub(sub.id);
+      const enabled = get().subscriptions.filter((s) => s.enabled);
+      if (!enabled.length) {
+        get().notify(translateCurrent("store.sub.noneEnabled"));
+        return;
       }
+      for (const sub of enabled) await get().updateSub(sub.id);
     },
 
     addRoutingRule(rule) {

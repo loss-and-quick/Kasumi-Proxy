@@ -49,6 +49,8 @@ export const IconBtn = ({
   sm,
   className = "",
   style,
+  disabled,
+  spinning,
 }: {
   name: string;
   onClick?: () => void;
@@ -57,6 +59,9 @@ export const IconBtn = ({
   sm?: boolean;
   className?: string;
   style?: CSSProperties;
+  disabled?: boolean;
+  /** Spin the glyph while the action it starts is running. */
+  spinning?: boolean;
 }) => (
   <button
     type="button"
@@ -65,8 +70,10 @@ export const IconBtn = ({
     onMouseDown={onMouseDown}
     title={title}
     aria-label={title}
+    aria-busy={spinning || undefined}
     style={style}
+    disabled={disabled}
   >
-    <Icon name={name} />
+    <Icon name={name} className={spinning ? "spin" : undefined} />
   </button>
 );

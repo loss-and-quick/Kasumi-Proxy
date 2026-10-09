@@ -858,6 +858,7 @@ const es = {
   "store.dedup.none": "No se encontraron duplicados",
   "store.sub.updateFailed": "Error al actualizar: {name}",
   "store.sub.updating": "Actualizando {name}…",
+  "store.sub.noneEnabled": "No hay suscripciones activadas que actualizar",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# perfil", other: "# perfiles" }, runtime)}`;

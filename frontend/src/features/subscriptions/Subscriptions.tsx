@@ -54,6 +54,7 @@ export default function Subscriptions({
   const removeSub = useAppStore((s) => s.removeSub);
   const updateSub = useAppStore((s) => s.updateSub);
   const updateAllSubs = useAppStore((s) => s.updateAllSubs);
+  const updatingSubs = useAppStore((s) => s.updatingSubs);
   const t = useT();
 
   const [addOpen, setAddOpen] = useState(false);
@@ -128,6 +129,8 @@ export default function Subscriptions({
               name="cloud_sync"
               title={t("subs.updateAll")}
               onClick={() => void updateAllSubs()}
+              disabled={updatingSubs.size > 0}
+              spinning={updatingSubs.size > 0}
             />
             <IconBtn name="add" title={t("subs.add")} onClick={() => setAddOpen(true)} />
           </>
@@ -145,6 +148,7 @@ export default function Subscriptions({
               revealed={!!revealed[s.id]}
               onReveal={() => setRevealed((r) => ({ ...r, [s.id]: !r[s.id] }))}
               onToggle={(enabled) => upsertSub({ ...s, enabled })}
+              updating={updatingSubs.has(s.id)}
               onUpdate={() => void updateSub(s.id)}
               onEdit={() => setEdit(s)}
               onDelete={() => {
@@ -285,6 +289,7 @@ function SubCard({
   revealed,
   onReveal,
   onToggle,
+  updating,
   onUpdate,
   onEdit,
   onDelete,
@@ -296,6 +301,7 @@ function SubCard({
   revealed: boolean;
   onReveal: () => void;
   onToggle: (enabled: boolean) => void;
+  updating: boolean;
   onUpdate: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -416,7 +422,14 @@ function SubCard({
         <IconBtn sm name="content_copy" onClick={onCopyUrl} title={t("subs.copyUrl")} />
         <IconBtn sm name="edit" onClick={onEdit} title={t("subs.editAction")} />
         <IconBtn sm name="delete" onClick={onDelete} title={t("subs.deleteAction")} />
-        <Btn variant="tonal" sm icon="refresh" onClick={onUpdate}>
+        <Btn
+          variant="tonal"
+          sm
+          icon={updating ? "autorenew" : "refresh"}
+          onClick={onUpdate}
+          disabled={updating}
+          className={updating ? "btn-busy" : undefined}
+        >
           {t("subs.updateBtn")}
         </Btn>
       </div>

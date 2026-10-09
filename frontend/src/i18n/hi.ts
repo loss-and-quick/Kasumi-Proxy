@@ -834,6 +834,7 @@ const hi = {
   "store.dedup.none": "कोई डुप्लिकेट नहीं मिला",
   "store.sub.updateFailed": "अपडेट विफल: {name}",
   "store.sub.updating": "{name} अपडेट किया जा रहा है…",
+  "store.sub.noneEnabled": "अपडेट करने के लिए कोई सक्षम सदस्यता नहीं",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# प्रोफ़ाइल", other: "# प्रोफ़ाइलें" }, runtime)}`;

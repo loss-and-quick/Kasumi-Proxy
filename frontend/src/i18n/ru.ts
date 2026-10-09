@@ -955,6 +955,7 @@ const ru = {
   "store.dedup.none": "Дубликатов не найдено",
   "store.sub.updateFailed": "Не удалось обновить: {name}",
   "store.sub.updating": "Обновление {name}…",
+  "store.sub.noneEnabled": "Нет включённых подписок для обновления",
   "store.sub.updatedProfiles": (vars: Vars | undefined, runtime: MessageRuntime) => {
     const { count = 0, name = "" } = vars ?? {};
     return `${name}: ${pluralPart(Number(count), { one: "# профиль", few: "# профиля", many: "# профилей", other: "# профиля" }, runtime)}`;
