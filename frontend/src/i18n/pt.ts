@@ -490,6 +490,8 @@ const pt = {
   "settings.tunTcpBuffer": "Tamanho do buffer TCP (bytes)",
   "settings.tunUdpRecvBuffer": "Buffer de recepção UDP (bytes)",
   "settings.tunEngine": "Motor TUN",
+  "settings.tunUnusedHint":
+    "Usado só no modo TUN. O modo de proxy atual (Roteamento) não usa estas configurações.",
   "settings.tunEngineHint":
     "Qual motor conecta o dispositivo TUN a cada núcleo. O sing-box pode usar o próprio TUN nativo; o xray precisa de um externo.",
   "settings.security": "Segurança",
@@ -537,6 +539,7 @@ const pt = {
   "settings.updateInstall": "Baixar e reiniciar",
   "settings.updateDownloading": "Baixando… {percent}%",
   "settings.updateError": "Não foi possível verificar atualizações",
+  "settings.updateInstallError": "Não foi possível instalar a atualização",
   "settings.system": "Sistema",
   "settings.backup": "Backup e restauração",
   "settings.backupSub": "Exporte ou importe sua configuração",
@@ -555,6 +558,8 @@ const pt = {
   "logs.clearConfirm": "Limpar todos os arquivos de log?",
   "logs.cleared": "Logs limpos",
   "logs.clearFailed": "Falha ao limpar os logs",
+  "logs.clearFailedReason": "Falha ao limpar os logs: {error}",
+  "logs.loadFailed": "Não foi possível ler o log: {error}",
   "testlog.open": "Ver registro de erro",
   "testlog.titlePing": "Registro da verificação de ping",
   "testlog.titleSpeed": "Registro do teste de velocidade",
@@ -563,7 +568,7 @@ const pt = {
   // backup
   "backup.title": "Backup e restauração",
   "backup.export": "Exportar",
-  "backup.exportLabel": "JSON atual do AppState",
+  "backup.exportLabel": "Backup atual",
   "backup.copyJson": "Copiar JSON",
   "backup.showQr": "Mostrar QR",
   "backup.download": "Baixar",
@@ -594,13 +599,16 @@ const pt = {
   "common.mode.direct": "Somente direto",
   "common.proxyNotRunning": "Inicie o proxy antes de usar o modo Somente proxy.",
   "common.openFile": "Abrir arquivo…",
+  "common.retry": "Tentar de novo",
+  "common.openFileFailed": "Não foi possível abrir o arquivo: {error}",
+  "common.saveFileFailed": "Não foi possível salvar o arquivo: {error}",
   // qr
   "qr.scan.title": "Escanear código QR",
   "qr.scan.starting": "Iniciando câmera…",
   "qr.scan.hint": "Aponte a câmera para um código QR.",
   "qr.scan.fromImage": "Escanear da imagem",
   "qr.scan.imageProcessing": "Processando imagem…",
-  "qr.scan.unsupported": "A câmera não está disponível neste WebView/navegador.",
+  "qr.scan.unsupported": "A câmera não está disponível aqui. Escolha uma imagem do QR code.",
   "qr.scan.denied": "A permissão da câmera foi negada ou está indisponível.",
   "qr.scan.noCode": "Nenhum código QR encontrado.",
   "qr.scan.close": "Fechar",
@@ -704,6 +712,10 @@ const pt = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Excluir",
+  "assetSheet.validation.filename": "Informe o nome do arquivo",
+  "assetSheet.validation.filenameUnsafe": 'O nome do arquivo não pode conter /, \\, " ou ..',
+  "assetSheet.validation.filenameTaken": "Já existe outro arquivo com este nome",
+  "assetSheet.validation.url": "Informe um link http:// ou https://",
   // settings extra
   "settings.routingRulesEditor": "Editor de regras",
   "settings.routingRulesHint":
@@ -767,6 +779,7 @@ const pt = {
   "settings.assetIntervalHours": plural("count", { one: "A cada # hora", other: "A cada # horas" }),
   "settings.assetIntervalDays": plural("count", { one: "A cada # dia", other: "A cada # dias" }),
   "settings.assetDownload": "Baixar",
+  "settings.assetRedownload": "Baixar de novo",
   "settings.assetDelete": "Excluir",
   "settings.assetLinks": "Links prontos para geoip.dat / geosite.dat",
   "settings.assetUse": "Usar",
@@ -847,6 +860,8 @@ const pt = {
   }),
   "store.ping.started": "Testando ping…",
   "store.ping.complete": "Teste de ping concluído",
+  "store.speed.started": "Medindo a velocidade…",
+  "store.speed.complete": "Teste de velocidade concluído",
   "store.rule.addedAboveCatchAll": "Adicionada acima de “{name}”, que captura todo o tráfego",
   "store.ping.removeUnreachable": plural("count", {
     one: "# perfil inacessível removido",
@@ -908,6 +923,7 @@ const pt = {
     "No modo TUN o filtro de aplicativos só funciona com o núcleo sing-box e o seu próprio motor TUN: um motor TUN externo entrega todas as conexões ao núcleo como suas, então o núcleo não sabe qual aplicativo as abriu. Funciona nos demais modos de proxy.",
   "appFilter.systemApp": "sistema",
   "appFilter.empty": "Nenhum app encontrado",
+  "appFilter.loadFailed": "Não foi possível listar os apps: {error}",
   "appFilter.openPage": "Filtro de apps",
   "appFilter.openPageSub": "Regras de proxy por app",
 } satisfies Record<string, MessageValue>;

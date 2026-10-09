@@ -710,7 +710,7 @@ export const useAppStore = create<Store>((set, get) => {
         .profiles.filter((p) => !groupId || groupId === "all" || p.meta.groupId === groupId)
         .map((p) => p.meta.id);
       if (!ids.length) return;
-      get().notify(translateCurrent("store.ping.started"));
+      get().notify(translateCurrent(speed ? "store.speed.started" : "store.ping.started"));
       set(speed ? { speedTesting: new Set(ids) } : { pinging: new Set(ids) });
       const apply = (id: string, value: number) =>
         set((s) => ({
@@ -730,7 +730,7 @@ export const useAppStore = create<Store>((set, get) => {
       } finally {
         set(speed ? { speedTesting: new Set() } : { pinging: new Set() });
       }
-      get().notify(translateCurrent("store.ping.complete"));
+      get().notify(translateCurrent(speed ? "store.speed.complete" : "store.ping.complete"));
       pushActivity(
         "speed",
         translateCurrent(speed ? "activity.speedTestComplete" : "activity.pingComplete", {

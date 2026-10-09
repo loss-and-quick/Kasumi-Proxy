@@ -554,6 +554,8 @@ const ar = {
   "settings.tunTcpBuffer": "حجم مخزن TCP (بايت)",
   "settings.tunUdpRecvBuffer": "مخزن استقبال UDP (بايت)",
   "settings.tunEngine": "محرك TUN",
+  "settings.tunUnusedHint":
+    "يُستخدم في وضع TUN فقط. وضع الوكيل الحالي (التوجيه) لا يستخدم هذه الإعدادات.",
   "settings.tunEngineHint":
     "المحرك الذي يربط جهاز TUN بكل نواة. يمكن لـ sing-box استخدام TUN الأصلي الخاص به؛ بينما يحتاج xray إلى محرك خارجي.",
   "settings.security": "الأمان",
@@ -601,6 +603,7 @@ const ar = {
   "settings.updateInstall": "تنزيل وإعادة التشغيل",
   "settings.updateDownloading": "جارٍ التنزيل… {percent}%",
   "settings.updateError": "تعذر التحقق من التحديثات",
+  "settings.updateInstallError": "تعذر تثبيت التحديث",
   "settings.system": "النظام",
   "settings.backup": "نسخ احتياطي واستعادة",
   "settings.backupSub": "تصدير إعداداتك أو استيرادها",
@@ -619,6 +622,8 @@ const ar = {
   "logs.clearConfirm": "هل تريد مسح جميع ملفات السجل؟",
   "logs.cleared": "تم مسح السجلات",
   "logs.clearFailed": "تعذر مسح السجلات",
+  "logs.clearFailedReason": "تعذر مسح السجلات: {error}",
+  "logs.loadFailed": "تعذرت قراءة السجل: {error}",
   "testlog.open": "عرض سجل الخطأ",
   "testlog.titlePing": "سجل فحص البينغ",
   "testlog.titleSpeed": "سجل اختبار السرعة",
@@ -627,7 +632,7 @@ const ar = {
   // backup
   "backup.title": "نسخ احتياطي واستعادة",
   "backup.export": "تصدير",
-  "backup.exportLabel": "JSON الحالي لـ AppState",
+  "backup.exportLabel": "النسخة الاحتياطية الحالية",
   "backup.copyJson": "نسخ JSON",
   "backup.showQr": "إظهار QR",
   "backup.download": "تنزيل",
@@ -680,13 +685,16 @@ const ar = {
   "common.mode.direct": "مباشر فقط",
   "common.proxyNotRunning": "شغّل الوكيل أولًا قبل استخدام وضع " + '"عبر الوكيل فقط".',
   "common.openFile": "فتح ملف…",
+  "common.retry": "إعادة المحاولة",
+  "common.openFileFailed": "تعذر فتح الملف: {error}",
+  "common.saveFileFailed": "تعذر حفظ الملف: {error}",
   // qr
   "qr.scan.title": "مسح رمز QR",
   "qr.scan.starting": "جارٍ تشغيل الكاميرا…",
   "qr.scan.hint": "وجّه الكاميرا إلى رمز QR.",
   "qr.scan.fromImage": "المسح من صورة",
   "qr.scan.imageProcessing": "جارٍ معالجة الصورة…",
-  "qr.scan.unsupported": "الكاميرا غير متاحة في هذا WebView/المتصفح.",
+  "qr.scan.unsupported": "الكاميرا غير متاحة هنا. اختر صورة لرمز QR بدلًا من ذلك.",
   "qr.scan.denied": "تم رفض إذن الكاميرا أو أنها غير متاحة.",
   "qr.scan.noCode": "لم يتم العثور على رمز QR.",
   "qr.scan.close": "إغلاق",
@@ -814,6 +822,10 @@ const ar = {
   "assetSheet.url": "الرابط",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "حذف",
+  "assetSheet.validation.filename": "اسم الملف مطلوب",
+  "assetSheet.validation.filenameUnsafe": 'لا يمكن أن يحتوي اسم الملف على / أو \\ أو " أو ..',
+  "assetSheet.validation.filenameTaken": "يوجد ملف آخر بهذا الاسم",
+  "assetSheet.validation.url": "أدخل رابط http:// أو https://",
   // settings extra
   "settings.routingRulesEditor": "محرر القواعد",
   "settings.routingRulesHint":
@@ -910,6 +922,7 @@ const ar = {
     other: "كل # يوم",
   }),
   "settings.assetDownload": "تنزيل",
+  "settings.assetRedownload": "تنزيل مرة أخرى",
   "settings.assetDelete": "حذف",
   "settings.assetLinks": "روابط جاهزة لـ geoip.dat / geosite.dat",
   "settings.assetUse": "استخدام",
@@ -1000,6 +1013,8 @@ const ar = {
   }),
   "store.ping.started": "جارٍ اختبار Ping…",
   "store.ping.complete": "اكتمل اختبار Ping",
+  "store.speed.started": "جارٍ اختبار السرعة…",
+  "store.speed.complete": "اكتمل اختبار السرعة",
   "store.rule.addedAboveCatchAll": "أُضيفت فوق «{name}»، الذي يلتقط كل حركة المرور",
   "store.ping.removeUnreachable": plural("count", {
     one: "تم حذف ملف تعريفي واحد غير متاح",
@@ -1092,6 +1107,7 @@ const ar = {
     "في وضع TUN يعمل مرشح التطبيقات فقط مع نواة sing-box ومحرك TUN الخاص بها: محرك TUN الخارجي يسلّم كل الاتصالات إلى النواة باسمه، فلا تعرف النواة أي تطبيق فتحها. يعمل المرشح في أوضاع البروكسي الأخرى.",
   "appFilter.systemApp": "نظام",
   "appFilter.empty": "لم يتم العثور على تطبيقات",
+  "appFilter.loadFailed": "تعذر عرض قائمة التطبيقات: {error}",
   "appFilter.openPage": "تصفية التطبيقات",
   "appFilter.openPageSub": "قواعد الوكيل لكل تطبيق",
 } satisfies Record<string, MessageValue>;

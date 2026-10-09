@@ -535,6 +535,8 @@ const ru = {
   "settings.tunTcpBuffer": "Размер буфера TCP (байты)",
   "settings.tunUdpRecvBuffer": "Буфер приёма UDP (байты)",
   "settings.tunEngine": "Движок TUN",
+  "settings.tunUnusedHint":
+    "Работает только в режиме TUN. Текущий режим прокси (Маршрутизация) эти настройки не использует.",
   "settings.tunEngineHint":
     "Какой движок связывает TUN-устройство с каждым ядром. sing-box умеет собственный нативный TUN; xray требует внешний.",
   "settings.security": "Безопасность",
@@ -582,6 +584,7 @@ const ru = {
   "settings.updateInstall": "Скачать и перезапустить",
   "settings.updateDownloading": "Загрузка… {percent}%",
   "settings.updateError": "Не удалось проверить обновления",
+  "settings.updateInstallError": "Не удалось установить обновление",
   "settings.system": "Система",
   "settings.backup": "Резервная копия и восстановление",
   "settings.backupSub": "Экспорт или импорт вашей конфигурации",
@@ -600,6 +603,8 @@ const ru = {
   "logs.clearConfirm": "Очистить все файлы логов?",
   "logs.cleared": "Логи очищены",
   "logs.clearFailed": "Не удалось очистить логи",
+  "logs.clearFailedReason": "Не удалось очистить логи: {error}",
+  "logs.loadFailed": "Не удалось прочитать лог: {error}",
   "testlog.open": "Показать лог ошибки",
   "testlog.titlePing": "Лог проверки пинга",
   "testlog.titleSpeed": "Лог теста скорости",
@@ -608,7 +613,7 @@ const ru = {
   // backup
   "backup.title": "Резервная копия и восстановление",
   "backup.export": "Экспорт",
-  "backup.exportLabel": "Текущий AppState JSON",
+  "backup.exportLabel": "Текущая резервная копия",
   "backup.copyJson": "Копировать JSON",
   "backup.showQr": "Показать QR",
   "backup.download": "Скачать",
@@ -639,13 +644,16 @@ const ru = {
   "common.mode.direct": "Только напрямую",
   "common.proxyNotRunning": "Перед режимом «Только через прокси» сначала запустите прокси.",
   "common.openFile": "Открыть файл…",
+  "common.retry": "Повторить",
+  "common.openFileFailed": "Не удалось открыть файл: {error}",
+  "common.saveFileFailed": "Не удалось сохранить файл: {error}",
   // qr
   "qr.scan.title": "Сканировать QR-код",
   "qr.scan.starting": "Запуск камеры…",
   "qr.scan.hint": "Наведите камеру на QR-код.",
   "qr.scan.fromImage": "Сканировать с изображения",
   "qr.scan.imageProcessing": "Обработка изображения…",
-  "qr.scan.unsupported": "Камера недоступна в этом WebView/браузере.",
+  "qr.scan.unsupported": "Камера здесь недоступна. Выберите изображение с QR-кодом.",
   "qr.scan.denied": "Доступ к камере запрещён или недоступен.",
   "qr.scan.noCode": "QR-код не найден.",
   "qr.scan.close": "Закрыть",
@@ -765,6 +773,10 @@ const ru = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Удалить",
+  "assetSheet.validation.filename": "Укажите имя файла",
+  "assetSheet.validation.filenameUnsafe": 'Имя файла не может содержать /, \\, " или ..',
+  "assetSheet.validation.filenameTaken": "Файл с таким именем уже есть",
+  "assetSheet.validation.url": "Укажите ссылку http:// или https://",
   // settings extra
   "settings.routingRulesEditor": "Редактор правил",
   "settings.routingRulesHint":
@@ -852,6 +864,7 @@ const ru = {
     other: "Каждые # дня",
   }),
   "settings.assetDownload": "Скачать",
+  "settings.assetRedownload": "Скачать заново",
   "settings.assetDelete": "Удалить",
   "settings.assetLinks": "Готовые ссылки для geoip.dat / geosite.dat",
   "settings.assetUse": "Использовать",
@@ -943,6 +956,8 @@ const ru = {
   }),
   "store.ping.started": "Пингуем…",
   "store.ping.complete": "Пинг завершён",
+  "store.speed.started": "Измеряю скорость…",
+  "store.speed.complete": "Тест скорости завершён",
   "store.rule.addedAboveCatchAll": "Добавлено выше «{name}» — это правило ловит весь трафик",
   "store.ping.removeUnreachable": plural("count", {
     one: "Удалён # недоступный профиль",
@@ -1010,6 +1025,7 @@ const ru = {
     "В режиме TUN фильтр приложений работает только с ядром sing-box и его собственным TUN-движком: внешний TUN-движок передаёт ядру все соединения от своего имени, и ядро не видит, какое приложение их открыло. В остальных режимах прокси фильтр работает.",
   "appFilter.systemApp": "системное",
   "appFilter.empty": "Приложения не найдены",
+  "appFilter.loadFailed": "Не удалось получить список приложений: {error}",
   "appFilter.openPage": "Фильтр приложений",
   "appFilter.openPageSub": "Правила прокси для каждого приложения",
 } satisfies Record<string, MessageValue>;

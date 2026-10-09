@@ -3,13 +3,14 @@
 // Per-app proxy filter: each app can be set to default/bypass/force-proxy.
 // Rendered as a full-screen overlay (.fullpage) over the current screen.
 // ============================================================
-import { useEffect, useMemo, useState } from "react";
-import { AppBar, Card, ListRow, SectionLabel, Segmented } from "../../components";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AppBar, Btn, Card, ListRow, SectionLabel, Segmented } from "../../components";
 import { IconBtn } from "../../components/icons";
 import { type Translate, useT } from "../../i18n";
 import type { AppEntry } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
+import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 
 // Android: pkg:uid identifies one profile instance of an app. Desktop: the program
@@ -40,7 +41,11 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
   const captureMode = settings.appCaptureMode ?? "all";
   const appFilter = settings.appFilter ?? {};
 
-  useEffect(() => {
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadApps = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     bridge
       .listApps()
       .then((list) => {
@@ -52,9 +57,17 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
           }),
         );
       })
-      .catch(() => setApps([]))
+      .catch((e: unknown) => {
+        // Say the list couldn't be read, rather than that there are no apps.
+        setApps([]);
+        setLoadError(errorMessage(e));
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadApps();
+  }, [loadApps]);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -125,6 +138,15 @@ export default function AppFilterPage({ onBack }: { onBack: () => void }) {
         {loading ? (
           <div style={{ padding: 24, textAlign: "center", color: "var(--on-surface-faint)" }}>
             {t("app.loading")}
+          </div>
+        ) : loadError ? (
+          <div style={{ padding: 24, textAlign: "center", color: "var(--on-surface-faint)" }}>
+            <div style={{ marginBottom: 12 }}>
+              {t("appFilter.loadFailed", { error: loadError })}
+            </div>
+            <Btn variant="outline" icon="refresh" onClick={loadApps}>
+              {t("common.retry")}
+            </Btn>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: 24, textAlign: "center", color: "var(--on-surface-faint)" }}>

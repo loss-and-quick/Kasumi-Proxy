@@ -4,7 +4,7 @@
 // delete, share, import pasted links, and basic bulk actions.
 // ============================================================
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Btn, Card, confirm, Icon } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
@@ -19,7 +19,7 @@ import { askRemoveUnreachable } from "./confirmations";
 import { PingActionsSheet } from "./PingActionsSheet";
 import { ProfilesList } from "./ProfilesList";
 import { ProfilesToolbar } from "./ProfilesToolbar";
-import type { SortMode } from "./types";
+import { useProfilesView } from "./viewState";
 
 const DeleteProfileDialog = lazy(() =>
   import("./DeleteProfileDialog").then((module) => ({ default: module.DeleteProfileDialog })),
@@ -39,12 +39,9 @@ const ManageGroupsSheet = lazy(() =>
 
 export default function Profiles({
   onOpenEditor,
-  initialGroup = null,
 }: {
   /** `groupId` is where a new profile goes. */
   onOpenEditor: (id: string | "new", groupId?: string) => void;
-  /** Open filtered to this group instead of all of them. */
-  initialGroup?: string | null;
 }) {
   const profiles = useAppStore((s) => s.profiles);
   const testResults = useAppStore((s) => s.testResults);
@@ -68,10 +65,18 @@ export default function Profiles({
 
   const [pingSheetOpen, setPingSheetOpen] = useState(false);
 
-  const [groupFilter, setGroupFilter] = useState<string>(initialGroup ?? "all");
-  const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [sort, setSort] = useState<SortMode>("name");
+  const view = useProfilesView();
+  const { query, setQuery, searchOpen, setSearchOpen, sort, setSort, setGroupFilter } = view;
+  // A remembered group that has since been deleted falls back to all of them.
+  const groupFilter =
+    view.groupFilter !== "all" && groups.some((g) => g.id === view.groupFilter)
+      ? view.groupFilter
+      : "all";
+  // A search kept from the last visit stays visible, not applied out of sight.
+  useEffect(() => {
+    const kept = useProfilesView.getState();
+    if (kept.query.trim()) kept.setSearchOpen(true);
+  }, []);
   const [sheetProfile, setSheetProfile] = useState<Profile | null>(null);
   const [confirmDel, setConfirmDel] = useState<Profile | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -243,7 +248,7 @@ export default function Profiles({
         searchOpen={searchOpen}
         query={query}
         setQuery={setQuery}
-        onToggleSearch={() => setSearchOpen((current) => !current)}
+        onToggleSearch={() => setSearchOpen(!searchOpen)}
         onOpenPingSheet={() => setPingSheetOpen(true)}
         bulkMode={bulkMode}
         onToggleBulk={toggleBulkMode}

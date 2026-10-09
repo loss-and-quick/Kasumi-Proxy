@@ -8,6 +8,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ConfirmHost, Icon, Toaster } from "./components";
 import Overview from "./features/overview/Overview";
+import { useProfilesView } from "./features/profiles/viewState";
 import { useT } from "./i18n";
 import { configureKsuWebUi, hasKsuNativeApi } from "./lib/ksu-webui";
 import { useSheetOpen } from "./lib/sheetPresence";
@@ -59,8 +60,6 @@ export default function App() {
   const [backupOpen, setBackupOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [appFilterOpen, setAppFilterOpen] = useState(false);
-  // The group Profiles opens filtered to, when another screen sends the user there.
-  const [profilesGroup, setProfilesGroup] = useState<string | null>(null);
   const isWide = useIsWide();
   const sheetOpen = useSheetOpen();
   useTraySync();
@@ -80,7 +79,9 @@ export default function App() {
   const nav = useMemo(
     () => ({
       go(next: Tab, group: string | null = null) {
-        setProfilesGroup(group);
+        // Sent to a group from another screen: Profiles opens on that group
+        // alone, without a search left from before hiding some of it.
+        if (group) useProfilesView.setState({ groupFilter: group, query: "", searchOpen: false });
         setEditorId(null);
         setBackupOpen(false);
         setLogsOpen(false);
@@ -122,7 +123,7 @@ export default function App() {
     tab === "overview" ? (
       <Overview onNavigate={nav.go} onOpenLogs={nav.openLogs} onOpenBackup={nav.openBackup} />
     ) : tab === "profiles" ? (
-      <Profiles onOpenEditor={nav.openEditor} initialGroup={profilesGroup} />
+      <Profiles onOpenEditor={nav.openEditor} />
     ) : tab === "subs" ? (
       <Subscriptions onOpenGroup={(group) => nav.go("profiles", group)} />
     ) : (

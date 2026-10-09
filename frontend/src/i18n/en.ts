@@ -496,6 +496,8 @@ const en = {
   "settings.tunTcpBuffer": "TCP buffer size (bytes)",
   "settings.tunUdpRecvBuffer": "UDP receive buffer (bytes)",
   "settings.tunEngine": "TUN engine",
+  "settings.tunUnusedHint":
+    "Used only in TUN mode. The current proxy mode (Routing) doesn't use these settings.",
   "settings.tunEngineHint":
     "Which engine bridges the TUN device to each core. sing-box can use its own native TUN; xray needs an external one.",
   "settings.security": "Security",
@@ -543,6 +545,7 @@ const en = {
   "settings.updateInstall": "Download & restart",
   "settings.updateDownloading": "Downloading… {percent}%",
   "settings.updateError": "Couldn't check for updates",
+  "settings.updateInstallError": "Couldn't install the update",
   "settings.system": "System",
   "settings.backup": "Backup & restore",
   "settings.backupSub": "Export or import your configuration",
@@ -561,6 +564,8 @@ const en = {
   "logs.clearConfirm": "Clear all log files?",
   "logs.cleared": "Logs cleared",
   "logs.clearFailed": "Failed to clear logs",
+  "logs.clearFailedReason": "Couldn't clear the logs: {error}",
+  "logs.loadFailed": "Couldn't read the log: {error}",
   // test-core error log (tap an `err` ping / speed result)
   "testlog.open": "Show error log",
   "testlog.titlePing": "Ping check log",
@@ -570,7 +575,7 @@ const en = {
   // backup
   "backup.title": "Backup & Restore",
   "backup.export": "Export",
-  "backup.exportLabel": "Current AppState JSON",
+  "backup.exportLabel": "Current backup",
   "backup.copyJson": "Copy JSON",
   "backup.showQr": "Show QR",
   "backup.download": "Download",
@@ -601,13 +606,16 @@ const en = {
   "common.mode.direct": "Direct only",
   "common.proxyNotRunning": "Start the proxy before using Proxy only mode.",
   "common.openFile": "Open file…",
+  "common.retry": "Try again",
+  "common.openFileFailed": "Couldn't open the file: {error}",
+  "common.saveFileFailed": "Couldn't save the file: {error}",
   // qr
   "qr.scan.title": "Scan QR code",
   "qr.scan.starting": "Starting camera…",
   "qr.scan.hint": "Point the camera at a QR code.",
   "qr.scan.fromImage": "Scan from image",
   "qr.scan.imageProcessing": "Processing image…",
-  "qr.scan.unsupported": "Camera is not available in this WebView/browser.",
+  "qr.scan.unsupported": "The camera isn't available here. Pick a picture of the QR code instead.",
   "qr.scan.denied": "Camera permission was denied or is unavailable.",
   "qr.scan.noCode": "No QR code found.",
   "qr.scan.close": "Close",
@@ -710,6 +718,10 @@ const en = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Delete",
+  "assetSheet.validation.filename": "File name required",
+  "assetSheet.validation.filenameUnsafe": "A file name can't contain /, \\, \" or ..",
+  "assetSheet.validation.filenameTaken": "Another file already has this name",
+  "assetSheet.validation.url": "Enter an http:// or https:// link",
   // settings extra
   "settings.routingRulesEditor": "Rules editor",
   "settings.routingRulesHint":
@@ -773,6 +785,7 @@ const en = {
   "settings.assetIntervalHours": plural("count", { one: "Every # hour", other: "Every # hours" }),
   "settings.assetIntervalDays": plural("count", { one: "Every # day", other: "Every # days" }),
   "settings.assetDownload": "Download",
+  "settings.assetRedownload": "Download again",
   "settings.assetDelete": "Delete",
   "settings.assetLinks": "Ready links for geoip.dat / geosite.dat",
   "settings.assetUse": "Use",
@@ -849,6 +862,7 @@ const en = {
     "In TUN mode the app filter only works with the sing-box core and its own TUN engine: an external TUN engine hands every connection to the core as its own, so the core can't tell which app made it. It works in every other proxy mode.",
   "appFilter.systemApp": "system",
   "appFilter.empty": "No apps found",
+  "appFilter.loadFailed": "Couldn't list the apps: {error}",
   "appFilter.openPage": "App filter",
   "appFilter.openPageSub": "Per-app proxy rules",
   // store notifications
@@ -872,6 +886,8 @@ const en = {
   }),
   "store.ping.started": "Pinging…",
   "store.ping.complete": "Ping complete",
+  "store.speed.started": "Testing speed…",
+  "store.speed.complete": "Speed test complete",
   "store.rule.addedAboveCatchAll": "Added above “{name}”, which catches all traffic",
   "store.ping.removeUnreachable": plural("count", {
     one: "Removed # unreachable profile",

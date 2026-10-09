@@ -22,6 +22,7 @@ import {
 } from "../../../generated/defaults";
 import { type DictKey, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
+import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
 
 // Display labels for the TUN engines. Presentation only; the selectable engines,
 // per-core defaults and validity all come from the generated `TUN_BY_CORE`
@@ -83,11 +84,20 @@ export function TunEngineSection({
     }
   }
   const excludeCount = (settings.tunExcludeAddresses ?? "").split(/[\s,]+/).filter(Boolean).length;
+  // On desktop the TUN is one of several proxy modes; in the others nothing here
+  // is used. Say so and dim it, but keep it editable for a later switch to TUN.
+  const unused = getRuntimeBridgeMode() === "tauri" && settings.proxyMode !== "tun";
+  const dim = unused ? { opacity: 0.55 } : undefined;
 
   return (
     <>
       <SectionLabel>{t("settings.tunEngine")}</SectionLabel>
-      <Card style={{ padding: "4px 14px" }}>
+      {unused && (
+        <div className="hint" style={{ margin: "0 2px 10px" }}>
+          {t("settings.tunUnusedHint")}
+        </div>
+      )}
+      <Card style={{ padding: "4px 14px", ...dim }}>
         {CORE_ENGINE_OPTS.map((core) => (
           <SettingRow key={core} title={core}>
             <Select
@@ -120,7 +130,7 @@ export function TunEngineSection({
         )}
       </Card>
 
-      <Card style={{ padding: "4px 14px", marginTop: 12 }}>
+      <Card style={{ padding: "4px 14px", marginTop: 12, ...dim }}>
         <SettingRow title={t("settings.strictRoute")} hint={t("settings.strictRouteSub")}>
           <Switch on={settings.strictRoute} onChange={(value) => set("strictRoute", value)} />
         </SettingRow>

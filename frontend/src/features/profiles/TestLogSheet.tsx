@@ -8,6 +8,7 @@ import { Btn, Sheet } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
+import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "./clipboard";
 
@@ -34,11 +35,11 @@ export function TestLogSheet({
     try {
       setText(await bridge.testLog(profile.meta.id, kind));
     } catch (e: unknown) {
-      setText(e instanceof Error ? e.message : String(e));
+      setText(t("logs.loadFailed", { error: errorMessage(e) }));
     } finally {
       setLoading(false);
     }
-  }, [profile.meta.id, kind]);
+  }, [profile.meta.id, kind, t]);
 
   useEffect(() => {
     void load();

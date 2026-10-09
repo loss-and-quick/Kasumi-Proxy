@@ -75,7 +75,13 @@ export function AssetFilesSection({
             alignItems: "center",
           }}
         >
-          <Btn variant="tonal" sm icon="download" onClick={() => void updateAllAssets()}>
+          <Btn
+            variant="tonal"
+            sm
+            icon="download"
+            disabled={assetFiles.length === 0 || busyAssetSet.size > 0}
+            onClick={() => void updateAllAssets()}
+          >
             {t("settings.assetUpdateAll")}
           </Btn>
           <Btn variant="tonal" sm icon="add" onClick={openNewAsset}>
@@ -119,14 +125,18 @@ export function AssetFilesSection({
             onClick={() => onEditAsset(asset)}
             right={
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                {(!asset.lastUpdated || busyAssetSet.has(asset.id)) && (
-                  <IconBtn
-                    name={busyAssetSet.has(asset.id) ? "hourglass_top" : "download"}
-                    sm
-                    title={t("settings.assetDownload")}
-                    onClick={() => void runAssetDownload(asset.id)}
-                  />
-                )}
+                {/* Always there, so one file can be fetched again without
+                    updating all of them; spins and holds while it downloads. */}
+                <IconBtn
+                  name={asset.lastUpdated ? "refresh" : "download"}
+                  sm
+                  title={
+                    asset.lastUpdated ? t("settings.assetRedownload") : t("settings.assetDownload")
+                  }
+                  disabled={busyAssetSet.has(asset.id)}
+                  spinning={busyAssetSet.has(asset.id)}
+                  onClick={() => void runAssetDownload(asset.id)}
+                />
                 {!asset.locked && (
                   <IconBtn
                     name="delete"

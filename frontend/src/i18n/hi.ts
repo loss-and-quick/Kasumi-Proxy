@@ -474,6 +474,8 @@ const hi = {
   "settings.tunTcpBuffer": "TCP बफ़र आकार (बाइट)",
   "settings.tunUdpRecvBuffer": "UDP रिसीव बफ़र (बाइट)",
   "settings.tunEngine": "TUN इंजन",
+  "settings.tunUnusedHint":
+    "केवल TUN मोड में उपयोग होता है। मौजूदा प्रॉक्सी मोड (रूटिंग) ये सेटिंग्स इस्तेमाल नहीं करता।",
   "settings.tunEngineHint":
     "कौन सा इंजन TUN डिवाइस को प्रत्येक कोर से जोड़ता है। sing-box अपना नेटिव TUN उपयोग कर सकता है; xray को बाहरी इंजन चाहिए।",
   "settings.security": "सुरक्षा",
@@ -521,6 +523,7 @@ const hi = {
   "settings.updateInstall": "डाउनलोड करें और पुनः आरंभ करें",
   "settings.updateDownloading": "डाउनलोड हो रहा है… {percent}%",
   "settings.updateError": "अपडेट जांच नहीं सके",
+  "settings.updateInstallError": "अपडेट इंस्टॉल नहीं हो सका",
   "settings.system": "सिस्टम",
   "settings.backup": "बैकअप और पुनर्स्थापना",
   "settings.backupSub": "अपना कॉन्फ़िगरेशन निर्यात या आयात करें",
@@ -539,6 +542,8 @@ const hi = {
   "logs.clearConfirm": "क्या सभी लॉग फ़ाइलें साफ़ करनी हैं?",
   "logs.cleared": "लॉग साफ़ कर दिए गए",
   "logs.clearFailed": "लॉग साफ़ नहीं हो सके",
+  "logs.clearFailedReason": "लॉग साफ़ नहीं हो सके: {error}",
+  "logs.loadFailed": "लॉग पढ़ा नहीं जा सका: {error}",
   "testlog.open": "त्रुटि लॉग दिखाएँ",
   "testlog.titlePing": "पिंग जाँच लॉग",
   "testlog.titleSpeed": "स्पीड टेस्ट लॉग",
@@ -547,7 +552,7 @@ const hi = {
   // backup
   "backup.title": "बैकअप और पुनर्स्थापना",
   "backup.export": "निर्यात",
-  "backup.exportLabel": "वर्तमान AppState JSON",
+  "backup.exportLabel": "मौजूदा बैकअप",
   "backup.copyJson": "JSON कॉपी करें",
   "backup.showQr": "QR दिखाएँ",
   "backup.download": "डाउनलोड",
@@ -578,13 +583,16 @@ const hi = {
   "common.mode.direct": "केवल direct",
   "common.proxyNotRunning": "Proxy only mode उपयोग करने से पहले प्रॉक्सी शुरू करें।",
   "common.openFile": "फ़ाइल खोलें…",
+  "common.retry": "फिर से कोशिश करें",
+  "common.openFileFailed": "फ़ाइल खोली नहीं जा सकी: {error}",
+  "common.saveFileFailed": "फ़ाइल सहेजी नहीं जा सकी: {error}",
   // qr
   "qr.scan.title": "QR कोड स्कैन करें",
   "qr.scan.starting": "कैमरा शुरू हो रहा है…",
   "qr.scan.hint": "कैमरे को QR कोड पर रखें।",
   "qr.scan.fromImage": "छवि से स्कैन करें",
   "qr.scan.imageProcessing": "छवि संसाधित हो रही है…",
-  "qr.scan.unsupported": "यह WebView/browser में कैमरा उपलब्ध नहीं है।",
+  "qr.scan.unsupported": "यहाँ कैमरा उपलब्ध नहीं है। इसके बजाय QR कोड की तस्वीर चुनें।",
   "qr.scan.denied": "कैमरा अनुमति अस्वीकृत की गई या उपलब्ध नहीं है।",
   "qr.scan.noCode": "कोई QR कोड नहीं मिला।",
   "qr.scan.close": "बंद करें",
@@ -687,6 +695,10 @@ const hi = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "हटाएँ",
+  "assetSheet.validation.filename": "फ़ाइल का नाम ज़रूरी है",
+  "assetSheet.validation.filenameUnsafe": 'फ़ाइल के नाम में /, \\, " या .. नहीं हो सकते',
+  "assetSheet.validation.filenameTaken": "इस नाम की एक और फ़ाइल पहले से है",
+  "assetSheet.validation.url": "http:// या https:// लिंक दर्ज करें",
   // settings extra
   "settings.routingRulesEditor": "नियम संपादक",
   "settings.routingRulesHint":
@@ -749,6 +761,7 @@ const hi = {
   "settings.assetIntervalHours": plural("count", { one: "हर # घंटे", other: "हर # घंटे" }),
   "settings.assetIntervalDays": plural("count", { one: "हर # दिन", other: "हर # दिन" }),
   "settings.assetDownload": "डाउनलोड",
+  "settings.assetRedownload": "फिर से डाउनलोड करें",
   "settings.assetDelete": "हटाएँ",
   "settings.assetLinks": "geoip.dat / geosite.dat के लिए तैयार लिंक",
   "settings.assetUse": "उपयोग करें",
@@ -828,6 +841,8 @@ const hi = {
   }),
   "store.ping.started": "पिंग किया जा रहा है…",
   "store.ping.complete": "पिंग पूरा हुआ",
+  "store.speed.started": "स्पीड जाँची जा रही है…",
+  "store.speed.complete": "स्पीड टेस्ट पूरा हुआ",
   "store.rule.addedAboveCatchAll": "“{name}” के ऊपर जोड़ा गया, जो सारा ट्रैफ़िक पकड़ता है",
   "store.ping.removeUnreachable": plural("count", {
     one: "# अनुपलब्ध प्रोफ़ाइल हटाई",
@@ -885,6 +900,7 @@ const hi = {
     "TUN मोड में ऐप फ़िल्टर केवल sing-box कोर और उसके अपने TUN इंजन के साथ काम करता है: बाहरी TUN इंजन हर कनेक्शन को अपने नाम से कोर को देता है, इसलिए कोर नहीं जान पाता कि कौन सा ऐप उसे खोल रहा है। अन्य सभी प्रॉक्सी मोड में यह काम करता है।",
   "appFilter.systemApp": "सिस्टम",
   "appFilter.empty": "कोई ऐप नहीं मिला",
+  "appFilter.loadFailed": "ऐप्स की सूची नहीं मिल सकी: {error}",
   "appFilter.openPage": "ऐप फ़िल्टर",
   "appFilter.openPageSub": "प्रत्येक ऐप के लिए प्रॉक्सी नियम",
 } satisfies Record<string, MessageValue>;

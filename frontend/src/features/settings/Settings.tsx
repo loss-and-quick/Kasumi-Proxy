@@ -387,6 +387,9 @@ export default function Settings({
           <AssetFileSheet
             open={assetSheetOpen}
             asset={editingAsset}
+            takenNames={assetFiles
+              .filter((item) => item.id !== editingAsset?.id)
+              .map((item) => item.remarks)}
             onClose={() => setAssetSheetOpen(false)}
             onSave={saveAsset}
             onDelete={removeAssetFile}

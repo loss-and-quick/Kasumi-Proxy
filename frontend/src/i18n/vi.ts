@@ -480,6 +480,8 @@ const vi = {
   "settings.tunTcpBuffer": "Kích thước bộ đệm TCP (byte)",
   "settings.tunUdpRecvBuffer": "Bộ đệm nhận UDP (byte)",
   "settings.tunEngine": "Công cụ TUN",
+  "settings.tunUnusedHint":
+    "Chỉ dùng ở chế độ TUN. Chế độ proxy hiện tại (Định tuyến) không dùng các cài đặt này.",
   "settings.tunEngineHint":
     "Công cụ kết nối thiết bị TUN với mỗi lõi. sing-box có thể dùng TUN gốc của nó; xray cần công cụ ngoài.",
   "settings.security": "Bảo mật",
@@ -527,6 +529,7 @@ const vi = {
   "settings.updateInstall": "Tải và khởi động lại",
   "settings.updateDownloading": "Đang tải… {percent}%",
   "settings.updateError": "Không thể kiểm tra cập nhật",
+  "settings.updateInstallError": "Không thể cài đặt bản cập nhật",
   "settings.system": "Hệ thống",
   "settings.backup": "Sao lưu và khôi phục",
   "settings.backupSub": "Xuất hoặc nhập cấu hình của bạn",
@@ -545,6 +548,8 @@ const vi = {
   "logs.clearConfirm": "Xóa toàn bộ tệp nhật ký?",
   "logs.cleared": "Đã xóa nhật ký",
   "logs.clearFailed": "Không thể xóa nhật ký",
+  "logs.clearFailedReason": "Không thể xóa nhật ký: {error}",
+  "logs.loadFailed": "Không thể đọc nhật ký: {error}",
   "testlog.open": "Xem nhật ký lỗi",
   "testlog.titlePing": "Nhật ký kiểm tra ping",
   "testlog.titleSpeed": "Nhật ký kiểm tra tốc độ",
@@ -553,7 +558,7 @@ const vi = {
   // backup
   "backup.title": "Sao lưu và khôi phục",
   "backup.export": "Xuất",
-  "backup.exportLabel": "JSON AppState hiện tại",
+  "backup.exportLabel": "Bản sao lưu hiện tại",
   "backup.copyJson": "Sao chép JSON",
   "backup.showQr": "Hiện QR",
   "backup.download": "Tải xuống",
@@ -584,13 +589,16 @@ const vi = {
   "common.mode.direct": "Chỉ trực tiếp",
   "common.proxyNotRunning": "Hãy khởi động proxy trước khi dùng chế độ Chỉ qua proxy.",
   "common.openFile": "Mở tệp…",
+  "common.retry": "Thử lại",
+  "common.openFileFailed": "Không thể mở tệp: {error}",
+  "common.saveFileFailed": "Không thể lưu tệp: {error}",
   // qr
   "qr.scan.title": "Quét mã QR",
   "qr.scan.starting": "Đang khởi động camera…",
   "qr.scan.hint": "Hướng camera vào mã QR.",
   "qr.scan.fromImage": "Quét từ ảnh",
   "qr.scan.imageProcessing": "Đang xử lý ảnh…",
-  "qr.scan.unsupported": "Camera không khả dụng trong WebView/trình duyệt này.",
+  "qr.scan.unsupported": "Không dùng được camera ở đây. Hãy chọn ảnh chứa mã QR.",
   "qr.scan.denied": "Quyền truy cập camera bị từ chối hoặc không khả dụng.",
   "qr.scan.noCode": "Không tìm thấy mã QR.",
   "qr.scan.close": "Đóng",
@@ -693,6 +701,10 @@ const vi = {
   "assetSheet.url": "URL",
   "assetSheet.urlPh": "https://github.com/.../download/geoip.dat",
   "assetSheet.delete": "Xóa",
+  "assetSheet.validation.filename": "Cần nhập tên tệp",
+  "assetSheet.validation.filenameUnsafe": 'Tên tệp không được chứa /, \\, " hoặc ..',
+  "assetSheet.validation.filenameTaken": "Đã có tệp khác trùng tên này",
+  "assetSheet.validation.url": "Nhập liên kết http:// hoặc https://",
   // settings extra
   "settings.routingRulesEditor": "Trình sửa quy tắc",
   "settings.routingRulesHint":
@@ -756,6 +768,7 @@ const vi = {
   "settings.assetIntervalHours": plural("count", { other: "Mỗi # giờ" }),
   "settings.assetIntervalDays": plural("count", { other: "Mỗi # ngày" }),
   "settings.assetDownload": "Tải xuống",
+  "settings.assetRedownload": "Tải lại",
   "settings.assetDelete": "Xóa",
   "settings.assetLinks": "Liên kết sẵn cho geoip.dat / geosite.dat",
   "settings.assetUse": "Sử dụng",
@@ -835,6 +848,8 @@ const vi = {
   }),
   "store.ping.started": "Đang ping…",
   "store.ping.complete": "Ping hoàn tất",
+  "store.speed.started": "Đang đo tốc độ…",
+  "store.speed.complete": "Đã đo tốc độ xong",
   "store.rule.addedAboveCatchAll": "Đã thêm phía trên “{name}”, quy tắc khớp mọi lưu lượng",
   "store.ping.removeUnreachable": plural("count", {
     one: "Đã xóa # hồ sơ không thể kết nối",
@@ -892,6 +907,7 @@ const vi = {
     "Ở chế độ TUN, bộ lọc ứng dụng chỉ hoạt động với lõi sing-box và engine TUN riêng của nó: engine TUN bên ngoài chuyển mọi kết nối cho lõi dưới tên của chính nó, nên lõi không biết ứng dụng nào đã mở kết nối. Ở các chế độ proxy khác bộ lọc vẫn hoạt động.",
   "appFilter.systemApp": "hệ thống",
   "appFilter.empty": "Không tìm thấy ứng dụng",
+  "appFilter.loadFailed": "Không thể lấy danh sách ứng dụng: {error}",
   "appFilter.openPage": "Lọc ứng dụng",
   "appFilter.openPageSub": "Quy tắc proxy theo ứng dụng",
 } satisfies Record<string, MessageValue>;

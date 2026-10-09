@@ -151,3 +151,31 @@ export function applyCoresPreset(preset: Exclude<CoresPreset, "custom">): CoreMa
   if (preset === "default") return {};
   return Object.fromEntries(switchable.map((p) => [p, preset]));
 }
+
+export type AssetDraft = { remarks: string; url: string };
+
+type Errors = Partial<Record<keyof AssetDraft, string>>;
+
+/** What's wrong with a draft, mirroring the backend's `safe_filename`, which
+ *  refuses to download into a name that could leave the assets folder. */
+export function assetDraftErrors(
+  draft: AssetDraft,
+  takenNames: string[],
+  t: (key: AssetErrorKey) => string,
+): Errors {
+  const errors: Errors = {};
+  const name = draft.remarks.trim();
+  const url = draft.url.trim();
+  if (!name) errors.remarks = t("assetSheet.validation.filename");
+  else if (/[/\\"]/.test(name) || name.includes(".."))
+    errors.remarks = t("assetSheet.validation.filenameUnsafe");
+  else if (takenNames.includes(name)) errors.remarks = t("assetSheet.validation.filenameTaken");
+  if (!/^https?:\/\/\S+$/i.test(url)) errors.url = t("assetSheet.validation.url");
+  return errors;
+}
+
+export type AssetErrorKey =
+  | "assetSheet.validation.filename"
+  | "assetSheet.validation.filenameUnsafe"
+  | "assetSheet.validation.filenameTaken"
+  | "assetSheet.validation.url";
