@@ -8,6 +8,7 @@ import { LOG_TARGET_OPTS } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import type { LogTarget } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
+import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "../profiles/clipboard";
 
@@ -36,24 +37,25 @@ export default function Logs({ onClose }: { onClose: () => void }) {
       const raw = await bridge.log({ target, lines });
       setText(raw.trimEnd().split("\n").reverse().join("\n"));
     } catch (e: unknown) {
-      setText(e instanceof Error ? e.message : String(e));
+      setText(t("logs.loadFailed", { error: errorMessage(e) }));
     } finally {
       setLoading(false);
     }
-  }, [lines, target]);
+  }, [lines, target, t]);
 
   const clearLogs = useCallback(async () => {
     setClearing(true);
     try {
       const result = await bridge.clearLogs();
       if (!result.ok) {
-        throw new Error(result.error || t("logs.clearFailed"));
+        throw new Error(result.error ?? "");
       }
       setClearOpen(false);
       notify(t("logs.cleared"));
       await load();
     } catch (e: unknown) {
-      notify(e instanceof Error ? e.message : t("logs.clearFailed"));
+      const reason = errorMessage(e);
+      notify(reason ? t("logs.clearFailedReason", { error: reason }) : t("logs.clearFailed"));
     } finally {
       setClearing(false);
     }

@@ -547,6 +547,8 @@ const vi = {
   "logs.clearConfirm": "Xóa toàn bộ tệp nhật ký?",
   "logs.cleared": "Đã xóa nhật ký",
   "logs.clearFailed": "Không thể xóa nhật ký",
+  "logs.clearFailedReason": "Không thể xóa nhật ký: {error}",
+  "logs.loadFailed": "Không thể đọc nhật ký: {error}",
   "testlog.open": "Xem nhật ký lỗi",
   "testlog.titlePing": "Nhật ký kiểm tra ping",
   "testlog.titleSpeed": "Nhật ký kiểm tra tốc độ",
@@ -586,6 +588,9 @@ const vi = {
   "common.mode.direct": "Chỉ trực tiếp",
   "common.proxyNotRunning": "Hãy khởi động proxy trước khi dùng chế độ Chỉ qua proxy.",
   "common.openFile": "Mở tệp…",
+  "common.retry": "Thử lại",
+  "common.openFileFailed": "Không thể mở tệp: {error}",
+  "common.saveFileFailed": "Không thể lưu tệp: {error}",
   // qr
   "qr.scan.title": "Quét mã QR",
   "qr.scan.starting": "Đang khởi động camera…",
@@ -893,6 +898,7 @@ const vi = {
     "Ở chế độ TUN, bộ lọc ứng dụng chỉ hoạt động với lõi sing-box và engine TUN riêng của nó: engine TUN bên ngoài chuyển mọi kết nối cho lõi dưới tên của chính nó, nên lõi không biết ứng dụng nào đã mở kết nối. Ở các chế độ proxy khác bộ lọc vẫn hoạt động.",
   "appFilter.systemApp": "hệ thống",
   "appFilter.empty": "Không tìm thấy ứng dụng",
+  "appFilter.loadFailed": "Không thể lấy danh sách ứng dụng: {error}",
   "appFilter.openPage": "Lọc ứng dụng",
   "appFilter.openPageSub": "Quy tắc proxy theo ứng dụng",
 } satisfies Record<string, MessageValue>;
