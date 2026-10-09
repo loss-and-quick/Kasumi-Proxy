@@ -167,6 +167,8 @@ const ar = {
   "profiles.bulkDelete": "حذف",
   "profiles.bulkDedup": "حذف المكرر",
   "profiles.noResults": "لا توجد ملفات تعريف مطابقة",
+  "profiles.emptyTitle": "لا توجد ملفات بعد",
+  "profiles.emptyBody": "الصق رابط اشتراك أو روابط ملفات، أو امسح رمز QR.",
   "profiles.fabNew": "إنشاء",
   "profiles.sheet.useProfile": "استخدام هذا الملف التعريفي",
   "profiles.sheet.edit": "تعديل",

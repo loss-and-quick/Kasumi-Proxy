@@ -127,6 +127,8 @@ const hi = {
   "profiles.bulkDelete": "हटाएँ",
   "profiles.bulkDedup": "डुप हटाएँ",
   "profiles.noResults": "मेल खाती कोई प्रोफ़ाइल नहीं मिली",
+  "profiles.emptyTitle": "अभी कोई प्रोफ़ाइल नहीं",
+  "profiles.emptyBody": "सदस्यता लिंक या प्रोफ़ाइल लिंक पेस्ट करें, या QR कोड स्कैन करें।",
   "profiles.fabNew": "बनाएँ",
   "profiles.sheet.useProfile": "इस प्रोफ़ाइल का उपयोग करें",
   "profiles.sheet.edit": "संपादित करें",

@@ -127,6 +127,8 @@ const zh = {
   "profiles.bulkDelete": "删除",
   "profiles.bulkDedup": "去重",
   "profiles.noResults": "未找到匹配的配置",
+  "profiles.emptyTitle": "还没有配置",
+  "profiles.emptyBody": "粘贴订阅链接或分享链接，或扫描二维码。",
   "profiles.fabNew": "新建",
   "profiles.sheet.useProfile": "使用此配置",
   "profiles.sheet.edit": "编辑",

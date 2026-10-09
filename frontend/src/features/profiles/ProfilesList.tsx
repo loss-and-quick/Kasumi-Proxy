@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { EmptyHint, Icon, SectionLabel } from "../../components";
 import type { Group, Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
@@ -10,6 +11,7 @@ export function ProfilesList({
   bulkMode,
   selected,
   emptyText,
+  empty,
   onToggleSelected,
   onToggleGroup,
   onUse,
@@ -23,6 +25,8 @@ export function ProfilesList({
   bulkMode: boolean;
   selected: Record<string, boolean>;
   emptyText: string;
+  /** Shown instead of the "no matches" hint when there is nothing to list at all. */
+  empty?: ReactNode;
   onToggleSelected: (id: string) => void;
   /** Select (or clear) every listed profile of one group. */
   onToggleGroup: (ids: string[], on: boolean) => void;
@@ -34,7 +38,7 @@ export function ProfilesList({
   const t = useT();
   return (
     <div className="scroll with-fab" style={{ paddingTop: 0 }}>
-      {groups.length === 0 && <EmptyHint icon="search_off" text={emptyText} />}
+      {groups.length === 0 && (empty ?? <EmptyHint icon="search_off" text={emptyText} />)}
       {groups.map((group) => {
         const ids = byGroup[group.id].map((p) => p.meta.id);
         const picked = ids.filter((id) => selected[id]).length;
