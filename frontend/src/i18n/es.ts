@@ -541,6 +541,7 @@ const es = {
   "settings.updateInstall": "Descargar y reiniciar",
   "settings.updateDownloading": "Descargando… {percent}%",
   "settings.updateError": "No se pudieron buscar actualizaciones",
+  "settings.updateInstallError": "No se pudo instalar la actualización",
   "settings.system": "Sistema",
   "settings.backup": "Copia y restauración",
   "settings.backupSub": "Exporta o importa tu configuración",
@@ -569,7 +570,7 @@ const es = {
   // backup
   "backup.title": "Copia y restauración",
   "backup.export": "Exportar",
-  "backup.exportLabel": "JSON actual de AppState",
+  "backup.exportLabel": "Copia de seguridad actual",
   "backup.copyJson": "Copiar JSON",
   "backup.showQr": "Mostrar QR",
   "backup.download": "Descargar",
@@ -862,6 +863,8 @@ const es = {
   }),
   "store.ping.started": "Haciendo ping…",
   "store.ping.complete": "Ping completado",
+  "store.speed.started": "Midiendo la velocidad…",
+  "store.speed.complete": "Prueba de velocidad terminada",
   "store.ping.removeUnreachable": plural("count", {
     one: "Se eliminó # perfil inaccesible",
     other: "Se eliminaron # perfiles inaccesibles",

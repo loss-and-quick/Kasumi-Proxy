@@ -603,6 +603,7 @@ const ar = {
   "settings.updateInstall": "تنزيل وإعادة التشغيل",
   "settings.updateDownloading": "جارٍ التنزيل… {percent}%",
   "settings.updateError": "تعذر التحقق من التحديثات",
+  "settings.updateInstallError": "تعذر تثبيت التحديث",
   "settings.system": "النظام",
   "settings.backup": "نسخ احتياطي واستعادة",
   "settings.backupSub": "تصدير إعداداتك أو استيرادها",
@@ -631,7 +632,7 @@ const ar = {
   // backup
   "backup.title": "نسخ احتياطي واستعادة",
   "backup.export": "تصدير",
-  "backup.exportLabel": "JSON الحالي لـ AppState",
+  "backup.exportLabel": "النسخة الاحتياطية الحالية",
   "backup.copyJson": "نسخ JSON",
   "backup.showQr": "إظهار QR",
   "backup.download": "تنزيل",
@@ -1012,6 +1013,8 @@ const ar = {
   }),
   "store.ping.started": "جارٍ اختبار Ping…",
   "store.ping.complete": "اكتمل اختبار Ping",
+  "store.speed.started": "جارٍ اختبار السرعة…",
+  "store.speed.complete": "اكتمل اختبار السرعة",
   "store.ping.removeUnreachable": plural("count", {
     one: "تم حذف ملف تعريفي واحد غير متاح",
     two: "تم حذف ملفين تعريفيين غير متاحين",

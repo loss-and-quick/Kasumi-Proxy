@@ -545,6 +545,7 @@ const en = {
   "settings.updateInstall": "Download & restart",
   "settings.updateDownloading": "Downloading… {percent}%",
   "settings.updateError": "Couldn't check for updates",
+  "settings.updateInstallError": "Couldn't install the update",
   "settings.system": "System",
   "settings.backup": "Backup & restore",
   "settings.backupSub": "Export or import your configuration",
@@ -574,7 +575,7 @@ const en = {
   // backup
   "backup.title": "Backup & Restore",
   "backup.export": "Export",
-  "backup.exportLabel": "Current AppState JSON",
+  "backup.exportLabel": "Current backup",
   "backup.copyJson": "Copy JSON",
   "backup.showQr": "Show QR",
   "backup.download": "Download",
@@ -885,6 +886,8 @@ const en = {
   }),
   "store.ping.started": "Pinging…",
   "store.ping.complete": "Ping complete",
+  "store.speed.started": "Testing speed…",
+  "store.speed.complete": "Speed test complete",
   "store.ping.removeUnreachable": plural("count", {
     one: "Removed # unreachable profile",
     other: "Removed # unreachable profiles",

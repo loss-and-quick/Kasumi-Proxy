@@ -9,7 +9,15 @@ import {
   updateSupported,
 } from "../../../lib/updater";
 
-type Status = "idle" | "checking" | "uptodate" | "available" | "downloading" | "error";
+type Status =
+  | "idle"
+  | "checking"
+  | "uptodate"
+  | "available"
+  | "downloading"
+  | "error"
+  // The download or the install failed; the update can be tried again.
+  | "installError";
 
 /** Desktop-only version + auto-update controls. Android is updated by the root
  * manager, so this renders nothing where the updater isn't supported. */
@@ -27,7 +35,7 @@ export function AboutSection() {
       setUpdate(u);
       setStatus(u ? "available" : "uptodate");
     } catch {
-      setStatus("error");
+      setStatus("installError");
     }
   }, []);
 
@@ -51,11 +59,12 @@ export function AboutSection() {
         setPercent(total ? Math.round((downloaded / total) * 100) : 0);
       });
     } catch {
-      setStatus("error");
+      setStatus("installError");
     }
   }
 
   const busy = status === "checking" || status === "downloading";
+  const canInstall = status === "available" || status === "installError";
   const statusText =
     status === "checking"
       ? t("settings.updateChecking")
@@ -67,7 +76,9 @@ export function AboutSection() {
             ? t("settings.updateDownloading", { percent })
             : status === "error"
               ? t("settings.updateError")
-              : undefined;
+              : status === "installError"
+                ? t("settings.updateInstallError")
+                : undefined;
 
   return (
     <>
@@ -78,9 +89,9 @@ export function AboutSection() {
           icon="system_update"
           title={t("settings.checkUpdates")}
           sub={statusText}
-          onClick={busy || status === "available" ? undefined : () => void runCheck()}
+          onClick={busy || canInstall ? undefined : () => void runCheck()}
           right={
-            status === "available" ? (
+            canInstall ? (
               <Btn sm onClick={() => void doInstall()}>
                 {t("settings.updateInstall")}
               </Btn>
