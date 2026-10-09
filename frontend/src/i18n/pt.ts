@@ -314,6 +314,33 @@ const pt = {
   "subs.edit.validationUrl": "URL da assinatura obrigatória",
   "subs.edit.validationInterval": "O intervalo deve ser maior que 0",
   "subs.edit.validationFilter": "Regex inválida",
+  "confirm.bulkDelete.title": plural("count", {
+    one: "Excluir # perfil?",
+    other: "Excluir # perfis?",
+  }),
+  "confirm.bulkDelete.body": "Eles serão removidos deste dispositivo para sempre.",
+  "confirm.unreachable.title": plural("count", {
+    one: "Excluir # perfil inacessível?",
+    other: "Excluir # perfis inacessíveis?",
+  }),
+  "confirm.unreachable.body":
+    "São os perfis cujo último ping falhou. Um servidor que ficou fora só por um momento também sai.",
+  "confirm.dedup.title": "Remover duplicados?",
+  "confirm.dedup.bodyAll":
+    "Perfis com o mesmo servidor e credenciais ficam reduzidos a um, em todos os grupos. O perfil ativo é sempre mantido.",
+  "confirm.dedup.bodyGroup":
+    "Perfis com o mesmo servidor e credenciais neste grupo ficam reduzidos a um. O perfil ativo é sempre mantido.",
+  "confirm.dedup.action": "Remover",
+  "confirm.backupReplace.title": "Substituir pelo backup?",
+  "confirm.backupReplace.body":
+    "Grupos, assinaturas, regras de roteamento, arquivos de recursos e configurações são substituídos pelos do backup. Os perfis ficam.",
+  "confirm.rulesReplace.title": plural("count", {
+    one: "Substituir # regra de roteamento?",
+    other: "Substituir todas as # regras de roteamento?",
+  }),
+  "confirm.rulesReplace.body": "As regras atuais são sobrescritas pelas importadas.",
+  "confirm.ruleDelete.title": "Excluir regra de roteamento?",
+  "confirm.assetDelete.title": "Excluir arquivo de recursos?",
   "add.title": "Adicionar",
   "add.inputLabel": "Links, assinaturas ou um QR code",
   "add.inputPh": "https://… · vless://… · ss://…",

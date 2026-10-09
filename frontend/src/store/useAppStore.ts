@@ -135,6 +135,17 @@ interface Store extends AppState {
   importBackup: (json: string, mode: "merge" | "replace") => Promise<void>;
 }
 
+/** Profiles in the group (all of them for none / "all") whose last ping failed. */
+export function unreachableIds(
+  profiles: Profile[],
+  testResults: Record<string, ProfileTest>,
+  groupId?: string,
+): Set<string> {
+  const inScope =
+    !groupId || groupId === "all" ? profiles : profiles.filter((p) => p.meta.groupId === groupId);
+  return new Set(inScope.filter((p) => testResults[p.meta.id]?.ping === -1).map((p) => p.meta.id));
+}
+
 export const useAppStore = create<Store>((set, get) => {
   const activity = new ActivityService();
   const pushActivity = (icon: string, text: string, color?: string) => {
@@ -652,13 +663,7 @@ export const useAppStore = create<Store>((set, get) => {
 
     async removeUnreachable(groupId?: string) {
       const { profiles, activeId, testResults } = get();
-      const affected =
-        !groupId || groupId === "all"
-          ? profiles
-          : profiles.filter((p) => p.meta.groupId === groupId);
-      const unreachable = new Set(
-        affected.filter((p) => testResults[p.meta.id]?.ping === -1).map((p) => p.meta.id),
-      );
+      const unreachable = unreachableIds(profiles, testResults, groupId);
       if (!unreachable.size) {
         get().notify(translateCurrent("store.ping.noUnreachable"));
         return;

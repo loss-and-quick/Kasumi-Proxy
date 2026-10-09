@@ -314,6 +314,33 @@ const es = {
   "subs.edit.validationUrl": "La URL de la suscripción es obligatoria",
   "subs.edit.validationInterval": "El intervalo debe ser mayor que 0",
   "subs.edit.validationFilter": "Regex no válida",
+  "confirm.bulkDelete.title": plural("count", {
+    one: "¿Eliminar # perfil?",
+    other: "¿Eliminar # perfiles?",
+  }),
+  "confirm.bulkDelete.body": "Se eliminarán de este dispositivo para siempre.",
+  "confirm.unreachable.title": plural("count", {
+    one: "¿Eliminar # perfil inaccesible?",
+    other: "¿Eliminar # perfiles inaccesibles?",
+  }),
+  "confirm.unreachable.body":
+    "Son los perfiles cuyo último ping falló. También se eliminará un servidor que solo cayó un momento.",
+  "confirm.dedup.title": "¿Quitar duplicados?",
+  "confirm.dedup.bodyAll":
+    "Los perfiles con el mismo servidor y credenciales se reducen a uno en todos los grupos. El perfil activo siempre se conserva.",
+  "confirm.dedup.bodyGroup":
+    "Los perfiles con el mismo servidor y credenciales de este grupo se reducen a uno. El perfil activo siempre se conserva.",
+  "confirm.dedup.action": "Quitar",
+  "confirm.backupReplace.title": "¿Reemplazar con la copia?",
+  "confirm.backupReplace.body":
+    "Los grupos, suscripciones, reglas de enrutamiento, archivos de recursos y ajustes se reemplazan por los de la copia. Los perfiles se quedan.",
+  "confirm.rulesReplace.title": plural("count", {
+    one: "¿Reemplazar # regla de enrutamiento?",
+    other: "¿Reemplazar las # reglas de enrutamiento?",
+  }),
+  "confirm.rulesReplace.body": "Las reglas actuales se sobrescriben con las importadas.",
+  "confirm.ruleDelete.title": "¿Eliminar la regla de enrutamiento?",
+  "confirm.assetDelete.title": "¿Eliminar el archivo de recursos?",
   "add.title": "Añadir",
   "add.inputLabel": "Enlaces, suscripciones o un código QR",
   "add.inputPh": "https://… · vless://… · ss://…",

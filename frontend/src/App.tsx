@@ -6,7 +6,7 @@
 // contexts.
 // ============================================================
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { Icon, Toaster } from "./components";
+import { ConfirmHost, Icon, Toaster } from "./components";
 import Overview from "./features/overview/Overview";
 import { useT } from "./i18n";
 import { configureKsuWebUi, hasKsuNativeApi } from "./lib/ksu-webui";
@@ -197,6 +197,7 @@ export default function App() {
           <AppFilterPage onBack={() => setAppFilterOpen(false)} />
         </Suspense>
       )}
+      <ConfirmHost />
       {!nativeToast && <Toaster toasts={toasts} onDismiss={dismissToast} />}
     </div>
   );

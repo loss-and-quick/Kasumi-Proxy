@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Btn, Field, RowToggle, Segmented, Select, Sheet } from "../../components";
+import { Btn, confirm, Field, RowToggle, Segmented, Select, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { normalizeList, toText, uid } from "../../lib/utils";
@@ -220,7 +220,13 @@ export function RoutingRuleSheet({
           <Btn
             variant="error"
             icon="delete"
-            onClick={() => {
+            onClick={async () => {
+              const ok = await confirm({
+                title: t("confirm.ruleDelete.title"),
+                body: rule.remarks || undefined,
+                confirmLabel: t("routingSheet.delete"),
+              });
+              if (!ok) return;
               onDelete(rule.id);
               onClose();
             }}

@@ -21,6 +21,7 @@ import { isServiceUp } from "../../lib/bridge";
 import { formatRate, formatUptime } from "../../lib/format";
 import { profileEndpointLabel } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
+import { askRemoveUnreachable } from "../profiles/confirmations";
 import { PingActionsSheet } from "../profiles/PingActionsSheet";
 
 export default function Overview({
@@ -330,8 +331,10 @@ export default function Overview({
             setPingSheetOpen(false);
           }}
           onDeleteUnreachable={() => {
-            void removeUnreachable();
             setPingSheetOpen(false);
+            void askRemoveUnreachable().then((ok) => {
+              if (ok) void removeUnreachable();
+            });
           }}
           onSelectBest={() => {
             selectBest();
