@@ -85,7 +85,8 @@ export default function Settings({
   };
   // Side by side there is always a page showing; on a phone the list comes first.
   const page: SettingsPage | null = hashPage ?? (isWide ? SETTINGS_PAGES[0].id : null);
-  useEscapeToClose(!isWide && hashPage !== null, closePage);
+  // The page already moved the hash, so Back pops that; only Escape needs the stack.
+  useEscapeToClose(!isWide && hashPage !== null, closePage, { history: false });
 
   const profileOptions = useMemo(
     () => profiles.map((p) => ({ id: p.meta.id, remarks: p.meta.remarks })),
