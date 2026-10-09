@@ -321,6 +321,33 @@ const en = {
   "subs.edit.validationUrl": "Subscription URL required",
   "subs.edit.validationInterval": "Interval must be greater than 0",
   "subs.edit.validationFilter": "Invalid regex",
+  "confirm.bulkDelete.title": plural("count", {
+    one: "Delete # profile?",
+    other: "Delete # profiles?",
+  }),
+  "confirm.bulkDelete.body": "They will be permanently removed from this device.",
+  "confirm.unreachable.title": plural("count", {
+    one: "Delete # unreachable profile?",
+    other: "Delete # unreachable profiles?",
+  }),
+  "confirm.unreachable.body":
+    "These are the profiles whose last ping failed. A server that was only down for a moment goes too.",
+  "confirm.dedup.title": "Remove duplicates?",
+  "confirm.dedup.bodyAll":
+    "Profiles with the same server and credentials are reduced to one, in every group. The active profile is always kept.",
+  "confirm.dedup.bodyGroup":
+    "Profiles with the same server and credentials in this group are reduced to one. The active profile is always kept.",
+  "confirm.dedup.action": "Remove",
+  "confirm.backupReplace.title": "Replace with the backup?",
+  "confirm.backupReplace.body":
+    "Groups, subscriptions, routing rules, resource files and settings are replaced by the backup's. Profiles stay.",
+  "confirm.rulesReplace.title": plural("count", {
+    one: "Replace # routing rule?",
+    other: "Replace all # routing rules?",
+  }),
+  "confirm.rulesReplace.body": "The current rules are overwritten by the imported ones.",
+  "confirm.ruleDelete.title": "Delete routing rule?",
+  "confirm.assetDelete.title": "Delete resource file?",
   "add.title": "Add",
   "add.inputLabel": "Links, subscriptions or a QR code",
   "add.inputPh": "https://… · vless://… · ss://…",

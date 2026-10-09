@@ -3,6 +3,7 @@ import { Btn, Field, Sheet } from "../../components";
 import type { AssetFile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { uid } from "../../lib/utils";
+import { confirmAssetDelete } from "./confirmations";
 
 type Draft = {
   remarks: string;
@@ -80,7 +81,8 @@ export function AssetFileSheet({
           <Btn
             variant="error"
             icon="delete"
-            onClick={() => {
+            onClick={async () => {
+              if (!(await confirmAssetDelete(asset.remarks))) return;
               onDelete(asset.id);
               onClose();
             }}

@@ -5,7 +5,7 @@
 // ============================================================
 
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Btn, Field, SectionLabel, Sheet } from "../../components";
+import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
@@ -142,7 +142,20 @@ export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose:
         <Btn variant="outline" disabled={!parsed.ok} onClick={() => doImport("merge")}>
           {t("backup.merge")}
         </Btn>
-        <Btn variant="error" disabled={!parsed.ok} onClick={() => doImport("replace")}>
+        <Btn
+          variant="error"
+          disabled={!parsed.ok}
+          onClick={async () => {
+            const ok =
+              !hasRules ||
+              (await confirm({
+                title: t("confirm.rulesReplace.title", { count: routingRules.length }),
+                body: t("confirm.rulesReplace.body"),
+                confirmLabel: t("backup.replace"),
+              }));
+            if (ok) doImport("replace");
+          }}
+        >
           {t("backup.replace")}
         </Btn>
       </div>

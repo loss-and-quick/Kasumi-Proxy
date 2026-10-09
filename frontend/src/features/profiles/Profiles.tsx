@@ -5,7 +5,7 @@
 // ============================================================
 
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Icon } from "../../components";
+import { confirm, Icon } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
@@ -15,6 +15,7 @@ import { profileSearchText } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
 import { copyText } from "./clipboard";
+import { askRemoveUnreachable } from "./confirmations";
 import { PingActionsSheet } from "./PingActionsSheet";
 import { ProfilesList } from "./ProfilesList";
 import { ProfilesToolbar } from "./ProfilesToolbar";
@@ -196,14 +197,27 @@ export default function Profiles({
     notify(t("profiles.bulkMoveDone", { count: selectedIds.length }));
   }
 
-  function doBulkDelete() {
-    removeProfiles(selectedIds);
+  async function doBulkDelete() {
+    const count = selectedIds.length;
+    const ok = await confirm({
+      title: t("confirm.bulkDelete.title", { count }),
+      body: t("confirm.bulkDelete.body"),
+      confirmLabel: t("profiles.confirmDel.delete"),
+    });
+    if (!ok) return;
+    await removeProfiles(selectedIds);
     setSelected({});
-    notify(t("profiles.bulkDeleteDone", { count: selectedIds.length }));
+    notify(t("profiles.bulkDeleteDone", { count }));
   }
 
-  function doBulkDedup() {
-    removeDuplicates(groupFilter);
+  async function doBulkDedup() {
+    const ok = await confirm({
+      icon: "content_cut",
+      title: t("confirm.dedup.title"),
+      body: groupFilter === "all" ? t("confirm.dedup.bodyAll") : t("confirm.dedup.bodyGroup"),
+      confirmLabel: t("confirm.dedup.action"),
+    });
+    if (ok) await removeDuplicates(groupFilter);
   }
 
   function toggleBulkMode() {
@@ -236,8 +250,8 @@ export default function Profiles({
         onBulkPing={() => void doBulkPing()}
         onBulkShare={() => void doShareSelected()}
         onBulkMove={() => void doBulkMove()}
-        onBulkDelete={doBulkDelete}
-        onBulkDedup={doBulkDedup}
+        onBulkDelete={() => void doBulkDelete()}
+        onBulkDedup={() => void doBulkDedup()}
       />
 
       <ProfilesList
@@ -268,8 +282,10 @@ export default function Profiles({
           setPingSheetOpen(false);
         }}
         onDeleteUnreachable={() => {
-          void removeUnreachable(groupFilter);
           setPingSheetOpen(false);
+          void askRemoveUnreachable(groupFilter).then((ok) => {
+            if (ok) void removeUnreachable(groupFilter);
+          });
         }}
         onSelectBest={() => {
           selectBest(groupFilter);

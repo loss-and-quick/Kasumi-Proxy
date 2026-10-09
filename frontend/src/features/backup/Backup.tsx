@@ -4,7 +4,7 @@
 // ============================================================
 
 import { lazy, Suspense, useMemo, useState } from "react";
-import { Btn, Field, SectionLabel, Sheet } from "../../components";
+import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import { AppStateSchema } from "../../generated/schemas";
 import { useT } from "../../i18n";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
@@ -150,7 +150,14 @@ export default function Backup({ onClose }: { onClose: () => void }) {
         <Btn
           variant="error"
           disabled={!importText.trim() || !importValidation.ok}
-          onClick={() => void importBackup(importText, "replace")}
+          onClick={async () => {
+            const ok = await confirm({
+              title: t("confirm.backupReplace.title"),
+              body: t("confirm.backupReplace.body"),
+              confirmLabel: t("backup.replace"),
+            });
+            if (ok) await importBackup(importText, "replace");
+          }}
         >
           {t("backup.replace")}
         </Btn>

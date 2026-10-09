@@ -385,6 +385,30 @@ const ar = {
   "subs.edit.validationUrl": "رابط الاشتراك مطلوب",
   "subs.edit.validationInterval": "يجب أن يكون الفاصل أكبر من 0",
   "subs.edit.validationFilter": "regex غير صالح",
+  "confirm.bulkDelete.title": plural("count", { one: "حذف ملف واحد؟", other: "حذف # ملفات؟" }),
+  "confirm.bulkDelete.body": "ستُحذف نهائيًا من هذا الجهاز.",
+  "confirm.unreachable.title": plural("count", {
+    one: "حذف ملف واحد غير متاح؟",
+    other: "حذف # ملفات غير متاحة؟",
+  }),
+  "confirm.unreachable.body":
+    "هذه الملفات فشل آخر اختبار ping لها. سيُحذف أيضًا خادم تعطل للحظة فقط.",
+  "confirm.dedup.title": "إزالة المكررات؟",
+  "confirm.dedup.bodyAll":
+    "تُختصر الملفات ذات الخادم وبيانات الاعتماد نفسها إلى ملف واحد في كل المجموعات. يُحتفظ دائمًا بالملف النشط.",
+  "confirm.dedup.bodyGroup":
+    "تُختصر الملفات ذات الخادم وبيانات الاعتماد نفسها في هذه المجموعة إلى ملف واحد. يُحتفظ دائمًا بالملف النشط.",
+  "confirm.dedup.action": "إزالة",
+  "confirm.backupReplace.title": "الاستبدال بالنسخة الاحتياطية؟",
+  "confirm.backupReplace.body":
+    "تُستبدل المجموعات والاشتراكات وقواعد التوجيه وملفات الموارد والإعدادات بما في النسخة الاحتياطية. تبقى الملفات الشخصية.",
+  "confirm.rulesReplace.title": plural("count", {
+    one: "استبدال قاعدة توجيه واحدة؟",
+    other: "استبدال كل قواعد التوجيه (#)؟",
+  }),
+  "confirm.rulesReplace.body": "ستُستبدل القواعد الحالية بالقواعد المستوردة.",
+  "confirm.ruleDelete.title": "حذف قاعدة التوجيه؟",
+  "confirm.assetDelete.title": "حذف ملف المورد؟",
   "add.title": "إضافة",
   "add.inputLabel": "روابط أو اشتراكات أو رمز QR",
   "add.inputPh": "https://… · vless://… · ss://…",

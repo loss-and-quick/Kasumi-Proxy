@@ -310,6 +310,30 @@ const vi = {
   "subs.edit.validationUrl": "Bắt buộc nhập URL đăng ký",
   "subs.edit.validationInterval": "Khoảng thời gian phải lớn hơn 0",
   "subs.edit.validationFilter": "Regex không hợp lệ",
+  "confirm.bulkDelete.title": plural("count", { one: "Xóa # hồ sơ?", other: "Xóa # hồ sơ?" }),
+  "confirm.bulkDelete.body": "Chúng sẽ bị xóa vĩnh viễn khỏi thiết bị này.",
+  "confirm.unreachable.title": plural("count", {
+    one: "Xóa # hồ sơ không truy cập được?",
+    other: "Xóa # hồ sơ không truy cập được?",
+  }),
+  "confirm.unreachable.body":
+    "Đây là các hồ sơ có lần ping gần nhất thất bại. Máy chủ chỉ tạm ngắt một lúc cũng sẽ bị xóa.",
+  "confirm.dedup.title": "Xóa trùng lặp?",
+  "confirm.dedup.bodyAll":
+    "Các hồ sơ cùng máy chủ và thông tin đăng nhập được gộp còn một, trong mọi nhóm. Hồ sơ đang dùng luôn được giữ.",
+  "confirm.dedup.bodyGroup":
+    "Các hồ sơ cùng máy chủ và thông tin đăng nhập trong nhóm này được gộp còn một. Hồ sơ đang dùng luôn được giữ.",
+  "confirm.dedup.action": "Xóa",
+  "confirm.backupReplace.title": "Thay bằng bản sao lưu?",
+  "confirm.backupReplace.body":
+    "Nhóm, gói đăng ký, quy tắc định tuyến, tệp tài nguyên và cài đặt được thay bằng bản sao lưu. Hồ sơ được giữ lại.",
+  "confirm.rulesReplace.title": plural("count", {
+    one: "Thay # quy tắc định tuyến?",
+    other: "Thay toàn bộ # quy tắc định tuyến?",
+  }),
+  "confirm.rulesReplace.body": "Các quy tắc hiện tại sẽ bị ghi đè bằng quy tắc được nhập.",
+  "confirm.ruleDelete.title": "Xóa quy tắc định tuyến?",
+  "confirm.assetDelete.title": "Xóa tệp tài nguyên?",
   "add.title": "Thêm",
   "add.inputLabel": "Liên kết, gói đăng ký hoặc mã QR",
   "add.inputPh": "https://… · vless://… · ss://…",

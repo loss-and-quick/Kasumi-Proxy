@@ -308,6 +308,30 @@ const hi = {
   "subs.edit.validationUrl": "सदस्यता URL आवश्यक है",
   "subs.edit.validationInterval": "अंतराल 0 से बड़ा होना चाहिए",
   "subs.edit.validationFilter": "अमान्य regex",
+  "confirm.bulkDelete.title": plural("count", { one: "# प्रोफ़ाइल हटाएँ?", other: "# प्रोफ़ाइलें हटाएँ?" }),
+  "confirm.bulkDelete.body": "ये इस डिवाइस से हमेशा के लिए हट जाएँगी।",
+  "confirm.unreachable.title": plural("count", {
+    one: "# पहुँच से बाहर प्रोफ़ाइल हटाएँ?",
+    other: "# पहुँच से बाहर प्रोफ़ाइलें हटाएँ?",
+  }),
+  "confirm.unreachable.body":
+    "ये वे प्रोफ़ाइलें हैं जिनका पिछला पिंग विफल रहा। कुछ पल के लिए बंद रहा सर्वर भी हट जाएगा।",
+  "confirm.dedup.title": "डुप्लिकेट हटाएँ?",
+  "confirm.dedup.bodyAll":
+    "एक ही सर्वर और क्रेडेंशियल वाली प्रोफ़ाइलें सभी समूहों में एक रह जाएँगी। सक्रिय प्रोफ़ाइल हमेशा रहती है।",
+  "confirm.dedup.bodyGroup":
+    "इस समूह में एक ही सर्वर और क्रेडेंशियल वाली प्रोफ़ाइलें एक रह जाएँगी। सक्रिय प्रोफ़ाइल हमेशा रहती है।",
+  "confirm.dedup.action": "हटाएँ",
+  "confirm.backupReplace.title": "बैकअप से बदलें?",
+  "confirm.backupReplace.body":
+    "समूह, सदस्यताएँ, रूटिंग नियम, रिसोर्स फ़ाइलें और सेटिंग्स बैकअप वाली से बदल जाएँगी। प्रोफ़ाइलें बनी रहेंगी।",
+  "confirm.rulesReplace.title": plural("count", {
+    one: "# रूटिंग नियम बदलें?",
+    other: "सभी # रूटिंग नियम बदलें?",
+  }),
+  "confirm.rulesReplace.body": "मौजूदा नियम आयात किए गए नियमों से बदल दिए जाएँगे।",
+  "confirm.ruleDelete.title": "रूटिंग नियम हटाएँ?",
+  "confirm.assetDelete.title": "रिसोर्स फ़ाइल हटाएँ?",
   "add.title": "जोड़ें",
   "add.inputLabel": "लिंक, सदस्यताएँ या QR कोड",
   "add.inputPh": "https://… · vless://… · ss://…",

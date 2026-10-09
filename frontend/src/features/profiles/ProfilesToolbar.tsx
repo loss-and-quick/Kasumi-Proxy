@@ -192,7 +192,7 @@ export function ProfilesToolbar({
             </div>
             {/* Even two-column grid: Move pairs with its target select; Delete
                 stays on its own row, away from the move selector. */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div className="bulk-grid">
               <Btn variant="outline" sm block onClick={onBulkPing} disabled={bulkDisabled}>
                 {t("profiles.bulkPing")}
               </Btn>

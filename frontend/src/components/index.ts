@@ -1,4 +1,5 @@
 export * from "./buttons";
+export * from "./confirm";
 export * from "./display";
 export * from "./forms";
 export * from "./GroupPicker";

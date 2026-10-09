@@ -13,6 +13,7 @@ import {
 import type { AssetFile } from "../../../generated/bindings";
 import { useFormatters, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
+import { confirmAssetDelete } from "../confirmations";
 import { formatUpdatedAt } from "../helpers";
 import { RESOURCE_LINKS } from "../resource-links";
 
@@ -131,7 +132,9 @@ export function AssetFilesSection({
                     name="delete"
                     sm
                     title={t("settings.assetDelete")}
-                    onClick={() => removeAssetFile(asset.id)}
+                    onClick={async () => {
+                      if (await confirmAssetDelete(asset.remarks)) removeAssetFile(asset.id);
+                    }}
                   />
                 )}
               </div>
