@@ -521,6 +521,7 @@ const hi = {
   "settings.updateInstall": "डाउनलोड करें और पुनः आरंभ करें",
   "settings.updateDownloading": "डाउनलोड हो रहा है… {percent}%",
   "settings.updateError": "अपडेट जांच नहीं सके",
+  "settings.updateInstallError": "अपडेट इंस्टॉल नहीं हो सका",
   "settings.system": "सिस्टम",
   "settings.backup": "बैकअप और पुनर्स्थापना",
   "settings.backupSub": "अपना कॉन्फ़िगरेशन निर्यात या आयात करें",
@@ -547,7 +548,7 @@ const hi = {
   // backup
   "backup.title": "बैकअप और पुनर्स्थापना",
   "backup.export": "निर्यात",
-  "backup.exportLabel": "वर्तमान AppState JSON",
+  "backup.exportLabel": "मौजूदा बैकअप",
   "backup.copyJson": "JSON कॉपी करें",
   "backup.showQr": "QR दिखाएँ",
   "backup.download": "डाउनलोड",
@@ -828,6 +829,8 @@ const hi = {
   }),
   "store.ping.started": "पिंग किया जा रहा है…",
   "store.ping.complete": "पिंग पूरा हुआ",
+  "store.speed.started": "स्पीड जाँची जा रही है…",
+  "store.speed.complete": "स्पीड टेस्ट पूरा हुआ",
   "store.ping.removeUnreachable": plural("count", {
     one: "# अनुपलब्ध प्रोफ़ाइल हटाई",
     other: "# अनुपलब्ध प्रोफ़ाइलें हटाईं",

@@ -903,6 +903,19 @@ describe("useAppStore", () => {
       expect(feed[0].text).toMatch(/1/);
     });
 
+    it("speedTestAll toasts about speed, not ping", async () => {
+      const profile = makeVless({ meta: { id: "p1" } });
+      bridge.readState.mockResolvedValue(makeState({ profiles: [profile] }));
+      bridge.speedTestAll = vi.fn(async () => ({ [profile.meta.id]: 5_000_000 }));
+      await useAppStore.getState().hydrate();
+      useAppStore.setState({ toasts: [] });
+
+      await useAppStore.getState().testAll("speed");
+
+      const toasts = useAppStore.getState().toasts.map((x) => x.msg);
+      expect(toasts).toEqual(["Testing speed…", "Speed test complete"]);
+    });
+
     it("removeUnreachable pushes unreachableRemoved activity", async () => {
       const dead = makeVless({ meta: { id: "p1" } });
       const alive = makeVless({ meta: { id: "p2" } });

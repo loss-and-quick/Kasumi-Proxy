@@ -517,6 +517,7 @@ const zh = {
   "settings.updateInstall": "下载并重启",
   "settings.updateDownloading": "正在下载… {percent}%",
   "settings.updateError": "无法检查更新",
+  "settings.updateInstallError": "无法安装更新",
   "settings.system": "系统",
   "settings.backup": "备份与恢复",
   "settings.backupSub": "导出或导入你的配置",
@@ -543,7 +544,7 @@ const zh = {
   // backup
   "backup.title": "备份与恢复",
   "backup.export": "导出",
-  "backup.exportLabel": "当前 AppState JSON",
+  "backup.exportLabel": "当前备份",
   "backup.copyJson": "复制 JSON",
   "backup.showQr": "显示二维码",
   "backup.download": "下载",
@@ -821,6 +822,8 @@ const zh = {
   }),
   "store.ping.started": "测速中…",
   "store.ping.complete": "测速完成",
+  "store.speed.started": "正在测速…",
+  "store.speed.complete": "测速完成",
   "store.ping.removeUnreachable": plural("count", {
     one: "已删除 # 个不可达配置",
     other: "已删除 # 个不可达配置",

@@ -582,6 +582,7 @@ const ru = {
   "settings.updateInstall": "Скачать и перезапустить",
   "settings.updateDownloading": "Загрузка… {percent}%",
   "settings.updateError": "Не удалось проверить обновления",
+  "settings.updateInstallError": "Не удалось установить обновление",
   "settings.system": "Система",
   "settings.backup": "Резервная копия и восстановление",
   "settings.backupSub": "Экспорт или импорт вашей конфигурации",
@@ -608,7 +609,7 @@ const ru = {
   // backup
   "backup.title": "Резервная копия и восстановление",
   "backup.export": "Экспорт",
-  "backup.exportLabel": "Текущий AppState JSON",
+  "backup.exportLabel": "Текущая резервная копия",
   "backup.copyJson": "Копировать JSON",
   "backup.showQr": "Показать QR",
   "backup.download": "Скачать",
@@ -943,6 +944,8 @@ const ru = {
   }),
   "store.ping.started": "Пингуем…",
   "store.ping.complete": "Пинг завершён",
+  "store.speed.started": "Измеряю скорость…",
+  "store.speed.complete": "Тест скорости завершён",
   "store.ping.removeUnreachable": plural("count", {
     one: "Удалён # недоступный профиль",
     few: "Удалено # недоступных профиля",

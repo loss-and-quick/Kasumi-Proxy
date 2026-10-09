@@ -527,6 +527,7 @@ const vi = {
   "settings.updateInstall": "Tải và khởi động lại",
   "settings.updateDownloading": "Đang tải… {percent}%",
   "settings.updateError": "Không thể kiểm tra cập nhật",
+  "settings.updateInstallError": "Không thể cài đặt bản cập nhật",
   "settings.system": "Hệ thống",
   "settings.backup": "Sao lưu và khôi phục",
   "settings.backupSub": "Xuất hoặc nhập cấu hình của bạn",
@@ -553,7 +554,7 @@ const vi = {
   // backup
   "backup.title": "Sao lưu và khôi phục",
   "backup.export": "Xuất",
-  "backup.exportLabel": "JSON AppState hiện tại",
+  "backup.exportLabel": "Bản sao lưu hiện tại",
   "backup.copyJson": "Sao chép JSON",
   "backup.showQr": "Hiện QR",
   "backup.download": "Tải xuống",
@@ -835,6 +836,8 @@ const vi = {
   }),
   "store.ping.started": "Đang ping…",
   "store.ping.complete": "Ping hoàn tất",
+  "store.speed.started": "Đang đo tốc độ…",
+  "store.speed.complete": "Đã đo tốc độ xong",
   "store.ping.removeUnreachable": plural("count", {
     one: "Đã xóa # hồ sơ không thể kết nối",
     other: "Đã xóa # hồ sơ không thể kết nối",
