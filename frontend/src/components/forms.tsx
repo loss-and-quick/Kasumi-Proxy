@@ -1,8 +1,11 @@
 import {
   type CSSProperties,
+  createContext,
   type KeyboardEvent,
   useCallback,
+  useContext,
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -28,15 +31,33 @@ type Opt<T extends string> = T | { value: T; label: string };
 type OptGroup<T extends string> = { group: string; options: Opt<T>[] };
 type SelectItem<T extends string> = Opt<T> | OptGroup<T>;
 
-export const Switch = ({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) => (
-  <button
-    type="button"
-    className={`switch${on ? " on" : ""}`}
-    onClick={() => onChange(!on)}
-    role="switch"
-    aria-checked={on}
-  />
-);
+/** The id of the text a row shows next to its control, so a bare switch inside
+ *  a settings row is announced by that text instead of as "switch". */
+export const ControlLabelContext = createContext<string | undefined>(undefined);
+
+export const Switch = ({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: (v: boolean) => void;
+  /** Spoken name, when no surrounding row labels it. */
+  label?: string;
+}) => {
+  const labelledBy = useContext(ControlLabelContext);
+  return (
+    <button
+      type="button"
+      className={`switch${on ? " on" : ""}`}
+      onClick={() => onChange(!on)}
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      aria-labelledby={label ? undefined : labelledBy}
+    />
+  );
+};
 
 export function Segmented<T extends string>({
   options,
@@ -127,6 +148,7 @@ export function Field({
   commitOnBlur?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const id = useId();
   const shown = commitOnBlur && draft !== null ? draft : value;
   const edit = (v: string) => (commitOnBlur ? setDraft(v) : onChange(v));
   const commit = () => {
@@ -139,9 +161,14 @@ export function Field({
   const lazy = commitOnBlur ? { onBlur: commit } : null;
   return (
     <div className="field">
-      {label && <div className="field-label">{label}</div>}
+      {label && (
+        <label className="field-label" htmlFor={id}>
+          {label}
+        </label>
+      )}
       {area ? (
         <textarea
+          id={id}
           className="input"
           style={mono ? undefined : { fontFamily: "var(--font-ui)" }}
           value={shown}
@@ -151,6 +178,7 @@ export function Field({
         />
       ) : (
         <input
+          id={id}
           className="input"
           style={{
             ...(mono && type !== "number" ? null : { fontFamily: "var(--font-ui)" }),
@@ -669,7 +697,7 @@ export function Select<T extends string>({
             <button
               type="button"
               className="select-overlay"
-              aria-label="Close"
+              aria-label={t("common.close")}
               onClick={() => setOpen(false)}
             />
             <div

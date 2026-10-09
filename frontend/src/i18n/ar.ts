@@ -817,6 +817,7 @@ const ar = {
   "settings.routingEmpty": "لا توجد قواعد توجيه بعد.",
   "settings.routingRuleDefault": "القاعدة {n}",
   "common.none": "لا شيء",
+  "common.close": "إغلاق",
   "common.search": "بحث",
   "common.noMatches": "لا توجد نتائج",
   "common.modeShort.auto": "تلقائي",

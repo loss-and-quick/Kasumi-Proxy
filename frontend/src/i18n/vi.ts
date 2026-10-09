@@ -696,6 +696,7 @@ const vi = {
   "settings.routingEmpty": "Chưa có quy tắc định tuyến nào.",
   "settings.routingRuleDefault": "Quy tắc {n}",
   "common.none": "Không",
+  "common.close": "Đóng",
   "common.search": "Tìm kiếm",
   "common.noMatches": "Không có kết quả",
   "common.modeShort.auto": "Tự động",

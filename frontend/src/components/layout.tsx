@@ -1,5 +1,5 @@
-import { type ReactNode, useState } from "react";
-import { Switch } from "./forms";
+import { type ReactNode, useId, useState } from "react";
+import { ControlLabelContext, Switch } from "./forms";
 import { Icon } from "./icons";
 import type { SortableBindings } from "./sortable";
 
@@ -133,7 +133,7 @@ export const RowToggle = ({
       <div className="lr-title">{title}</div>
       {sub && <div className="lr-sub">{sub}</div>}
     </div>
-    <Switch on={on} onChange={onChange} />
+    <Switch on={on} onChange={onChange} label={title} />
   </div>
 );
 
@@ -201,15 +201,22 @@ export const SettingRow = ({
   hint?: ReactNode;
   stacked?: boolean;
   children: ReactNode;
-}) => (
-  <div className={`setting-row${stacked ? " stacked" : ""}`}>
-    <div className="sr-main">
-      <div className="sr-title">{title}</div>
-      {hint && <div className="sr-hint">{hint}</div>}
+}) => {
+  const titleId = useId();
+  return (
+    <div className={`setting-row${stacked ? " stacked" : ""}`}>
+      <div className="sr-main">
+        <div className="sr-title" id={titleId}>
+          {title}
+        </div>
+        {hint && <div className="sr-hint">{hint}</div>}
+      </div>
+      <ControlLabelContext.Provider value={titleId}>
+        <div className="sr-control">{children}</div>
+      </ControlLabelContext.Provider>
     </div>
-    <div className="sr-control">{children}</div>
-  </div>
-);
+  );
+};
 
 /** Options revealed under a toggle row, indented to line up with the row's text. */
 export const SettingGroup = ({ children }: { children: ReactNode }) => (

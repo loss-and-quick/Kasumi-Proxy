@@ -767,6 +767,7 @@ const ru = {
   "settings.routingEmpty": "Правил маршрутизации пока нет.",
   "settings.routingRuleDefault": "Правило {n}",
   "common.none": "Нет",
+  "common.close": "Закрыть",
   "common.search": "Поиск",
   "common.noMatches": "Ничего не найдено",
   "common.modeShort.auto": "Авто",
