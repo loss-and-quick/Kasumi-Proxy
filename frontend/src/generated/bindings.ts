@@ -333,7 +333,15 @@ export type AppState_Deserialize = {
 	profiles?: Profile[],
 	groups: Group_Deserialize[],
 	subscriptions: Subscription_Deserialize[],
+	/**
+	 *  The flat rule list of versions before routes. Only read: normalization
+	 *  folds it into a block of the default route, so it is never written back.
+	 */
 	routingRules?: RoutingRule_Deserialize[],
+	/**  Named rule lists that routes line up; see [`crate::route`]. */
+	ruleBlocks?: RuleBlock_Deserialize[],
+	/**  Which blocks each profile runs with; the default route comes first. */
+	routes?: Route[],
 	assetFiles?: AssetFile[],
 	settings: AdvancedSettings_Deserialize,
 	/**  Active profile id, or `null` (required + nullable). */
@@ -352,7 +360,15 @@ export type AppState_Serialize = {
 	profiles: Profile[],
 	groups: Group_Serialize[],
 	subscriptions: Subscription_Serialize[],
-	routingRules: RoutingRule_Serialize[],
+	/**
+	 *  The flat rule list of versions before routes. Only read: normalization
+	 *  folds it into a block of the default route, so it is never written back.
+	 */
+	routingRules?: RoutingRule_Serialize[],
+	/**  Named rule lists that routes line up; see [`crate::route`]. */
+	ruleBlocks: RuleBlock_Serialize[],
+	/**  Which blocks each profile runs with; the default route comes first. */
+	routes: Route[],
 	assetFiles: AssetFile[],
 	settings: AdvancedSettings_Serialize,
 	/**  Active profile id, or `null` (required + nullable). */
@@ -636,60 +652,79 @@ export type MutationIntent = MutationIntent_Serialize | MutationIntent_Deseriali
  */
 export type MutationIntent_Deserialize = 
 /**  Add a profile (front) or replace the one with the same `meta.id`. */
-({ kind: "upsertProfile"; profile: Profile }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "upsertProfile"; profile: Profile }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Remove every profile whose id is listed. */
-({ kind: "removeProfiles"; ids: string[] }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "removeProfiles"; ids: string[] }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Copy the profile `id` into a fresh one (`new_id`, `remarks`), inserted right
  *  after the source; the copy is detached from any subscription and untested.
  */
-({ kind: "cloneProfile"; id: string; newId: string; remarks: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; profile?: never; profiles?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "cloneProfile"; id: string; newId: string; remarks: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; profile?: never; profileId?: never; profiles?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Move the listed profiles into `group_id`. */
-({ kind: "moveProfiles"; ids: string[]; groupId: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "moveProfiles"; ids: string[]; groupId: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Prepend a batch of profiles (share-link / file import). */
-({ kind: "addProfiles"; profiles: Profile[] }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "addProfiles"; profiles: Profile[] }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Drop duplicate endpoints within the scope, always keeping the active one. */
-({ kind: "deduplicateProfiles"; activeId?: string | null; groupId?: string | null }) & { asset?: never; deleteGroup?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "deduplicateProfiles"; activeId?: string | null; groupId?: string | null }) & { asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Add a group. `sub_id` marks a group made for that subscription: it follows
  *  the subscription's renames and can be removed along with it.
  */
-({ kind: "addGroup"; id: string; name: string; subId?: string | null }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "renameGroup"; id: string; name: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "addGroup"; id: string; name: string; subId?: string | null }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "renameGroup"; id: string; name: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Remove a group and its profiles. Subscriptions that fetched into it move to
  *  the base group.
  */
-({ kind: "removeGroup"; id: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "removeGroup"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Reorder by index; `g-main` stays pinned at 0. */
-({ kind: "reorderGroups"; from: number; to: number }) & { activeId?: never; asset?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
+({ kind: "reorderGroups"; from: number; to: number }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
 /**  Add or replace a subscription (by `id`). */
-({ kind: "upsertSub"; subscription: Subscription_Deserialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; to?: never } | 
+({ kind: "upsertSub"; subscription: Subscription_Deserialize }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; to?: never } | 
 /**
  *  Remove a subscription and prune the profiles it still owns in its group.
  *  With `delete_group`, also remove the group made for it when nothing else
  *  is left in it.
  */
-({ kind: "removeSub"; id: string; deleteGroup?: boolean }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
-/**  Add or replace a routing rule (by `id`). */
-({ kind: "upsertRoutingRule"; rule: RoutingRule_Deserialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeRoutingRule"; id: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "reorderRoutingRules"; from: number; to: number }) & { activeId?: never; asset?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
-/**  Append (merge) or replace the routing-rule list with `rules`. */
-({ kind: "importRoutingRules"; rules: RoutingRule_Deserialize[]; mode: ImportMode }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "removeSub"; id: string; deleteGroup?: boolean }) & { activeId?: never; asset?: never; block?: never; blockId?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**  Add or replace a routing rule (by `id`) in block `block_id`. */
+({ kind: "upsertRoutingRule"; blockId: string; rule: RoutingRule_Deserialize }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeRoutingRule"; blockId: string; id: string }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "reorderRoutingRules"; blockId: string; from: number; to: number }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
+/**  Append (merge) or replace block `block_id`'s rules with `rules`. */
+({ kind: "importRoutingRules"; blockId: string; rules: RoutingRule_Deserialize[]; mode: ImportMode }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**  Add or replace a rule block (by `id`), rules included. */
+({ kind: "upsertRuleBlock"; block: RuleBlock_Deserialize }) & { activeId?: never; asset?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**  Remove a block and take it out of every route. */
+({ kind: "removeRuleBlock"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Add or replace a route (by `id`). The profiles and groups it lists leave
+ *  every other route.
+ */
+({ kind: "upsertRoute"; route: Route }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Remove a route; its profiles fall back to their group's route or the
+ *  default. The default route stays.
+ */
+({ kind: "removeRoute"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Run profile `profile_id` with route `route_id` (`None` or the default:
+ *  whatever its group gets).
+ */
+({ kind: "setProfileRoute"; profileId: string; routeId?: string | null }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; route?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Add or replace an asset entry (by `id`). */
-({ kind: "upsertAssetFile"; asset: AssetFile }) & { activeId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeAssetFile"; id: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "upsertAssetFile"; asset: AssetFile }) & { activeId?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeAssetFile"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Replace the whole settings block (the UI builds the next one from the prev). */
-({ kind: "setSettings"; settings: AdvancedSettings_Deserialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "setSettings"; settings: AdvancedSettings_Deserialize }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Set (or clear) the active profile id. */
-({ kind: "setActive"; id?: string | null }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "setActive"; id?: string | null }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Restore a backup, merging into or replacing the current state. Replace keeps
  *  the current profiles (backups carry none).
  */
-({ kind: "importBackup"; incoming: AppState_Deserialize; mode: ImportMode }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "importBackup"; incoming: AppState_Deserialize; mode: ImportMode }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Replace the whole persisted state wholesale (profiles included). The bulk
  *  escape hatch for one-time client migrations on hydrate; not the per-edit path.
  */
-({ kind: "replaceState"; state: AppState_Deserialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; subId?: never; subscription?: never; to?: never };
+({ kind: "replaceState"; state: AppState_Deserialize }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; subId?: never; subscription?: never; to?: never };
 
 /**
  *  A single state-changing verb dispatched by the UI. The tag `kind` selects the
@@ -697,60 +732,79 @@ export type MutationIntent_Deserialize =
  */
 export type MutationIntent_Serialize = 
 /**  Add a profile (front) or replace the one with the same `meta.id`. */
-({ kind: "upsertProfile"; profile: Profile }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "upsertProfile"; profile: Profile }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Remove every profile whose id is listed. */
-({ kind: "removeProfiles"; ids: string[] }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "removeProfiles"; ids: string[] }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Copy the profile `id` into a fresh one (`new_id`, `remarks`), inserted right
  *  after the source; the copy is detached from any subscription and untested.
  */
-({ kind: "cloneProfile"; id: string; newId: string; remarks: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; profile?: never; profiles?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "cloneProfile"; id: string; newId: string; remarks: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; profile?: never; profileId?: never; profiles?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Move the listed profiles into `group_id`. */
-({ kind: "moveProfiles"; ids: string[]; groupId: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "moveProfiles"; ids: string[]; groupId: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; id?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Prepend a batch of profiles (share-link / file import). */
-({ kind: "addProfiles"; profiles: Profile[] }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "addProfiles"; profiles: Profile[] }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Drop duplicate endpoints within the scope, always keeping the active one. */
-({ kind: "deduplicateProfiles"; activeId: string | null; groupId: string | null }) & { asset?: never; deleteGroup?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "deduplicateProfiles"; activeId: string | null; groupId: string | null }) & { asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Add a group. `sub_id` marks a group made for that subscription: it follows
  *  the subscription's renames and can be removed along with it.
  */
-({ kind: "addGroup"; id: string; name: string; subId: string | null }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "renameGroup"; id: string; name: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "addGroup"; id: string; name: string; subId: string | null }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subscription?: never; to?: never } | ({ kind: "renameGroup"; id: string; name: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Remove a group and its profiles. Subscriptions that fetched into it move to
  *  the base group.
  */
-({ kind: "removeGroup"; id: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "removeGroup"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Reorder by index; `g-main` stays pinned at 0. */
-({ kind: "reorderGroups"; from: number; to: number }) & { activeId?: never; asset?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
+({ kind: "reorderGroups"; from: number; to: number }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
 /**  Add or replace a subscription (by `id`). */
-({ kind: "upsertSub"; subscription: Subscription_Serialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; to?: never } | 
+({ kind: "upsertSub"; subscription: Subscription_Serialize }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; to?: never } | 
 /**
  *  Remove a subscription and prune the profiles it still owns in its group.
  *  With `delete_group`, also remove the group made for it when nothing else
  *  is left in it.
  */
-({ kind: "removeSub"; id: string; deleteGroup: boolean }) & { activeId?: never; asset?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
-/**  Add or replace a routing rule (by `id`). */
-({ kind: "upsertRoutingRule"; rule: RoutingRule_Serialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeRoutingRule"; id: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "reorderRoutingRules"; from: number; to: number }) & { activeId?: never; asset?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
-/**  Append (merge) or replace the routing-rule list with `rules`. */
-({ kind: "importRoutingRules"; rules: RoutingRule_Serialize[]; mode: ImportMode }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "removeSub"; id: string; deleteGroup: boolean }) & { activeId?: never; asset?: never; block?: never; blockId?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**  Add or replace a routing rule (by `id`) in block `block_id`. */
+({ kind: "upsertRoutingRule"; blockId: string; rule: RoutingRule_Serialize }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeRoutingRule"; blockId: string; id: string }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "reorderRoutingRules"; blockId: string; from: number; to: number }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
+/**  Append (merge) or replace block `block_id`'s rules with `rules`. */
+({ kind: "importRoutingRules"; blockId: string; rules: RoutingRule_Serialize[]; mode: ImportMode }) & { activeId?: never; asset?: never; block?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**  Add or replace a rule block (by `id`), rules included. */
+({ kind: "upsertRuleBlock"; block: RuleBlock_Serialize }) & { activeId?: never; asset?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**  Remove a block and take it out of every route. */
+({ kind: "removeRuleBlock"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Add or replace a route (by `id`). The profiles and groups it lists leave
+ *  every other route.
+ */
+({ kind: "upsertRoute"; route: Route }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Remove a route; its profiles fall back to their group's route or the
+ *  default. The default route stays.
+ */
+({ kind: "removeRoute"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Run profile `profile_id` with route `route_id` (`None` or the default:
+ *  whatever its group gets).
+ */
+({ kind: "setProfileRoute"; profileId: string; routeId: string | null }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; route?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Add or replace an asset entry (by `id`). */
-({ kind: "upsertAssetFile"; asset: AssetFile }) & { activeId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeAssetFile"; id: string }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "upsertAssetFile"; asset: AssetFile }) & { activeId?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | ({ kind: "removeAssetFile"; id: string }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Replace the whole settings block (the UI builds the next one from the prev). */
-({ kind: "setSettings"; settings: AdvancedSettings_Serialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "setSettings"; settings: AdvancedSettings_Serialize }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Set (or clear) the active profile id. */
-({ kind: "setActive"; id: string | null }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "setActive"; id: string | null }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Restore a backup, merging into or replacing the current state. Replace keeps
  *  the current profiles (backups carry none).
  */
-({ kind: "importBackup"; incoming: AppState_Serialize; mode: ImportMode }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+({ kind: "importBackup"; incoming: AppState_Serialize; mode: ImportMode }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Replace the whole persisted state wholesale (profiles included). The bulk
  *  escape hatch for one-time client migrations on hydrate; not the per-edit path.
  */
-({ kind: "replaceState"; state: AppState_Serialize }) & { activeId?: never; asset?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profiles?: never; remarks?: never; rule?: never; rules?: never; settings?: never; subId?: never; subscription?: never; to?: never };
+({ kind: "replaceState"; state: AppState_Serialize }) & { activeId?: never; asset?: never; block?: never; blockId?: never; deleteGroup?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; subId?: never; subscription?: never; to?: never };
 
 /**  Mux xudp-over-443 handling. */
 export type MuxXudp443 = "reject" | "proxy";
@@ -846,6 +900,36 @@ export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
 ({ kind: "ok" }) & { value?: never };
 
+/**  Which blocks, in what order, a set of profiles runs with. */
+export type Route = {
+	id: string,
+	name: string,
+	/**  A switched-off route lets its profiles fall back to the default route. */
+	enabled?: boolean,
+	/**  Profile ids this route applies to. Empty on the default route. */
+	profiles?: string[],
+	/**
+	 *  Group ids this route applies to (every profile in them, unless a route
+	 *  lists the profile itself). Empty on the default route.
+	 */
+	groups?: string[],
+	blocks?: RouteBlockRef[],
+	/**
+	 *  Where traffic no rule matched goes: `proxy`, `direct`, `block` or a
+	 *  profile id.
+	 */
+	finalOutbound?: string,
+};
+
+/**
+ *  One block's place in a route. Turning it off keeps it in place (and in
+ *  other routes) while this route skips its rules.
+ */
+export type RouteBlockRef = {
+	blockId: string,
+	enabled?: boolean,
+};
+
 /**  How traffic is routed. `bypass-lan` is a legacy alias mapped to `global`. */
 export type RoutingMode = RoutingMode_Serialize | RoutingMode_Deserialize;
 
@@ -906,6 +990,23 @@ export type RoutingRule_Serialize = {
 	packageName?: string[] | null,
 	/**  Source addresses/CIDRs, e.g. LAN clients using the shared proxy port. */
 	sourceIp?: string[] | null,
+};
+
+/**  A named, ordered list of routing rules that routes can share. */
+export type RuleBlock = RuleBlock_Serialize | RuleBlock_Deserialize;
+
+/**  A named, ordered list of routing rules that routes can share. */
+export type RuleBlock_Deserialize = {
+	id: string,
+	name: string,
+	rules?: RoutingRule_Deserialize[],
+};
+
+/**  A named, ordered list of routing rules that routes can share. */
+export type RuleBlock_Serialize = {
+	id: string,
+	name: string,
+	rules: RoutingRule_Serialize[],
 };
 
 /**  Transport scope of a routing rule. */

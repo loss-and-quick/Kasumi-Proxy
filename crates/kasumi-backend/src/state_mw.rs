@@ -26,6 +26,7 @@
 //! not scattered across init sites.
 
 use kasumi_core::chain::fixup_dangling_via;
+use kasumi_core::route::normalize_routes;
 use kasumi_core::state::{AppState, fixup_active_id, fixup_dangling_groups};
 
 /// A single write-side rule. Pure: no I/O, deterministic, trivially unit-testable.
@@ -127,6 +128,21 @@ impl WriteMiddleware for FixupDanglingGroups {
     }
 }
 
+/// Keep routes in shape: the default route first, no route naming a deleted
+/// block, profile or group, each profile and group in one route, and a flat
+/// rule list from an old backup folded into a block.
+pub struct FixupRoutes;
+
+impl WriteMiddleware for FixupRoutes {
+    fn name(&self) -> &'static str {
+        "fixup-routes"
+    }
+
+    fn apply(&self, _prev: &AppState, next: &mut AppState) {
+        normalize_routes(next);
+    }
+}
+
 /// Build the canonical chain of write-side rules, in dependency order.
 ///
 /// Centralizing construction here keeps rule ordering auditable in one spot;
@@ -139,6 +155,8 @@ pub fn default_chain() -> WriteChain {
     // it as the graph grows.
     chain.push(FixupDanglingActiveId);
     chain.push(FixupDanglingVia);
+    // After every rule that removes profiles or groups.
+    chain.push(FixupRoutes);
     chain
 }
 
@@ -201,8 +219,29 @@ mod tests {
     }
 
     #[test]
+    fn fixup_drops_a_deleted_profile_from_its_route() {
+        let mut a = p("vless://u1@e.x:443?type=tcp#A");
+        a.meta_mut().id = "a".into();
+        let prev = default_app_state();
+        let mut next = default_app_state();
+        next.profiles = vec![a];
+        next.routes.push(kasumi_core::route::Route {
+            id: "work".into(),
+            name: "Work".into(),
+            profiles: vec!["a".into()],
+            ..kasumi_core::route::default_route()
+        });
+        default_chain().run(&prev, &mut next);
+        assert_eq!(next.routes[1].profiles, ["a"]);
+
+        next.profiles.clear();
+        default_chain().run(&prev, &mut next);
+        assert!(next.routes[1].profiles.is_empty());
+    }
+
+    #[test]
     fn default_chain_has_the_fixup_rules() {
-        assert_eq!(default_chain().len(), 3);
+        assert_eq!(default_chain().len(), 4);
     }
 
     #[test]

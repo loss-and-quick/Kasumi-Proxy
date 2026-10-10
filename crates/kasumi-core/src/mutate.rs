@@ -17,6 +17,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::profile::Profile;
+use crate::route::{
+    DEFAULT_ROUTE_ID, Route, RuleBlock, fold_legacy_rules, set_profile_route, upsert_route,
+};
 use crate::state::{
     AdvancedSettings, AppState, AssetFile, BASE_GROUP_ID, RoutingRule, Subscription,
 };
@@ -113,22 +116,58 @@ pub enum MutationIntent {
         delete_group: bool,
     },
 
-    // ---- routing rules ----
-    /// Add or replace a routing rule (by `id`).
+    // ---- routing rules (inside a block) ----
+    /// Add or replace a routing rule (by `id`) in block `block_id`.
+    #[serde(rename_all = "camelCase")]
     UpsertRoutingRule {
+        block_id: String,
         rule: Box<RoutingRule>,
     },
+    #[serde(rename_all = "camelCase")]
     RemoveRoutingRule {
+        block_id: String,
         id: String,
     },
+    #[serde(rename_all = "camelCase")]
     ReorderRoutingRules {
+        block_id: String,
         from: u32,
         to: u32,
     },
-    /// Append (merge) or replace the routing-rule list with `rules`.
+    /// Append (merge) or replace block `block_id`'s rules with `rules`.
+    #[serde(rename_all = "camelCase")]
     ImportRoutingRules {
+        block_id: String,
         rules: Vec<RoutingRule>,
         mode: ImportMode,
+    },
+
+    // ---- rule blocks and routes ----
+    /// Add or replace a rule block (by `id`), rules included.
+    UpsertRuleBlock {
+        block: Box<RuleBlock>,
+    },
+    /// Remove a block and take it out of every route.
+    RemoveRuleBlock {
+        id: String,
+    },
+    /// Add or replace a route (by `id`). The profiles and groups it lists leave
+    /// every other route.
+    UpsertRoute {
+        route: Box<Route>,
+    },
+    /// Remove a route; its profiles fall back to their group's route or the
+    /// default. The default route stays.
+    RemoveRoute {
+        id: String,
+    },
+    /// Run profile `profile_id` with route `route_id` (`None` or the default:
+    /// whatever its group gets).
+    #[serde(rename_all = "camelCase")]
+    SetProfileRoute {
+        profile_id: String,
+        #[serde(default)]
+        route_id: Option<String>,
     },
 
     // ---- asset files ----
@@ -320,19 +359,55 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             }
         }
 
-        MutationIntent::UpsertRoutingRule { rule } => {
-            upsert_by_id(&mut state.routing_rules, (**rule).clone());
+        MutationIntent::UpsertRoutingRule { block_id, rule } => {
+            if let Some(b) = block_mut(state, block_id) {
+                upsert_by_id(&mut b.rules, (**rule).clone());
+            }
         }
-        MutationIntent::RemoveRoutingRule { id } => {
-            state.routing_rules.retain(|r| r.id != *id);
+        MutationIntent::RemoveRoutingRule { block_id, id } => {
+            if let Some(b) = block_mut(state, block_id) {
+                b.rules.retain(|r| r.id != *id);
+            }
         }
-        MutationIntent::ReorderRoutingRules { from, to } => {
-            move_item_by_index(&mut state.routing_rules, *from as usize, *to as usize);
+        MutationIntent::ReorderRoutingRules { block_id, from, to } => {
+            if let Some(b) = block_mut(state, block_id) {
+                move_item_by_index(&mut b.rules, *from as usize, *to as usize);
+            }
         }
-        MutationIntent::ImportRoutingRules { rules, mode } => match mode {
-            ImportMode::Replace => state.routing_rules = rules.clone(),
-            ImportMode::Merge => state.routing_rules.extend(rules.iter().cloned()),
-        },
+        MutationIntent::ImportRoutingRules {
+            block_id,
+            rules,
+            mode,
+        } => {
+            if let Some(b) = block_mut(state, block_id) {
+                match mode {
+                    ImportMode::Replace => b.rules = rules.clone(),
+                    ImportMode::Merge => b.rules.extend(rules.iter().cloned()),
+                }
+            }
+        }
+
+        MutationIntent::UpsertRuleBlock { block } => {
+            upsert_by_id(&mut state.rule_blocks, (**block).clone());
+        }
+        MutationIntent::RemoveRuleBlock { id } => {
+            state.rule_blocks.retain(|b| b.id != *id);
+            for r in &mut state.routes {
+                r.blocks.retain(|b| b.block_id != *id);
+            }
+        }
+        MutationIntent::UpsertRoute { route } => {
+            upsert_route(state, (**route).clone());
+        }
+        MutationIntent::RemoveRoute { id } => {
+            if id != DEFAULT_ROUTE_ID {
+                state.routes.retain(|r| r.id != *id);
+            }
+        }
+        MutationIntent::SetProfileRoute {
+            profile_id,
+            route_id,
+        } => set_profile_route(state, profile_id, route_id.as_deref()),
 
         MutationIntent::UpsertAssetFile { asset } => {
             upsert_by_id(&mut state.asset_files, (**asset).clone());
@@ -375,9 +450,7 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 state
                     .subscriptions
                     .extend(incoming.subscriptions.iter().cloned());
-                state
-                    .routing_rules
-                    .extend(incoming.routing_rules.iter().cloned());
+                merge_routes(state, incoming);
                 state
                     .asset_files
                     .extend(incoming.asset_files.iter().cloned());
@@ -387,6 +460,35 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
         },
         MutationIntent::ReplaceState { state: replacement } => {
             *state = (**replacement).clone();
+        }
+    }
+}
+
+fn block_mut<'a>(state: &'a mut AppState, id: &str) -> Option<&'a mut RuleBlock> {
+    state.rule_blocks.iter_mut().find(|b| b.id == id)
+}
+
+/// Add a backup's blocks and routes to the current ones. Its default route's
+/// blocks join the end of the current default route; a block or route already
+/// here by id is the one kept. A backup from before routes brings a flat rule
+/// list, which becomes a block first.
+fn merge_routes(state: &mut AppState, incoming: &AppState) {
+    let mut incoming = incoming.clone();
+    fold_legacy_rules(&mut incoming);
+    for block in incoming.rule_blocks {
+        if !state.rule_blocks.iter().any(|b| b.id == block.id) {
+            state.rule_blocks.push(block);
+        }
+    }
+    for route in incoming.routes {
+        if route.id == DEFAULT_ROUTE_ID {
+            if let Some(default) = state.routes.iter_mut().find(|r| r.id == DEFAULT_ROUTE_ID) {
+                default.blocks.extend(route.blocks);
+            } else {
+                state.routes.insert(0, route);
+            }
+        } else if !state.routes.iter().any(|r| r.id == route.id) {
+            state.routes.push(route);
         }
     }
 }
@@ -439,8 +541,8 @@ fn upsert_profile_front(profiles: &mut Vec<Profile>, profile: Profile) {
     }
 }
 
-/// Trait for the `{ id }`-keyed entities (subs, rules, assets) so one upsert serves
-/// all three: replace in place by id, else append.
+/// Trait for the `{ id }`-keyed entities (subs, rules, blocks, assets) so one
+/// upsert serves them all: replace in place by id, else append.
 trait HasId {
     fn entity_id(&self) -> &str;
 }
@@ -450,6 +552,11 @@ impl HasId for Subscription {
     }
 }
 impl HasId for RoutingRule {
+    fn entity_id(&self) -> &str {
+        &self.id
+    }
+}
+impl HasId for RuleBlock {
     fn entity_id(&self) -> &str {
         &self.id
     }
@@ -805,10 +912,8 @@ mod tests {
         assert_eq!(s.subscriptions.len(), 1);
     }
 
-    #[test]
-    fn import_routing_rules_merge_and_replace() {
-        let mut s = base();
-        let rule = |id: &str| RoutingRule {
+    fn rule(id: &str) -> RoutingRule {
+        RoutingRule {
             id: id.into(),
             remarks: id.into(),
             enabled: true,
@@ -821,26 +926,139 @@ mod tests {
             process: None,
             package_name: None,
             source_ip: None,
-        };
-        s.routing_rules = vec![rule("r1")];
+        }
+    }
+
+    fn with_block(rules: &[&str]) -> AppState {
+        let mut s = base();
+        s.rule_blocks = vec![RuleBlock {
+            id: "b1".into(),
+            name: "B".into(),
+            rules: rules.iter().map(|id| rule(id)).collect(),
+        }];
+        s
+    }
+
+    fn rule_ids(s: &AppState) -> Vec<&str> {
+        s.rule_blocks[0]
+            .rules
+            .iter()
+            .map(|r| r.id.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn import_routing_rules_merge_and_replace() {
+        let mut s = with_block(&["r1"]);
         apply_mutation(
             &mut s,
             &MutationIntent::ImportRoutingRules {
+                block_id: "b1".into(),
                 rules: vec![rule("r2")],
                 mode: ImportMode::Merge,
             },
         );
-        let ids: Vec<&str> = s.routing_rules.iter().map(|r| r.id.as_str()).collect();
-        assert_eq!(ids, vec!["r1", "r2"]);
+        assert_eq!(rule_ids(&s), vec!["r1", "r2"]);
         apply_mutation(
             &mut s,
             &MutationIntent::ImportRoutingRules {
+                block_id: "b1".into(),
                 rules: vec![rule("r3")],
                 mode: ImportMode::Replace,
             },
         );
-        let ids: Vec<&str> = s.routing_rules.iter().map(|r| r.id.as_str()).collect();
-        assert_eq!(ids, vec!["r3"]);
+        assert_eq!(rule_ids(&s), vec!["r3"]);
+    }
+
+    #[test]
+    fn rule_edits_land_in_their_block_and_skip_an_unknown_one() {
+        let mut s = with_block(&["r1", "r2"]);
+        let upsert = |block: &str, id: &str| MutationIntent::UpsertRoutingRule {
+            block_id: block.into(),
+            rule: Box::new(rule(id)),
+        };
+        apply_mutation(&mut s, &upsert("b1", "r3"));
+        apply_mutation(&mut s, &upsert("nope", "r4"));
+        assert_eq!(rule_ids(&s), vec!["r1", "r2", "r3"]);
+        apply_mutation(
+            &mut s,
+            &MutationIntent::ReorderRoutingRules {
+                block_id: "b1".into(),
+                from: 2,
+                to: 0,
+            },
+        );
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveRoutingRule {
+                block_id: "b1".into(),
+                id: "r1".into(),
+            },
+        );
+        assert_eq!(rule_ids(&s), vec!["r3", "r2"]);
+    }
+
+    #[test]
+    fn removing_a_block_takes_it_out_of_every_route() {
+        let mut s = with_block(&["r1"]);
+        let link = crate::route::RouteBlockRef {
+            block_id: "b1".into(),
+            enabled: true,
+        };
+        s.routes[0].blocks = vec![link.clone()];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::UpsertRoute {
+                route: Box::new(Route {
+                    id: "work".into(),
+                    name: "Work".into(),
+                    blocks: vec![link],
+                    ..crate::route::default_route()
+                }),
+            },
+        );
+        apply_mutation(&mut s, &MutationIntent::RemoveRuleBlock { id: "b1".into() });
+        assert!(s.rule_blocks.is_empty());
+        assert!(s.routes.iter().all(|r| r.blocks.is_empty()));
+    }
+
+    #[test]
+    fn the_default_route_cannot_be_removed() {
+        let mut s = base();
+        apply_mutation(
+            &mut s,
+            &MutationIntent::RemoveRoute {
+                id: DEFAULT_ROUTE_ID.into(),
+            },
+        );
+        assert_eq!(s.routes.len(), 1);
+    }
+
+    #[test]
+    fn merging_an_old_backup_folds_its_rules_into_the_default_route() {
+        let mut s = with_block(&["r1"]);
+        s.routes[0].blocks = vec![crate::route::RouteBlockRef {
+            block_id: "b1".into(),
+            enabled: true,
+        }];
+        let mut incoming = base();
+        incoming.routes.clear();
+        incoming.rule_blocks.clear();
+        incoming.routing_rules = vec![rule("old")];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::ImportBackup {
+                incoming: Box::new(incoming),
+                mode: ImportMode::Merge,
+            },
+        );
+        let blocks: Vec<&str> = s.routes[0]
+            .blocks
+            .iter()
+            .map(|b| b.block_id.as_str())
+            .collect();
+        assert_eq!(blocks, vec!["b1", "block-main"]);
+        assert_eq!(s.rule_blocks[1].rules[0].id, "old");
     }
 
     #[test]

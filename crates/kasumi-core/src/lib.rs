@@ -16,6 +16,7 @@
 //! - [`mixins`] — shared field groups (meta/endpoint/transport/tls)
 //! - [`profile`] — the 13-protocol `Profile` discriminated union
 //! - [`state`] — groups/subscriptions/rules/assets + settings/AppState
+//! - [`route`] — rule blocks and the route each profile runs with
 //! - [`share`] — share-link parse/build
 
 pub mod app_process;
@@ -33,6 +34,7 @@ pub mod mutate;
 pub mod normalize;
 pub mod outbound_bind;
 pub mod profile;
+pub mod route;
 pub mod share;
 pub mod singbox_config;
 pub mod state;

@@ -577,6 +577,29 @@ fn plain_rules() -> Vec<RoutingRule> {
     ]
 }
 
+/// The flat list a profile gets from a route with one block and "everything
+/// else → direct".
+fn route_final_direct_rules() -> Vec<RoutingRule> {
+    use kasumi_core::route::{RouteBlockRef, RuleBlock, default_route, resolve_route};
+    let mut state = kasumi_core::state::default_app_state();
+    state.rule_blocks = vec![RuleBlock {
+        id: "b".into(),
+        name: "B".into(),
+        rules: plain_rules(),
+    }];
+    state.routes = vec![kasumi_core::route::Route {
+        blocks: vec![RouteBlockRef {
+            block_id: "b".into(),
+            enabled: true,
+        }],
+        final_outbound: "direct".into(),
+        ..default_route()
+    }];
+    let profile = kasumi_core::share::parse_share_link("vless://u@e.x:443?type=tcp#P", None)
+        .expect("a share link");
+    resolve_route(&state, &profile)
+}
+
 /// Rules exercising the port / network / protocol match fields (both builders
 /// emit these into routing rule objects).
 fn match_field_rules() -> Vec<RoutingRule> {
@@ -696,6 +719,17 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
                 ..Default::default()
             },
             source_match_rules(),
+            false,
+        ),
+        // A route whose unmatched traffic goes direct: its blocks' rules, then
+        // the catch-all `resolve_route` appends.
+        (
+            "rules-route-final-direct",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                ..Default::default()
+            },
+            route_final_direct_rules(),
             false,
         ),
         // Every domain strategy the builder branches on.
