@@ -529,6 +529,90 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .chip-scroller::-webkit-scrollbar { display: none; }
 .chip-scroller .chip { flex: 0 0 auto; }
 
+/* ---------- Routes (Settings → Routing → Rules) ---------- */
+.route-chip-off { margin-left: 6px; font-size: 11px; opacity: 0.7; }
+.route-scope .list-row { padding: 10px 0; }
+/* The route as a line top to bottom: blocks hang on it, the final outbound closes it. */
+.route-chain { position: relative; margin-top: 4px; padding-left: 24px; }
+.route-chain::before {
+  content: ""; position: absolute; left: 9px; top: 12px; bottom: 26px; width: 2px;
+  border-radius: 1px; background: var(--outline-variant);
+}
+.route-cap {
+  display: flex; align-items: center; gap: 8px; margin-left: -24px; padding: 4px 0 2px;
+  font-size: 12px; color: var(--on-surface-faint);
+}
+.route-cap .material-symbols-rounded {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--sc-high);
+  display: flex; align-items: center; justify-content: center; font-size: 14px; position: relative;
+}
+.route-empty { font-size: var(--fs-support); color: var(--on-surface-faint); padding: 8px 0; }
+.route-step { position: relative; padding-top: 8px; }
+.route-step::before {
+  content: ""; position: absolute; left: -19px; top: calc(50% + 4px); width: 10px; height: 10px;
+  margin-top: -5px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 3px var(--surface);
+}
+.route-step.muted::before { background: var(--outline); }
+.route-step .list-row { background: var(--sc-high); border-radius: 14px; padding: 8px 10px 8px 2px; gap: 8px; }
+.route-step .list-row + .list-row { border-top: none; }
+.route-step.muted .lr-main, .route-step.muted .lr-icon { opacity: 0.55; }
+.route-insert {
+  position: absolute; left: -24px; top: -6px; width: 22px; height: 22px; padding: 0; z-index: 1;
+  border-radius: 50%; border: 1px solid var(--outline-variant); background: var(--surface);
+  color: var(--on-surface-faint); display: flex; align-items: center; justify-content: center;
+  font-size: 14px; cursor: pointer; transition: color var(--dur-fast), border-color var(--dur-fast);
+}
+.route-insert:hover, .route-insert:focus-visible { color: var(--primary); border-color: var(--primary); }
+.route-chain > .route-insert { position: relative; left: -24px; top: 0; margin: 4px 0 -2px; }
+.route-final {
+  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 8px; padding: 8px 10px; border-radius: 14px;
+  border: 1px dashed var(--outline-variant);
+}
+.route-final::before {
+  content: ""; position: absolute; left: -19px; top: 50%; width: 10px; height: 10px; margin-top: -5px;
+  border-radius: 2px; background: var(--on-surface-variant); box-shadow: 0 0 0 3px var(--surface);
+}
+.route-final.muted { opacity: 0.6; }
+.route-final-label { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 0; }
+.route-final > :last-child { flex: 0 1 160px; min-width: 120px; }
+.route-final-label .lr-title { font-size: var(--fs-title); font-weight: 500; }
+.route-final-label .lr-sub { font-size: var(--fs-support); color: var(--on-surface-faint); }
+.route-shared-note {
+  display: flex; gap: 10px; align-items: flex-start; margin: 2px 0 12px; padding: 10px 12px;
+  border-radius: 12px; background: var(--sc-high); color: var(--on-surface-variant);
+  font-size: 13px; line-height: 1.45;
+}
+.route-shared-note > .material-symbols-rounded { font-size: 18px; margin-top: 1px; color: var(--primary); }
+.route-search { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; color: var(--on-surface-faint); }
+.route-search .input { flex: 1; font-family: var(--font-ui); }
+.route-scope-profile { padding-left: 28px; }
+.route-scope-profile .list-row { padding: 10px 4px; }
+.route-link {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-top: 10px;
+  padding: 4px 8px 4px 8px; border-radius: 100px; border: 1px solid var(--outline-variant);
+  background: transparent; color: var(--on-surface-variant); font: 500 12.5px var(--font-ui); cursor: pointer;
+}
+.route-link:hover { color: var(--on-surface); border-color: var(--outline); }
+.route-graph { display: flex; gap: 12px; }
+.route-graph-canvas {
+  flex: 1; min-width: 0; height: min(62vh, 560px); border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--outline-variant); background: var(--sc-lowest);
+}
+.route-graph.wide .route-graph-canvas { height: min(68vh, 640px); }
+.route-graph .react-flow { --xy-background-color: transparent; }
+.route-graph-palette { width: 230px; flex: 0 0 auto; max-height: min(68vh, 640px); overflow-y: auto; }
+.route-graph-node {
+  box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 12px; border: 1.5px solid var(--outline-variant); background: var(--sc-high);
+  color: var(--on-surface); font-family: var(--font-ui);
+}
+.route-graph-node.out { border-radius: 100px; background: var(--sc); }
+.route-graph-node.dim { opacity: 0.45; }
+.route-graph-node > .material-symbols-rounded { font-size: 18px; flex: 0 0 auto; color: var(--on-surface-variant); }
+.route-graph-title { font-size: 13px; font-weight: 600; }
+.route-graph-sub { font-size: 11px; color: var(--on-surface-variant); }
+
 .scrim { position: absolute; inset: 0; background: oklch(0 0 0 / 0.55); z-index: 40; animation: fade var(--dur-base) ease; }
 .scrim.leaving { opacity: 0; transition: opacity var(--dur-slow) ease; }
 @keyframes fade { from { opacity: 0; } }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AssetFile, Profile } from "../generated/bindings";
+import type { AssetFile, Profile, RoutingRule } from "../generated/bindings";
 import type {
   AdvancedSettings,
   AppState,
@@ -19,6 +19,7 @@ type BridgeMock = {
 };
 
 import { applyMutation } from "../lib/apply-mutation";
+import { DEFAULT_ROUTE_ID, exportRoutePackage, newRoute, parseRoutePackage } from "../lib/routes";
 import { uid } from "../lib/utils";
 import { EMPTY_SETTINGS } from "./defaults";
 
@@ -107,7 +108,8 @@ function makeState(overrides: Partial<AppState> = {}): AppState {
       { id: "g-alt", name: "Alt" },
     ],
     subscriptions: overrides.subscriptions ?? [],
-    routingRules: overrides.routingRules ?? [],
+    ruleBlocks: overrides.ruleBlocks ?? [],
+    routes: overrides.routes ?? [newRoute(DEFAULT_ROUTE_ID, "Default")],
     assetFiles: overrides.assetFiles ?? [],
     settings: overrides.settings ?? DEFAULT_SETTINGS,
     activeId: overrides.activeId ?? null,
@@ -198,7 +200,8 @@ beforeEach(async () => {
       profiles: s.profiles,
       groups: s.groups,
       subscriptions: s.subscriptions,
-      routingRules: s.routingRules,
+      ruleBlocks: s.ruleBlocks,
+      routes: s.routes,
       assetFiles: s.assetFiles,
       settings: s.settings,
       activeId: s.activeId,
@@ -517,10 +520,21 @@ describe("useAppStore", () => {
     expect(toasts.filter((x) => x.includes("disk full"))).toHaveLength(1);
   });
 
+  /** One block "b1" with `rules`, run by the default route. */
+  function withBlock(rules: RoutingRule[]) {
+    return makeState({
+      ruleBlocks: [{ id: "b1", name: "Mine", rules }],
+      routes: [
+        { ...newRoute(DEFAULT_ROUTE_ID, "Default"), blocks: [{ blockId: "b1", enabled: true }] },
+      ],
+    });
+  }
+  const ruleIds = () => useAppStore.getState().ruleBlocks[0].rules.map((r) => r.id);
+
   it("restoring an older backup without rules keeps the current rules", async () => {
     const rule = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block" };
-    useAppStore.setState({ ...makeState({ routingRules: [rule] }) });
-    // A backup from before rules were exported: no routingRules key at all.
+    useAppStore.setState({ ...withBlock([rule]) });
+    // A backup from before rules were exported: no rules or routes at all.
     // (`profiles: []` is what the real schema defaults it to; the mock doesn't.)
     const legacy = JSON.stringify({
       profiles: [],
@@ -530,7 +544,24 @@ describe("useAppStore", () => {
       activeId: null,
     });
     await useAppStore.getState().importBackup(legacy, "replace");
-    expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1"]);
+    expect(ruleIds()).toEqual(["r1"]);
+  });
+
+  it("a backup from before routes brings its flat rules in as a block", async () => {
+    useAppStore.setState({ ...withBlock([]) });
+    const old = JSON.stringify({
+      profiles: [],
+      groups: [{ id: "g-main", name: "Main" }],
+      subscriptions: [],
+      routingRules: [{ id: "old", remarks: "Old", enabled: true, outboundTag: "direct" }],
+      settings: DEFAULT_SETTINGS,
+      activeId: null,
+    });
+    await useAppStore.getState().importBackup(old, "merge");
+    const { ruleBlocks, routes } = useAppStore.getState();
+    const added = ruleBlocks.find((b) => b.rules.some((r) => r.id === "old"));
+    expect(added).toBeDefined();
+    expect(routes[0].blocks?.map((b) => b.blockId)).toEqual(["b1", added?.id]);
   });
 
   it("a new rule goes above a rule that catches everything", async () => {
@@ -542,15 +573,15 @@ describe("useAppStore", () => {
       outboundTag: "direct",
       port: "1-65535",
     };
-    useAppStore.setState({ ...makeState({ routingRules: [ads, all] }), toasts: [] });
-    await useAppStore.getState().addRoutingRule({
+    useAppStore.setState({ ...withBlock([ads, all]), toasts: [] });
+    await useAppStore.getState().addRoutingRule("b1", {
       id: "r3",
       remarks: "QUIC",
       enabled: true,
       outboundTag: "block",
       port: "443",
     });
-    expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1", "r3", "r2"]);
+    expect(ruleIds()).toEqual(["r1", "r3", "r2"]);
     expect(useAppStore.getState().toasts.map((x) => x.msg)).toEqual([
       "Added above “Rest”, which catches all traffic",
     ]);
@@ -558,7 +589,7 @@ describe("useAppStore", () => {
 
   it("a new rule is appended when nothing catches everything, or when it does itself", async () => {
     const ads = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block", domain: ["x"] };
-    useAppStore.setState({ ...makeState({ routingRules: [ads] }), toasts: [] });
+    useAppStore.setState({ ...withBlock([ads]), toasts: [] });
     const all = {
       id: "r2",
       remarks: "Rest",
@@ -566,11 +597,56 @@ describe("useAppStore", () => {
       outboundTag: "direct",
       port: "1-65535",
     };
-    await useAppStore.getState().addRoutingRule(all);
+    await useAppStore.getState().addRoutingRule("b1", all);
     const second = { ...all, id: "r3", remarks: "Rest 2" };
-    await useAppStore.getState().addRoutingRule(second);
-    expect(useAppStore.getState().routingRules.map((r) => r.id)).toEqual(["r1", "r2", "r3"]);
+    await useAppStore.getState().addRoutingRule("b1", second);
+    expect(ruleIds()).toEqual(["r1", "r2", "r3"]);
     expect(useAppStore.getState().toasts).toEqual([]);
+  });
+
+  it("a forked block is the route's own; the other routes keep the original", async () => {
+    const rule = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block" };
+    useAppStore.setState({ ...withBlock([rule]) });
+    const work = await useAppStore.getState().addRoute("Work", {
+      blocks: [{ blockId: "b1", enabled: true }],
+    });
+    const copy = await useAppStore.getState().forkRuleBlock("b1", work);
+    const { routes, ruleBlocks } = useAppStore.getState();
+    expect(copy).not.toBe("b1");
+    expect(routes.find((r) => r.id === work)?.blocks?.map((b) => b.blockId)).toEqual([copy]);
+    expect(routes[0].blocks?.map((b) => b.blockId)).toEqual(["b1"]);
+    expect(ruleBlocks.find((b) => b.id === copy)?.rules.map((r) => r.remarks)).toEqual(["Ads"]);
+  });
+
+  it("picking a route for a profile takes it off the route it was on", async () => {
+    const p = makeVless({ meta: { id: "p1" } });
+    useAppStore.setState({ ...makeState({ profiles: [p] }) });
+    const a = await useAppStore.getState().addRoute("A", { profiles: ["p1"] });
+    const b = await useAppStore.getState().addRoute("B");
+    await useAppStore.getState().setProfileRoute("p1", b);
+    const listing = useAppStore
+      .getState()
+      .routes.filter((r) => r.profiles?.includes("p1"))
+      .map((r) => r.id);
+    expect(listing).toEqual([b]);
+    expect(listing).not.toContain(a);
+  });
+
+  it("an imported route reuses a block that is already here", async () => {
+    const rule = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block" };
+    useAppStore.setState({ ...withBlock([rule]) });
+    const pkg = parseRoutePackage(
+      exportRoutePackage(
+        { ...newRoute("x", "Shared"), blocks: [{ blockId: "b1", enabled: true }] },
+        useAppStore.getState().ruleBlocks,
+      ),
+    );
+    expect(pkg).not.toBeNull();
+    if (!pkg) return;
+    const id = await useAppStore.getState().importRoutePackage(pkg);
+    const { routes, ruleBlocks } = useAppStore.getState();
+    expect(ruleBlocks).toHaveLength(1);
+    expect(routes.find((r) => r.id === id)?.blocks?.map((b) => b.blockId)).toEqual(["b1"]);
   });
 
   it("updateSub ignores a second tap while the first fetch runs", async () => {

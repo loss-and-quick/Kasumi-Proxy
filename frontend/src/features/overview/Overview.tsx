@@ -20,9 +20,12 @@ import { useT } from "../../i18n";
 import { isServiceUp } from "../../lib/bridge";
 import { formatRate, formatUptime } from "../../lib/format";
 import { profileEndpointLabel } from "../../lib/profile-utils";
+import { routeFor } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
 import { askRemoveUnreachable } from "../profiles/confirmations";
 import { PingActionsSheet } from "../profiles/PingActionsSheet";
+import { routeName } from "../routes/labels";
+import { openRoute } from "../routes/viewState";
 
 export default function Overview({
   onNavigate,
@@ -74,6 +77,10 @@ export default function Overview({
     settings.routingMode !== "global" && !assetFiles.some((a) => a.lastUpdated != null);
 
   const active = profiles.find((p) => p.meta.id === activeId);
+  const routes = useAppStore((s) => s.routes);
+  // Only worth a line when rules are on and there is more than one route to be on.
+  const activeRoute =
+    settings.routingMode === "rules" && routes.length > 1 ? routeFor(routes, active) : undefined;
   // Backend-resolved core of the active profile (`resolveCores` cache in the store).
   const resolvedCore = useAppStore((s) =>
     activeId ? (s.coreResolutions[activeId]?.resolved ?? null) : null,
@@ -192,7 +199,20 @@ export default function Overview({
                   </span>
                 </div>
               </button>
-            ) : (
+            ) : null}
+            {active && activeRoute && (
+              <button
+                type="button"
+                className="route-link"
+                onClick={() => openRoute(activeRoute.id)}
+                title={t("overview.routeOpen")}
+              >
+                <Icon name="alt_route" />
+                {t("overview.route", { route: routeName(activeRoute, t) })}
+                <Icon name="chevron_right" />
+              </button>
+            )}
+            {active ? null : (
               // Start stays disabled without a profile, so this is the way forward.
               <button
                 type="button"

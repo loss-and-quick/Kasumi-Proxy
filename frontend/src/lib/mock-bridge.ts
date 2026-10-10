@@ -280,7 +280,8 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
       profiles: [...state.profiles],
       groups: [...state.groups],
       subscriptions: [...state.subscriptions],
-      routingRules: [...state.routingRules],
+      ruleBlocks: [...state.ruleBlocks],
+      routes: [...state.routes],
       assetFiles: [...state.assetFiles],
     });
   },
@@ -405,20 +406,6 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     // `parse` yields the `Serialize | Deserialize` union; narrow to the all-fields
     // phase (assignable to the UI `AppState`, which only omits `schemaVersion`).
     const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
-    if (mode === "replace") {
-      // Keep current profiles — backups no longer include them
-      state = { ...incoming, profiles: state.profiles };
-    } else {
-      // merge: add profiles/groups/subs, then overwrite settings
-      state = {
-        ...state,
-        profiles: [...state.profiles, ...incoming.profiles],
-        groups: [...state.groups, ...incoming.groups],
-        subscriptions: [...state.subscriptions, ...incoming.subscriptions],
-        routingRules: [...state.routingRules, ...incoming.routingRules],
-        assetFiles: [...state.assetFiles, ...incoming.assetFiles],
-        settings: incoming.settings,
-      };
-    }
+    state = applyMutation(state, { kind: "importBackup", incoming, mode });
   },
 };

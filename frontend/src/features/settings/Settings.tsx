@@ -5,7 +5,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AppBar, Card, IconBtn, NavRow } from "../../components";
-import type { AssetFile, CoreEngine, Protocol, RoutingRule } from "../../generated/bindings";
+import type { AssetFile, CoreEngine, Protocol } from "../../generated/bindings";
 import { DEFAULT_CORE_BY_PROTOCOL } from "../../generated/defaults";
 import { LOCALES, useLang, useT } from "../../i18n";
 import { isServiceUp } from "../../lib/bridge";
@@ -32,12 +32,6 @@ import { TunEngineSection } from "./sections/TunEngineSection";
 const AssetFileSheet = lazy(() =>
   import("./AssetFileSheet").then((module) => ({ default: module.AssetFileSheet })),
 );
-const RoutingRuleSheet = lazy(() =>
-  import("./RoutingRuleSheet").then((module) => ({ default: module.RoutingRuleSheet })),
-);
-const RoutingRulesIOSheet = lazy(() =>
-  import("./RoutingRulesIOSheet").then((module) => ({ default: module.RoutingRulesIOSheet })),
-);
 
 export default function Settings({
   onOpenBackup,
@@ -51,17 +45,13 @@ export default function Settings({
   const settings = useAppStore((s) => s.settings);
   const profiles = useAppStore((s) => s.profiles);
   const subscriptions = useAppStore((s) => s.subscriptions);
-  const routingRules = useAppStore((s) => s.routingRules);
+  const routes = useAppStore((s) => s.routes);
   const assetFiles = useAppStore((s) => s.assetFiles);
   const activeId = useAppStore((s) => s.activeId);
   const service = useAppStore((s) => s.service);
   const caps = useAppStore((s) => s.caps);
   const notify = useAppStore((s) => s.notify);
   const setSetting = useAppStore((s) => s.setSetting);
-  const addRoutingRule = useAppStore((s) => s.addRoutingRule);
-  const updateRoutingRule = useAppStore((s) => s.updateRoutingRule);
-  const removeRoutingRule = useAppStore((s) => s.removeRoutingRule);
-  const reorderRoutingRules = useAppStore((s) => s.reorderRoutingRules);
   const addAssetFile = useAppStore((s) => s.addAssetFile);
   const updateAssetFile = useAppStore((s) => s.updateAssetFile);
   const removeAssetFile = useAppStore((s) => s.removeAssetFile);
@@ -88,17 +78,9 @@ export default function Settings({
   // The page already moved the hash, so Back pops that; only Escape needs the stack.
   useEscapeToClose(!isWide && hashPage !== null, closePage, { history: false });
 
-  const profileOptions = useMemo(
-    () => profiles.map((p) => ({ id: p.meta.id, remarks: p.meta.remarks })),
-    [profiles],
-  );
-
-  const [editingRule, setEditingRule] = useState<RoutingRule | null>(null);
-  const [ruleSheetOpen, setRuleSheetOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetFile | null>(null);
   const [assetSheetOpen, setAssetSheetOpen] = useState(false);
   const [busyAssets, setBusyAssets] = useState<string[]>([]);
-  const [rulesIOOpen, setRulesIOOpen] = useState(false);
 
   const coreFor = (protocol: Protocol): CoreEngine =>
     settings.coreByProtocol?.[protocol] ?? DEFAULT_CORE_BY_PROTOCOL[protocol];
@@ -112,22 +94,6 @@ export default function Settings({
   const bridgeMode = getRuntimeBridgeMode();
 
   const busyAssetSet = useMemo(() => new Set(busyAssets), [busyAssets]);
-
-  const openNewRule = () => {
-    setEditingRule(null);
-    setRuleSheetOpen(true);
-  };
-
-  const openRuleEditor = (rule: RoutingRule) => {
-    setEditingRule(rule);
-    setRuleSheetOpen(true);
-  };
-
-  const saveRule = (rule: RoutingRule) => {
-    const existing = routingRules.find((item) => item.id === rule.id);
-    if (existing) updateRoutingRule(rule.id, rule);
-    else addRoutingRule(rule);
-  };
 
   const openNewAsset = () => {
     setEditingAsset(null);
@@ -209,7 +175,7 @@ export default function Settings({
   const summary: Record<SettingsPage, string> = {
     routing:
       settings.routingMode === "rules"
-        ? `${t("settings.routingRulesEditor")} · ${t("settings.rulesCount", { count: routingRules.length })}`
+        ? `${t("settings.routingRulesEditor")} · ${t("routes.count", { count: routes.length })}`
         : settings.routingMode === "custom"
           ? t("settings.routingCustom")
           : t("settings.routingGlobal"),
@@ -242,15 +208,7 @@ export default function Settings({
           <RoutingSection
             settings={settings}
             set={set}
-            routingRules={routingRules}
-            profiles={profileOptions}
             setRoutingMode={setRoutingMode}
-            openNewRule={openNewRule}
-            onEditRule={openRuleEditor}
-            addRoutingRule={addRoutingRule}
-            updateRoutingRule={updateRoutingRule}
-            reorderRoutingRules={reorderRoutingRules}
-            onOpenRulesIO={() => setRulesIOOpen(true)}
             onOpenAppFilter={onOpenAppFilter}
           />
         );
@@ -366,23 +324,6 @@ export default function Settings({
         </>
       )}
 
-      {ruleSheetOpen && (
-        <Suspense fallback={null}>
-          <RoutingRuleSheet
-            open={ruleSheetOpen}
-            rule={editingRule}
-            profiles={profileOptions}
-            onClose={() => setRuleSheetOpen(false)}
-            onSave={saveRule}
-            onDelete={removeRoutingRule}
-          />
-        </Suspense>
-      )}
-      {rulesIOOpen && (
-        <Suspense fallback={null}>
-          <RoutingRulesIOSheet open={rulesIOOpen} onClose={() => setRulesIOOpen(false)} />
-        </Suspense>
-      )}
       {assetSheetOpen && (
         <Suspense fallback={null}>
           <AssetFileSheet

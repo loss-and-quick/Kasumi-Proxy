@@ -25,7 +25,8 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const groups = useAppStore((s) => s.groups);
   const subscriptions = useAppStore((s) => s.subscriptions);
   const allProfiles = useAppStore((s) => s.profiles);
-  const routingRules = useAppStore((s) => s.routingRules);
+  const ruleBlocks = useAppStore((s) => s.ruleBlocks);
+  const routes = useAppStore((s) => s.routes);
   const assetFiles = useAppStore((s) => s.assetFiles);
   // Profiles a subscription brings are fetched again after a restore; the ones
   // made by hand (or pasted) exist nowhere else, so they go in the backup.
@@ -39,11 +40,11 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const backupJson = useMemo(
     () =>
       JSON.stringify(
-        { profiles, groups, subscriptions, routingRules, assetFiles, settings, activeId },
+        { profiles, groups, subscriptions, ruleBlocks, routes, assetFiles, settings, activeId },
         null,
         2,
       ),
-    [profiles, groups, subscriptions, routingRules, assetFiles, settings, activeId],
+    [profiles, groups, subscriptions, ruleBlocks, routes, assetFiles, settings, activeId],
   );
   const [importText, setImportText] = useState("");
   const [qrOpen, setQrOpen] = useState(false);

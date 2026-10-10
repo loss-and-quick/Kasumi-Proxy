@@ -10,6 +10,7 @@ import type {
   Meta,
   Profile,
   Protocol,
+  Route,
   RoutingRule,
   Tls,
   Transport,
@@ -17,6 +18,7 @@ import type {
 import { EMPTY_SETTINGS } from "../store/defaults";
 import type { AdvancedSettings, AppState, Subscription } from "./bridge";
 import { emptyProfile, type ProfileOf } from "./profile-utils";
+import { DEFAULT_ROUTE_ID, newRoute, type RuleBlock } from "./routes";
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -199,7 +201,55 @@ export const PROFILES_SEED: Profile[] = [
   }),
 ];
 
-export const ROUTING_RULES_SEED: RoutingRule[] = [];
+const rule = (id: string, remarks: string, fields: Partial<RoutingRule>): RoutingRule => ({
+  id,
+  remarks,
+  enabled: true,
+  outboundTag: "direct",
+  ...fields,
+});
+
+// Demo routes: two shared blocks on the default route, and a route for the
+// Amsterdam group that adds work domains in front and sends the rest direct.
+export const RULE_BLOCKS_SEED: RuleBlock[] = [
+  {
+    id: "b-ads",
+    name: "Block ads",
+    rules: [rule("r-ads", "Ads", { outboundTag: "block", domain: ["geosite:category-ads-all"] })],
+  },
+  {
+    id: "b-lan",
+    name: "Local network direct",
+    rules: [rule("r-lan", "Private IPs", { ip: ["geoip:private"] })],
+  },
+  {
+    id: "b-work",
+    name: "Work",
+    rules: [
+      rule("r-corp", "Corporate", { domain: ["domain:corp.example", "domain:intra.example"] }),
+      rule("r-git", "Git over SSH", { port: "22" }),
+    ],
+  },
+];
+
+export const ROUTES_SEED: Route[] = [
+  {
+    ...newRoute(DEFAULT_ROUTE_ID, "Default"),
+    blocks: [
+      { blockId: "b-ads", enabled: true },
+      { blockId: "b-lan", enabled: true },
+    ],
+  },
+  {
+    ...newRoute("route-work", "Work"),
+    groups: ["g-nl"],
+    blocks: [
+      { blockId: "b-work", enabled: true },
+      { blockId: "b-ads", enabled: true },
+    ],
+    finalOutbound: "direct",
+  },
+];
 
 export const ASSET_FILES_SEED: AssetFile[] = [];
 
@@ -215,7 +265,8 @@ export function seedAppState(): AppState {
     profiles: PROFILES_SEED,
     groups: GROUPS_SEED,
     subscriptions: SUBS_SEED,
-    routingRules: ROUTING_RULES_SEED,
+    ruleBlocks: RULE_BLOCKS_SEED,
+    routes: ROUTES_SEED,
     assetFiles: [],
     settings: SETTINGS_SEED,
     activeId: PROFILES_SEED[0].meta.id,
