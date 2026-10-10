@@ -33,6 +33,7 @@ import {
   routesUsing,
 } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
+import { useOrderedProfiles } from "../profiles/order";
 import { routeName, scopeSummary } from "./labels";
 import { useRoutesView } from "./viewState";
 
@@ -58,7 +59,7 @@ export function RoutesCard() {
   const sensors = useSortableSensors();
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
-  const profiles = useAppStore((s) => s.profiles);
+  const profiles = useOrderedProfiles();
   const groups = useAppStore((s) => s.groups);
   const saveRoute = useAppStore((s) => s.saveRoute);
   const activeId = useAppStore((s) => s.activeId);
@@ -96,14 +97,18 @@ export function RoutesCard() {
     { value: "proxy", label: t("routes.out.proxy") },
     { value: "direct", label: t("routes.out.direct") },
     { value: "block", label: t("routes.out.block") },
-    ...(profiles.length
-      ? [
-          {
-            group: t("routingSheet.outbound.profiles"),
-            options: profiles.map((p) => ({ value: p.meta.id, label: p.meta.remarks })),
-          },
-        ]
-      : []),
+    // Under each group's name, as on the Profiles screen.
+    ...groups.flatMap((g) => {
+      const members = profiles.filter((p) => p.meta.groupId === g.id);
+      return members.length
+        ? [
+            {
+              group: g.name,
+              options: members.map((p) => ({ value: p.meta.id, label: p.meta.remarks })),
+            },
+          ]
+        : [];
+    }),
   ];
 
   const insertButton = (index: number) => (

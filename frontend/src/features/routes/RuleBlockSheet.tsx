@@ -11,6 +11,7 @@ import type { RoutingRule } from "../../generated/bindings";
 import { useFormatters, useT } from "../../i18n";
 import { routeBlocks, routesUsing } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
+import { useOrderedProfiles } from "../profiles/order";
 import { routeName } from "./labels";
 import { RuleList } from "./RuleList";
 
@@ -41,7 +42,7 @@ export function RuleBlockSheet({
   const formatters = useFormatters();
   const block = useAppStore((s) => s.ruleBlocks.find((b) => b.id === blockId));
   const routes = useAppStore((s) => s.routes);
-  const profiles = useAppStore((s) => s.profiles);
+  const profiles = useOrderedProfiles();
   const renameRuleBlock = useAppStore((s) => s.renameRuleBlock);
   const removeRuleBlock = useAppStore((s) => s.removeRuleBlock);
   const forkRuleBlock = useAppStore((s) => s.forkRuleBlock);
