@@ -24,6 +24,7 @@ import { emptyProfile, schemaFor } from "../../lib/profile-utils";
 import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
+import { useOrderedProfiles } from "../profiles/order";
 import { routeName } from "../routes/labels";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
@@ -44,7 +45,8 @@ export default function Editor({
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
-  const profiles = useAppStore((s) => s.profiles);
+  // Hops are offered in the Profiles screen's order.
+  const ordered = useOrderedProfiles();
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
   const resolveGroup = useAppStore((s) => s.resolveGroup);
@@ -216,10 +218,9 @@ export default function Editor({
         ]
       : [];
 
-  const viaOpts = viaIds.flatMap((id) => {
-    const hop = profiles.find((p) => p.meta.id === id);
-    return hop ? [{ value: id, label: hop.meta.remarks }] : [];
-  });
+  const viaOpts = ordered
+    .filter((p) => viaIds.includes(p.meta.id))
+    .map((hop) => ({ value: hop.meta.id, label: hop.meta.remarks }));
   const proto = draft.protocol;
   const security = "tls" in draft && draft.tls ? (draft.tls.security ?? "none") : "none";
   const isReality = security === "reality";

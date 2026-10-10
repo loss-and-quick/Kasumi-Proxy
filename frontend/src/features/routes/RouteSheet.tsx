@@ -30,6 +30,7 @@ import {
   routeProfiles,
 } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
+import { useOrderedProfiles } from "../profiles/order";
 import { routeName } from "./labels";
 
 const SEARCH_FROM = 8;
@@ -51,7 +52,8 @@ export function RouteSheet({
   const formatters = useFormatters();
   const routes = useAppStore((s) => s.routes);
   const groups = useAppStore((s) => s.groups);
-  const profiles = useAppStore((s) => s.profiles);
+  // Listed as on the Profiles screen, so a profile is where it is expected.
+  const profiles = useOrderedProfiles();
   const saveRoute = useAppStore((s) => s.saveRoute);
   const addRoute = useAppStore((s) => s.addRoute);
   const removeRoute = useAppStore((s) => s.removeRoute);

@@ -16,6 +16,7 @@ import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
 import { copyText } from "./clipboard";
 import { askRemoveUnreachable } from "./confirmations";
+import { sortProfiles } from "./order";
 import { PingActionsSheet } from "./PingActionsSheet";
 import { ProfilesList } from "./ProfilesList";
 import { ProfilesToolbar } from "./ProfilesToolbar";
@@ -116,19 +117,7 @@ export default function Profiles({
     // While searching, rank by fuzzy relevance instead of the chosen sort.
     list = fuzzyFilterSort(list, query, profileSearchText);
   } else {
-    const pingRank = (id: string) => {
-      const p = testResults[id]?.ping;
-      return p != null && p >= 0 ? p : Number.MAX_SAFE_INTEGER;
-    };
-    list = [...list].sort((left, right) => {
-      if (sort === "ping") {
-        return (
-          pingRank(left.meta.id) - pingRank(right.meta.id) ||
-          left.meta.remarks.localeCompare(right.meta.remarks)
-        );
-      }
-      return left.meta.remarks.localeCompare(right.meta.remarks);
-    });
+    list = sortProfiles(list, sort, testResults);
   }
 
   const byGroup: Record<string, Profile[]> = {};
