@@ -574,6 +574,7 @@ export const DEFAULT_LOCAL_PAC_PORT = 10811;
 export const DEFAULT_LOG_ROTATE_KB = 512;
 export const DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
 export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=10000000";
+export const DEFAULT_ROUTE_ID = "route-default";
 
 /* Editor dropdown option lists (wire values, in declaration order). */
 export const PROTOCOL_OPTS: Protocol[] = ["vless","vmess","trojan","shadowsocks","socks","http","wireguard","hysteria2","tuic","anytls","naive","shadowtls","custom"];

@@ -13,11 +13,12 @@ use tokio::sync::Mutex;
 use kasumi_core::contract::SubAppliedEvent;
 use kasumi_core::core_config::{active_config_changed, build_core_config};
 use kasumi_core::profile::Profile;
+use kasumi_core::route::{repoint_profile_ids, resolve_route};
 use kasumi_core::share::parse_share_links;
 use kasumi_core::state::{AppState, Subscription};
 use kasumi_core::sub_apply::{
     ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
-    map_fetched_subscription_profiles, profile_filter_regex,
+    map_fetched_subscription_profiles, profile_filter_regex, refreshed_id,
 };
 
 use crate::net::{FetchUrlOptions, fetch_url};
@@ -251,6 +252,11 @@ async fn apply(
         &now_iso(),
     );
     let mut next = current.clone();
+    // Routes and rules that name one of this subscription's profiles follow it
+    // to its new id, as the active id does.
+    repoint_profile_ids(&mut next, &|id| {
+        refreshed_id(&current.profiles, id, &cur_sub.id, &mapped)
+    });
     next.profiles = res.profiles;
     next.subscriptions = res.subscriptions;
     next.active_id = res.active_id.clone();
@@ -296,8 +302,10 @@ fn config_changed(prev: &AppState, old_active: Option<&Profile>, next: &AppState
     let (Some(old), Some(new)) = (old_active, new_active) else {
         return true; // can't compare → restart to be safe
     };
-    let prev_cfg = build_core_config(old, &prev.settings, &prev.routing_rules, &prev.profiles, "");
-    let next_cfg = build_core_config(new, &next.settings, &next.routing_rules, &next.profiles, "");
+    let prev_rules = resolve_route(prev, old);
+    let next_rules = resolve_route(next, new);
+    let prev_cfg = build_core_config(old, &prev.settings, &prev_rules, &prev.profiles, "");
+    let next_cfg = build_core_config(new, &next.settings, &next_rules, &next.profiles, "");
     match (prev_cfg, next_cfg) {
         (Ok(a), Ok(b)) => active_config_changed(&a, &b),
         _ => true, // a build failed → don't risk leaving a stale config
@@ -448,6 +456,36 @@ mod tests {
         // TestPlatform reports Running → a restart of the new active id fired.
         let calls = lc.calls.lock().unwrap();
         assert!(calls.iter().any(|c| c.starts_with("restart")));
+    }
+
+    #[tokio::test]
+    async fn a_route_keeps_its_profile_through_a_refresh() {
+        let (p, _d) = TestPlatform::new();
+        let mut old = sample_vless();
+        old.meta_mut().id = "old".into();
+        old.meta_mut().sub_id = Some("s1".into());
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", "u")];
+        state.profiles = vec![old.clone()];
+        state.routes.push(kasumi_core::route::Route {
+            id: "work".into(),
+            name: "Work".into(),
+            profiles: vec!["old".into()],
+            ..kasumi_core::route::default_route()
+        });
+        write_app_state(&p, &state).await.unwrap();
+
+        let mut fresh = old;
+        fresh.meta_mut().id = "fresh".into();
+        let lc = RecordingLifecycle {
+            calls: StdMutex::new(vec![]),
+        };
+        apply(&p, &lc, &state.subscriptions[0], vec![fresh], true)
+            .await
+            .expect("apply returns the new state");
+
+        let after = read_app_state(&p).await.unwrap();
+        assert_eq!(after.routes[1].profiles, ["fresh"]);
     }
 
     #[tokio::test]

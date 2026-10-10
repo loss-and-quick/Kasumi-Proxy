@@ -241,7 +241,7 @@ pub fn next_active_id_after_subscription_update(
 /// Where a reference to profile `id` points after `sub_id`'s profiles were
 /// re-created with new ids: unchanged when `id` isn't one of them, else the
 /// refreshed profile with the same identity (then the same name), else `None`.
-fn refreshed_id(
+pub fn refreshed_id(
     profiles: &[Profile],
     id: &str,
     sub_id: &str,

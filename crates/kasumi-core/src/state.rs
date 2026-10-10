@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::contract::FetchMode;
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::{Profile, Protocol};
+use crate::route::{Route, RuleBlock};
 
 // Default local inbound ports used when settings leave them unset.
 pub const DEFAULT_LOCAL_SOCKS_PORT: u16 = 10808;
@@ -473,8 +474,16 @@ pub struct AppState {
     pub profiles: Vec<Profile>,
     pub groups: Vec<Group>,
     pub subscriptions: Vec<Subscription>,
-    #[serde(default)]
+    /// The flat rule list of versions before routes. Only read: normalization
+    /// folds it into a block of the default route, so it is never written back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub routing_rules: Vec<RoutingRule>,
+    /// Named rule lists that routes line up; see [`crate::route`].
+    #[serde(default)]
+    pub rule_blocks: Vec<RuleBlock>,
+    /// Which blocks each profile runs with; the default route comes first.
+    #[serde(default)]
+    pub routes: Vec<Route>,
     #[serde(default)]
     pub asset_files: Vec<AssetFile>,
     pub settings: AdvancedSettings,
@@ -502,6 +511,8 @@ pub fn default_app_state() -> AppState {
         }],
         subscriptions: Vec::new(),
         routing_rules: Vec::new(),
+        rule_blocks: Vec::new(),
+        routes: vec![crate::route::default_route()],
         asset_files: Vec::new(),
         settings: AdvancedSettings::default(),
         active_id: None,

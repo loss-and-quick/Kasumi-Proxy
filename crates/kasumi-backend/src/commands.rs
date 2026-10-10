@@ -234,24 +234,27 @@ pub(crate) async fn build_profile_config(
     id: &str,
 ) -> Result<CoreConfig, CommandError> {
     let paths = platform.paths();
-    let state: AppState = read_json(&paths.app_state)
+    // The full read path (migration + normalization), so state written by an
+    // older version builds with the same routes the UI shows.
+    let state = crate::state::read_app_state(platform)
         .await
         .ok_or_else(|| err("app-state not found"))?;
-    let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
+    let profiles = &state.profiles;
     let profile = profiles
         .iter()
         .find(|p| p.meta().id == id)
         .ok_or_else(|| err(format!("profile not found: {id}")))?;
+    let rules = kasumi_core::route::resolve_route(&state, profile);
     let srs_dir = paths.srs_dir.to_str().unwrap_or("");
-    let mut settings = state.settings;
+    let mut settings = state.settings.clone();
     if !platform.supports_proxy_modes() {
         // A platform that always runs tun (the Android root module) must not have
         // its tun inbound stripped by a non-tun proxyMode — e.g. one restored from
         // a desktop backup.
         settings.proxy_mode = kasumi_core::state::ProxyMode::Tun;
     }
-    let mut built = build_core_config(profile, &settings, &state.routing_rules, &profiles, srs_dir)
-        .map_err(err)?;
+    let mut built =
+        build_core_config(profile, &settings, &rules, profiles, srs_dir).map_err(err)?;
     if built.engine == CoreEngine::SingBox {
         apply_singbox_cache_file(
             &mut built.config,

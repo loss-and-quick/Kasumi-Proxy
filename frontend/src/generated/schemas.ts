@@ -314,6 +314,33 @@ export const RoutingRule_SerializeSchema = z.object({
 export type RoutingRule_Serialize = z.infer<typeof RoutingRule_SerializeSchema>;
 
 
+export const RuleBlock_SerializeSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	rules: z.array(RoutingRule_SerializeSchema),
+});
+export type RuleBlock_Serialize = z.infer<typeof RuleBlock_SerializeSchema>;
+
+
+export const RouteBlockRefSchema = z.object({
+	blockId: z.string(),
+	enabled: z.boolean().optional(),
+});
+export type RouteBlockRef = z.infer<typeof RouteBlockRefSchema>;
+
+
+export const RouteSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	enabled: z.boolean().optional(),
+	profiles: z.array(z.string()).optional(),
+	groups: z.array(z.string()).optional(),
+	blocks: z.array(RouteBlockRefSchema).optional(),
+	finalOutbound: z.string().optional(),
+});
+export type Route = z.infer<typeof RouteSchema>;
+
+
 export const WireguardSchema = z.object({
 	meta: MetaSchema,
 	endpoint: EndpointSchema,
@@ -643,7 +670,9 @@ export const AppState_SerializeSchema = z.object({
 	profiles: z.array(ProfileSchema),
 	groups: z.array(Group_SerializeSchema),
 	subscriptions: z.array(Subscription_SerializeSchema),
-	routingRules: z.array(RoutingRule_SerializeSchema),
+	routingRules: z.array(RoutingRule_SerializeSchema).optional(),
+	ruleBlocks: z.array(RuleBlock_SerializeSchema),
+	routes: z.array(RouteSchema),
 	assetFiles: z.array(AssetFileSchema),
 	settings: AdvancedSettings_SerializeSchema,
 	activeId: z.string().nullable(),
@@ -691,6 +720,14 @@ export const RoutingRule_DeserializeSchema = z.object({
 export type RoutingRule_Deserialize = z.infer<typeof RoutingRule_DeserializeSchema>;
 
 
+export const RuleBlock_DeserializeSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	rules: z.array(RoutingRule_DeserializeSchema).optional(),
+});
+export type RuleBlock_Deserialize = z.infer<typeof RuleBlock_DeserializeSchema>;
+
+
 export const Group_DeserializeSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -704,6 +741,8 @@ export const AppState_DeserializeSchema = z.object({
 	groups: z.array(Group_DeserializeSchema),
 	subscriptions: z.array(Subscription_DeserializeSchema),
 	routingRules: z.array(RoutingRule_DeserializeSchema).optional(),
+	ruleBlocks: z.array(RuleBlock_DeserializeSchema).optional(),
+	routes: z.array(RouteSchema).optional(),
 	assetFiles: z.array(AssetFileSchema).optional(),
 	settings: AdvancedSettings_DeserializeSchema,
 	activeId: z.string().nullable(),
@@ -757,6 +796,7 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	mode: ImportModeSchema,
 }), z.object({
 	kind: z.literal("importRoutingRules"),
+	blockId: z.string(),
 	rules: z.array(RoutingRule_SerializeSchema),
 	mode: ImportModeSchema,
 }), z.object({
@@ -773,7 +813,14 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("removeProfiles"),
 	ids: z.array(z.string()),
 }), z.object({
+	kind: z.literal("removeRoute"),
+	id: z.string(),
+}), z.object({
 	kind: z.literal("removeRoutingRule"),
+	blockId: z.string(),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeRuleBlock"),
 	id: z.string(),
 }), z.object({
 	kind: z.literal("removeSub"),
@@ -789,6 +836,7 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	to: z.number(),
 }), z.object({
 	kind: z.literal("reorderRoutingRules"),
+	blockId: z.string(),
 	from: z.number(),
 	to: z.number(),
 }), z.object({
@@ -797,6 +845,10 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("setActive"),
 	id: z.string().nullable(),
+}), z.object({
+	kind: z.literal("setProfileRoute"),
+	profileId: z.string(),
+	routeId: z.string().nullable(),
 }), z.object({
 	kind: z.literal("setSettings"),
 	settings: AdvancedSettings_SerializeSchema,
@@ -807,8 +859,15 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("upsertProfile"),
 	profile: ProfileSchema,
 }), z.object({
+	kind: z.literal("upsertRoute"),
+	route: RouteSchema,
+}), z.object({
 	kind: z.literal("upsertRoutingRule"),
+	blockId: z.string(),
 	rule: RoutingRule_SerializeSchema,
+}), z.object({
+	kind: z.literal("upsertRuleBlock"),
+	block: RuleBlock_SerializeSchema,
 }), z.object({
 	kind: z.literal("upsertSub"),
 	subscription: Subscription_SerializeSchema,
@@ -931,6 +990,7 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	mode: ImportModeSchema,
 }), z.object({
 	kind: z.literal("importRoutingRules"),
+	blockId: z.string(),
 	rules: z.array(RoutingRule_DeserializeSchema),
 	mode: ImportModeSchema,
 }), z.object({
@@ -947,7 +1007,14 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("removeProfiles"),
 	ids: z.array(z.string()),
 }), z.object({
+	kind: z.literal("removeRoute"),
+	id: z.string(),
+}), z.object({
 	kind: z.literal("removeRoutingRule"),
+	blockId: z.string(),
+	id: z.string(),
+}), z.object({
+	kind: z.literal("removeRuleBlock"),
 	id: z.string(),
 }), z.object({
 	kind: z.literal("removeSub"),
@@ -963,6 +1030,7 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	to: z.number(),
 }), z.object({
 	kind: z.literal("reorderRoutingRules"),
+	blockId: z.string(),
 	from: z.number(),
 	to: z.number(),
 }), z.object({
@@ -971,6 +1039,10 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("setActive"),
 	id: z.string().nullable().optional(),
+}), z.object({
+	kind: z.literal("setProfileRoute"),
+	profileId: z.string(),
+	routeId: z.string().nullable().optional(),
 }), z.object({
 	kind: z.literal("setSettings"),
 	settings: AdvancedSettings_DeserializeSchema,
@@ -981,8 +1053,15 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("upsertProfile"),
 	profile: ProfileSchema,
 }), z.object({
+	kind: z.literal("upsertRoute"),
+	route: RouteSchema,
+}), z.object({
 	kind: z.literal("upsertRoutingRule"),
+	blockId: z.string(),
 	rule: RoutingRule_DeserializeSchema,
+}), z.object({
+	kind: z.literal("upsertRuleBlock"),
+	block: RuleBlock_DeserializeSchema,
 }), z.object({
 	kind: z.literal("upsertSub"),
 	subscription: Subscription_DeserializeSchema,
@@ -1231,6 +1310,10 @@ export type RoutingMode = z.infer<typeof RoutingModeSchema>;
 
 export const RoutingRuleSchema = z.union([RoutingRule_DeserializeSchema, RoutingRule_SerializeSchema]);
 export type RoutingRule = z.infer<typeof RoutingRuleSchema>;
+
+
+export const RuleBlockSchema = z.union([RuleBlock_DeserializeSchema, RuleBlock_SerializeSchema]);
+export type RuleBlock = z.infer<typeof RuleBlockSchema>;
 
 
 export const ServiceStateSchema = z.union([ServiceState_DeserializeSchema, ServiceState_SerializeSchema]);

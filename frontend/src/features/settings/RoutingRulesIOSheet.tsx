@@ -1,6 +1,6 @@
 // ============================================================
 // features/settings/RoutingRulesIOSheet.tsx
-// Import / export of routing rules (JSON), modelled on the Backup sheet:
+// Import / export of one block's routing rules (JSON), modelled on the Backup sheet:
 // copy / QR / download to export, paste / scan QR with merge / replace to import.
 // ============================================================
 
@@ -23,8 +23,20 @@ const QrScannerSheet = lazy(() =>
   import("../../components/QrScannerSheet").then((module) => ({ default: module.QrScannerSheet })),
 );
 
-export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const routingRules = useAppStore((s) => s.routingRules);
+const NO_RULES: RoutingRule[] = [];
+
+export function RoutingRulesIOSheet({
+  open,
+  blockId,
+  onClose,
+}: {
+  open: boolean;
+  blockId: string;
+  onClose: () => void;
+}) {
+  const routingRules = useAppStore(
+    (s) => s.ruleBlocks.find((b) => b.id === blockId)?.rules ?? NO_RULES,
+  );
   const importRoutingRules = useAppStore((s) => s.importRoutingRules);
   const notify = useAppStore((s) => s.notify);
   const t = useT();
@@ -46,7 +58,7 @@ export function RoutingRulesIOSheet({ open, onClose }: { open: boolean; onClose:
   }, [importText, t]);
 
   const doImport = (mode: "merge" | "replace") => {
-    importRoutingRules(parsed.rules, mode);
+    void importRoutingRules(blockId, parsed.rules, mode);
     notify(t("rulesIo.summary", { count: parsed.rules.length }));
     onClose();
   };

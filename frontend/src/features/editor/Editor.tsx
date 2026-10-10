@@ -21,8 +21,10 @@ import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { emptyProfile, schemaFor } from "../../lib/profile-utils";
+import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
+import { routeName } from "../routes/labels";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
 import { RawConfigSection } from "./sections/RawConfigSection";
@@ -46,6 +48,8 @@ export default function Editor({
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
   const resolveGroup = useAppStore((s) => s.resolveGroup);
+  const routes = useAppStore((s) => s.routes);
+  const setProfileRoute = useAppStore((s) => s.setProfileRoute);
   const t = useT();
 
   const [draft, setDraft] = useState<Profile>(
@@ -54,11 +58,16 @@ export default function Editor({
   const [errors, setErrors] = useState<FieldErrors>({});
   // The group is picked apart from the draft: a new one is only created on save.
   const [group, setGroup] = useState<GroupChoice>(() => ({ id: draft.meta.groupId }));
+  // The route that lists this profile itself; "" follows its group's route.
+  const [listedRoute] = useState(
+    () => routes.find((r) => routeProfiles(r).includes(draft.meta.id))?.id ?? "",
+  );
+  const [route, setRoute] = useState(listedRoute);
   const [saving, setSaving] = useState(false);
   const notify = useAppStore((s) => s.notify);
   // What the form opened with, to tell whether closing would lose anything.
-  const opened = useRef(JSON.stringify([draft, group]));
-  const dirty = () => JSON.stringify([draft, group]) !== opened.current;
+  const opened = useRef(JSON.stringify([draft, group, route]));
+  const dirty = () => JSON.stringify([draft, group, route]) !== opened.current;
 
   // Every way out (swipe, scrim, Escape, ✕, Cancel) asks first when there are
   // unsaved changes.
@@ -174,6 +183,7 @@ export default function Editor({
     try {
       const groupId = await resolveGroup(group, "");
       await upsert({ ...profile, meta: { ...profile.meta, groupId } });
+      if (route !== listedRoute) await setProfileRoute(profile.meta.id, route || null);
     } catch (e) {
       // Keep the form open so nothing typed is lost.
       if (!wasReported(e))
@@ -184,6 +194,27 @@ export default function Editor({
     }
     onClose();
   };
+
+  // Without a route of its own the profile runs with its group's (or the default).
+  const groupId = "id" in group ? group.id : null;
+  const groupRoute =
+    routes.find((r) => routeEnabled(r) && groupId !== null && routeGroups(r).includes(groupId)) ??
+    routes.find(isDefaultRoute);
+  const routeOpts =
+    routes.length > 1
+      ? [
+          {
+            value: "",
+            label: t("editor.routeFollow", { route: groupRoute ? routeName(groupRoute, t) : "" }),
+          },
+          ...routes
+            .filter((r) => !isDefaultRoute(r))
+            .map((r) => ({
+              value: r.id,
+              label: routeEnabled(r) ? r.name : `${r.name} · ${t("routes.off")}`,
+            })),
+        ]
+      : [];
 
   const viaOpts = viaIds.flatMap((id) => {
     const hop = profiles.find((p) => p.meta.id === id);
@@ -228,6 +259,9 @@ export default function Editor({
         changeProtocol={changeProtocol}
         engineForced={engineForced}
         engineHint={engineHint}
+        route={route}
+        routeOpts={routeOpts}
+        setRoute={setRoute}
       />
 
       <CredentialsSection draft={draft} setRoot={setRoot} errors={errors} />

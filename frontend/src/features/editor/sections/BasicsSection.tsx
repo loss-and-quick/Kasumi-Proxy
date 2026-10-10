@@ -39,6 +39,9 @@ export function BasicsSection({
   changeProtocol,
   engineForced,
   engineHint,
+  route,
+  routeOpts,
+  setRoute,
 }: {
   draft: Profile;
   setMeta: MetaSetter;
@@ -51,6 +54,11 @@ export function BasicsSection({
   changeProtocol: (proto: Protocol) => void;
   engineForced: CoreEngine | null;
   engineHint: string;
+  /** The route listing this profile; "" follows its group. */
+  route: string;
+  /** Empty while there is only the default route: nothing to choose. */
+  routeOpts: Array<{ value: string; label: string }>;
+  setRoute: (id: string) => void;
 }) {
   const t = useT();
   const coreValue: (typeof CORE_SEL)[number] = engineForced ?? draft.meta.coreType ?? "global";
@@ -109,6 +117,16 @@ export function BasicsSection({
           options={[{ value: VIA_DIRECT, label: t("editor.viaDirect") }, ...viaOpts]}
           onChange={(value) => setMeta({ via: value === VIA_DIRECT ? null : value })}
           hint={t("editor.viaHint")}
+        />
+      )}
+
+      {routeOpts.length > 0 && (
+        <Select
+          label={t("editor.route")}
+          value={route}
+          options={routeOpts}
+          onChange={setRoute}
+          hint={t("editor.routeHint")}
         />
       )}
 

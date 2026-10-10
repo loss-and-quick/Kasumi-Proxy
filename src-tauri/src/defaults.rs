@@ -128,9 +128,10 @@ pub fn render() -> String {
     for (name, value) in nums {
         out.push_str(&format!("export const {name} = {value};\n"));
     }
-    let strs: [(&str, &str); 2] = [
+    let strs: [(&str, &str); 3] = [
         ("DEFAULT_DELAY_TEST_URL", state::DEFAULT_DELAY_TEST_URL),
         ("DEFAULT_SPEED_TEST_URL", state::DEFAULT_SPEED_TEST_URL),
+        ("DEFAULT_ROUTE_ID", kasumi_core::route::DEFAULT_ROUTE_ID),
     ];
     for (name, value) in strs {
         let json = serde_json::to_string(value).expect("string const");

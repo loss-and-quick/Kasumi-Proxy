@@ -20,7 +20,7 @@ use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_UR
 use kasumi_core::xray_config::build_xray_config;
 
 use crate::fs::{exists, read_text, remove_file};
-use crate::fsjson::{read_json, write_text_atomic};
+use crate::fsjson::write_text_atomic;
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
 
@@ -56,9 +56,8 @@ fn speed_limiter(limit: usize) -> Arc<Semaphore> {
 }
 
 async fn load_profile(platform: &dyn Platform, profile_id: &str) -> Option<Loaded> {
-    let paths = platform.paths();
-    let state: AppState = read_json(&paths.app_state).await?;
-    let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
+    let state = crate::state::read_app_state(platform).await?;
+    let profiles = state.profiles.clone();
     let profile = profiles.iter().find(|p| p.meta().id == profile_id)?.clone();
     Some(Loaded {
         profile,
@@ -275,7 +274,7 @@ fn build_test_config(
     let mut settings = loaded.state.settings.clone();
     settings.local_socks_port = Some(port);
     settings.local_http_port = Some(port + 1);
-    let rules = &loaded.state.routing_rules;
+    let rules = &kasumi_core::route::resolve_route(&loaded.state, &loaded.profile);
     let value = match engine {
         CoreEngine::SingBox => build_singbox_config(
             &loaded.profile,

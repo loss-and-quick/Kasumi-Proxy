@@ -13,6 +13,7 @@
 //! fixes). Pure and idempotent — running it twice equals running it once.
 
 use crate::chain::fixup_dangling_via;
+use crate::route::normalize_routes;
 use crate::state::{
     AppState, BASE_GROUP_ID, BASE_GROUP_NAME, Group, fixup_active_id, fixup_dangling_groups,
 };
@@ -21,13 +22,15 @@ use crate::state::{
 const LEGACY_DEFAULT_ASSET_IDS: [&str; 2] = ["asset-geoip", "asset-geosite"];
 
 /// Normalize a freshly-read [`AppState`] in place: ensure the base group exists
-/// and nothing names a missing group, drop legacy default assets, and null a dangling `active_id` and `via`s.
+/// and nothing names a missing group, drop legacy default assets, null a dangling
+/// `active_id` and `via`s, and bring routes to shape (folding a legacy rule list).
 pub fn normalize_app_state(state: &mut AppState) {
     ensure_base_group(state);
     fixup_dangling_groups(state);
     strip_legacy_default_assets(state);
     fixup_active_id(state);
     fixup_dangling_via(state);
+    normalize_routes(state);
 }
 
 /// The `g-main` base group must always exist (the share-import / emptyProfile

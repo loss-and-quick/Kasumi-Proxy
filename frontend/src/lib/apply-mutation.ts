@@ -1,7 +1,7 @@
 // ============================================================
 // src/lib/apply-mutation.ts
 // Dev-only TS port of the backend's `kasumi_core::mutate::apply_mutation` plus its
-// write-side middleware chain (FixupDanglingActiveId). The real
+// write-side middleware chain (FixupDanglingActiveId, FixupRoutes). The real
 // transports round-trip a MutationIntent to the Rust backend and render the
 // canonical AppState it returns; the mock bridge has no backend, so it applies the
 // same intent locally here. Production never imports this — it is the mock's
@@ -9,9 +9,11 @@
 // `crates/kasumi-core/src/mutate.rs`.
 // ============================================================
 
-import type { Profile } from "../generated/bindings";
+import type { Profile, RoutingRule } from "../generated/bindings";
 import { mergeSettings } from "../store/defaults";
 import type { AppState, MutationIntent } from "./bridge";
+import { uid } from "./profile-utils";
+import { DEFAULT_ROUTE_ID, normalizeRoutes, setProfileRoute, upsertRoute } from "./routes";
 
 const BASE_GROUP_ID = "g-main";
 
@@ -65,6 +67,36 @@ function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
   const next = [...items];
   next[i] = item;
   return next;
+}
+
+function editBlock(
+  state: AppState,
+  blockId: string,
+  edit: (rules: RoutingRule[]) => RoutingRule[],
+): AppState {
+  return {
+    ...state,
+    ruleBlocks: state.ruleBlocks.map((b) =>
+      b.id === blockId ? { ...b, rules: edit(b.rules) } : b,
+    ),
+  };
+}
+
+/** Mirrors `merge_routes`: the backup's blocks and routes join the current ones. */
+function mergeRoutes(state: AppState, raw: AppState): Pick<AppState, "ruleBlocks" | "routes"> {
+  const incoming = normalizeRoutes(raw, uid);
+  const blockIds = new Set(state.ruleBlocks.map((b) => b.id));
+  const routeIds = new Set(state.routes.map((r) => r.id));
+  const routes = state.routes.map((r) => {
+    const theirs = incoming.routes.find((x) => x.id === r.id);
+    return r.id === DEFAULT_ROUTE_ID && theirs
+      ? { ...r, blocks: [...(r.blocks ?? []), ...(theirs.blocks ?? [])] }
+      : r;
+  });
+  return {
+    ruleBlocks: [...state.ruleBlocks, ...incoming.ruleBlocks.filter((b) => !blockIds.has(b.id))],
+    routes: [...routes, ...incoming.routes.filter((r) => !routeIds.has(r.id))],
+  };
 }
 
 /** Apply one intent to `state`, returning a new state. Mirrors Rust `apply_mutation`. */
@@ -201,16 +233,37 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
     }
 
     case "upsertRoutingRule":
-      return { ...state, routingRules: upsertById(state.routingRules, intent.rule) };
+      return editBlock(state, intent.blockId, (rules) => upsertById(rules, intent.rule));
     case "removeRoutingRule":
-      return { ...state, routingRules: state.routingRules.filter((r) => r.id !== intent.id) };
+      return editBlock(state, intent.blockId, (rules) => rules.filter((r) => r.id !== intent.id));
     case "reorderRoutingRules":
-      return { ...state, routingRules: moveItem(state.routingRules, intent.from, intent.to) };
+      return editBlock(state, intent.blockId, (rules) => moveItem(rules, intent.from, intent.to));
     case "importRoutingRules":
+      return editBlock(state, intent.blockId, (rules) =>
+        intent.mode === "replace" ? intent.rules : [...rules, ...intent.rules],
+      );
+
+    case "upsertRuleBlock":
+      return { ...state, ruleBlocks: upsertById(state.ruleBlocks, intent.block) };
+    case "removeRuleBlock":
       return {
         ...state,
-        routingRules:
-          intent.mode === "replace" ? intent.rules : [...state.routingRules, ...intent.rules],
+        ruleBlocks: state.ruleBlocks.filter((b) => b.id !== intent.id),
+        routes: state.routes.map((r) => ({
+          ...r,
+          blocks: (r.blocks ?? []).filter((b) => b.blockId !== intent.id),
+        })),
+      };
+    case "upsertRoute":
+      return { ...state, routes: upsertRoute(state.routes, intent.route) };
+    case "removeRoute":
+      return intent.id === DEFAULT_ROUTE_ID
+        ? state
+        : { ...state, routes: state.routes.filter((r) => r.id !== intent.id) };
+    case "setProfileRoute":
+      return {
+        ...state,
+        routes: setProfileRoute(state.routes, intent.profileId, intent.routeId ?? null),
       };
 
     case "upsertAssetFile":
@@ -239,7 +292,7 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         profiles: [...state.profiles, ...incoming.profiles],
         groups: [...state.groups, ...incoming.groups],
         subscriptions: [...state.subscriptions, ...incoming.subscriptions],
-        routingRules: [...state.routingRules, ...incoming.routingRules],
+        ...mergeRoutes(state, incoming),
         assetFiles: [...state.assetFiles, ...incoming.assetFiles],
         settings: mergeSettings(incoming.settings),
       };
@@ -263,5 +316,6 @@ function fixupActiveId(next: AppState): AppState {
 export function applyMutation(prev: AppState, intent: MutationIntent): AppState {
   let next = applyIntent(prev, intent);
   next = fixupActiveId(next);
+  next = normalizeRoutes(next, uid);
   return next;
 }

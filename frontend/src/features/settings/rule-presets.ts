@@ -1,21 +1,21 @@
 // ============================================================
 // features/settings/rule-presets.ts
-// Quick-add templates for common routing rules. Each preset becomes a
-// full RoutingRule (with a generated id) when the user taps it.
+// Quick-add templates for common single rules. Each one becomes a full
+// RoutingRule (with a generated id) in the open block when the user taps it.
 // ============================================================
 
 import type { RoutingRule } from "../../generated/bindings";
 import type { DictKey } from "../../i18n";
 import { uid } from "../../lib/utils";
 
-export type RulePreset = {
+export type QuickRule = {
   id: string;
   labelKey: DictKey;
   icon: string;
   rule: Omit<RoutingRule, "id" | "remarks" | "enabled">;
 };
 
-export const RULE_PRESETS: RulePreset[] = [
+export const QUICK_RULES: QuickRule[] = [
   {
     id: "ads",
     labelKey: "settings.rulePreset.ads",
@@ -42,6 +42,6 @@ export const RULE_PRESETS: RulePreset[] = [
   },
 ];
 
-export function makePresetRule(preset: RulePreset, name: string): RoutingRule {
-  return { id: uid(), remarks: name, enabled: true, ...preset.rule };
+export function makeQuickRule(quick: QuickRule, name: string): RoutingRule {
+  return { id: uid(), remarks: name, enabled: true, ...quick.rule };
 }

@@ -6,7 +6,13 @@
 // ============================================================
 
 import { create } from "zustand";
-import type { AppState_Serialize, Profile, TestKind } from "../generated/bindings";
+import type {
+  AppState_Serialize,
+  Profile,
+  Route,
+  RouteBlockRef,
+  TestKind,
+} from "../generated/bindings";
 import { translateCurrent } from "../i18n";
 import type {
   AdvancedSettings,
@@ -26,6 +32,7 @@ import { isServiceUp } from "../lib/bridge";
 import { bridge } from "../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupNamed } from "../lib/groups";
 import { showNativeToast } from "../lib/ksu-webui";
+import { newRoute, type RoutePackage, routeBlocks, sameBlock } from "../lib/routes";
 import { isCatchAllRule } from "../lib/routing-rules";
 import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
@@ -116,12 +123,35 @@ interface Store extends AppState {
   updateSub: (id: string) => Promise<void>;
   updateAllSubs: () => Promise<void>;
 
-  // routing rules
-  addRoutingRule: (rule: RoutingRule) => Promise<void>;
-  updateRoutingRule: (id: string, patch: Partial<RoutingRule>) => Promise<void>;
-  removeRoutingRule: (id: string) => Promise<void>;
-  reorderRoutingRules: (from: number, to: number) => Promise<void>;
-  importRoutingRules: (rules: RoutingRule[], mode: "merge" | "replace") => Promise<void>;
+  // routing rules (each lives in a block)
+  addRoutingRule: (blockId: string, rule: RoutingRule) => Promise<void>;
+  updateRoutingRule: (blockId: string, id: string, patch: Partial<RoutingRule>) => Promise<void>;
+  removeRoutingRule: (blockId: string, id: string) => Promise<void>;
+  reorderRoutingRules: (blockId: string, from: number, to: number) => Promise<void>;
+  importRoutingRules: (
+    blockId: string,
+    rules: RoutingRule[],
+    mode: "merge" | "replace",
+  ) => Promise<void>;
+
+  // rule blocks and routes
+  /** Create a block and, with `place`, put it into that route (at `index`, else last). */
+  addRuleBlock: (
+    name: string,
+    rules?: RoutingRule[],
+    place?: { routeId: string; index?: number },
+  ) => Promise<string>;
+  renameRuleBlock: (id: string, name: string) => Promise<void>;
+  removeRuleBlock: (id: string) => Promise<void>;
+  /** Give `routeId` its own copy of a shared block; other routes keep the original. */
+  forkRuleBlock: (blockId: string, routeId: string) => Promise<string>;
+  saveRoute: (route: Route) => Promise<void>;
+  addRoute: (name: string, init?: Partial<Route>) => Promise<string>;
+  removeRoute: (id: string) => Promise<void>;
+  /** Run a profile with `routeId`; `null` leaves it to its group's route or the default. */
+  setProfileRoute: (profileId: string, routeId: string | null) => Promise<void>;
+  /** Add a route shared as a package; blocks identical to existing ones are reused. */
+  importRoutePackage: (pkg: RoutePackage) => Promise<string>;
 
   // asset files
   addAssetFile: (asset: AssetFile) => Promise<void>;
@@ -191,7 +221,8 @@ export const useAppStore = create<Store>((set, get) => {
         profiles: next.profiles,
         groups: next.groups,
         subscriptions: next.subscriptions,
-        routingRules: next.routingRules,
+        ruleBlocks: next.ruleBlocks,
+        routes: next.routes,
         assetFiles: next.assetFiles,
         settings: mergeSettings(next.settings),
         activeId: next.activeId,
@@ -204,6 +235,7 @@ export const useAppStore = create<Store>((set, get) => {
   // AppState the backend returns. No local invariant logic, no full-state shipping.
   // A rejected write is never silent: the user hears about it here, once, and
   // the caller still sees the failure (as a ReportedError) for its own flow.
+  const blockOf = (id: string) => get().ruleBlocks.find((b) => b.id === id);
   const mutate = (intent: MutationIntent) =>
     bridge
       .mutate(intent)
@@ -330,7 +362,8 @@ export const useAppStore = create<Store>((set, get) => {
         profiles: state.profiles,
         groups: state.groups,
         subscriptions: state.subscriptions,
-        routingRules: state.routingRules,
+        ruleBlocks: state.ruleBlocks,
+        routes: state.routes,
         assetFiles: state.assetFiles,
         settings: mergeSettings(state.settings),
         activeId: state.activeId,
@@ -400,7 +433,8 @@ export const useAppStore = create<Store>((set, get) => {
     profiles: [],
     groups: [],
     subscriptions: [],
-    routingRules: [],
+    ruleBlocks: [],
+    routes: [],
     assetFiles: [],
     settings: EMPTY_SETTINGS,
     activeId: null,
@@ -866,36 +900,97 @@ export const useAppStore = create<Store>((set, get) => {
       for (const sub of enabled) await get().updateSub(sub.id);
     },
 
-    async addRoutingRule(rule) {
-      const before = get().routingRules;
+    async addRoutingRule(blockId, rule) {
+      const before = blockOf(blockId)?.rules ?? [];
       const isNew = !before.some((r) => r.id === rule.id);
       const catchAll = before.findIndex(isCatchAllRule);
-      await mutate({ kind: "upsertRoutingRule", rule });
+      await mutate({ kind: "upsertRoutingRule", blockId, rule });
       // Appended below a rule that matches everything, a new rule would never
       // match; it goes just above that rule instead.
       if (!isNew || catchAll < 0 || isCatchAllRule(rule)) return;
-      const at = get().routingRules.findIndex((r) => r.id === rule.id);
+      const at = blockOf(blockId)?.rules.findIndex((r) => r.id === rule.id) ?? -1;
       if (at <= catchAll) return;
-      await mutate({ kind: "reorderRoutingRules", from: at, to: catchAll });
+      await mutate({ kind: "reorderRoutingRules", blockId, from: at, to: catchAll });
       get().notify(
         translateCurrent("store.rule.addedAboveCatchAll", { name: before[catchAll].remarks }),
       );
     },
-    updateRoutingRule(id, rulePatch) {
-      const rule = get().routingRules.find((r) => r.id === id);
+    updateRoutingRule(blockId, id, rulePatch) {
+      const rule = blockOf(blockId)?.rules.find((r) => r.id === id);
       if (!rule) return Promise.resolve();
-      return mutate({ kind: "upsertRoutingRule", rule: { ...rule, ...rulePatch } });
+      return mutate({ kind: "upsertRoutingRule", blockId, rule: { ...rule, ...rulePatch } });
     },
-    removeRoutingRule(id) {
-      return mutate({ kind: "removeRoutingRule", id });
+    removeRoutingRule(blockId, id) {
+      return mutate({ kind: "removeRoutingRule", blockId, id });
     },
-    reorderRoutingRules(from, to) {
-      return mutate({ kind: "reorderRoutingRules", from, to });
+    reorderRoutingRules(blockId, from, to) {
+      return mutate({ kind: "reorderRoutingRules", blockId, from, to });
     },
-    importRoutingRules(rules, mode) {
+    importRoutingRules(blockId, rules, mode) {
       // Re-id imported rules so they never collide with existing ones.
       const incoming = rules.map((rule) => ({ ...rule, id: uid() }));
-      return mutate({ kind: "importRoutingRules", rules: incoming, mode });
+      return mutate({ kind: "importRoutingRules", blockId, rules: incoming, mode });
+    },
+
+    async addRuleBlock(name, rules = [], place) {
+      const id = uid();
+      const block = { id, name, rules: rules.map((rule) => ({ ...rule, id: uid() })) };
+      await mutate({ kind: "upsertRuleBlock", block });
+      const route = place && get().routes.find((r) => r.id === place.routeId);
+      if (route) {
+        const refs = [...routeBlocks(route)];
+        refs.splice(place.index ?? refs.length, 0, { blockId: id, enabled: true });
+        await mutate({ kind: "upsertRoute", route: { ...route, blocks: refs } });
+      }
+      return id;
+    },
+    renameRuleBlock(id, name) {
+      const block = blockOf(id);
+      if (!block) return Promise.resolve();
+      return mutate({ kind: "upsertRuleBlock", block: { ...block, name } });
+    },
+    removeRuleBlock(id) {
+      return mutate({ kind: "removeRuleBlock", id });
+    },
+    async forkRuleBlock(blockId, routeId) {
+      const block = blockOf(blockId);
+      const route = get().routes.find((r) => r.id === routeId);
+      if (!block || !route) return blockId;
+      const id = uid();
+      const copy = {
+        id,
+        name: translateCurrent("routes.block.copyName", { name: block.name }),
+        rules: block.rules.map((rule) => ({ ...rule, id: uid() })),
+      };
+      await mutate({ kind: "upsertRuleBlock", block: copy });
+      const blocks = routeBlocks(route).map((ref) =>
+        ref.blockId === blockId ? { ...ref, blockId: id } : ref,
+      );
+      await mutate({ kind: "upsertRoute", route: { ...route, blocks } });
+      return id;
+    },
+    saveRoute(route) {
+      return mutate({ kind: "upsertRoute", route });
+    },
+    async addRoute(name, init = {}) {
+      const id = uid();
+      await mutate({ kind: "upsertRoute", route: { ...newRoute(id, name), ...init, id } });
+      return id;
+    },
+    removeRoute(id) {
+      return mutate({ kind: "removeRoute", id });
+    },
+    setProfileRoute(profileId, routeId) {
+      return mutate({ kind: "setProfileRoute", profileId, routeId });
+    },
+    async importRoutePackage(pkg) {
+      const blocks: RouteBlockRef[] = [];
+      for (const incoming of pkg.blocks) {
+        const same = get().ruleBlocks.find((b) => sameBlock(b, incoming));
+        const blockId = same?.id ?? (await get().addRuleBlock(incoming.name, incoming.rules));
+        blocks.push({ blockId, enabled: incoming.enabled });
+      }
+      return get().addRoute(pkg.name, { blocks, finalOutbound: pkg.finalOutbound });
     },
 
     addAssetFile(asset) {
@@ -967,10 +1062,16 @@ export const useAppStore = create<Store>((set, get) => {
       const parsedState = parsed.data as AppState_Serialize;
       // Older backups carry no routing rules or resource files. Reading those as
       // "none" would wipe the current ones on Replace, so they stay as they are.
+      // A backup from before routes carries a flat rule list instead, which the
+      // backend turns into a block of the default route.
       const raw = parsedJson as Record<string, unknown>;
+      const hasRoutes = "routes" in raw;
+      const keepRoutes = !hasRoutes && !("routingRules" in raw);
       const incoming: AppState_Serialize = {
         ...parsedState,
-        routingRules: "routingRules" in raw ? parsedState.routingRules : get().routingRules,
+        ruleBlocks: keepRoutes ? get().ruleBlocks : (parsedState.ruleBlocks ?? []),
+        routes: keepRoutes ? get().routes : (parsedState.routes ?? []),
+        routingRules: hasRoutes ? undefined : parsedState.routingRules,
         assetFiles: "assetFiles" in raw ? parsedState.assetFiles : get().assetFiles,
       };
       // AppStateSchema silently drops invalid profiles (logged with reasons via
