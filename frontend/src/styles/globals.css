@@ -616,6 +616,9 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 .route-graph-node.out { border-radius: 100px; background: var(--sc); }
 .route-graph-node.dim { opacity: 0.45; }
+/* The selected route carries this block switched off: same mute the chain
+   list uses, plus a dashed border so the state reads at a glance. */
+.route-graph-node.off { opacity: 0.55; border-style: dashed; }
 .route-graph-node > .material-symbols-rounded { font-size: 18px; flex: 0 0 auto; color: var(--on-surface-variant); }
 .route-graph-title { font-size: 13px; font-weight: 600; }
 .route-graph-sub { font-size: 11px; color: var(--on-surface-variant); }

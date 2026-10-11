@@ -25,7 +25,7 @@ import {
 import { useEffect, useMemo } from "react";
 import { Icon, ListRow, Sheet } from "../../components";
 import { useFormatters, useT } from "../../i18n";
-import { PROXY_OUTBOUND, routeBlocks } from "../../lib/routes";
+import { PROXY_OUTBOUND, refEnabled, routeBlocks } from "../../lib/routes";
 import { useIsWide } from "../../lib/useIsWide";
 import { useAppStore } from "../../store/useAppStore";
 import {
@@ -46,6 +46,8 @@ type NodeData = {
   color?: string;
   icon: string;
   dim: boolean;
+  /** The selected route carries this block switched off. */
+  off?: boolean;
   kind: GraphNode["kind"];
   vertical: boolean;
   hasSource?: boolean;
@@ -54,7 +56,7 @@ type NodeData = {
 function GraphCard({ data }: NodeProps<Node<NodeData>>) {
   return (
     <div
-      className={`route-graph-node ${data.kind}${data.dim ? " dim" : ""}`}
+      className={`route-graph-node ${data.kind}${data.dim ? " dim" : ""}${data.off ? " off" : ""}`}
       style={{ borderColor: data.color, ...NODE_SIZE[data.kind] }}
     >
       {data.kind !== "route" && (
@@ -97,6 +99,7 @@ export function RouteGraphSheet({
   const notify = useAppStore((s) => s.notify);
 
   const selected = routes.find((r) => r.id === selectedId);
+  const refs = useMemo(() => (selected ? routeBlocks(selected) : []), [selected]);
 
   const graph = useMemo(() => {
     const colorOf = (routeId: string) => routeColor(routes.findIndex((r) => r.id === routeId));
@@ -144,6 +147,7 @@ export function RouteGraphSheet({
       }
       if (n.kind === "block") {
         const block = ruleBlocks.find((b) => b.id === n.blockId);
+        const ref = refs.find((r) => r.blockId === n.blockId);
         return {
           ...base,
           data: {
@@ -153,6 +157,7 @@ export function RouteGraphSheet({
             title: block?.name ?? "",
             sub: t("routes.block.rules", { count: block?.rules.length ?? 0 }),
             dim,
+            off: ref ? !refEnabled(ref) : false,
           },
         };
       }
@@ -200,13 +205,13 @@ export function RouteGraphSheet({
           stroke: color,
           strokeWidth: e.ruleOut ? 1 : mine ? 2.5 : 1.5,
           strokeDasharray: e.ruleOut || e.faint ? "4 4" : undefined,
-          opacity: e.ruleOut ? 0.45 : mine ? 1 : 0.3,
+          opacity: e.ruleOut ? 0.45 : e.faint ? (mine ? 0.5 : 0.3) : mine ? 1 : 0.3,
         },
         markerEnd: e.ruleOut ? undefined : { type: MarkerType.ArrowClosed, color },
       };
     });
     return { nodes, edges };
-  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters, activeId]);
+  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters, activeId, refs]);
 
   // The flow keeps its own copy (measured sizes, the selected link to delete);
   // it follows the store whenever routes change.
@@ -216,8 +221,6 @@ export function RouteGraphSheet({
     setNodes(graph.nodes);
     setEdges(graph.edges);
   }, [graph, setNodes, setEdges]);
-
-  const refs = selected ? routeBlocks(selected) : [];
 
   // A link from the selected route's start or one of its blocks to a block puts
   // that block right after it (moving it if it was further along).
