@@ -589,9 +589,10 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .route-scope-profile { padding-left: 28px; }
 .route-scope-profile .list-row { padding: 10px 4px; }
 .route-link {
-  display: inline-flex; align-items: center; gap: 4px; max-width: 100%; margin-top: 10px;
-  padding: 4px 8px 4px 8px; border-radius: 100px; border: 1px solid var(--outline-variant);
-  background: transparent; color: var(--on-surface-variant); font: 500 12.5px var(--font-ui); cursor: pointer;
+  display: flex; align-items: center; gap: 4px; width: fit-content; max-width: 100%; margin-top: 10px;
+  padding: 4px 8px; border-radius: 100px; border: 1px solid var(--outline-variant);
+  background: var(--sc-high); color: var(--on-surface-variant); font: 500 12.5px var(--font-ui); cursor: pointer;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
 }
 .route-link:hover { color: var(--on-surface); border-color: var(--outline); }
 .route-graph { display: flex; gap: 12px; }
