@@ -32,6 +32,8 @@ export type GraphEdge = {
   faint?: boolean;
   /** Where a block's rules send traffic (not the route's path). */
   ruleOut?: boolean;
+  /** Resolves generic proxy outbound to the user-selected active profile. */
+  resolve?: boolean;
 };
 
 export const routeNodeId = (id: string) => `route:${id}`;
@@ -98,7 +100,7 @@ export function buildRouteGraph(
 export const NODE_SIZE = {
   route: { width: 170, height: 56 },
   block: { width: 180, height: 56 },
-  out: { width: 150, height: 50 },
+  out: { width: 130, height: 40 },
 } as const;
 
 /**
