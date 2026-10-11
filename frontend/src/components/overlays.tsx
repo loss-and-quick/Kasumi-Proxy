@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
-import { acquireSheet } from "../lib/sheetPresence";
+import { registerSheet, useIsTopSheet } from "../lib/sheetPresence";
 import { useEscapeToClose } from "../lib/useEscapeToClose";
 import { useSwipeDownToDismiss } from "../lib/useSwipeDownToDismiss";
 import type { ToastItem } from "../store/useAppStore";
@@ -49,14 +49,22 @@ export const Sheet = ({
   }, []);
   const swipe = useSwipeDownToDismiss(sheetRef, requestClose);
 
-  // Escape slides the sheet out like every other close path.
-  useEscapeToClose(open, requestClose);
-
-  // Register presence so the desktop side rail steps aside while open.
+  // Track registration in the central sheet stack.
+  const [sheetId, setSheetId] = useState<string | null>(null);
   useEffect(() => {
-    if (!open) return;
-    return acquireSheet();
+    if (!open) {
+      setSheetId(null);
+      return;
+    }
+    const reg = registerSheet();
+    setSheetId(reg.id);
+    return reg.release;
   }, [open]);
+
+  const isTop = useIsTopSheet(sheetId);
+
+  // Escape slides the sheet out like every other close path, but only for the top sheet.
+  useEscapeToClose(open && isTop, requestClose);
 
   // Reset the closing flag whenever the sheet (re)opens.
   useEffect(() => {
@@ -70,11 +78,12 @@ export const Sheet = ({
   if (!open) return null;
   return (
     <>
-      <Scrim onClose={() => void requestClose()} leaving={closing} />
+      {isTop && <Scrim onClose={() => void requestClose()} leaving={closing} />}
       <div
         ref={sheetRef}
-        className={`sheet${closing ? " leaving" : ""}`}
+        className={`sheet${closing ? " leaving" : ""}${!isTop ? " stacked-behind" : ""}`}
         onTransitionEnd={onTransitionEnd}
+        aria-hidden={!isTop}
         style={
           // `leaving` slides fully out; otherwise follow the drag. Disable the
           // transition only mid-drag so the gesture tracks the pointer 1:1.
