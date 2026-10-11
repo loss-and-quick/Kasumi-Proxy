@@ -139,9 +139,9 @@ export default function Overview({
             style={{
               padding: "20px 20px 18px",
               background: connected
-                ? "radial-gradient(120% 130% at 100% 0%, oklch(0.40 0.10 155 / 0.55), transparent 60%)"
+                ? "radial-gradient(120% 130% at 100% 0%, var(--running-accent), transparent 60%)"
                 : warn
-                  ? "radial-gradient(120% 130% at 100% 0%, oklch(0.42 0.10 85 / 0.5), transparent 60%)"
+                  ? "radial-gradient(120% 130% at 100% 0%, var(--warn-accent), transparent 60%)"
                   : "transparent",
               transition: "background 0.4s",
             }}
@@ -300,14 +300,14 @@ export default function Overview({
             )}
             <div className="primary-actions" style={{ display: "flex", gap: 10 }}>
               <Btn
+                variant={onSteady ? "error" : "filled"}
                 onClick={toggleService}
                 disabled={connecting || (!up && (!activeId || needsAssets))}
                 style={{
                   flex: 2,
                   height: 52,
                   fontSize: 15,
-                  background: onSteady ? "var(--error-container)" : "var(--running)",
-                  color: onSteady ? "oklch(0.92 0.04 25)" : "var(--on-running)",
+                  ...(onSteady ? {} : { background: "var(--running)", color: "var(--on-running)" }),
                 }}
               >
                 <Icon
@@ -323,7 +323,12 @@ export default function Overview({
                 style={{
                   flex: 1,
                   height: 52,
-                  outline: up && service.pendingRestart ? "1.5px solid var(--warn)" : undefined,
+                  ...(up && service.pendingRestart
+                    ? {
+                        background: "var(--warn-container)",
+                        color: "var(--on-warn-container)",
+                      }
+                    : {}),
                 }}
               >
                 <Icon name="restart_alt" /> {t("overview.restart")}

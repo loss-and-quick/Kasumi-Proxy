@@ -221,7 +221,7 @@ export function QrScannerSheet({ open, title, onClose, onResult }: Props) {
             borderRadius: 18,
             overflow: "hidden",
             background: "var(--sc-low)",
-            border: "1px solid oklch(1 0 0 / 0.06)",
+            border: "1px solid var(--hairline)",
           }}
         >
           {cameraNote ? (
@@ -254,7 +254,7 @@ export function QrScannerSheet({ open, title, onClose, onResult }: Props) {
                 display: "block",
                 aspectRatio: "3 / 4",
                 objectFit: "cover",
-                background: "oklch(0.18 0.01 260)",
+                background: "var(--bg)",
               }}
             />
           )}

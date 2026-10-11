@@ -8,14 +8,17 @@
   --on-primary:         oklch(0.30 0.10 var(--seed-h));
   --primary-container:  oklch(0.40 0.10 var(--seed-h));
   --on-primary-container: oklch(0.90 0.06 var(--seed-h));
+  --on-primary-container-variant: oklch(0.86 0.04 var(--seed-h));
   --primary-dim:        oklch(0.55 0.09 var(--seed-h));
 
   --running:            oklch(0.80 0.14 155);
   --on-running:         oklch(0.27 0.07 155);
   --running-container:  oklch(0.36 0.07 155);
+  --running-accent:     oklch(0.40 0.10 155 / 0.55);
   --warn:               oklch(0.83 0.13 85);
   --warn-container:     oklch(0.36 0.07 85);
   --on-warn-container:  oklch(0.90 0.05 85);
+  --warn-accent:        oklch(0.42 0.10 85 / 0.5);
   --error:              oklch(0.77 0.13 25);
   --on-error:           oklch(0.28 0.10 25);
   --error-container:    oklch(0.36 0.10 25);
@@ -34,6 +37,7 @@
   --on-surface-faint:   oklch(0.62 0.012 260);
   --outline:            oklch(0.55 0.012 260);
   --outline-variant:    oklch(0.34 0.010 260);
+  --hairline:           oklch(1 0 0 / 0.06);
 
   --font-ui: "Roboto", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;

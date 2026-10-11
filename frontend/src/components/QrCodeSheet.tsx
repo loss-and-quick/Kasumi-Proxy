@@ -57,7 +57,7 @@ export function QrCodeSheet({ open, title, text, onClose }: Props) {
         <div
           style={{
             borderRadius: 18,
-            border: "1px solid oklch(1 0 0 / 0.06)",
+            border: "1px solid var(--hairline)",
             background: "var(--sc-lowest)",
             padding: 16,
             minHeight: 260,
