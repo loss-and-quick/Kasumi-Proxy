@@ -52,13 +52,13 @@ export function ProfileRow({
         overflow: "hidden",
         display: "flex",
         alignItems: "stretch",
-        border: active ? "1px solid var(--primary)" : "1px solid oklch(1 0 0 / 0.04)",
+        border: "1px solid oklch(1 0 0 / 0.04)",
         background: active
           ? "var(--primary-container)"
           : selected
             ? "var(--sc)"
             : "var(--sc-lowest)",
-        transition: "background 0.2s, border-color 0.2s",
+        transition: "background 0.2s",
       }}
     >
       {bulkMode && (
@@ -123,7 +123,7 @@ export function ProfileRow({
               className="mono truncate"
               style={{
                 fontSize: 11.5,
-                color: active ? "oklch(0.86 0.04 var(--seed-h))" : "var(--on-surface-variant)",
+                color: active ? "var(--on-primary-container-variant)" : "var(--on-surface-variant)",
                 flex: 1,
               }}
             >

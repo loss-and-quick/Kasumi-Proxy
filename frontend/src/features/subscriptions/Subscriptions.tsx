@@ -398,7 +398,6 @@ function SubCard({
               fontSize: 11.5,
               pointerEvents: "none",
               color: "var(--warn)",
-              borderColor: "var(--warn)",
             }}
           >
             <Icon name="gpp_maybe" style={{ fontSize: 15 }} /> {t("subs.insecureLabel")}
@@ -412,7 +411,6 @@ function SubCard({
               fontSize: 11.5,
               pointerEvents: "none",
               color: "var(--error)",
-              borderColor: "var(--error)",
             }}
           >
             <Icon name="error" style={{ fontSize: 15 }} /> {t("subs.errorLabel")}
