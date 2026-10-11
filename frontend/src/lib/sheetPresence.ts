@@ -1,29 +1,37 @@
 // ============================================================
 // src/lib/sheetPresence.ts
-// Tracks how many bottom sheets are currently open so chrome
-// behind them (e.g. the desktop side rail) can step aside.
-// A module-level counter keeps it independent of the app store
-// and lets every <Sheet> register itself centrally.
+// Tracks bottom sheets in a stack so:
+// 1. Chrome behind them (e.g. desktop side rail) can step aside.
+// 2. When multiple sheets are open at once, only the topmost one
+//    is visible; background sheets are hidden without unmounting
+//    (preserving form state, scroll position, etc.) and restore
+//    automatically when the top sheet closes.
 // ============================================================
 import { useSyncExternalStore } from "react";
 
-let openCount = 0;
+const stack: string[] = [];
+let nextId = 1;
 const listeners = new Set<() => void>();
 
 function emit() {
   for (const notify of listeners) notify();
 }
 
-/** Mark a sheet as open; call the returned disposer when it closes. */
-export function acquireSheet(): () => void {
-  openCount += 1;
+/** Register a sheet in the stack; returns an id and a cleanup disposer. */
+export function registerSheet(): { id: string; release: () => void } {
+  const id = `sheet-${nextId++}`;
+  stack.push(id);
   emit();
   let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    openCount -= 1;
-    emit();
+  return {
+    id,
+    release: () => {
+      if (released) return;
+      released = true;
+      const idx = stack.indexOf(id);
+      if (idx !== -1) stack.splice(idx, 1);
+      emit();
+    },
   };
 }
 
@@ -34,7 +42,19 @@ export function useSheetOpen(): boolean {
       listeners.add(notify);
       return () => listeners.delete(notify);
     },
-    () => openCount > 0,
+    () => stack.length > 0,
+    () => false,
+  );
+}
+
+/** Reactive: true if this sheet is currently the topmost in the stack. */
+export function useIsTopSheet(id: string | null): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      listeners.add(notify);
+      return () => listeners.delete(notify);
+    },
+    () => id !== null && stack.length > 0 && stack[stack.length - 1] === id,
     () => false,
   );
 }
