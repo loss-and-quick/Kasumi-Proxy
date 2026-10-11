@@ -89,6 +89,7 @@ export function RouteGraphSheet({
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   const profiles = useAppStore((s) => s.profiles);
+  const activeId = useAppStore((s) => s.activeId);
   const groups = useAppStore((s) => s.groups);
   const saveRoute = useAppStore((s) => s.saveRoute);
   const notify = useAppStore((s) => s.notify);
@@ -142,6 +143,10 @@ export function RouteGraphSheet({
           vertical,
           icon: n.tag === "block" ? "block" : n.tag === "direct" ? "near_me" : "shield_moon",
           title: outboundLabel(n.tag, t, profiles),
+          sub:
+            n.tag === "proxy" || !n.tag
+              ? profiles.find((p) => p.meta.id === activeId)?.meta.remarks
+              : undefined,
           dim,
         },
       };
@@ -166,7 +171,7 @@ export function RouteGraphSheet({
       };
     });
     return { nodes, edges };
-  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters]);
+  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters, activeId]);
 
   // The flow keeps its own copy (measured sizes, the selected link to delete);
   // it follows the store whenever routes change.
