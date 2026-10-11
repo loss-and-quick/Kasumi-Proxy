@@ -928,6 +928,7 @@ const ru = {
   "store.service.selectActiveFirst": "Сначала выберите активный профиль",
   "store.service.error": "Ошибка сервиса: {error}",
   "store.write.failed": "Не удалось сохранить: {error}",
+  "store.routingEditNoRestart": "Маршрут запущенного профиля не затронут — перезапуск не нужен",
   "store.service.restarted": "Перезапущено",
   "store.service.stoppedProfileRemoved":
     "Сервис остановлен, потому что активный профиль был удалён",

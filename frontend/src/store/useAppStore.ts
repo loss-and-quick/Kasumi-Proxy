@@ -32,7 +32,7 @@ import { isServiceUp } from "../lib/bridge";
 import { bridge } from "../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupNamed } from "../lib/groups";
 import { showNativeToast } from "../lib/ksu-webui";
-import { newRoute, type RoutePackage, routeBlocks, sameBlock } from "../lib/routes";
+import { newRoute, type RoutePackage, routeBlocks, routeFor, sameBlock } from "../lib/routes";
 import { isCatchAllRule } from "../lib/routing-rules";
 import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
@@ -236,10 +236,59 @@ export const useAppStore = create<Store>((set, get) => {
   // A rejected write is never silent: the user hears about it here, once, and
   // the caller still sees the failure (as a ReportedError) for its own flow.
   const blockOf = (id: string) => get().ruleBlocks.find((b) => b.id === id);
+  // Routing edits that cannot reach the running data path (a route the active
+  // profile doesn't run, a block that route doesn't use) apply with nothing to
+  // restart; silence there reads as "the toggle got lost", so say so. Edits
+  // that do reach it flip pending_restart and the status frame toasts the cue.
+  const ROUTING_KINDS = new Set([
+    "upsertRoute",
+    "removeRoute",
+    "setProfileRoute",
+    "upsertRuleBlock",
+    "removeRuleBlock",
+    "upsertRoutingRule",
+    "removeRoutingRule",
+    "reorderRoutingRules",
+    "importRoutingRules",
+  ]);
+  const routingEditTouchesRunningPath = (intent: MutationIntent): boolean => {
+    const { routes, profiles, activeId } = get();
+    const active = profiles.find((p) => p.meta.id === activeId);
+    const activeRoute = active ? routeFor(routes, active) : null;
+    if (!activeRoute) return false;
+    const uses = (blockId: string) => routeBlocks(activeRoute).some((r) => r.blockId === blockId);
+    switch (intent.kind) {
+      case "upsertRoute":
+        return intent.route.id === activeRoute.id;
+      case "removeRoute":
+        return intent.id === activeRoute.id;
+      case "setProfileRoute":
+        return intent.profileId === activeId;
+      case "upsertRuleBlock":
+        return uses(intent.block.id);
+      case "removeRuleBlock":
+        return uses(intent.id);
+      case "upsertRoutingRule":
+      case "removeRoutingRule":
+      case "reorderRoutingRules":
+      case "importRoutingRules":
+        return uses(intent.blockId);
+      default:
+        return true;
+    }
+  };
   const mutate = (intent: MutationIntent) =>
     bridge
       .mutate(intent)
-      .then(applyState)
+      .then((next) => {
+        applyState(next);
+        if (
+          ROUTING_KINDS.has(intent.kind) &&
+          isServiceUp(get().service.state) &&
+          !routingEditTouchesRunningPath(intent)
+        )
+          get().notify(translateCurrent("store.routingEditNoRestart"));
+      })
       .catch((e: unknown) => {
         get().notify(translateCurrent("store.write.failed", { error: errorMessage(e) }));
         throw new ReportedError(e);
@@ -349,7 +398,11 @@ export const useAppStore = create<Store>((set, get) => {
       activeId && latencyMs != null && get().testResults[activeId]?.ping !== latencyMs
         ? { testResults: withTest(get(), activeId, { ping: latencyMs }) }
         : {};
+    const wasPending = get().service.pendingRestart;
     set({ service: { ...service, pendingRestart }, uploadRate, downloadRate, ...freshPing });
+    // The cue also lands as a toast on the flip, so it reaches whichever
+    // screen the edit was made from, not only Settings and Overview.
+    if (!wasPending && pendingRestart) get().notify(translateCurrent("overview.pendingRestart"));
   };
   // The daemon fetched & applied a subscription headlessly (it owns the restart
   // decision too) — re-read the persisted state so the UI reflects the new

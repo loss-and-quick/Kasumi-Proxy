@@ -845,6 +845,8 @@ const es = {
   "store.service.selectActiveFirst": "Selecciona primero un perfil activo",
   "store.service.error": "Error del servicio: {error}",
   "store.write.failed": "No se pudo guardar: {error}",
+  "store.routingEditNoRestart":
+    "La ruta del perfil en ejecución no cambia: no hace falta reiniciar",
   "store.service.restarted": "Reiniciado",
   "store.service.stoppedProfileRemoved": "El servicio se detuvo porque se eliminó el perfil activo",
   "store.service.stoppedProfileDeleted": "El servicio se detuvo porque se borró el perfil activo",
