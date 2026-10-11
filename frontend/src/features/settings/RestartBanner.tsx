@@ -16,18 +16,19 @@ export function RestartBanner() {
   if (!isServiceUp(service.state) || !service.pendingRestart) return null;
   return (
     <Card
-      className="flat"
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        padding: "10px 12px",
+        gap: 12,
+        padding: "10px 16px",
         marginBottom: 12,
-        border: "1px solid var(--warn)",
+        background: "var(--warn-container)",
+        border: "1px solid transparent",
+        borderRadius: "var(--card-radius)",
       }}
     >
       <Icon name="restart_alt" style={{ fontSize: 20, color: "var(--warn)" }} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--warn)" }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--on-warn-container)" }}>
         {t("overview.pendingRestart")}
       </span>
       <Btn variant="tonal" sm disabled={busy} onClick={() => void restart()}>
