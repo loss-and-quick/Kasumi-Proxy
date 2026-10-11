@@ -25,7 +25,7 @@ import {
 import { useEffect, useMemo } from "react";
 import { Icon, ListRow, Sheet } from "../../components";
 import { useFormatters, useT } from "../../i18n";
-import { routeBlocks } from "../../lib/routes";
+import { PROXY_OUTBOUND, routeBlocks } from "../../lib/routes";
 import { useIsWide } from "../../lib/useIsWide";
 import { useAppStore } from "../../store/useAppStore";
 import {
@@ -34,6 +34,7 @@ import {
   type GraphNode,
   layoutRouteGraph,
   NODE_SIZE,
+  outNodeId,
   routeColor,
   routeNodeId,
 } from "./graph";
@@ -47,6 +48,7 @@ type NodeData = {
   dim: boolean;
   kind: GraphNode["kind"];
   vertical: boolean;
+  hasSource?: boolean;
 };
 
 function GraphCard({ data }: NodeProps<Node<NodeData>>) {
@@ -63,7 +65,7 @@ function GraphCard({ data }: NodeProps<Node<NodeData>>) {
         <div className="truncate route-graph-title">{data.title}</div>
         {data.sub && <div className="truncate route-graph-sub">{data.sub}</div>}
       </div>
-      {data.kind !== "out" && (
+      {(data.kind !== "out" || data.hasSource) && (
         <Handle type="source" position={data.vertical ? Position.Bottom : Position.Right} />
       )}
     </div>
@@ -89,6 +91,7 @@ export function RouteGraphSheet({
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   const profiles = useAppStore((s) => s.profiles);
+  const activeId = useAppStore((s) => s.activeId);
   const groups = useAppStore((s) => s.groups);
   const saveRoute = useAppStore((s) => s.saveRoute);
   const notify = useAppStore((s) => s.notify);
@@ -98,14 +101,32 @@ export function RouteGraphSheet({
   const graph = useMemo(() => {
     const colorOf = (routeId: string) => routeColor(routes.findIndex((r) => r.id === routeId));
     const graph = buildRouteGraph(routes, ruleBlocks);
+    const proxyId = outNodeId(PROXY_OUTBOUND);
+    const hasProxy = graph.nodes.some((n) => n.id === proxyId);
+    if (activeId && activeId !== PROXY_OUTBOUND && hasProxy) {
+      const activeNodeId = outNodeId(activeId);
+      if (!graph.nodes.some((n) => n.id === activeNodeId)) {
+        graph.nodes.push({ id: activeNodeId, kind: "out", tag: activeId });
+      }
+      graph.edges.push({
+        id: "proxy-resolves",
+        source: proxyId,
+        target: activeNodeId,
+        resolve: true,
+      });
+    }
     const vertical = !isWide;
     const at = layoutRouteGraph(graph.nodes, graph.edges, vertical);
     const onSelected = new Set(
       graph.edges.filter((e) => e.routeId === selectedId).flatMap((e) => [e.source, e.target]),
     );
+    const resolveEdge = graph.edges.find((e) => e.resolve);
+    const resolveNodes = resolveEdge
+      ? new Set([resolveEdge.source, resolveEdge.target])
+      : new Set<string>();
     const nodes: Node<NodeData>[] = graph.nodes.map((n) => {
       const base = { id: n.id, type: "card", position: at.get(n.id) ?? { x: 0, y: 0 } };
-      const dim = !onSelected.has(n.id);
+      const dim = !onSelected.has(n.id) && !resolveNodes.has(n.id);
       if (n.kind === "route") {
         const route = routes.find((r) => r.id === n.routeId);
         return {
@@ -143,10 +164,29 @@ export function RouteGraphSheet({
           icon: n.tag === "block" ? "block" : n.tag === "direct" ? "near_me" : "shield_moon",
           title: outboundLabel(n.tag, t, profiles),
           dim,
+          hasSource: resolveEdge != null && n.id === resolveEdge.source,
         },
       };
     });
     const edges: Edge[] = graph.edges.map((e) => {
+      if (e.resolve) {
+        const stroke = "var(--outline)";
+        return {
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          type: "smoothstep",
+          deletable: false,
+          animated: false,
+          style: {
+            stroke,
+            strokeWidth: 1.5,
+            strokeDasharray: "4 4",
+            opacity: 0.9,
+          },
+          markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
+        };
+      }
       const color = e.routeId ? colorOf(e.routeId) : "var(--outline)";
       const mine = e.routeId === selectedId;
       return {
@@ -166,7 +206,7 @@ export function RouteGraphSheet({
       };
     });
     return { nodes, edges };
-  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters]);
+  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters, activeId]);
 
   // The flow keeps its own copy (measured sizes, the selected link to delete);
   // it follows the store whenever routes change.

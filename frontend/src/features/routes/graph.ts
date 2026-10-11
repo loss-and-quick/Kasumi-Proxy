@@ -32,6 +32,8 @@ export type GraphEdge = {
   faint?: boolean;
   /** Where a block's rules send traffic (not the route's path). */
   ruleOut?: boolean;
+  /** Resolves generic proxy outbound to the user-selected active profile. */
+  resolve?: boolean;
 };
 
 export const routeNodeId = (id: string) => `route:${id}`;
