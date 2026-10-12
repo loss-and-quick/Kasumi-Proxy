@@ -18,6 +18,7 @@
 //! - [`state`] — groups/subscriptions/rules/assets + settings/AppState
 //! - [`route`] — rule blocks and the route each profile runs with
 //! - [`share`] — share-link parse/build
+//! - [`sub_ingest`] — subscription responses to profiles and provider meta
 
 pub mod app_process;
 pub mod chain;
@@ -39,6 +40,7 @@ pub mod share;
 pub mod singbox_config;
 pub mod state;
 pub mod sub_apply;
+pub mod sub_ingest;
 pub mod tun;
 pub mod tun2socks_config;
 pub mod uid;

@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Captured HTTP responses: CRLF header lines are part of the fixture.
+crates/kasumi-core/tests/fixtures/happ/*.http -text

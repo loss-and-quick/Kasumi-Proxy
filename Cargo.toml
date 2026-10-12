@@ -10,6 +10,9 @@ members = [
   "src-tauri",
 ]
 
+[workspace.dependencies]
+happ-sub = { git = "https://github.com/loss-and-quick/happ-sub", rev = "bdf21f1b2ced4c3e939f6d8ed29e565bcbc23b2e", default-features = false, features = ["body-crypt"] }
+
 [workspace.package]
 # Placeholder — the real product version is module/module.prop (single source of
 # truth); the desktop bundle gets it via `tauri build --config` (scripts/app-version.sh).
