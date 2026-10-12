@@ -214,6 +214,9 @@ const ar = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "إعداد Xray الخام (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "مُقدَّم من اشتراكك بعد تنقيته",
+  "editor.custom.providerSub":
+    "للقراءة فقط. يستخدم Kasumi الخوادم وقواعد التوجيه فقط، ويوفّر بقية الإعداد بنفسه.",
   "editor.transport": "النقل",
   "editor.network": "الشبكة",
   "editor.headerType": "نوع الترويسة",

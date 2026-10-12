@@ -20,7 +20,7 @@ import type {
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
-import { emptyProfile, schemaFor } from "../../lib/profile-utils";
+import { emptyProfile, isProviderCustom, schemaFor } from "../../lib/profile-utils";
 import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
@@ -272,6 +272,7 @@ export default function Editor({
           raw={proto === "custom" ? (draft.raw ?? "") : ""}
           onChange={(value) => setRoot({ raw: value })}
           errors={errors}
+          provider={isProviderCustom(draft)}
         />
       )}
 

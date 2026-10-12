@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Profile } from "../../generated/bindings";
-import { emptyProfile, schemaFor } from "../profile-utils";
+import { emptyProfile, isProviderCustom, schemaFor } from "../profile-utils";
 
 const issues = (p: Profile) => {
   const r = schemaFor(p.protocol).safeParse(p);
@@ -36,5 +36,26 @@ describe("profile validation", () => {
       version: 1,
     };
     expect(issues(v1 as Profile)).not.toContain("password");
+  });
+});
+
+describe("provider custom profiles", () => {
+  const provider = {
+    ...emptyProfile("custom"),
+    meta: { ...emptyProfile("custom").meta, remarks: "P" },
+    raw: '{ "outbounds": [] }',
+    origin: "provider",
+  } as Profile;
+
+  it("keeps the origin through the editor's save validation", () => {
+    // Dropping it would save the config as the user's own, which runs verbatim.
+    const r = schemaFor("custom").safeParse(provider);
+    expect(r.success && "origin" in r.data && r.data.origin).toBe("provider");
+  });
+
+  it("tells provider configs from the user's own", () => {
+    expect(isProviderCustom(provider)).toBe(true);
+    expect(isProviderCustom(emptyProfile("custom"))).toBe(false);
+    expect(isProviderCustom(emptyProfile("vless"))).toBe(false);
   });
 });

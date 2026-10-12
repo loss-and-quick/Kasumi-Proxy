@@ -130,6 +130,7 @@ export function Field({
   area,
   min,
   commitOnBlur,
+  readOnly,
 }: {
   label?: string;
   value: string | number;
@@ -146,6 +147,7 @@ export function Field({
    *  written to the backend: typing stays smooth, the cursor stays put, and a
    *  number field can be cleared while retyping without saving 0. */
   commitOnBlur?: boolean;
+  readOnly?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const id = useId();
@@ -172,6 +174,7 @@ export function Field({
           className="input"
           style={mono ? undefined : { fontFamily: "var(--font-ui)" }}
           value={shown}
+          readOnly={readOnly}
           placeholder={placeholder}
           onChange={(e) => edit(e.target.value)}
           {...lazy}
@@ -187,6 +190,7 @@ export function Field({
           type={type}
           min={min}
           value={shown}
+          readOnly={readOnly}
           placeholder={placeholder}
           onChange={(e) => edit(e.target.value)}
           onKeyDown={
