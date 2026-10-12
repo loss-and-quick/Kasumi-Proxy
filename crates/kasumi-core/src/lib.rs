@@ -19,6 +19,7 @@
 //! - [`route`] — rule blocks and the route each profile runs with
 //! - [`share`] — share-link parse/build
 //! - [`sub_ingest`] — subscription responses to profiles and provider meta
+//! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
 
 pub mod app_process;
 pub mod chain;
@@ -26,6 +27,7 @@ pub mod config_shared;
 pub mod contract;
 pub mod core;
 pub mod core_config;
+pub mod custom_sanitize;
 pub mod data_path_state;
 pub mod enums;
 pub mod hev_config;
