@@ -10,13 +10,15 @@
 // reads far clearer than struct-update syntax laced with `if` expressions.
 #![allow(clippy::field_reassign_with_default)]
 
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::net::Ipv6Addr;
 use std::sync::LazyLock;
 
 use base64::Engine;
 use fancy_regex::Regex as FancyRegex;
 use percent_encoding::percent_decode_str;
-use url::Url;
+use url::{Host, Url};
 
 use std::collections::BTreeMap;
 
@@ -88,9 +90,60 @@ fn split_last(s: &str, sep: char) -> (String, String) {
     }
 }
 fn parse_host_port(hp: &str) -> (String, u16) {
-    let (h, p) = split_last(hp, ':');
+    let (h, p) = match hp.strip_prefix('[').and_then(|r| r.split_once(']')) {
+        Some((h, rest)) => (
+            h.to_string(),
+            rest.strip_prefix(':').unwrap_or("").to_string(),
+        ),
+        None => split_last(hp, ':'),
+    };
     let port = p.parse().ok().filter(|n| *n != 0).unwrap_or(443);
     (h, port)
+}
+
+/// Bracket an IPv6 host that a link carries bare (`@2001:db8::4:8443`), which
+/// providers emit and the URL parser would otherwise read as a bad port. A
+/// trailing `:<u16>` after a valid address is taken as the port.
+fn bracket_bare_ipv6(uri: &str) -> Cow<'_, str> {
+    let Some(scheme_end) = uri.find("://") else {
+        return Cow::Borrowed(uri);
+    };
+    let start = scheme_end + 3;
+    let end = uri[start..]
+        .find(['/', '?', '#'])
+        .map_or(uri.len(), |i| start + i);
+    let host_start = uri[start..end].rfind('@').map_or(start, |i| start + i + 1);
+    let host = &uri[host_start..end];
+    if host.contains('[') || host.matches(':').count() < 2 {
+        return Cow::Borrowed(uri);
+    }
+    let bracketed = match host.rsplit_once(':') {
+        Some((addr, port)) if addr.parse::<Ipv6Addr>().is_ok() && port.parse::<u16>().is_ok() => {
+            format!("[{addr}]:{port}")
+        }
+        _ if host.parse::<Ipv6Addr>().is_ok() => format!("[{host}]"),
+        _ => return Cow::Borrowed(uri),
+    };
+    Cow::Owned(format!("{}{bracketed}{}", &uri[..host_start], &uri[end..]))
+}
+
+/// The host as an endpoint address: IPv6 without the URL brackets, which the
+/// core configs reject.
+fn host_of(u: &Url) -> String {
+    match u.host() {
+        Some(Host::Ipv6(a)) => a.to_string(),
+        Some(h) => h.to_string(),
+        None => String::new(),
+    }
+}
+
+/// An endpoint address as a URL authority host (IPv6 bracketed).
+pub(crate) fn host_for_uri(addr: &str) -> Cow<'_, str> {
+    if addr.contains(':') && !addr.starts_with('[') {
+        Cow::Owned(format!("[{addr}]"))
+    } else {
+        Cow::Borrowed(addr)
+    }
 }
 
 /// `?key=1|true` truthiness over several aliases.
@@ -179,7 +232,7 @@ enum UrlProto {
 }
 
 fn parse_url_based(uri: &str, proto: UrlProto, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
     let get = |k: &str| q.get(k).cloned().unwrap_or_default();
     let cred = pct(u.username());
@@ -273,7 +326,7 @@ fn parse_url_based(uri: &str, proto: UrlProto, group_id: Option<&str>) -> Option
 
     let m = meta(remarks_or_host(&u), group_id);
     let endpoint = Endpoint {
-        address: u.host_str().unwrap_or("").to_string(),
+        address: host_of(&u),
         port: u.port().unwrap_or(443),
     };
 
@@ -311,9 +364,9 @@ enum SockHttp {
 }
 
 fn parse_socks_or_http(uri: &str, proto: SockHttp, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
-    let host = u.host_str().unwrap_or("").to_string();
+    let host = host_of(&u);
     let https = u.scheme() == "https";
     let default_port = if https {
         443
@@ -366,7 +419,7 @@ fn parse_socks_or_http(uri: &str, proto: SockHttp, group_id: Option<&str>) -> Op
 }
 
 fn parse_wireguard(uri: &str, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
     let secret_key = pct(u.username());
     if secret_key.is_empty() {
@@ -376,7 +429,7 @@ fn parse_wireguard(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     Some(Profile::Wireguard(Wireguard {
         meta: meta(remarks_or_host(&u), group_id),
         endpoint: Endpoint {
-            address: u.host_str().unwrap_or("").to_string(),
+            address: host_of(&u),
             port: u.port().unwrap_or(51820),
         },
         secret_key,
@@ -688,7 +741,7 @@ fn parse_hysteria2(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     } else {
         uri.to_string()
     };
-    let u = Url::parse(&normalised).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(&normalised)).ok()?;
     let q = query_map(&u);
     let mut tls = Tls::default();
     tls.security = Security::Tls;
@@ -698,7 +751,7 @@ fn parse_hysteria2(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     Some(Profile::Hysteria2(Hysteria2 {
         meta: meta(remarks_or_host(&u), group_id),
         endpoint: Endpoint {
-            address: u.host_str().unwrap_or("").to_string(),
+            address: host_of(&u),
             port: u.port().unwrap_or(443),
         },
         tls,
@@ -718,7 +771,7 @@ fn parse_hysteria2(uri: &str, group_id: Option<&str>) -> Option<Profile> {
 }
 
 fn parse_tuic(uri: &str, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
     let mut tls = Tls::default();
     tls.security = Security::Tls;
@@ -728,7 +781,7 @@ fn parse_tuic(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     Some(Profile::Tuic(Tuic {
         meta: meta(remarks_or_host(&u), group_id),
         endpoint: Endpoint {
-            address: u.host_str().unwrap_or("").to_string(),
+            address: host_of(&u),
             port: u.port().unwrap_or(443),
         },
         tls,
@@ -743,7 +796,7 @@ fn parse_tuic(uri: &str, group_id: Option<&str>) -> Option<Profile> {
 }
 
 fn parse_anytls(uri: &str, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
     let cred = {
         let un = pct(u.username());
@@ -764,7 +817,7 @@ fn parse_anytls(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     Some(Profile::Anytls(Anytls {
         meta: meta(remarks_or_host(&u), group_id),
         endpoint: Endpoint {
-            address: u.host_str().unwrap_or("").to_string(),
+            address: host_of(&u),
             port: u.port().unwrap_or(443),
         },
         tls,
@@ -776,7 +829,7 @@ fn parse_anytls(uri: &str, group_id: Option<&str>) -> Option<Profile> {
 }
 
 fn parse_naive(uri: &str, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
     let mut tls = Tls::default();
     tls.security = Security::Tls;
@@ -789,7 +842,7 @@ fn parse_naive(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     Some(Profile::Naive(Naive {
         meta: meta(remarks_or_host(&u), group_id),
         endpoint: Endpoint {
-            address: u.host_str().unwrap_or("").to_string(),
+            address: host_of(&u),
             port: u.port().unwrap_or(443),
         },
         tls,
@@ -805,7 +858,7 @@ fn parse_naive(uri: &str, group_id: Option<&str>) -> Option<Profile> {
 }
 
 fn parse_shadowtls(uri: &str, group_id: Option<&str>) -> Option<Profile> {
-    let u = Url::parse(uri).ok()?;
+    let u = Url::parse(&bracket_bare_ipv6(uri)).ok()?;
     let q = query_map(&u);
     let ver = q
         .get("version")
@@ -828,7 +881,7 @@ fn parse_shadowtls(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     Some(Profile::Shadowtls(Shadowtls {
         meta: meta(remarks_or_host(&u), group_id),
         endpoint: Endpoint {
-            address: u.host_str().unwrap_or("").to_string(),
+            address: host_of(&u),
             port: u.port().unwrap_or(443),
         },
         tls,
@@ -1196,7 +1249,7 @@ fn build_url_based(p: &Profile) -> String {
     format!(
         "{proto}://{}@{}:{}?{}{}",
         enc(cred),
-        ep.address,
+        host_for_uri(&ep.address),
         ep.port,
         q.finish(),
         frag(&m.remarks)
@@ -1254,7 +1307,7 @@ fn build_ss(p: &Shadowsocks) -> String {
     };
     format!(
         "ss://{info}@{}:{}{qs}{}",
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1290,7 +1343,7 @@ fn build_hysteria2(p: &Hysteria2) -> String {
     format!(
         "hysteria2://{}@{}:{}{qs}{}",
         enc(&p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1318,7 +1371,7 @@ fn build_tuic(p: &Tuic) -> String {
         "tuic://{}:{}@{}:{}?{}{}",
         enc(&p.uuid),
         enc(&p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         q.finish(),
         frag(&p.meta.remarks)
@@ -1354,7 +1407,7 @@ fn build_anytls(p: &Anytls) -> String {
     format!(
         "anytls://{}@{}:{}{qs}{}",
         enc(&p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1398,7 +1451,7 @@ fn build_naive(p: &Naive) -> String {
     format!(
         "{scheme}://{}@{}:{}{qs}{}",
         userinfo(&p.username, &p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1416,7 +1469,7 @@ fn build_shadowtls(p: &Shadowtls) -> String {
     format!(
         "shadowtls://{}@{}:{}?{}{}",
         enc(&p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         q.finish(),
         frag(&p.meta.remarks)
@@ -1455,7 +1508,7 @@ fn build_wireguard(p: &Wireguard) -> String {
     format!(
         "wireguard://{}@{}:{}{qs}{}",
         enc(&p.secret_key),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1465,7 +1518,7 @@ fn build_socks(p: &Socks) -> String {
     format!(
         "socks5://{}@{}:{}{}",
         userinfo(&p.username, &p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1490,7 +1543,7 @@ fn build_http(p: &Http) -> String {
     format!(
         "{scheme}://{}@{}:{}{qs}{}",
         userinfo(&p.username, &p.password),
-        p.endpoint.address,
+        host_for_uri(&p.endpoint.address),
         p.endpoint.port,
         frag(&p.meta.remarks)
     )
@@ -1687,6 +1740,62 @@ mod tests {
         assert_eq!(uris.len(), 2);
         assert!(uris[0].contains("first name"));
         assert!(uris[1].contains("second name"));
+    }
+
+    #[test]
+    fn bare_ipv6_vless_host_and_port() {
+        let p = parse_share_link(
+            "vless://u@2001:db8::4:8443?type=tcp&security=reality&pbk=k#V6",
+            None,
+        )
+        .expect("bare IPv6 host parses");
+        let ep = p.endpoint().unwrap();
+        assert_eq!(ep.address, "2001:db8::4");
+        assert_eq!(ep.port, 8443);
+        assert_eq!(p.meta().remarks, "V6");
+
+        let p = parse_share_link("socks5://2001:db8::5#S", None).unwrap();
+        assert_eq!(p.endpoint().unwrap().address, "2001:db8::5");
+        assert_eq!(p.endpoint().unwrap().port, 1080);
+    }
+
+    #[test]
+    fn bracketed_ipv6_has_no_brackets_in_address() {
+        for uri in [
+            "vless://u@[2001:db8::4]:443?type=tcp#a",
+            "trojan://p@[2001:db8::4]:443#a",
+            "hysteria2://p@[2001:db8::4]:443#a",
+            "tuic://u:p@[2001:db8::4]:443#a",
+            "anytls://p@[2001:db8::4]:443#a",
+            "naive+https://u:p@[2001:db8::4]:443#a",
+            "shadowtls://p@[2001:db8::4]:443#a",
+            "wireguard://k@[2001:db8::4]:443#a",
+            "socks5://[2001:db8::4]:443#a",
+            "http://[2001:db8::4]:443#a",
+            "ss://YWVzLTI1Ni1nY206cHc@[2001:db8::4]:443#a",
+        ] {
+            let p = parse_share_link(uri, None).unwrap_or_else(|| panic!("{uri}"));
+            let ep = p.endpoint().unwrap();
+            assert_eq!(ep.address, "2001:db8::4", "{uri}");
+            assert_eq!(ep.port, 443, "{uri}");
+        }
+    }
+
+    #[test]
+    fn ipv6_round_trips_through_build_share_link() {
+        for uri in [
+            "vless://u@2001:db8::4:8443?type=tcp#a",
+            "hysteria2://p@[2001:db8::4]:8443#a",
+            "ss://YWVzLTI1Ni1nY206cHc@2001:db8::4:8443#a",
+            "wireguard://k@[2001:db8::4]:8443?publickey=x#a",
+            "socks5://u:p@[2001:db8::4]:8443#a",
+        ] {
+            let first = parse_share_link(uri, None).unwrap_or_else(|| panic!("{uri}"));
+            let built = build_share_link(&first);
+            assert!(built.contains("@[2001:db8::4]:8443"), "{built}");
+            let again = parse_share_link(&built, None).unwrap_or_else(|| panic!("{built}"));
+            assert_eq!(again.endpoint(), first.endpoint(), "{uri}");
+        }
     }
 
     #[test]

@@ -107,7 +107,7 @@ fn build_wireguard_outbound(w: &crate::profile::Wireguard) -> Map<String, Value>
     }
     let mut peer = json!({
         "publicKey": w.peer_public_key,
-        "endpoint": format!("{}:{}", w.endpoint.address, w.endpoint.port),
+        "endpoint": format!("{}:{}", crate::share::host_for_uri(&w.endpoint.address), w.endpoint.port),
         "allowedIPs": ["0.0.0.0/0", "::/0"],
     });
     if !w.pre_shared_key.is_empty() {
@@ -1152,6 +1152,17 @@ mod tests {
         .unwrap();
         let Profile::Wireguard(w) = p else { panic!() };
         w
+    }
+
+    #[test]
+    fn wireguard_peer_endpoint_brackets_ipv6() {
+        let mut w = wireguard("");
+        w.endpoint.address = "2001:db8::4".into();
+        let out = build_wireguard_outbound(&w);
+        assert_eq!(
+            out["settings"]["peers"][0]["endpoint"],
+            "[2001:db8::4]:51820"
+        );
     }
 
     #[test]
