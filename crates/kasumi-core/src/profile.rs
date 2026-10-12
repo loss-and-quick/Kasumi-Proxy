@@ -309,6 +309,17 @@ pub struct Custom {
     pub meta: Meta,
     #[serde(default)]
     pub raw: String,
+    #[serde(default)]
+    pub origin: CustomOrigin,
+}
+
+/// Who wrote a custom profile's raw config: a provider's runs only after sanitising.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CustomOrigin {
+    #[default]
+    User,
+    Provider,
 }
 
 /// A proxy profile — the persisted unit, tagged by `protocol`.
@@ -559,6 +570,8 @@ mod tests {
         assert_eq!(c.protocol(), Protocol::Custom);
         let Profile::Custom(cc) = &c else { panic!() };
         assert_eq!(cc.raw, "");
+        // Custom profiles stored before origins existed were all typed by the user.
+        assert_eq!(cc.origin, CustomOrigin::User);
 
         let w: Profile = serde_json::from_value(serde_json::json!({
             "protocol":"wireguard","meta":{"id":"w","remarks":"r","groupId":"g-main"},

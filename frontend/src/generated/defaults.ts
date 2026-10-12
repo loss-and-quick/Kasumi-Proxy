@@ -74,6 +74,7 @@ export const EMPTY_PROFILES = {
       "subId": null,
       "via": null
     },
+    "origin": "user",
     "protocol": "custom",
     "raw": ""
   },
