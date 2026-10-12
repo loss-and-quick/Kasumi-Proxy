@@ -8,22 +8,26 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::{SecondsFormat, Utc};
+use happ_sub::MergeMode;
 use tokio::sync::Mutex;
 
 use kasumi_core::contract::SubAppliedEvent;
 use kasumi_core::core_config::{active_config_changed, build_core_config};
 use kasumi_core::profile::Profile;
 use kasumi_core::route::{repoint_profile_ids, resolve_route};
-use kasumi_core::share::parse_share_links;
 use kasumi_core::state::{AppState, Subscription};
 use kasumi_core::sub_apply::{
     ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
     map_fetched_subscription_profiles, profile_filter_regex, refreshed_id,
 };
+use kasumi_core::sub_ingest::{
+    IngestInput, StoredSubMeta, SubWarning, ingest, limits, record_after, stored_for_url,
+};
 
-use crate::net::{FetchUrlOptions, fetch_url};
+use crate::net::{FetchUrlOptions, fetch};
 use crate::platform::Platform;
 use crate::state::read_app_state;
+use crate::sub_meta;
 use crate::updater::{self, LifecycleControl, now_ms};
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
@@ -78,15 +82,23 @@ pub async fn tick(
             continue;
         }
         log::info!("sub-update {}: fetching", sub.remarks);
-        match fetch_and_map(platform, &sub, &filter).await {
-            Ok(mapped) => {
-                let count = mapped.len() as u32;
+        // Happ's background update keeps meta keys a response omits.
+        match fetch_and_map(platform, &sub, &filter, MergeMode::Partial).await {
+            Ok(fetched) => {
+                let count = fetched.mapped.len() as u32;
                 let _g = serialize.lock().await;
                 // Headless: a user toggling the subscription off mid-fetch must
                 // abort the apply, so re-check `enabled` against the live state.
-                if apply(platform, lifecycle, &sub, mapped, true)
-                    .await
-                    .is_some()
+                if apply(
+                    platform,
+                    lifecycle,
+                    &sub,
+                    fetched.mapped,
+                    Some(fetched.record),
+                    true,
+                )
+                .await
+                .is_some()
                 {
                     log::info!("sub-update {}: applied {count} profiles", sub.remarks);
                     on_applied(SubAppliedEvent {
@@ -134,11 +146,19 @@ pub async fn update_subscription(
         return record_and_reload(platform, serialize, sub_id, "invalid profile filter").await;
     }
 
-    match fetch_and_map(platform, &sub, &filter).await {
-        Ok(mapped) => {
+    match fetch_and_map(platform, &sub, &filter, MergeMode::Full).await {
+        Ok(fetched) => {
             let _g = serialize.lock().await;
             // The user explicitly triggered this, so apply even to a disabled sub.
-            let applied = apply(platform, lifecycle, &sub, mapped, false).await;
+            let applied = apply(
+                platform,
+                lifecycle,
+                &sub,
+                fetched.mapped,
+                Some(fetched.record),
+                false,
+            )
+            .await;
             drop(_g);
             match applied {
                 Some(next) => Ok(next),
@@ -181,26 +201,38 @@ fn display_fetch_error(e: &anyhow::Error) -> String {
     }
 }
 
+struct Fetched {
+    mapped: Vec<Profile>,
+    record: StoredSubMeta,
+}
+
+/// Fetch and ingest a subscription. Any error leaves its profiles and sub-meta as
+/// they were: an error page, a failed decryption or an empty list must never wipe
+/// a subscription (possibly stopping the tunnel).
 async fn fetch_and_map(
     platform: &dyn Platform,
     sub: &Subscription,
     filter: &ProfileFilter,
-) -> Result<Vec<Profile>, String> {
+    merge: MergeMode,
+) -> Result<Fetched, String> {
     let proxy = platform.proxy_status().await.map_err(|e| e.to_string())?;
-    let body = match fetch_url(
-        &sub.url,
+    // The fragment carries provider directives for the import and never goes on
+    // the wire.
+    let res = match fetch(
+        happ_sub::meta::fetch_url(&sub.url),
         FetchUrlOptions {
             mode: sub.update_mode,
             proxy: Some(proxy),
             user_agent: (!sub.user_agent.is_empty()).then(|| sub.user_agent.clone()),
             allow_insecure: sub.allow_insecure,
             timeout: Some(FETCH_TIMEOUT),
+            max_body_bytes: Some(limits().max_body_bytes),
             ..Default::default()
         },
     )
     .await
     {
-        Ok(body) => body,
+        Ok(res) => res,
         Err(e) => {
             // Full cause chain (with the URL) to the log — the manual "update now"
             // path logs nowhere else; the UI gets just the cause.
@@ -208,13 +240,29 @@ async fn fetch_and_map(
             return Err(display_fetch_error(&e));
         }
     };
-    let fresh = parse_share_links(&String::from_utf8_lossy(&body), None);
-    // An error page / captive portal parses to zero profiles — never wipe a
-    // subscription (possibly stopping the tunnel) over that.
-    if fresh.is_empty() {
-        return Err("no profiles in subscription body".into());
+    let stored = sub_meta::read_all(platform).await;
+    let ingested = ingest(&IngestInput {
+        url: &sub.url,
+        headers: &res.headers,
+        body: &res.body,
+        stored: stored_for_url(stored.get(&sub.id), &sub.url),
+        merge,
+    })
+    .map_err(|e| {
+        log::warn!("subscription {}: {e}", sub.remarks);
+        e.to_string()
+    })?;
+    log_warnings(sub, &ingested.warnings);
+    Ok(Fetched {
+        mapped: map_fetched_subscription_profiles(&ingested.profiles, sub, filter),
+        record: record_after(&sub.url, &ingested),
+    })
+}
+
+fn log_warnings(sub: &Subscription, warnings: &[SubWarning]) {
+    for w in warnings {
+        log::info!("subscription {}: {w:?}", sub.remarks);
     }
-    Ok(map_fetched_subscription_profiles(&fresh, sub, filter))
 }
 
 /// Apply a fetched-and-mapped body to the current state, persisting it and — when the
@@ -222,11 +270,13 @@ async fn fetch_and_map(
 /// data-path. Returns the new persisted state (`None` if the subscription vanished, or
 /// was disabled mid-fetch while `require_enabled`). Runs inside the serializer: the
 /// fetch took seconds, so re-read the state the UI may have rewritten meanwhile.
+/// `record` replaces the subscription's sub-meta entry once the state is persisted.
 async fn apply(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
     sub: &Subscription,
     mapped: Vec<Profile>,
+    record: Option<StoredSubMeta>,
     require_enabled: bool,
 ) -> Option<AppState> {
     let current = read_app_state(platform).await?;
@@ -272,6 +322,12 @@ async fn apply(
     // Same write tail as the intent path: run the write-side chain (invariants) then
     // persist. Keeps the chain the single enforcement point across save and fetch.
     let _ = crate::commands::persist_with_chain(platform, &current, &mut next).await;
+    if let Some(record) = record {
+        let live: Vec<&str> = next.subscriptions.iter().map(|s| s.id.as_str()).collect();
+        if let Err(e) = sub_meta::write_entry(platform, &sub.id, Some(record), &live).await {
+            log::warn!("subscription {}: writing sub-meta failed: {e}", sub.remarks);
+        }
+    }
 
     if res.active_affected {
         let running = platform
@@ -333,7 +389,7 @@ async fn record_error(platform: &dyn Platform, sub_id: &str, message: &str) {
 mod tests {
     use super::*;
     use crate::state::write_app_state;
-    use crate::testutil::{TestPlatform, sample_vless};
+    use crate::testutil::{TestPlatform, http_response, sample_vless, serve};
     use kasumi_core::state::default_app_state;
     use std::sync::Mutex as StdMutex;
 
@@ -445,7 +501,7 @@ mod tests {
         let lc = RecordingLifecycle {
             calls: StdMutex::new(vec![]),
         };
-        let next = apply(&p, &lc, &state.subscriptions[0], vec![fresh], true)
+        let next = apply(&p, &lc, &state.subscriptions[0], vec![fresh], None, true)
             .await
             .expect("apply returns the new state");
         assert_eq!(next.subscriptions[0].count, 1);
@@ -481,7 +537,7 @@ mod tests {
         let lc = RecordingLifecycle {
             calls: StdMutex::new(vec![]),
         };
-        apply(&p, &lc, &state.subscriptions[0], vec![fresh], true)
+        apply(&p, &lc, &state.subscriptions[0], vec![fresh], None, true)
             .await
             .expect("apply returns the new state");
 
@@ -551,5 +607,153 @@ mod tests {
         // An error we raise ourselves has no inner cause — it passes through whole.
         let bare = anyhow::anyhow!("HTTP 403");
         assert_eq!(display_fetch_error(&bare), "HTTP 403");
+    }
+
+    fn lifecycle() -> RecordingLifecycle {
+        RecordingLifecycle {
+            calls: StdMutex::new(vec![]),
+        }
+    }
+
+    /// State with subscription `s1` at `url` that already owns profile `old`.
+    async fn with_old_profile(p: &TestPlatform, url: &str) {
+        let mut old = sample_vless();
+        old.meta_mut().id = "old".into();
+        old.meta_mut().sub_id = Some("s1".into());
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", url)];
+        state.profiles = vec![old];
+        write_app_state(p, &state).await.unwrap();
+    }
+
+    async fn update(p: &TestPlatform) -> AppState {
+        update_subscription(p, &lifecycle(), &Mutex::new(()), "s1")
+            .await
+            .unwrap()
+    }
+
+    async fn assert_kept(p: &TestPlatform, error: &str) {
+        let after = read_app_state(p).await.unwrap();
+        let ids: Vec<&str> = after
+            .profiles
+            .iter()
+            .map(|x| x.meta().id.as_str())
+            .collect();
+        assert_eq!(ids, ["old"]);
+        let last_error = after.subscriptions[0].last_error.as_deref().unwrap_or("");
+        assert!(last_error.contains(error), "{last_error}");
+        assert!(sub_meta::read_all(p).await.is_empty());
+    }
+
+    const LINK: &[u8] =
+        b"vless://11111111-1111-1111-1111-111111111111@e.example:443?type=tcp#Fresh\n";
+
+    #[tokio::test]
+    async fn decrypt_failure_keeps_profiles_and_records_error() {
+        let (p, _d) = TestPlatform::new();
+        // A tag with `?key=` makes the body ciphertext; plain links fail to decrypt.
+        let tag = [("Encrypt-Tag", "AAAAAAAAAAAAAAAAAAAAAA==")];
+        let (base, _) = serve(vec![http_response(200, &tag, LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s?key=key02")).await;
+        update(&p).await;
+        assert_kept(&p, "could not be decrypted").await;
+    }
+
+    #[tokio::test]
+    async fn zero_profile_body_keeps_profiles() {
+        let (p, _d) = TestPlatform::new();
+        let body = b"#profile-title: Empty\nunknown://not-a-proxy\n";
+        let (base, _) = serve(vec![http_response(200, &[], body)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        assert_kept(&p, "no profiles in subscription body").await;
+    }
+
+    #[tokio::test]
+    async fn error_page_html_keeps_profiles() {
+        let (p, _d) = TestPlatform::new();
+        let page = b"<html><body><h1>502 Bad Gateway</h1></body></html>";
+        let html = [("content-type", "text/html; charset=utf-8")];
+        let (base, _) = serve(vec![http_response(200, &html, page)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        assert_kept(&p, "web page").await;
+    }
+
+    #[tokio::test]
+    async fn fragment_never_sent() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        let url = format!("{base}/s?token=1#Name?profile-title=FromFragment");
+        with_old_profile(&p, &url).await;
+        let next = update(&p).await;
+
+        let request_line = requests.lock().unwrap()[0]
+            .lines()
+            .next()
+            .unwrap()
+            .to_owned();
+        assert_eq!(request_line, "GET /s?token=1 HTTP/1.1");
+        assert_eq!(next.subscriptions[0].url, url, "the URL is kept as typed");
+        assert_eq!(next.subscriptions[0].last_error, None);
+        let stored = sub_meta::read_all(&p).await.remove("s1").unwrap();
+        assert_eq!(stored.source_url, url);
+        assert_eq!(stored.meta.profile_title(), Some("FromFragment"));
+    }
+
+    async fn stored_announce(p: &TestPlatform) -> Option<String> {
+        let stored = sub_meta::read_all(p).await.remove("s1").unwrap();
+        stored.meta.announce().map(str::to_owned)
+    }
+
+    #[tokio::test]
+    async fn manual_update_drops_absent_keys_tick_keeps_them() {
+        let a = http_response(200, &[("profile-title", "T"), ("announce", "Hi")], LINK);
+        let b = http_response(200, &[("profile-title", "T")], LINK);
+
+        // Manual refresh: a key the provider stopped sending is dropped.
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![a.clone(), b.clone()]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        assert_eq!(stored_announce(&p).await.as_deref(), Some("Hi"));
+        update(&p).await;
+        assert_eq!(stored_announce(&p).await, None);
+
+        // Background update: the same response keeps it.
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![a, b]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].last_updated.clear(); // due again
+        write_app_state(&p, &state).await.unwrap();
+        tick(
+            &p,
+            &lifecycle(),
+            &Mutex::new(()),
+            &mut HashMap::new(),
+            &|_| {},
+        )
+        .await;
+        let after = read_app_state(&p).await.unwrap();
+        assert!(
+            !after.subscriptions[0].last_updated.is_empty(),
+            "tick applied"
+        );
+        assert_eq!(stored_announce(&p).await.as_deref(), Some("Hi"));
+    }
+
+    #[tokio::test]
+    async fn sub_meta_entry_removed_when_subscription_gone() {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![http_response(200, &[("profile-title", "T")], LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        sub_meta::write_entry(&p, "gone", Some(StoredSubMeta::default()), &["gone"])
+            .await
+            .unwrap();
+        update(&p).await;
+        let all = sub_meta::read_all(&p).await;
+        assert_eq!(all.keys().collect::<Vec<_>>(), ["s1"]);
     }
 }

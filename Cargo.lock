@@ -2516,6 +2516,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "happ-sub",
  "kasumi-core",
  "libc",
  "log",

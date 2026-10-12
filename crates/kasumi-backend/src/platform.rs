@@ -98,6 +98,11 @@ impl BackendPaths {
     pub fn singbox_cache(&self) -> PathBuf {
         self.run_dir.join("singbox-cache.db")
     }
+
+    /// Provider meta per subscription; see [`crate::sub_meta`].
+    pub fn sub_meta(&self) -> PathBuf {
+        self.data_dir.join("sub-meta.json")
+    }
 }
 
 /// Installed core versions probed off the host. `CoreEngine` isn't hashable, so the
