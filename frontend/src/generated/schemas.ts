@@ -1062,6 +1062,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("mutate"),
 	intent: MutationIntent_SerializeSchema,
 }), z.object({
+	cmd: z.literal("openUrl"),
+	url: z.string(),
+}), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
 	groupId: z.string().nullable(),
@@ -1251,6 +1254,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("mutate"),
 	intent: MutationIntent_DeserializeSchema,
+}), z.object({
+	cmd: z.literal("openUrl"),
+	url: z.string(),
 }), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),

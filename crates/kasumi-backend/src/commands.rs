@@ -26,6 +26,7 @@ use kasumi_core::profile::Profile;
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
+use kasumi_core::sub_policy::safe_provider_link;
 
 use crate::fs::{read_text, write_text};
 use crate::fsjson::read_json;
@@ -175,6 +176,10 @@ pub enum Command {
     #[serde(rename_all = "camelCase")]
     ApplySubscription {
         sub_id: String,
+    },
+    /// Open a provider link (support, web page, renewal) in the system browser.
+    OpenUrl {
+        url: String,
     },
 }
 
@@ -441,6 +446,16 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
 
         Command::BuildShareLink { profile } => Ok(Response::Text(build_share_link(&profile))),
 
+        Command::OpenUrl { url } => {
+            // The link came from a provider: only public http(s) reaches the OS.
+            let url = safe_provider_link(&url).ok_or_else(|| err("refusing to open this link"))?;
+            platform
+                .open_url(&url)
+                .await
+                .map_err(|e| err(e.to_string()))?;
+            Ok(Response::Ok)
+        }
+
         Command::ChainCandidates { profile } => {
             let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
             Ok(Response::ProfileIds(chain_candidates(&profile, &profiles)))
@@ -598,6 +613,33 @@ mod tests {
         };
         assert_eq!(state.active_id, None);
         assert!(state.profiles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn open_url_rejects_non_http() {
+        let (p, _d) = TestPlatform::new();
+        let open = |url: &str| {
+            dispatch(
+                &p,
+                Command::OpenUrl {
+                    url: url.to_owned(),
+                },
+            )
+        };
+        for url in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "intent://x#Intent;end",
+            "http://192.168.1.1/",
+            "https://localhost/",
+        ] {
+            let e = open(url).await.unwrap_err();
+            assert!(e.0.contains("refusing"), "{url}: {e}");
+        }
+        // A public link passes the check and reaches the platform, which has no
+        // browser in tests.
+        let e = open("https://example.org/renew").await.unwrap_err();
+        assert!(e.0.contains("not supported"), "{e}");
     }
 
     #[tokio::test]

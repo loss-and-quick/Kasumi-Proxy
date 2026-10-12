@@ -237,6 +237,11 @@ pub trait Platform: Send + Sync {
     /// proxy-vs-direct decision in subscription/asset fetches.
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus>;
 
+    /// Open an already-validated http(s) URL in the user's browser.
+    async fn open_url(&self, _url: &str) -> anyhow::Result<()> {
+        anyhow::bail!("opening links is not supported here")
+    }
+
     /// Post-process a downloaded asset (geoip/geosite → `.srs` for sing-box).
     async fn convert_asset(&self, _filename: &str) -> anyhow::Result<()> {
         Ok(())
