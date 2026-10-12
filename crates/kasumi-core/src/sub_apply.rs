@@ -319,6 +319,7 @@ pub fn apply_subscription_profiles(
                 x.last_updated = fetched_at.to_string();
                 x.count = fresh_mapped.len() as i64;
                 x.last_error = None;
+                x.last_error_kind = None;
                 x
             } else {
                 x.clone()
@@ -498,6 +499,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         };
         // fresh batch: same name, different port (endpoint changed)
         let fresh = vec![p("vless://u@ex.com:8443?type=tcp#Server")];
@@ -600,6 +602,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         }
     }
 

@@ -411,6 +411,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         }
     }
 

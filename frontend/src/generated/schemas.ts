@@ -272,6 +272,93 @@ export const AppInfoSchema = z.union([AppInfo_DeserializeSchema, AppInfo_Seriali
 export type AppInfo = z.infer<typeof AppInfoSchema>;
 
 
+export const SubWarningSchema = z.union([z.object({
+	kind: z.literal("invalidFragment"),
+}), z.object({
+	kind: z.literal("invalidRouting"),
+	message: z.string(),
+}), z.object({
+	kind: z.literal("legacyParser"),
+}), z.object({
+	kind: z.literal("skippedLines"),
+	count: z.number(),
+	sample: z.string(),
+}), z.object({
+	kind: z.literal("unsupportedLinks"),
+	count: z.number(),
+})]);
+export type SubWarning = z.infer<typeof SubWarningSchema>;
+
+
+export const PayloadKindSchema = z.union([z.literal("jsonArray"), z.literal("singBoxJson"), z.literal("xrayJson")]);
+export type PayloadKind = z.infer<typeof PayloadKindSchema>;
+
+
+export const ContentHintSchema = z.union([z.literal("html"), z.literal("unknown"), z.literal("yaml")]);
+export type ContentHint = z.infer<typeof ContentHintSchema>;
+
+
+export const SubErrorKindSchema = z.union([z.object({
+	kind: z.literal("decrypt"),
+	keyId: z.string().nullable(),
+}), z.object({
+	kind: z.literal("emptyBody"),
+}), z.object({
+	kind: z.literal("http"),
+	status: z.number(),
+}), z.object({
+	kind: z.literal("invalid"),
+}), z.object({
+	kind: z.literal("limit"),
+}), z.object({
+	kind: z.literal("network"),
+}), z.object({
+	kind: z.literal("noProfiles"),
+}), z.object({
+	kind: z.literal("unknownContent"),
+	hint: ContentHintSchema,
+}), z.object({
+	kind: z.literal("unsupportedPayload"),
+	payload: PayloadKindSchema,
+})]);
+export type SubErrorKind = z.infer<typeof SubErrorKindSchema>;
+
+
+export const TrafficInfo_SerializeSchema = z.object({
+	upload: z.number(),
+	download: z.number(),
+	total: z.number(),
+	expire: z.number().nullable().optional(),
+});
+export type TrafficInfo_Serialize = z.infer<typeof TrafficInfo_SerializeSchema>;
+
+
+export const NoticeColorSchema = z.union([z.literal("blue"), z.literal("default"), z.literal("green"), z.literal("red")]);
+export type NoticeColor = z.infer<typeof NoticeColorSchema>;
+
+
+export const ProviderNotice_SerializeSchema = z.object({
+	text: z.string(),
+	color: NoticeColorSchema,
+	buttonText: z.string().nullable().optional(),
+	buttonUrl: z.string().nullable().optional(),
+});
+export type ProviderNotice_Serialize = z.infer<typeof ProviderNotice_SerializeSchema>;
+
+
+export const ProviderInfo_SerializeSchema = z.object({
+	title: z.string().nullable().optional(),
+	announce: z.string().nullable().optional(),
+	supportUrl: z.string().nullable().optional(),
+	webPageUrl: z.string().nullable().optional(),
+	traffic: TrafficInfo_SerializeSchema.nullable().optional(),
+	notice: ProviderNotice_SerializeSchema.nullable().optional(),
+	expired: z.boolean(),
+	renewUrl: z.string().nullable().optional(),
+});
+export type ProviderInfo_Serialize = z.infer<typeof ProviderInfo_SerializeSchema>;
+
+
 export const Subscription_SerializeSchema = z.object({
 	id: z.string(),
 	remarks: z.string(),
@@ -289,6 +376,14 @@ export const Subscription_SerializeSchema = z.object({
 	lastError: z.string().nullable().optional(),
 	prevProfile: z.string().nullable().optional(),
 	nextProfile: z.string().nullable().optional(),
+	provider: ProviderInfo_SerializeSchema.nullable().optional(),
+	manualTitle: z.boolean(),
+	providerIntervalHours: z.number().nullable().optional(),
+	intervalOverride: z.boolean(),
+	requestTimeoutSecs: z.number().nullable().optional(),
+	bodyEncrypted: z.boolean(),
+	warnings: z.array(SubWarningSchema).optional(),
+	lastErrorKind: SubErrorKindSchema.nullable().optional(),
 });
 export type Subscription_Serialize = z.infer<typeof Subscription_SerializeSchema>;
 
@@ -687,6 +782,37 @@ export const AppState_SerializeSchema = z.object({
 export type AppState_Serialize = z.infer<typeof AppState_SerializeSchema>;
 
 
+export const TrafficInfo_DeserializeSchema = z.object({
+	upload: z.number(),
+	download: z.number(),
+	total: z.number(),
+	expire: z.number().nullable().optional(),
+});
+export type TrafficInfo_Deserialize = z.infer<typeof TrafficInfo_DeserializeSchema>;
+
+
+export const ProviderNotice_DeserializeSchema = z.object({
+	text: z.string(),
+	color: NoticeColorSchema,
+	buttonText: z.string().nullable().optional(),
+	buttonUrl: z.string().nullable().optional(),
+});
+export type ProviderNotice_Deserialize = z.infer<typeof ProviderNotice_DeserializeSchema>;
+
+
+export const ProviderInfo_DeserializeSchema = z.object({
+	title: z.string().nullable().optional(),
+	announce: z.string().nullable().optional(),
+	supportUrl: z.string().nullable().optional(),
+	webPageUrl: z.string().nullable().optional(),
+	traffic: TrafficInfo_DeserializeSchema.nullable().optional(),
+	notice: ProviderNotice_DeserializeSchema.nullable().optional(),
+	expired: z.boolean().optional(),
+	renewUrl: z.string().nullable().optional(),
+});
+export type ProviderInfo_Deserialize = z.infer<typeof ProviderInfo_DeserializeSchema>;
+
+
 export const Subscription_DeserializeSchema = z.object({
 	id: z.string(),
 	remarks: z.string(),
@@ -704,6 +830,14 @@ export const Subscription_DeserializeSchema = z.object({
 	lastError: z.string().nullable().optional(),
 	prevProfile: z.string().nullable().optional(),
 	nextProfile: z.string().nullable().optional(),
+	provider: ProviderInfo_DeserializeSchema.nullable().optional(),
+	manualTitle: z.boolean().optional(),
+	providerIntervalHours: z.number().nullable().optional(),
+	intervalOverride: z.boolean().optional(),
+	requestTimeoutSecs: z.number().nullable().optional(),
+	bodyEncrypted: z.boolean().optional(),
+	warnings: z.array(SubWarningSchema).optional(),
+	lastErrorKind: SubErrorKindSchema.nullable().optional(),
 });
 export type Subscription_Deserialize = z.infer<typeof Subscription_DeserializeSchema>;
 
@@ -1182,6 +1316,14 @@ export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, M
 export type MutationIntent = z.infer<typeof MutationIntentSchema>;
 
 
+export const ProviderInfoSchema = z.union([ProviderInfo_DeserializeSchema, ProviderInfo_SerializeSchema]);
+export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
+
+
+export const ProviderNoticeSchema = z.union([ProviderNotice_DeserializeSchema, ProviderNotice_SerializeSchema]);
+export type ProviderNotice = z.infer<typeof ProviderNoticeSchema>;
+
+
 export const WsInfoSchema = z.object({
 	port: z.number(),
 	token: z.string(),
@@ -1357,5 +1499,9 @@ export type SubAppliedEvent = z.infer<typeof SubAppliedEventSchema>;
 
 export const SubscriptionSchema = z.union([Subscription_DeserializeSchema, Subscription_SerializeSchema]);
 export type Subscription = z.infer<typeof SubscriptionSchema>;
+
+
+export const TrafficInfoSchema = z.union([TrafficInfo_DeserializeSchema, TrafficInfo_SerializeSchema]);
+export type TrafficInfo = z.infer<typeof TrafficInfoSchema>;
 
 

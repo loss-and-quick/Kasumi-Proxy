@@ -512,7 +512,7 @@ pub fn owned_group_is_empty(state: &AppState, sub_id: &str, group: &str) -> bool
 /// A group made for a subscription carries its name until the user renames the
 /// group: when the subscription's name changes and the group still has the old
 /// one, the group follows.
-fn rename_owned_group(state: &mut AppState, next: &Subscription) {
+pub fn rename_owned_group(state: &mut AppState, next: &Subscription) {
     let Some(prev) = state.subscriptions.iter().find(|s| s.id == next.id) else {
         return;
     };
@@ -829,6 +829,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         });
         let mut owned = with_id("trojan://pw@a.com:443#A", "a", "g-main");
         owned.meta_mut().sub_id = Some("s1".into());
@@ -866,6 +867,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         }
     }
 
@@ -1182,6 +1184,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         });
         apply_mutation(
             &mut s,

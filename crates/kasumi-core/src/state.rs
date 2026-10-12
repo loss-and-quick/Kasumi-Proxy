@@ -10,6 +10,10 @@ use crate::contract::FetchMode;
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::{Profile, Protocol};
 use crate::route::{Route, RuleBlock};
+pub use crate::sub_meta_types::{
+    ContentHint, NoticeColor, PayloadKind, ProviderInfo, ProviderNotice, SubErrorKind, SubWarning,
+    TrafficInfo,
+};
 
 // Default local inbound ports used when settings leave them unset.
 pub const DEFAULT_LOCAL_SOCKS_PORT: u16 = 10808;
@@ -68,7 +72,7 @@ pub struct Group {
 }
 
 /// A subscription source (`SubscriptionSchema`).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Subscription {
     pub id: String,
@@ -92,6 +96,27 @@ pub struct Subscription {
     pub prev_profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub next_profile: Option<String>,
+    /// What the provider says about this subscription (auto-applied Display keys).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderInfo>,
+    /// The user typed `remarks`; a provider title no longer renames it.
+    #[serde(default)]
+    pub manual_title: bool,
+    /// `profile-update-interval`, already clamped by happ-sub to 1..=730 hours.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_interval_hours: Option<u32>,
+    /// The user's own `interval` (minutes) wins over the provider's.
+    #[serde(default)]
+    pub interval_override: bool,
+    /// `subscription-request-timeout`, clamped to 5..=15 s.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_timeout_secs: Option<u32>,
+    #[serde(default)]
+    pub body_encrypted: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<SubWarning>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error_kind: Option<SubErrorKind>,
 }
 
 /// Transport scope of a routing rule.
