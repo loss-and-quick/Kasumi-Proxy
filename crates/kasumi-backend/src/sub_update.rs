@@ -980,4 +980,51 @@ mod tests {
         let returned = update(&p).await;
         assert_eq!(returned.subscriptions[0].last_error_kind, None);
     }
+
+    fn reality(sni: &str, sid: &str, port: u16) -> Vec<u8> {
+        let link = format!(
+            "vless://11111111-1111-1111-1111-111111111111@r.example.org:{port}?type=tcp\
+             &security=reality&pbk=PK&fp=firefox&sni={sni}&sid={sid}#Node\n"
+        );
+        http_response(200, &[], link.as_bytes())
+    }
+
+    /// Fetch `first`, make its profile active, then fetch `second` and report the
+    /// lifecycle calls the second apply made.
+    async fn refresh_calls(first: Vec<u8>, second: Vec<u8>) -> Vec<String> {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![first, second]).await;
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", &format!("{base}/s"))];
+        write_app_state(&p, &state).await.unwrap();
+        let mut state = update(&p).await;
+        state.active_id = Some(state.profiles[0].meta().id.clone());
+        write_app_state(&p, &state).await.unwrap();
+
+        let lc = lifecycle();
+        update_subscription(&p, &lc, &Mutex::new(()), "s1")
+            .await
+            .unwrap();
+        lc.calls.lock().unwrap().clone()
+    }
+
+    #[tokio::test]
+    async fn reality_sni_and_sid_rotation_does_not_restart() {
+        let calls = refresh_calls(
+            reality("a1.sni.example.com", "aaaa", 443),
+            reality("b2.sni.example.com", "bbbb", 443),
+        )
+        .await;
+        assert_eq!(calls, Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn a_port_change_still_restarts() {
+        let calls = refresh_calls(
+            reality("a1.sni.example.com", "aaaa", 443),
+            reality("b2.sni.example.com", "bbbb", 8443),
+        )
+        .await;
+        assert!(calls.iter().any(|c| c.starts_with("restart")), "{calls:?}");
+    }
 }
