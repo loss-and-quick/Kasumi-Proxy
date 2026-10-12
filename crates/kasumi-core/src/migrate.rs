@@ -24,7 +24,7 @@ type MigrationStep = fn(&mut Value);
 
 /// The ordered migration ladder. Index `i` lifts version `i` to `i + 1`; append a
 /// new step (never reorder or delete) whenever the on-disk schema changes.
-const MIGRATIONS: &[MigrationStep] = &[migrate_v0_to_v1];
+const MIGRATIONS: &[MigrationStep] = &[migrate_v0_to_v1, migrate_v1_to_v2];
 
 /// The schema version the current code writes (the length of the ladder).
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -53,6 +53,36 @@ fn migrate_v0_to_v1(v: &mut Value) {
             migrate_profile(p);
         }
     }
+}
+
+/// v1 → v2: a provider title may now rename a subscription, so mark the names the
+/// user typed. The UI's default name is the URL's host, which stays replaceable.
+fn migrate_v1_to_v2(v: &mut Value) {
+    let Some(subs) = v.get_mut("subscriptions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for sub in subs {
+        let Some(obj) = sub.as_object_mut() else {
+            continue;
+        };
+        let remarks = obj
+            .get("remarks")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let url = obj.get("url").and_then(Value::as_str).unwrap_or("");
+        let manual = !remarks.is_empty() && remarks != default_sub_name(url);
+        obj.insert("manualTitle".into(), Value::Bool(manual));
+    }
+}
+
+/// The name the UI gives a subscription the user left unnamed (`hostOf`).
+fn default_sub_name(url: &str) -> String {
+    let url = url.trim();
+    url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().filter(|h| !h.is_empty()).map(str::to_owned))
+        .unwrap_or_else(|| url.to_owned())
 }
 
 const META_KEYS: &[&str] = &["id", "remarks", "groupId", "subId", "coreType"];
@@ -471,7 +501,8 @@ mod tests {
             }]
         });
         migrate_app_state(&mut doc);
-        assert_eq!(doc["schemaVersion"], json!(SCHEMA_VERSION));
+        assert_eq!(SCHEMA_VERSION, 2);
+        assert_eq!(doc["schemaVersion"], json!(2));
         assert_eq!(doc["profiles"][0]["transport"]["kind"], "ws");
         assert!(doc["profiles"][0]["meta"].is_object());
 
@@ -479,6 +510,41 @@ mod tests {
         let again = doc.clone();
         migrate_app_state(&mut doc);
         assert_eq!(doc, again);
+    }
+
+    fn v1_doc(subs: Value) -> Value {
+        json!({ "schemaVersion": 1, "profiles": [], "subscriptions": subs })
+    }
+
+    #[test]
+    fn v1_to_v2_marks_user_titles_manual() {
+        let mut doc = v1_doc(json!([
+            { "id": "a", "remarks": "My VPN", "url": "https://sub.example.org/s/1" },
+            { "id": "b", "remarks": " sub.example.org ", "url": "https://sub.example.org/s/2" },
+            { "id": "c", "remarks": "", "url": "https://sub.example.org/s/3" },
+        ]));
+        migrate_app_state(&mut doc);
+        assert_eq!(doc["schemaVersion"], json!(2));
+        let manual: Vec<&Value> = doc["subscriptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| &s["manualTitle"])
+            .collect();
+        assert_eq!(manual, [&json!(true), &json!(false), &json!(false)]);
+    }
+
+    #[test]
+    fn v1_to_v2_host_default_title_is_not_manual() {
+        // The UI names an unnamed subscription after its host, or the raw text when
+        // the URL does not parse.
+        let mut doc = v1_doc(json!([
+            { "id": "a", "remarks": "[2001:db8::1]", "url": "http://[2001:db8::1]:8080/s" },
+            { "id": "b", "remarks": "not a url", "url": " not a url " },
+        ]));
+        migrate_app_state(&mut doc);
+        assert_eq!(doc["subscriptions"][0]["manualTitle"], json!(false));
+        assert_eq!(doc["subscriptions"][1]["manualTitle"], json!(false));
     }
 
     #[test]
