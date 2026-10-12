@@ -149,3 +149,74 @@ pub fn vless_at(port: u16) -> Profile {
     )
     .unwrap()
 }
+
+/// Raw request heads [`serve`] received, in arrival order.
+pub type Requests = std::sync::Arc<Mutex<Vec<String>>>;
+
+/// A local HTTP/1.1 server answering successive connections with `responses` in
+/// order (the last one repeats). Returns its base URL and the requests it saw.
+pub async fn serve(responses: Vec<Vec<u8>>) -> (String, Requests) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    assert!(!responses.is_empty());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let requests = Requests::default();
+    let seen = requests.clone();
+    tokio::spawn(async move {
+        for i in 0.. {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                return;
+            };
+            let mut head = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                match sock.read(&mut buf).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => head.extend_from_slice(&buf[..n]),
+                }
+            }
+            seen.lock()
+                .unwrap()
+                .push(String::from_utf8_lossy(&head).into_owned());
+            let res = &responses[i.min(responses.len() - 1)];
+            let _ = sock.write_all(res).await;
+            let _ = sock.shutdown().await;
+        }
+    });
+    (base, requests)
+}
+
+/// An HTTP/1.1 response with a `content-length` computed from `body`.
+pub fn http_response(status: u16, headers: &[(&str, &str)], body: &[u8]) -> Vec<u8> {
+    let mut out = format!("HTTP/1.1 {status} X\r\n");
+    for (k, v) in headers {
+        out.push_str(&format!("{k}: {v}\r\n"));
+    }
+    out.push_str(&format!(
+        "content-length: {}\r\nconnection: close\r\n\r\n",
+        body.len()
+    ));
+    let mut out = out.into_bytes();
+    out.extend_from_slice(body);
+    out
+}
+
+/// A captured provider response from the core fixtures, replayed over HTTP/1.1.
+pub fn fixture_response(name: &str) -> Vec<u8> {
+    let path = format!(
+        "{}/../kasumi-core/tests/fixtures/happ/{name}.http",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let head = String::from_utf8(raw[..split].to_vec()).unwrap();
+    let headers: Vec<(&str, &str)> = head
+        .lines()
+        .skip(1)
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim(), v.trim()))
+        .filter(|(k, _)| !k.eq_ignore_ascii_case("content-length"))
+        .collect();
+    http_response(200, &headers, &raw[split + 4..])
+}

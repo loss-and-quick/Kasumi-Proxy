@@ -195,6 +195,7 @@ async fn fetch_and_map(
             user_agent: (!sub.user_agent.is_empty()).then(|| sub.user_agent.clone()),
             allow_insecure: sub.allow_insecure,
             timeout: Some(FETCH_TIMEOUT),
+            ..Default::default()
         },
     )
     .await

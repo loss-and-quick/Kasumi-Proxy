@@ -305,7 +305,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                     proxy: Some(proxy),
                     user_agent,
                     allow_insecure,
-                    timeout: None,
+                    ..Default::default()
                 },
             )
             .await
