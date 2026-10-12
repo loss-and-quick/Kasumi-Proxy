@@ -112,6 +112,9 @@ export const bridge: Bridge = {
   async applySubscription(subId) {
     return (await loadBridge()).applySubscription(subId);
   },
+  async openUrl(url) {
+    return (await loadBridge()).openUrl(url);
+  },
   onSubApplied(cb) {
     let unsubscribed = false;
     let dispose: (() => void) | null = null;

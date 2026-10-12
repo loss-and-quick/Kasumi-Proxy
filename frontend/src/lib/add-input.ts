@@ -18,9 +18,10 @@ export function makeSubscription(
   p: Partial<Subscription> & { url: string },
   defaults: SubDefaults,
 ): Subscription {
+  const remarks = p.remarks?.trim() ?? "";
   return {
     id: uid(),
-    remarks: p.remarks?.trim() || hostOf(p.url),
+    remarks: remarks || hostOf(p.url),
     url: p.url.trim(),
     enabled: p.enabled ?? true,
     groupId: p.groupId ?? null,
@@ -33,6 +34,11 @@ export function makeSubscription(
     lastUpdated: "",
     count: 0,
     lastError: null,
+    // A dump from an older build has no flag: a name other than the host was typed.
+    manualTitle: p.manualTitle ?? (remarks !== "" && remarks !== hostOf(p.url)),
+    intervalOverride: p.intervalOverride ?? false,
+    bodyEncrypted: false,
+    warnings: [],
   };
 }
 

@@ -43,6 +43,20 @@ describe("classifyAddInput", () => {
     expect(subs[0]).toMatchObject({ remarks: "P", groupId: "g1", autoUpdate: true, interval: 360 });
   });
 
+  it("marks only a typed name as manual", () => {
+    const { subs } = classifyAddInput(
+      JSON.stringify([
+        { remarks: "Mine", url: "https://a.example/s" },
+        { remarks: "b.example", url: "https://b.example/s" },
+        { remarks: "Kept", url: "https://c.example/s", manualTitle: false },
+        { url: "https://d.example/s" },
+      ]),
+      defaults,
+    );
+    expect(subs.map((s) => s.manualTitle)).toEqual([true, false, false, false]);
+    expect(classifyAddInput("https://e.example/s", defaults).subs[0].manualTitle).toBe(false);
+  });
+
   it("treats JSON without subscription URLs as text", () => {
     const { subs, profileText } = classifyAddInput('{"outbounds":[]}', defaults);
     expect(subs).toEqual([]);
