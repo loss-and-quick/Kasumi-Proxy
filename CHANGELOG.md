@@ -1,3 +1,54 @@
+## v0.4.8 — 2026-10-12
+
+### Core updates
+
+- sing-box: `v1.14.2` → `v1.14.3`
+
+### Changes
+
+- [`54b7e85`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/54b7e85) feat(frontend): answer routing edits with an explicit restart verdict (#294)
+- [`5c2bdc1`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5c2bdc1) fix(frontend): mute switched-off blocks in the route graph (#293)
+- [`79a632e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/79a632e) fix(frontend): tuck background sheets away while another sheet is on top (#292)
+- [`c92a8a7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c92a8a7) fix(frontend): keep semantic colors in text and fill roles (#291)
+- [`90aa523`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/90aa523) fix(frontend): tone the restart banner into the warn container palette (#289)
+- [`83d5cdf`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/83d5cdf) fix(frontend): give the overview route chip its own line (#288)
+- [`2712d51`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/2712d51) fix(frontend): resolve the graph proxy outbound to the selected profile node
+- [`ccb76ab`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/ccb76ab) fix(frontend): show the selected profile on the graph proxy outbound
+- [`61d3c9e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/61d3c9e) fix(frontend): list profiles in route pickers the way the Profiles screen does (#287)
+- [`a22ac4f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a22ac4f) feat(frontend): routes built from shared rule blocks
+- [`b12efcd`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b12efcd) feat(core): rule blocks and per-profile routes
+- [`f30fc52`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f30fc52) fix(frontend): Back closes the top sheet or dialog
+- [`af260b1`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/af260b1) fix(frontend): add new routing rules above a rule that catches everything
+- [`77902a8`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/77902a8) fix(frontend): word speed tests, failed installs and the backup box right
+- [`27153db`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/27153db) fix(frontend): validate resource files and keep each one re-downloadable
+- [`0286241`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/0286241) fix(frontend): say what failed instead of showing a bare error
+- [`b20efe0`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/b20efe0) fix(frontend): keep the Profiles filter, sort and search across tabs
+- [`3ebfbae`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3ebfbae) fix(frontend): stop offering settings that do nothing here
+- [`893e893`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/893e893) fix(frontend): a real first-run state on Profiles, no empty headings
+- [`f924af6`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/f924af6) fix(frontend): give switches, fields and close buttons accessible names
+- [`d899323`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d899323) fix(frontend): turn the Overview dead ends into ways forward
+- [`986d4f7`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/986d4f7) fix(frontend): show a subscription updating, and run it once
+- [`caa864f`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/caa864f) feat(frontend): say "restart to apply" in Settings too
+- [`dcee0c5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/dcee0c5) fix(backup): back up rules, resource files and hand-made profiles
+- [`25760ea`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/25760ea) fix(frontend): save settings fields on blur and never fail a write silently
+- [`efa3e88`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/efa3e88) feat(frontend): select all or a whole group in bulk mode
+- [`1924723`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/1924723) fix(frontend): keep unsaved profile edits and blank profiles out
+- [`d271c5e`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/d271c5e) fix(frontend): ask before actions that can't be undone
+- [`e67a75c`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e67a75c) fix(frontend): add into the group being looked at
+- [`37c538d`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/37c538d) feat(frontend): one Add sheet that sorts out what is pasted
+- [`e757da4`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e757da4) feat(frontend): create a group right where one is picked
+- [`4f460a5`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/4f460a5) fix(core): keep subscriptions and profiles pointing at a live group
+- [`7a919b9`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/7a919b9) feat(desktop): list launcher apps for the app filter
+- [`3a4b431`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/3a4b431) feat(core): route desktop apps in the app filter by process
+- [`5925546`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5925546) fix(android): keep apps outside the proxy off its ports and its tun
+- [`89e9615`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/89e9615) fix(desktop): send system DNS through the tun with an xray core
+- [`5ec4a7b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5ec4a7b) feat(core): xray config helpers for DNS through a tun
+- [`5d143f6`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/5d143f6) fix(desktop): keep the LAN out of the sing-box tun on Linux
+- [`425fd7b`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/425fd7b) fix(frontend): word the startup toggles for desktop
+- [`e0f2446`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/e0f2446) fix(desktop): start with the system through the launcher, in the tray
+- [`c8b6176`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/c8b6176) feat(frontend): keep the active ping fresh and re-check it on tap
+- [`a6a6958`](https://github.com/loss-and-quick/Kasumi-Proxy/commit/a6a6958) feat(backend): check connectivity once a minute and report its latency
+
 ## v0.4.7 — 2026-09-29
 
 ### Changes
