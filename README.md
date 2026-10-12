@@ -37,6 +37,9 @@ Both run the same Rust backend and the same React UI.
 - **Import.** Subscription URLs, share links, mixed text and QR codes.
 - **Subscriptions.** Groups of servers that can be updated in one tap, or in the background
   with no UI open.
+- **Happ-compatible subscriptions.** The provider's title, traffic and expiry, announcements and
+  update interval are read from subscription headers and `#key:` directives, decoded by
+  [happ-sub](https://github.com/loss-and-quick/happ-sub).
 - **Honest status.** An end-to-end probe tells *connected* apart from *no internet* and *failed*.
 - **Diagnostics.** TCP ping, real ping and a speed test for each profile.
 - **Per-app routing** on Android, plus a choice of TUN engine: tun2socks, hev-socks5-tunnel or
