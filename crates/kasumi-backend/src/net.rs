@@ -34,7 +34,32 @@ pub struct FetchUrlOptions {
     /// Skip TLS certificate verification.
     pub allow_insecure: bool,
     pub timeout: Option<Duration>,
+    /// Extra request headers, in wire order.
+    pub headers: Vec<(String, String)>,
+    /// Stop reading once the body exceeds this; `None` = unbounded.
+    pub max_body_bytes: Option<usize>,
 }
+
+#[derive(Debug)]
+pub struct FetchResponse {
+    pub status: u16,
+    /// Every header occurrence, values as lossy UTF-8.
+    pub headers: Vec<(String, String)>,
+    pub body: Vec<u8>,
+    pub final_url: String,
+}
+
+/// A non-2xx reply, typed so callers can classify it.
+#[derive(Debug)]
+pub struct HttpStatusError(pub u16);
+
+impl std::fmt::Display for HttpStatusError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HTTP {}", self.0)
+    }
+}
+
+impl std::error::Error for HttpStatusError {}
 
 fn socks_url(port: u16) -> String {
     format!("socks5h://127.0.0.1:{port}")
@@ -43,33 +68,61 @@ fn socks_url(port: u16) -> String {
 async fn fetch_once(
     url: &str,
     proxy: Option<String>,
-    user_agent: Option<&str>,
-    allow_insecure: bool,
+    opts: &FetchUrlOptions,
     timeout: Duration,
-) -> anyhow::Result<Vec<u8>> {
+) -> anyhow::Result<FetchResponse> {
     let mut builder = reqwest::Client::builder().timeout(timeout);
     if let Some(p) = proxy {
         builder = builder.proxy(reqwest::Proxy::all(&p)?);
     }
-    if allow_insecure {
+    if opts.allow_insecure {
         builder = builder.danger_accept_invalid_certs(true);
     }
-    if let Some(ua) = user_agent {
+    if let Some(ua) = &opts.user_agent {
         builder = builder.user_agent(ua);
     }
     let client = builder.build()?;
-    let res = client.get(url).send().await?;
-    if !res.status().is_success() {
-        anyhow::bail!("HTTP {}", res.status().as_u16());
+    let mut req = client.get(url);
+    for (name, value) in &opts.headers {
+        req = req.header(name, value);
     }
-    Ok(res.bytes().await?.to_vec())
+    let mut res = req.send().await?;
+    let status = res.status().as_u16();
+    if !res.status().is_success() {
+        return Err(HttpStatusError(status).into());
+    }
+    let headers = res
+        .headers()
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.as_str().to_owned(),
+                String::from_utf8_lossy(v.as_bytes()).into_owned(),
+            )
+        })
+        .collect();
+    let final_url = res.url().to_string();
+    let mut body = Vec::new();
+    while let Some(chunk) = res.chunk().await? {
+        body.extend_from_slice(&chunk);
+        if let Some(max) = opts.max_body_bytes
+            && body.len() > max
+        {
+            anyhow::bail!("body exceeds {max} bytes");
+        }
+    }
+    Ok(FetchResponse {
+        status,
+        headers,
+        body,
+        final_url,
+    })
 }
 
 /// Fetch a URL honoring the proxy mode. `Auto` tries the proxy when one is running
 /// and falls back to direct; `Proxy` requires it; `Direct` never uses it.
-pub async fn fetch_url(url: &str, opts: FetchUrlOptions) -> anyhow::Result<Vec<u8>> {
+pub async fn fetch(url: &str, opts: FetchUrlOptions) -> anyhow::Result<FetchResponse> {
     let timeout = opts.timeout.unwrap_or(Duration::from_secs(30));
-    let ua = opts.user_agent.as_deref();
     let running = opts.proxy.map(|p| p.running).unwrap_or(false);
     let try_proxy = opts.mode == FetchMode::Proxy || (opts.mode == FetchMode::Auto && running);
 
@@ -81,16 +134,8 @@ pub async fn fetch_url(url: &str, opts: FetchUrlOptions) -> anyhow::Result<Vec<u
         // Force-proxy: route the attempt through `force-in`, which bypasses the geo
         // rules — a proxied fetch should always traverse the tunnel, never be sent
         // `direct` by a `geoip:ru`-style rule. Auto still falls back to direct below.
-        match fetch_once(
-            url,
-            Some(socks_url(proxy.force_port)),
-            ua,
-            opts.allow_insecure,
-            timeout,
-        )
-        .await
-        {
-            Ok(body) => return Ok(body),
+        match fetch_once(url, Some(socks_url(proxy.force_port)), &opts, timeout).await {
+            Ok(res) => return Ok(res),
             Err(err) => {
                 if opts.mode == FetchMode::Proxy {
                     return Err(err);
@@ -99,7 +144,12 @@ pub async fn fetch_url(url: &str, opts: FetchUrlOptions) -> anyhow::Result<Vec<u
         }
     }
 
-    fetch_once(url, None, ua, opts.allow_insecure, timeout).await
+    fetch_once(url, None, &opts, timeout).await
+}
+
+/// [`fetch`] for callers that need only the body.
+pub async fn fetch_url(url: &str, opts: FetchUrlOptions) -> anyhow::Result<Vec<u8>> {
+    Ok(fetch(url, opts).await?.body)
 }
 
 /// Local TCP ports currently in use (LISTEN/connected), from `/proc/net/tcp{,6}`.
@@ -205,6 +255,7 @@ pub async fn tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testutil::{fixture_response, http_response, serve};
 
     #[tokio::test]
     async fn free_port_skips_a_used_port() {
@@ -262,6 +313,66 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("proxy not running"));
+    }
+
+    fn direct() -> FetchUrlOptions {
+        FetchUrlOptions {
+            mode: FetchMode::Direct,
+            timeout: Some(Duration::from_secs(5)),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn fetch_returns_status_headers_body() {
+        let (base, requests) = serve(vec![fixture_response("01-happ-full")]).await;
+        let opts = FetchUrlOptions {
+            headers: vec![("X-Probe".into(), "1".into())],
+            ..direct()
+        };
+        let res = fetch(&format!("{base}/sub"), opts).await.unwrap();
+        assert_eq!(res.status, 200);
+        let header = |name: &str| {
+            res.headers
+                .iter()
+                .filter(|(k, _)| k == name)
+                .map(|(_, v)| v.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(header("profile-update-interval"), ["1"]);
+        assert_eq!(header("set-cookie").len(), 4);
+        assert!(res.body.starts_with(b"dmxlc3M6Ly"));
+        assert_eq!(res.final_url, format!("{base}/sub"));
+        let sent = requests.lock().unwrap()[0].to_ascii_lowercase();
+        assert!(sent.contains("x-probe: 1"), "{sent}");
+    }
+
+    #[tokio::test]
+    async fn fetch_enforces_body_limit() {
+        let (base, _) = serve(vec![http_response(200, &[], &[b'a'; 4096])]).await;
+        let opts = FetchUrlOptions {
+            max_body_bytes: Some(1024),
+            ..direct()
+        };
+        let err = fetch(&base, opts).await.unwrap_err();
+        assert!(err.to_string().contains("body exceeds 1024 bytes"), "{err}");
+
+        let opts = FetchUrlOptions {
+            max_body_bytes: Some(4096),
+            ..direct()
+        };
+        assert_eq!(fetch(&base, opts).await.unwrap().body.len(), 4096);
+    }
+
+    #[tokio::test]
+    async fn non_2xx_is_http_status_error() {
+        let (base, _) = serve(vec![http_response(403, &[], b"denied")]).await;
+        let err = fetch_url(&base, direct()).await.unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<HttpStatusError>().map(|e| e.0),
+            Some(403)
+        );
+        assert_eq!(err.to_string(), "HTTP 403");
     }
 
     #[tokio::test]

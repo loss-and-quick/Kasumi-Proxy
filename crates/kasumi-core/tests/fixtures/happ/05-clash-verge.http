@@ -1,0 +1,475 @@
+HTTP/2 200 
+server: ddos-guard
+set-cookie: __ddg8_=<REDACTED>; Domain=.example.org; Path=/; Expires=Mon, 12-Oct-2026 14:40:23 GMT
+set-cookie: __ddg10_=<REDACTED>; Domain=.example.org; Path=/; Expires=Mon, 12-Oct-2026 14:40:23 GMT
+set-cookie: __ddg9_=<REDACTED>; Domain=.example.org; Path=/; Expires=Mon, 12-Oct-2026 14:40:23 GMT
+content-security-policy: upgrade-insecure-requests;
+set-cookie: __ddg1_=<REDACTED>; Domain=.example.org; HttpOnly; Path=/; Expires=Tue, 12-Oct-2027 14:20:23 GMT
+date: Mon, 12 Oct 2026 14:20:23 GMT
+content-type: text/yaml; charset=utf-8
+content-length: 12413
+profile-title: base64:RXhhbXBsZSBWUE4g8J+XvQ==
+profile-update-interval: 1
+support-url: https://t.me/example_vpn_bot
+profile-web-page-url: https://example.org/start
+subscription-userinfo: upload=0; download=0; total=0; expire=1796256000
+announce: base64:8J+klCDQnNC90L7Qs9C+INC90LXQtNC+0YHRgtGD0L/QvdGL0YUg0LvQvtC60LDRhtC40Lk/CtCf0L7Qv9GA0L7QsdGD0LnRgtC1INCy0LrQu9GO0YfQuNGC0YwgQnlQYXNzINGA0LXQttC40Lwg0L/QvtC00L/QuNGB0LrQuCDQsiDQkdC+0YLQtS9XZWJVSS4KCtCU0LvRjyDRjdGC0L7Qs9C+INC/0LXRgNC10LnQtNC40YLQtSDQsiAn0KPQv9GA0LDQstC70LXQvdC40LUg0L/QvtC00L/QuNGB0LrQvtC5JyAtPiAn0KDQsNGB0YjQuNGA0LXQvdC90YvQtSDQvdCw0YHRgtGA0L7QudC60LgnIC0+ICfQmNC30LzQtdC90LjRgtGMINGC0LjQvyDQv9C+0LTQutC70Y7Rh9C10L3QuNGPJywg0LLRi9Cx0LXRgNC40YLQtSBCeVBhc3Mg0YDQtdC20LjQvCDQuCDwn5SE0L7QsdC90L7QstC40YLQtSDQv9C+0LTQv9C40YHQutGDLg==
+
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: true
+proxies:
+- name: 🇩🇪⚡Германия
+  type: vless
+  server: node-03.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: hrhpigyeh4.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: djua4a1v3P84ebYT4Wmz135QQ8dGEVxFkBnWmLLFoJQ
+    short-id: 1edfa379f93a3956
+- name: 🇳🇱⚡Нидерланды
+  type: vless
+  server: node-07.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: maeu8n95qm.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: fakBYxyh5hOrbx60kB4QQhLOP1iRr7LOuzt7lpCGK4M
+    short-id: 9a05d15b774b16e2
+- name: 🇨🇭⚡Швейцария-1
+  type: vless
+  server: node-08.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: 3cygkh4avo.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: rz0x_bzNwD2GV5sRamzcA35uP065OZeRqm3vD7coZkw
+    short-id: 0752bc1df483d4de
+- name: 🇨🇭⚡Швейцария-3
+  type: vless
+  server: node-09.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: utpakaoscl.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: ymlFaviq6S_eUBbV0cJ4hRuRqpEcUuK2BDkNRSpGIoU
+    short-id: e336ea8ecd564063
+- name: 🇨🇭⚡Швейцария-4 EXTRA
+  type: vless
+  server: relay-02.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: cdn.example.net
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: ymlFaviq6S_eUBbV0cJ4hRuRqpEcUuK2BDkNRSpGIoU
+    short-id: e26921aa91993265
+- name: 🇫🇷⚡Франция
+  type: vless
+  server: node-06.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: gjbgu6sqn3.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: 0KaGZGHvn40IoER0Q7DrT6AgFKJU88QzBFPDqD09rTs
+    short-id: 640ae8b9ea380636
+- name: 🇸🇪⚡Швеция
+  type: vless
+  server: node-12.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: w1lqblolzj.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: zYwT9yv_UK_yoSiWswycTb9YNKs3m-2GsscQCicQHu8
+    short-id: ea298541c145e776
+- name: 🇫🇮⚡Финляндия-1
+  type: vless
+  server: node-10.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: cjlqx2mvpp.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: kqaI8BkK4luTrp5XleFVrBbau3v4gMwBmgAacIumhuo
+    short-id: 3bc25cefc8a12690
+- name: 🇫🇮⚡Финляндия-2
+  type: vless
+  server: node-11.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: ukckvb1crz.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: YnfpJtViHIg9KywapqtLt87yqKNs1a6s6fp2ISQrwVo
+    short-id: 2fb8df24a27346d3
+- name: 🇬🇧⚡Англия-1
+  type: vless
+  server: node-05.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: 0zpal0uv4c.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: CHgX4VVW8hxKF0uW5XsFaLKjirT2ZsMIbh7Hpn0MbA4
+    short-id: 755d0a57c8ff3435
+- name: 🇬🇧⚡Англия-2 EXTRA
+  type: vless
+  server: relay-01.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: cdn.example.net
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: CHgX4VVW8hxKF0uW5XsFaLKjirT2ZsMIbh7Hpn0MbA4
+    short-id: f08eae043ac26a30
+- name: 🇵🇱⚡Польша
+  type: vless
+  server: node-04.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: uhj5ye3gqr.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: rn0FRG0vj7sIMdL0FOnMZJdtwvWEEy7omexUvzydCUk
+    short-id: 8e3323c2542243ae
+- name: 🇭🇺⚡Венгрия
+  type: vless
+  server: node-01.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: q2tzs95v9w.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: QRGsb_EyIAiE7IgreKHILrE1JSC5uYAcBoXRD8bfQT8
+    short-id: 260b71f939cbe8b4
+- name: 🇪🇸⚡Испания
+  type: vless
+  server: node-02.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: me8lbagyoq.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: Qs4EDaJ57MdzUOFgK3t9i6FHPWzmOA6WY_aFj2pc_Z4
+    short-id: a2b5ed39ebd17629
+- name: 🇫🇮🎮Финляндия GAMING
+  type: hysteria2
+  server: node-11.example.org
+  port: 8449
+  password: 00000000-0000-4000-8000-000000000001
+  sni: hy-sni-01.example.net
+  alpn:
+  - h3
+- name: 🇳🇱🎮Нидерланды GAMING
+  type: hysteria2
+  server: node-07.example.org
+  port: 8449
+  password: 00000000-0000-4000-8000-000000000001
+  sni: hy-sni-02.example.net
+  alpn:
+  - h3
+- name: 🇨🇭🎮Швейцария GAMING
+  type: hysteria2
+  server: node-09.example.org
+  port: 8449
+  password: 00000000-0000-4000-8000-000000000001
+  sni: hy-sni-03.example.net
+  alpn:
+  - h3
+- name: 🇷🇺💳Россия
+  type: hysteria2
+  server: 192.0.2.18
+  port: 8449
+  password: 00000000-0000-4000-8000-000000000001
+  sni: node-16.example.org
+  alpn:
+  - h3
+- name: 🇧🇷💳Бразилия
+  type: vless
+  server: node-15.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: nb3k3nwpuu.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: fVZDSZsnbll49Z-VpfJ74iC6fgJx302lIWOY32BjTPU
+    short-id: c73be26ed9247003
+- name: 🇮🇳💳Индия
+  type: vless
+  server: node-14.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: jbl5zolw9w.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: g1UCOmkHEUU0aDcM_GD5utcP4nEEqt34-2dpOIxBybI
+    short-id: dce816a17e4b93b2
+- name: 🇰🇿💳Казахстан
+  type: vless
+  server: node-17.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: tcrcymf5r4.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: 0bgafiCYgvDDjO3oqkRJ5iLmlY6RjLeaLqZPt07jLfw
+    short-id: ac137c1f46ac0db7
+- name: 🇹🇷💳Турция Torrent
+  type: vless
+  server: node-13.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: lbkll7fz7u.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: 5BvccHAi2iIJ9LOgtB2KT6NoR-gEnQbEniCZ1SM_5TM
+    short-id: fb27e036ddad921d
+- name: 🇮🇹Италия Torrent
+  type: vless
+  server: node-22.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: fxqkxavcfj.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: b6SvmL_LHqw5G1UTOppr1CxIjkv3OJg_agRE3_3qwt8
+    short-id: 25e277e91d012a3c
+- name: 🇯🇵Япония
+  type: vless
+  server: node-18.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: vo8hq1w4l3.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: ipp5sS0GIj8P5Z-rN1O76ww94ZKPsv8DpmVEYnhQQts
+    short-id: 934d733cb990804a
+- name: 🇨🇦Канада Torrent
+  type: vless
+  server: node-24.example.org
+  port: 8443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: mdcdefwesa.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: GkCOyhnU3f9xR0v99ykXlldPvDsH86GdtC2d7bDohvA
+    short-id: 881820476fb566ad
+- name: 🇭🇰Гонконг
+  type: vless
+  server: node-20.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: gq641boaom.sni.example.com
+  client-fingerprint: chrome
+  reality-opts:
+    public-key: xBedo9PuOpgve2l2p8oVdkBBHqNNWSFgb7S6dQmvPRw
+    short-id: 441fdff8b5bf1256
+- name: 🇧🇪Бельгия
+  type: vless
+  server: node-23.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: bkzq5oevs0.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: VZdqk1N323OVv9HbsreqmrJxLsZafYHlHzo8UW_oBW8
+    short-id: f8b6cf366f11cb1d
+- name: 🇺🇸США Torrent
+  type: vless
+  server: node-19.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: rns5pdms2a.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: rtfVi3g0ZljLQAQ64ewJChQqQ8HrVESGsniDX3auDfw
+    short-id: 90785071b2f3e764
+- name: 🇲🇩Молдова
+  type: vless
+  server: node-21.example.org
+  port: 443
+  uuid: 00000000-0000-4000-8000-000000000001
+  network: tcp
+  udp: true
+  flow: xtls-rprx-vision
+  tls: true
+  servername: 5qndpsz7rd.sni.example.com
+  client-fingerprint: firefox
+  reality-opts:
+    public-key: CDeiz6GDkjzY9o0bMfGUgvkUniQiUoXhTih5chCur4g
+    short-id: 77419f3242d5e881
+proxy-groups:
+- name: PROXY
+  type: select
+  proxies:
+  - Auto
+  - 🇩🇪⚡Германия
+  - 🇳🇱⚡Нидерланды
+  - 🇨🇭⚡Швейцария-1
+  - 🇨🇭⚡Швейцария-3
+  - 🇨🇭⚡Швейцария-4 EXTRA
+  - 🇫🇷⚡Франция
+  - 🇸🇪⚡Швеция
+  - 🇫🇮⚡Финляндия-1
+  - 🇫🇮⚡Финляндия-2
+  - 🇬🇧⚡Англия-1
+  - 🇬🇧⚡Англия-2 EXTRA
+  - 🇵🇱⚡Польша
+  - 🇭🇺⚡Венгрия
+  - 🇪🇸⚡Испания
+  - 🇫🇮🎮Финляндия GAMING
+  - 🇳🇱🎮Нидерланды GAMING
+  - 🇨🇭🎮Швейцария GAMING
+  - 🇷🇺💳Россия
+  - 🇧🇷💳Бразилия
+  - 🇮🇳💳Индия
+  - 🇰🇿💳Казахстан
+  - 🇹🇷💳Турция Torrent
+  - 🇮🇹Италия Torrent
+  - 🇯🇵Япония
+  - 🇨🇦Канада Torrent
+  - 🇭🇰Гонконг
+  - 🇧🇪Бельгия
+  - 🇺🇸США Torrent
+  - 🇲🇩Молдова
+- name: Auto
+  type: url-test
+  proxies:
+  - 🇩🇪⚡Германия
+  - 🇳🇱⚡Нидерланды
+  - 🇨🇭⚡Швейцария-1
+  - 🇨🇭⚡Швейцария-3
+  - 🇨🇭⚡Швейцария-4 EXTRA
+  - 🇫🇷⚡Франция
+  - 🇸🇪⚡Швеция
+  - 🇫🇮⚡Финляндия-1
+  - 🇫🇮⚡Финляндия-2
+  - 🇬🇧⚡Англия-1
+  - 🇬🇧⚡Англия-2 EXTRA
+  - 🇵🇱⚡Польша
+  - 🇭🇺⚡Венгрия
+  - 🇪🇸⚡Испания
+  - 🇫🇮🎮Финляндия GAMING
+  - 🇳🇱🎮Нидерланды GAMING
+  - 🇨🇭🎮Швейцария GAMING
+  - 🇷🇺💳Россия
+  - 🇧🇷💳Бразилия
+  - 🇮🇳💳Индия
+  - 🇰🇿💳Казахстан
+  - 🇹🇷💳Турция Torrent
+  - 🇮🇹Италия Torrent
+  - 🇯🇵Япония
+  - 🇨🇦Канада Torrent
+  - 🇭🇰Гонконг
+  - 🇧🇪Бельгия
+  - 🇺🇸США Torrent
+  - 🇲🇩Молдова
+  url: http://www.gstatic.com/generate_204
+  interval: 300
+rules:
+- MATCH,PROXY
