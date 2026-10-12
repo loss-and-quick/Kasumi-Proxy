@@ -146,6 +146,15 @@ pub(crate) fn host_for_uri(addr: &str) -> Cow<'_, str> {
     }
 }
 
+/// Happ appends `?serverDescription=…` to a link name; only the part before it is
+/// the name.
+fn strip_server_description(mut name: String) -> String {
+    if let Some(i) = name.find("?serverDescription=") {
+        name.truncate(i);
+    }
+    name
+}
+
 /// `?key=1|true` truthiness over several aliases.
 fn query_truthy(q: &HashMap<String, String>, keys: &[&str]) -> bool {
     keys.iter()
@@ -220,7 +229,7 @@ fn meta(remarks: String, group_id: Option<&str>) -> Meta {
 /// Fragment (`#...`) decoded, or the host as a fallback remark.
 fn remarks_or_host(u: &Url) -> String {
     match u.fragment() {
-        Some(f) => pct(f),
+        Some(f) => strip_server_description(pct(f)),
         None => u.host_str().unwrap_or("").to_string(),
     }
 }
@@ -620,7 +629,7 @@ fn parse_ss(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     let mut body = uri["ss://".len()..].to_string();
     let mut tag = String::new();
     if let Some(h) = body.find('#') {
-        tag = pct(&body[h + 1..]);
+        tag = strip_server_description(pct(&body[h + 1..]));
         body = body[..h].to_string();
     }
     let mut plugin = String::new();
@@ -1796,6 +1805,20 @@ mod tests {
             let again = parse_share_link(&built, None).unwrap_or_else(|| panic!("{built}"));
             assert_eq!(again.endpoint(), first.endpoint(), "{uri}");
         }
+    }
+
+    #[test]
+    fn server_description_is_not_part_of_remarks() {
+        for uri in [
+            "vless://u@h.example:443?type=tcp#Frankfurt%3FserverDescription%3DFast%20node",
+            "vless://u@h.example:443?type=tcp#Frankfurt?serverDescription=Fast",
+            "ss://YWVzLTI1Ni1nY206cHc@h.example:443#Frankfurt?serverDescription=Fast",
+        ] {
+            let p = parse_share_link(uri, None).unwrap_or_else(|| panic!("{uri}"));
+            assert_eq!(p.meta().remarks, "Frankfurt", "{uri}");
+        }
+        let p = parse_share_link("vless://u@h.example:443#What?", None).unwrap();
+        assert_eq!(p.meta().remarks, "What?");
     }
 
     #[test]
