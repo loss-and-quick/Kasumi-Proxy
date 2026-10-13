@@ -64,7 +64,7 @@ fn build_outbound_base(p: &Profile) -> Option<Map<String, Value>> {
         }
         Profile::Shadowsocks(ss) => json!({
             "tag": "proxy", "protocol": "shadowsocks",
-            "settings": { "servers": [{ "address": ss.endpoint.address, "port": ss.endpoint.port, "method": wire(&ss.method), "password": ss.password, "uot": true }]},
+            "settings": { "servers": [{ "address": ss.endpoint.address, "port": ss.endpoint.port, "method": wire(&ss.method), "password": ss.password }]},
         }),
         Profile::Socks(sk) => {
             let mut server = json!({ "address": sk.endpoint.address, "port": sk.endpoint.port });
@@ -1207,6 +1207,21 @@ mod tests {
         ];
         let err = build_xray_config(&all[0], &s, &[], &all).unwrap_err();
         assert!(err.contains("requires sing-box"), "{err}");
+    }
+
+    /// UDP over TCP is off, as on sing-box: xray applies `uot` only to the 2022
+    /// ciphers, and their servers need not accept it.
+    #[test]
+    fn shadowsocks_2022_sends_udp_natively() {
+        let p = crate::share::parse_share_link(
+            "ss://MjAyMi1ibGFrZTMtYWVzLTEyOC1nY206TVRJek5EVTJOemc1TUdGaVkyUmxaZz09@ss.example:8388#x",
+            None,
+        )
+        .unwrap();
+        let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+        let server = &cfg["outbounds"][0]["settings"]["servers"][0];
+        assert_eq!(server["method"], "2022-blake3-aes-128-gcm");
+        assert!(server.get("uot").is_none(), "{server}");
     }
 
     fn sample() -> Profile {

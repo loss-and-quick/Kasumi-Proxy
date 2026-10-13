@@ -1820,18 +1820,14 @@ fn bridged_uplink_bind_validates_against_real_cores() {
             }
         }
     });
+}
 
-/// Xray's spellings of shared Shadowsocks ciphers (`plain`, `chacha20-poly1305`,
-/// `xchacha20-poly1305`) on a plain TCP link, pinned to each core in turn: both
-/// must run them, sing-box under its own names.
+/// Every Shadowsocks cipher on a plain TCP link, pinned to each core in turn:
+/// both must run them all, sing-box under its own names for Xray's aliases.
 #[test]
-fn xray_cipher_spellings_validate_on_both_cores() {
+fn every_shadowsocks_cipher_validates_on_both_cores() {
     let mut cases = Vec::new();
-    for method in [
-        SsMethod::Plain,
-        SsMethod::Chacha20Poly1305,
-        SsMethod::Xchacha20Poly1305,
-    ] {
+    for method in SsMethod::iter() {
         for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
             let name = format!("ss-core/{}/{}", wire(&method), wire(&engine));
             let Some(Profile::Shadowsocks(mut s)) =
@@ -1840,6 +1836,7 @@ fn xray_cipher_spellings_validate_on_both_cores() {
                 panic!("{name}: shadowsocks seed builds");
             };
             s.method = method;
+            s.password = ss_key(method).to_string();
             s.meta.core_type = Some(engine);
             let profile = Profile::Shadowsocks(s);
             let settings = AdvancedSettings::default();
