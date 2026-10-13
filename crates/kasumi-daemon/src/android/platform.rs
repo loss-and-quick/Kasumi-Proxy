@@ -926,6 +926,7 @@ impl AppFilterCapability for AndroidPlatform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kasumi_core::core::owns_native_tun;
     use kasumi_core::state::AppFilterMode;
 
     // The FATAL line sing-box logged when netd held the lock (#189).
@@ -998,6 +999,35 @@ mod tests {
         }
     }
 
+    #[test]
+    fn start_and_watchdog_expect_the_same_helpers() {
+        // The watchdog tears down a data path whose expected helper is missing, so a
+        // start that skipped one would be killed on the next tick.
+        for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+            for tun in [TunEngine::SingboxTun, TunEngine::Tun2socks, TunEngine::Hev] {
+                for force in [false, true] {
+                    let plan = plan(engine, tun, force, 10809);
+                    let at = format!("{engine:?} + {tun:?}, force {force}");
+                    let started: Vec<HelperSpec> =
+                        plan.helpers().into_iter().map(helper_spec).collect();
+                    let doc = plan.state(RunState::Connecting).to_json();
+                    let recorded = DataPathState::from_json(doc.as_bytes()).unwrap();
+                    let watched = watched_helpers(&recorded);
+                    assert_eq!(watched[..], started[..watched.len()], "{at}");
+                    let external = !owns_native_tun(engine, tun);
+                    assert_eq!(watched.len(), usize::from(external), "{at}");
+                    assert_eq!(
+                        started.len(),
+                        usize::from(external) * (1 + usize::from(force)),
+                        "{at}"
+                    );
+                    for spec in &started {
+                        assert_eq!(spec.bin, tun_helper_bin(tun), "{at}");
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn retries_a_native_singbox_once_after_a_backoff() {
