@@ -2066,9 +2066,10 @@ export type Tuic = {
 };
 
 /**
- *  Which engine bridges the TUN device to the proxy core. `SingboxTun` means
- *  "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` and
- *  `Hev` are external userspace tun→socks processes in front of a socks-only core.
+ *  Which engine bridges the TUN device to the proxy core. `SingboxTun` is sing-box's
+ *  own TUN stack: native on the sing-box core, a sidecar sing-box in front of any
+ *  other core. `Tun2socks` and `Hev` are external userspace tun→socks processes in
+ *  front of a socks-only core.
  *  Further engines plug in as new variants. Wire values: `"singbox-tun"`,
  *  `"tun2socks"`, `"hev"`.
  */

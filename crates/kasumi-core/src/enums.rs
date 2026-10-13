@@ -23,9 +23,10 @@ pub enum CoreEngine {
     SingBox,
 }
 
-/// Which engine bridges the TUN device to the proxy core. `SingboxTun` means
-/// "use sing-box's own native TUN stack" (sing-box core only); `Tun2socks` and
-/// `Hev` are external userspace tun→socks processes in front of a socks-only core.
+/// Which engine bridges the TUN device to the proxy core. `SingboxTun` is sing-box's
+/// own TUN stack: native on the sing-box core, a sidecar sing-box in front of any
+/// other core. `Tun2socks` and `Hev` are external userspace tun→socks processes in
+/// front of a socks-only core.
 /// Further engines plug in as new variants. Wire values: `"singbox-tun"`,
 /// `"tun2socks"`, `"hev"`.
 #[derive(
@@ -38,23 +39,6 @@ pub enum TunEngine {
     Tun2socks,
     #[serde(rename = "hev")]
     Hev,
-}
-
-/// The wire label of a TUN engine — its serde value, the single source. Used as
-/// the on-disk marker that records which engine a running data-path uses, so every
-/// shell (desktop helper, Android daemon) reads/writes one canonical label instead
-/// of hand-maintaining its own match.
-pub fn tun_marker(tun: TunEngine) -> String {
-    serde_json::to_value(tun)
-        .ok()
-        .and_then(|v| v.as_str().map(str::to_owned))
-        .unwrap_or_default()
-}
-
-/// Parse a marker label back to its [`TunEngine`] (`None` for unknown/legacy
-/// labels). Inverse of [`tun_marker`], also serde-driven so the two can't drift.
-pub fn tun_from_marker(s: &str) -> Option<TunEngine> {
-    serde_json::from_value(serde_json::Value::String(s.trim().to_owned())).ok()
 }
 
 /// A per-engine TUN setting. The wire value is the `AdvancedSettings` field it
@@ -403,7 +387,6 @@ pub fn editor_option_lists() -> Vec<(&'static str, Vec<String>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strum::IntoEnumIterator;
 
     fn wire<T: Serialize>(v: &T) -> String {
         serde_json::to_string(v).unwrap()
@@ -420,19 +403,6 @@ mod tests {
         assert_eq!(wire(&TunEngine::SingboxTun), "\"singbox-tun\"");
         assert_eq!(wire(&TunEngine::Tun2socks), "\"tun2socks\"");
         assert_eq!(wire(&TunEngine::Hev), "\"hev\"");
-    }
-
-    #[test]
-    fn tun_marker_round_trips() {
-        for e in TunEngine::iter() {
-            assert_eq!(tun_from_marker(&tun_marker(e)), Some(e));
-        }
-        // Marker equals the serde wire value (single source).
-        assert_eq!(tun_marker(TunEngine::Tun2socks), "tun2socks");
-        assert_eq!(tun_marker(TunEngine::SingboxTun), "singbox-tun");
-        // Unknown/legacy labels don't resolve.
-        assert_eq!(tun_from_marker("nope"), None);
-        assert_eq!(tun_from_marker(""), None);
     }
 
     #[test]
