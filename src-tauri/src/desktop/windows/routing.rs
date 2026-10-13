@@ -252,6 +252,45 @@ pub async fn uplink_device() -> Option<String> {
     (!alias.is_empty()).then(|| alias.to_string())
 }
 
+/// Bind `socket` to the uplink adapter with `IP_UNICAST_IF` / `IPV6_UNICAST_IF`,
+/// the option sing-box `bind_interface` sets for test cores; it needs no
+/// privilege. No uplink leaves it unbound.
+pub async fn bind_uplink(
+    socket: &tokio::net::TcpSocket,
+    dest: std::net::IpAddr,
+) -> std::io::Result<()> {
+    use std::os::windows::io::AsRawSocket;
+    use windows_sys::Win32::Networking::WinSock::{
+        IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, IPV6_UNICAST_IF, SOCKET, SOCKET_ERROR, setsockopt,
+    };
+
+    let Some(alias) = uplink_device().await else {
+        return Ok(());
+    };
+    let Some(index) = adapter_ifindex(&alias).await else {
+        return Ok(());
+    };
+    // The IPv4 option takes the index in network byte order, the IPv6 one in host order.
+    let (level, name, value) = if dest.is_ipv4() {
+        (IPPROTO_IP, IP_UNICAST_IF, index.to_be())
+    } else {
+        (IPPROTO_IPV6, IPV6_UNICAST_IF, index)
+    };
+    let rc = unsafe {
+        setsockopt(
+            socket.as_raw_socket() as SOCKET,
+            level,
+            name,
+            (&raw const value).cast(),
+            std::mem::size_of::<u32>() as i32,
+        )
+    };
+    if rc == SOCKET_ERROR {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 /// Source-address pin for the uplink bind. Windows binds by interface index
 /// (`IP_UNICAST_IF`), which doesn't suffer the multi-homed source-selection issue the
 /// Linux `SO_BINDTODEVICE` path does, so no source override is emitted here.

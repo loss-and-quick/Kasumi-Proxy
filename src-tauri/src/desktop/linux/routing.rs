@@ -318,6 +318,27 @@ pub async fn uplink_device() -> Option<String> {
     read_default_route().await.map(|(_, dev)| dev)
 }
 
+/// Bind `socket` to the uplink device (`SO_BINDTODEVICE`, needs `CAP_NET_RAW`) and,
+/// when its family matches `dest`, the uplink's source address — the same pair
+/// `bind_uplink_outbounds` pins for test cores. No uplink leaves it unbound.
+pub async fn bind_uplink(
+    socket: &tokio::net::TcpSocket,
+    dest: std::net::IpAddr,
+) -> std::io::Result<()> {
+    let Some(dev) = uplink_device().await else {
+        return Ok(());
+    };
+    socket.bind_device(Some(dev.as_bytes()))?;
+    if let Some(src) = uplink_source()
+        .await
+        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+        && src.is_ipv4() == dest.is_ipv4()
+    {
+        socket.bind(std::net::SocketAddr::new(src, 0))?;
+    }
+    Ok(())
+}
+
 /// The preferred source address of the current default route (`default … src <ip>`).
 /// Pinned alongside the uplink device so a multi-homed host can't pick another NIC's
 /// source and black-hole the reply (see `outbound_bind::bind_uplink_outbounds`).

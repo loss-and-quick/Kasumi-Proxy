@@ -735,6 +735,16 @@ impl Platform for DesktopPlatform {
         let dat = self.p.backend.dat_dir.to_string_lossy().into_owned();
         spawn_local_test_core(&bin, cfg_path, log_path, &dat).await
     }
+
+    async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
+        // Same escape as the test cores above; an unprivileged in-process run has
+        // no managed tun to escape.
+        if can_bind_uplink() {
+            crate::desktop::net::uplink_tcp_ping(host, port, timeout).await
+        } else {
+            kasumi_backend::net::tcp_ping(host, port, timeout).await
+        }
+    }
 }
 
 /// Rewrite a core's config to bind every outbound that dials the network (see

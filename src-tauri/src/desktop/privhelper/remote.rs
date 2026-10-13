@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -190,6 +191,27 @@ impl Platform for RemotePlatform {
             handle,
             killed: false,
         }))
+    }
+
+    async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
+        // Linux: the uplink bind needs CAP_NET_RAW, so the helper connects, the way
+        // it runs test cores. A helper too old for the op falls back to the plain
+        // connect below.
+        #[cfg(unix)]
+        {
+            let req = PrivRequest::TcpPing {
+                host: host.to_owned(),
+                port,
+                timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
+            };
+            match self.client.call_oneshot(req).await {
+                Ok(PrivReply::Latency { ms }) => return ms,
+                Ok(other) => log::warn!("unexpected reply to TcpPing: {other:?}"),
+                Err(e) => log::warn!("tcp-ping through the helper failed: {e}"),
+            }
+        }
+        // Windows binds the uplink (`IP_UNICAST_IF`) without privilege.
+        self.local.tcp_ping(host, port, timeout).await
     }
 }
 
