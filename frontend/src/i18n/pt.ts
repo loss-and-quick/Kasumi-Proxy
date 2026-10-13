@@ -832,10 +832,10 @@ const pt = {
   "subs.identity.providerHeader":
     "O provedor pediu para enviar o ID do dispositivo como cabeçalho.",
   "subs.identity.providerYouDecide": "Os interruptores definidos aqui continuam valendo.",
-  "subs.identity.compat": "Igual ao Happ {version}.",
+  "subs.identity.compat": "Compatível com o protocolo do Happ.",
   "subs.identity.privacy":
     "Os provedores usam estes cabeçalhos para contar seus dispositivos: o mesmo ID em vários parece um só.",
-  "subs.identityNotice.title": "As assinaturas agora se identificam como o Happ {version}",
+  "subs.identityNotice.title": "As assinaturas agora usam o protocolo do Happ",
   "subs.identityNotice.body":
     "As atualizações enviam o User-Agent do Happ, um ID do dispositivo (X-HWID), o SO, o modelo e o idioma, como o Happ faz. Assinaturas com User-Agent próprio o mantêm e não enviam dados do dispositivo. Altere isso em cada assinatura em Editar → Identidade das requisições, ou para todas em Configurações → DNS e conexão.",
   "subs.identityNotice.settings": "Configurações",

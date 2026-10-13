@@ -949,10 +949,10 @@ const ar = {
   "subs.identity.providerCookie": "طلب المزوّد إرسال معرّف الجهاز في ملف تعريف ارتباط.",
   "subs.identity.providerHeader": "طلب المزوّد إرسال معرّف الجهاز في ترويسة.",
   "subs.identity.providerYouDecide": "المفاتيح التي تضبطها هنا تبقى هي الحاسمة.",
-  "subs.identity.compat": "مطابق لـ Happ {version}.",
+  "subs.identity.compat": "متوافق مع بروتوكول Happ.",
   "subs.identity.privacy":
     "يستخدم المزوّدون هذه الترويسات لعدّ أجهزتك: المعرّف نفسه على عدة أجهزة يبدو جهازًا واحدًا.",
-  "subs.identityNotice.title": "تعرّف الاشتراكات بنفسها الآن مثل Happ {version}",
+  "subs.identityNotice.title": "تستخدم الاشتراكات الآن بروتوكول Happ",
   "subs.identityNotice.body":
     "ترسل التحديثات User-Agent الخاص بـ Happ ومعرّف الجهاز (X-HWID) والنظام والطراز واللغة، كما يفعل Happ. الاشتراكات التي لها User-Agent خاص تحتفظ به ولا ترسل معلومات الجهاز. غيّر ذلك لكل اشتراك من تعديل ← هوية الطلبات، أو للجميع من الإعدادات ← DNS والاتصال.",
   "subs.identityNotice.settings": "الإعدادات",

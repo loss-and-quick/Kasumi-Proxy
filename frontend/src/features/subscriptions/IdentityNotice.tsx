@@ -1,5 +1,4 @@
 import { Btn, Icon } from "../../components";
-import { HAPP_VERSION } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import { useAppStore } from "../../store/useAppStore";
 
@@ -27,9 +26,7 @@ export function IdentityNotice() {
     >
       <Icon name="fingerprint" style={{ fontSize: 22, color: "var(--primary)", flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>
-          {t("subs.identityNotice.title", { version: HAPP_VERSION })}
-        </div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{t("subs.identityNotice.title")}</div>
         <div style={{ fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
           {t("subs.identityNotice.body")}
         </div>

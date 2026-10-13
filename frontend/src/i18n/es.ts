@@ -832,10 +832,10 @@ const es = {
   "subs.identity.providerHeader":
     "El proveedor pidió enviar el ID del dispositivo como encabezado.",
   "subs.identity.providerYouDecide": "Los interruptores que definas aquí siguen mandando.",
-  "subs.identity.compat": "Igual que Happ {version}.",
+  "subs.identity.compat": "Compatible con el protocolo de Happ.",
   "subs.identity.privacy":
     "Los proveedores usan estos encabezados para contar tus dispositivos: el mismo ID en varios parece uno solo.",
-  "subs.identityNotice.title": "Las suscripciones ahora se identifican como Happ {version}",
+  "subs.identityNotice.title": "Las suscripciones ahora usan el protocolo de Happ",
   "subs.identityNotice.body":
     "Al actualizar se envían el User-Agent de Happ, un ID del dispositivo (X-HWID), el SO, el modelo y el idioma, como hace Happ. Las suscripciones con User-Agent propio lo conservan y no envían datos del dispositivo. Cámbialo en cada suscripción en Editar → Identidad de las solicitudes, o para todas en Ajustes → DNS y conexión.",
   "subs.identityNotice.settings": "Ajustes",

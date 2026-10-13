@@ -784,10 +784,10 @@ const zh = {
   "subs.identity.providerCookie": "服务商要求通过 Cookie 发送设备 ID。",
   "subs.identity.providerHeader": "服务商要求通过请求头发送设备 ID。",
   "subs.identity.providerYouDecide": "你在这里设置的开关仍然优先。",
-  "subs.identity.compat": "与 Happ {version} 一致。",
+  "subs.identity.compat": "兼容 Happ 协议。",
   "subs.identity.privacy":
     "服务商用这些请求头统计你的设备数量：多台设备使用同一个 ID 时，会被视为同一台设备。",
-  "subs.identityNotice.title": "订阅现在以 Happ {version} 的身份请求",
+  "subs.identityNotice.title": "订阅现在使用 Happ 协议请求",
   "subs.identityNotice.body":
     "更新时会像 Happ 一样发送 Happ 的 User-Agent、设备 ID（X-HWID）、系统、型号和语言。设置了自定义 User-Agent 的订阅保留原值，且不发送设备信息。可在订阅的“编辑 → 请求身份”中单独修改，或在“设置 → DNS 与连接”中统一修改。",
   "subs.identityNotice.settings": "设置",

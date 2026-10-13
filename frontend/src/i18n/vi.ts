@@ -810,10 +810,10 @@ const vi = {
   "subs.identity.providerCookie": "Nhà cung cấp yêu cầu gửi ID thiết bị trong cookie.",
   "subs.identity.providerHeader": "Nhà cung cấp yêu cầu gửi ID thiết bị dưới dạng header.",
   "subs.identity.providerYouDecide": "Các công tắc bạn đặt ở đây vẫn được ưu tiên.",
-  "subs.identity.compat": "Giống Happ {version}.",
+  "subs.identity.compat": "Tương thích với giao thức Happ.",
   "subs.identity.privacy":
     "Nhà cung cấp dùng các header này để đếm thiết bị của bạn: cùng một ID trên nhiều thiết bị trông như một thiết bị.",
-  "subs.identityNotice.title": "Gói đăng ký giờ tự nhận là Happ {version}",
+  "subs.identityNotice.title": "Gói đăng ký giờ sử dụng giao thức Happ",
   "subs.identityNotice.body":
     "Khi cập nhật, ứng dụng gửi User-Agent của Happ, ID thiết bị (X-HWID), hệ điều hành, mẫu máy và ngôn ngữ, giống như Happ. Gói đăng ký có User-Agent riêng vẫn giữ nó và không gửi thông tin thiết bị. Thay đổi cho từng gói tại Chỉnh sửa → Danh tính yêu cầu, hoặc cho tất cả tại Cài đặt → DNS và kết nối.",
   "subs.identityNotice.settings": "Cài đặt",

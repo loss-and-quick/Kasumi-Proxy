@@ -797,10 +797,10 @@ const hi = {
   "subs.identity.providerCookie": "प्रोवाइडर ने डिवाइस ID cookie में भेजने को कहा है।",
   "subs.identity.providerHeader": "प्रोवाइडर ने डिवाइस ID हेडर में भेजने को कहा है।",
   "subs.identity.providerYouDecide": "यहाँ आपके सेट किए स्विच ही लागू होते हैं।",
-  "subs.identity.compat": "Happ {version} जैसा।",
+  "subs.identity.compat": "Happ प्रोटोकॉल के अनुकूल।",
   "subs.identity.privacy":
     "प्रोवाइडर इन हेडर से आपके डिवाइस गिनते हैं: कई डिवाइस पर एक ही ID हो तो वे एक ही डिवाइस जैसे दिखते हैं।",
-  "subs.identityNotice.title": "सब्सक्रिप्शन अब Happ {version} की तरह पहचान बताते हैं",
+  "subs.identityNotice.title": "सब्सक्रिप्शन अब Happ प्रोटोकॉल का उपयोग करते हैं",
   "subs.identityNotice.body":
     "अपडेट में Happ का User-Agent, डिवाइस ID (X-HWID), OS, मॉडल और भाषा भेजी जाती है, जैसे Happ भेजता है। जिन सब्सक्रिप्शन का अपना User-Agent है, वे उसे रखते हैं और डिवाइस की जानकारी नहीं भेजते। इसे हर सब्सक्रिप्शन के लिए “संपादित करें → अनुरोध की पहचान” में, या सबके लिए “सेटिंग्स → DNS और कनेक्शन” में बदलें।",
   "subs.identityNotice.settings": "सेटिंग्स",
