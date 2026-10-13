@@ -1328,7 +1328,10 @@ export type Route = {
 	name: string,
 	/**  A switched-off route lets its profiles fall back to the default route. */
 	enabled?: boolean,
-	/**  Profile ids this route applies to. Empty on the default route. */
+	/**
+	 *  Profile ids this route applies to. On the default route: profiles pinned
+	 *  to it against their group's route.
+	 */
 	profiles?: string[],
 	/**
 	 *  Group ids this route applies to (every profile in them, unless a route
