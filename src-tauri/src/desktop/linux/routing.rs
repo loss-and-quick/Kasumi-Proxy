@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use kasumi_backend::fs::read_text;
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
+use kasumi_core::outbound_bind::UplinkSource;
 
 use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
@@ -329,26 +330,41 @@ pub async fn bind_uplink(
         return Ok(());
     };
     socket.bind_device(Some(dev.as_bytes()))?;
-    if let Some(src) = uplink_source()
-        .await
-        .and_then(|s| s.parse::<std::net::IpAddr>().ok())
-        && src.is_ipv4() == dest.is_ipv4()
-    {
+    let source = uplink_source(&dev).await;
+    let pin = match dest {
+        std::net::IpAddr::V4(_) => source.v4,
+        std::net::IpAddr::V6(_) => source.v6,
+    };
+    if let Some(src) = pin.and_then(|s| s.parse::<std::net::IpAddr>().ok()) {
         socket.bind(std::net::SocketAddr::new(src, 0))?;
     }
     Ok(())
 }
 
-/// The preferred source address of the current default route (`default … src <ip>`).
-/// Pinned alongside the uplink device so a multi-homed host can't pick another NIC's
-/// source and black-hole the reply (see `outbound_bind::bind_uplink_outbounds`).
-/// `None` when the default route carries no `src` (then the device bind is used alone).
-pub async fn uplink_source() -> Option<String> {
+/// The source addresses to pin alongside the uplink device `dev`, so a multi-homed
+/// host can't pick another NIC's source and black-hole the reply (see
+/// `outbound_bind::bind_uplink_outbounds`). IPv4 is the default route's `src`.
+/// IPv6 default routes rarely carry one, so the kernel is asked which source it
+/// would pick on `dev` for a global destination (a documentation address; nothing
+/// is sent). A family left `None` keeps the device bind alone.
+pub async fn uplink_source(dev: &str) -> UplinkSource {
     let (code, out) = run_out(&[IP, "route", "show", "default"]).await;
-    if code != 0 {
-        return None;
-    }
-    parse_default_src(&out)
+    let v4 = (code == 0).then(|| parse_default_src(&out)).flatten();
+    let (code, out) = run_out(&[IP, "-6", "route", "get", V6_PROBE, "oif", dev]).await;
+    let v6 = (code == 0).then(|| parse_route_src_v6(&out)).flatten();
+    UplinkSource { v4, v6 }
+}
+
+/// A global IPv6 destination for `ip route get` (RFC 3849 documentation prefix).
+const V6_PROBE: &str = "2001:db8::1";
+
+/// The `src` of an `ip -6 route get` answer, unless it is link-local: binding one
+/// needs a scope id the cores don't take.
+fn parse_route_src_v6(out: &str) -> Option<String> {
+    let toks: Vec<&str> = out.split_whitespace().collect();
+    let src = toks.windows(2).find(|w| w[0] == "src").map(|w| w[1])?;
+    let ip: std::net::Ipv6Addr = src.parse().ok()?;
+    ((ip.segments()[0] & 0xffc0) != 0xfe80).then(|| src.to_string())
 }
 
 /// Pull the `src <ip>` from a `default via … dev … src <ip>` line.
@@ -390,6 +406,22 @@ mod tests {
         // No device (or empty output) yields None.
         assert_eq!(parse_route_dev("unreachable 0.0.0.0/1"), None);
         assert_eq!(parse_route_dev(""), None);
+    }
+
+    #[test]
+    fn parses_the_ipv6_route_source() {
+        let out = "2001:db8::1 from :: via fe80::1 dev eno1 proto ra src 2a02:6b8::5 metric 100 pref medium";
+        assert_eq!(parse_route_src_v6(out), Some("2a02:6b8::5".to_string()));
+        // A link-local source can't be bound without its scope.
+        assert_eq!(
+            parse_route_src_v6("2001:db8::1 via fe80::1 dev eno1 src fe80::5 metric 100"),
+            None
+        );
+        assert_eq!(
+            parse_route_src_v6("2001:db8::1 via fe80::1 dev eno1 metric 100"),
+            None
+        );
+        assert_eq!(parse_route_src_v6(""), None);
     }
 
     #[test]

@@ -35,6 +35,13 @@ use crate::enums::CoreEngine;
 const XRAY_LOCAL_PROTOCOLS: [&str; 2] = ["blackhole", "loopback"];
 const SINGBOX_LOCAL_TYPES: [&str; 3] = ["block", "selector", "urltest"];
 
+/// The uplink's own source addresses, per family, for [`bind_uplink_outbounds`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UplinkSource {
+    pub v4: Option<String>,
+    pub v6: Option<String>,
+}
+
 /// Bind every outbound that dials the network itself to `iface`, so the core's
 /// traffic to its servers *and* its direct (geo-`direct`) traffic egress the
 /// physical uplink and escape an active tun — no per-connection OS routing involved.
@@ -53,14 +60,19 @@ const SINGBOX_LOCAL_TYPES: [&str; 3] = ["block", "selector", "urltest"];
 /// host (several NICs on one subnet) `SO_BINDTODEVICE` alone lets the kernel pick a
 /// different NIC's source address, so the reply lands on the other interface and is
 /// dropped — the dial then times out and the bind silently fails to escape the tun.
-/// Pinning the source to the uplink's own address (xray `sendThrough`, sing-box
-/// `inet4_bind_address`) makes the escape deterministic. `None` keeps the device-only
-/// behaviour (single-homed hosts, or where the source can't be resolved).
+/// Pinning the source to the uplink's own address makes the escape deterministic.
+/// sing-box takes one per family (`inet4_bind_address` / `inet6_bind_address`) and
+/// uses the one matching each dial. xray has a single `sendThrough` for every dial,
+/// so it gets the IPv4 source only: an IPv6 one would break every IPv4 dial, and
+/// xray's IPv6 traffic keeps the device-only bind. A family without a source keeps
+/// the device-only behaviour (single-homed hosts, or where it can't be resolved).
+/// <https://sing-box.sagernet.org/configuration/shared/dial/>
+/// <https://xtls.github.io/en/config/outbound.html#outboundobject>
 pub fn bind_uplink_outbounds(
     engine: CoreEngine,
     cfg: &mut Value,
     iface: &str,
-    source: Option<&str>,
+    source: &UplinkSource,
 ) {
     for key in ["outbounds", "endpoints"] {
         let Some(arr) = cfg.get_mut(key).and_then(Value::as_array_mut) else {
@@ -75,7 +87,7 @@ pub fn bind_uplink_outbounds(
     }
 }
 
-fn bind_xray_outbound(ob: &mut Map<String, Value>, iface: &str, source: Option<&str>) {
+fn bind_xray_outbound(ob: &mut Map<String, Value>, iface: &str, source: &UplinkSource) {
     let protocol = ob.get("protocol").and_then(Value::as_str).unwrap_or("");
     if protocol.is_empty() || XRAY_LOCAL_PROTOCOLS.contains(&protocol) {
         return;
@@ -119,8 +131,8 @@ fn bind_xray_outbound(ob: &mut Map<String, Value>, iface: &str, source: Option<&
     if relayed || !bind_xray_sockopt(stream, iface) {
         return;
     }
-    if let Some(src) = source {
-        ob.insert("sendThrough".into(), src.into());
+    if let Some(v4) = &source.v4 {
+        ob.insert("sendThrough".into(), v4.as_str().into());
     }
 }
 
@@ -145,7 +157,7 @@ fn bind_xray_sockopt(stream: &mut Map<String, Value>, iface: &str) -> bool {
     true
 }
 
-fn bind_singbox_outbound(ob: &mut Map<String, Value>, iface: &str, source: Option<&str>) {
+fn bind_singbox_outbound(ob: &mut Map<String, Value>, iface: &str, source: &UplinkSource) {
     let kind = ob.get("type").and_then(Value::as_str).unwrap_or("");
     if kind.is_empty() || SINGBOX_LOCAL_TYPES.contains(&kind) {
         return;
@@ -167,8 +179,11 @@ fn bind_singbox_outbound(ob: &mut Map<String, Value>, iface: &str, source: Optio
         return;
     }
     ob.insert("bind_interface".into(), iface.into());
-    if let Some(src) = source {
-        ob.insert("inet4_bind_address".into(), src.into());
+    if let Some(v4) = &source.v4 {
+        ob.insert("inet4_bind_address".into(), v4.as_str().into());
+    }
+    if let Some(v6) = &source.v6 {
+        ob.insert("inet6_bind_address".into(), v6.as_str().into());
     }
 }
 
@@ -423,7 +438,7 @@ mod tests {
               "settings": { "vnext": [{ "address": "d.example", "port": 443 }] },
               "streamSettings": { "sockopt": { "dialerProxy": "proxy" } } },
         ] });
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", Some("192.168.1.5"));
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &v4("192.168.1.5"));
         for tag in [
             "proxy", "hy", "wg", "direct", "fragment", "dns-out", "dns-fwd",
         ] {
@@ -463,7 +478,7 @@ mod tests {
                   "peers": [{ "address": "w2.example" }] },
             ],
         });
-        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "eno1", Some("192.168.1.2"));
+        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "eno1", &v4("192.168.1.2"));
         for tag in ["proxy", "other", "direct"] {
             assert!(singbox_bound(&s, "outbounds", tag), "{tag} unbound");
             assert_eq!(
@@ -531,7 +546,7 @@ mod tests {
         }))
         .unwrap();
         let mut x = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", None);
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &UplinkSource::default());
 
         // `de-1` became `proxy`; the balancer still picks among all three.
         assert_eq!(
@@ -587,14 +602,19 @@ mod tests {
         ];
 
         let mut x = build_xray_config(&all[0], &s, &rules, &all).unwrap();
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", None);
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &UplinkSource::default());
         for tag in ["proxy", "other", "wg"] {
             assert!(xray_bound(&x, tag), "xray {tag} unbound");
         }
         assert!(!xray_bound(&x, "local"));
 
         let mut sb = singbox(&all[0], &s, &rules, &all);
-        bind_uplink_outbounds(CoreEngine::SingBox, &mut sb, "eno1", None);
+        bind_uplink_outbounds(
+            CoreEngine::SingBox,
+            &mut sb,
+            "eno1",
+            &UplinkSource::default(),
+        );
         for tag in ["proxy", "other"] {
             assert!(
                 singbox_bound(&sb, "outbounds", tag),
@@ -625,7 +645,7 @@ mod tests {
         let s = AdvancedSettings::default();
 
         let mut x = build_xray_config(&all[0], &s, &[], &all).unwrap();
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", Some("192.168.1.5"));
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &v4("192.168.1.5"));
         assert!(xray_bound(&x, "entry"));
         assert_eq!(
             by_tag(&x, "outbounds", "entry")["sendThrough"],
@@ -644,7 +664,12 @@ mod tests {
             Some("entry"),
         );
         let mut sb = singbox(&sb_all[0], &s, &[], &sb_all);
-        bind_uplink_outbounds(CoreEngine::SingBox, &mut sb, "eno1", None);
+        bind_uplink_outbounds(
+            CoreEngine::SingBox,
+            &mut sb,
+            "eno1",
+            &UplinkSource::default(),
+        );
         assert!(singbox_bound(&sb, "outbounds", "entry"));
         assert!(!singbox_bound(&sb, "outbounds", "proxy"));
         assert!(!singbox_bound(&sb, "endpoints", "mid"));
@@ -668,7 +693,7 @@ mod tests {
                       "sockopt": { "dialerProxy": "proxy" } } },
               } } },
         ] });
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", None);
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &UplinkSource::default());
         let xhttp =
             |tag: &str| by_tag(&x, "outbounds", tag)["streamSettings"]["xhttpSettings"].clone();
         let proxy = xhttp("proxy");
@@ -699,7 +724,7 @@ mod tests {
         );
         let mut x = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
         crate::xray_config::hijack_inbound_dns(&mut x);
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", Some("192.168.1.5"));
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &v4("192.168.1.5"));
         let dns = x["outbounds"]
             .as_array()
             .unwrap()
@@ -714,7 +739,7 @@ mod tests {
     fn source_is_optional() {
         // No source → device-only binding (single-homed hosts keep the old shape).
         let mut x = json!({ "outbounds": [{ "tag": "proxy", "protocol": "vless" }] });
-        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", None);
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &UplinkSource::default());
         assert_eq!(
             x["outbounds"][0]["streamSettings"]["sockopt"]["interface"],
             "eno1"
@@ -722,8 +747,81 @@ mod tests {
         assert!(x["outbounds"][0].get("sendThrough").is_none());
 
         let mut s = json!({ "outbounds": [{ "tag": "proxy", "type": "vless" }] });
-        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "eno1", None);
+        bind_uplink_outbounds(
+            CoreEngine::SingBox,
+            &mut s,
+            "eno1",
+            &UplinkSource::default(),
+        );
         assert_eq!(s["outbounds"][0]["bind_interface"], "eno1");
         assert!(s["outbounds"][0].get("inet4_bind_address").is_none());
+    }
+
+    fn v4(addr: &str) -> UplinkSource {
+        UplinkSource {
+            v4: Some(addr.into()),
+            v6: None,
+        }
+    }
+
+    fn dual() -> UplinkSource {
+        UplinkSource {
+            v4: Some("192.168.1.5".into()),
+            v6: Some("2001:db8::5".into()),
+        }
+    }
+
+    /// The full config the backend would launch for a vless profile on `engine`.
+    fn built(engine: CoreEngine) -> Value {
+        let mut p = profile(
+            "vless://11111111-1111-1111-1111-111111111111@e.x:443?type=tcp&security=tls&sni=s",
+            "vless",
+            None,
+        );
+        p.meta_mut().core_type = Some(engine);
+        let cfg = crate::core_config::build_core_config(
+            &p,
+            &crate::state::AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+            "",
+        )
+        .unwrap();
+        assert_eq!(cfg.engine, engine);
+        cfg.config
+    }
+
+    #[test]
+    fn singbox_pins_each_family_on_the_built_config() {
+        let mut s = built(CoreEngine::SingBox);
+        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "eno1", &dual());
+        for tag in ["proxy", "direct"] {
+            let ob = by_tag(&s, "outbounds", tag);
+            assert_eq!(ob["bind_interface"], "eno1");
+            assert_eq!(ob["inet4_bind_address"], "192.168.1.5");
+            assert_eq!(ob["inet6_bind_address"], "2001:db8::5");
+        }
+    }
+
+    // xray has one `sendThrough` for every dial: an IPv6 source would break its
+    // IPv4 dials, so only the IPv4 source is pinned and IPv6 stays device-only.
+    #[test]
+    fn xray_pins_only_the_ipv4_source_on_the_built_config() {
+        let mut x = built(CoreEngine::Xray);
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &dual());
+        for tag in ["proxy", "direct"] {
+            assert!(xray_bound(&x, tag));
+            assert_eq!(by_tag(&x, "outbounds", tag)["sendThrough"], "192.168.1.5");
+        }
+        assert!(!x.to_string().contains("2001:db8::5"));
+
+        let mut v6_only = built(CoreEngine::Xray);
+        let source = UplinkSource {
+            v4: None,
+            v6: Some("2001:db8::5".into()),
+        };
+        bind_uplink_outbounds(CoreEngine::Xray, &mut v6_only, "eno1", &source);
+        assert!(xray_bound(&v6_only, "proxy"));
+        assert!(!v6_only.to_string().contains("sendThrough"));
     }
 }
