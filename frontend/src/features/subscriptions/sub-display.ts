@@ -104,5 +104,7 @@ export function warningKey(w: SubWarning): DictKey {
       return "subs.warnings.rejectedConfigs";
     case "skippedOutbounds":
       return "subs.warnings.skippedOutbounds";
+    case "unavailableProtocols":
+      return "subs.warnings.unavailableProtocols";
   }
 }

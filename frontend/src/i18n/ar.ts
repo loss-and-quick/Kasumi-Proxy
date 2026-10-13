@@ -474,6 +474,8 @@ const ar = {
   "add.unsupported.routingOff":
     "يوقف توجيه المزوّد. أوقف المسارات من الإعدادات ← التوجيه بدلًا من ذلك.",
   "add.unsupported.urlDecrypt": "لا يملك Kasumi مفتاحًا لهذا الرابط المشفّر.",
+  "add.unsupported.unavailableProtocol":
+    "Naive غير متاح على Android: تم بناء sing-box المرفق بدونه.",
   "add.unsupported.invalid": "ليس رابط Happ صالحًا.",
   "add.linkUseAdd": "هذا رابط وليس JSON. أضِفه بزر «إضافة».",
   "groups.picker.new": "مجموعة جديدة…",
@@ -873,6 +875,15 @@ const ar = {
     few: "# خوادم بتنسيق لا يدعمه Kasumi",
     many: "# خادمًا بتنسيق لا يدعمه Kasumi",
     other: "# خادم بتنسيق لا يدعمه Kasumi",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    zero: "لم يُتخطَّ أي خادم",
+    one: "تم تخطي خادم واحد يستخدم بروتوكولًا لا يستطيع هذا الجهاز تشغيله (Naive غير متاح على Android، تم بناء sing-box المرفق بدونه)",
+    two: "تم تخطي خادمين يستخدمان بروتوكولًا لا يستطيع هذا الجهاز تشغيله (Naive غير متاح على Android، تم بناء sing-box المرفق بدونه)",
+    few: "تم تخطي # خوادم تستخدم بروتوكولًا لا يستطيع هذا الجهاز تشغيله (Naive غير متاح على Android، تم بناء sing-box المرفق بدونه)",
+    many: "تم تخطي # خادمًا يستخدم بروتوكولًا لا يستطيع هذا الجهاز تشغيله (Naive غير متاح على Android، تم بناء sing-box المرفق بدونه)",
+    other:
+      "تم تخطي # خادم يستخدم بروتوكولًا لا يستطيع هذا الجهاز تشغيله (Naive غير متاح على Android، تم بناء sing-box المرفق بدونه)",
   }),
   "subs.warnings.invalidRouting": "ملف التوجيه من المزوّد غير صالح وتم تجاهله.",
   "subs.warnings.invalidFragment": "تعذّرت قراءة جزء من الإعدادات بعد # في الرابط.",

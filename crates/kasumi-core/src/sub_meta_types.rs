@@ -88,6 +88,10 @@ pub enum SubWarning {
     SkippedOutbounds {
         count: u32,
     },
+    /// Servers whose protocol this device's cores can't run (naive on Android).
+    UnavailableProtocols {
+        count: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

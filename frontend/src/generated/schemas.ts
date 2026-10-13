@@ -326,6 +326,9 @@ export const SubWarningSchema = z.union([z.object({
 	kind: z.literal("skippedOutbounds"),
 	count: z.number(),
 }), z.object({
+	kind: z.literal("unavailableProtocols"),
+	count: z.number(),
+}), z.object({
 	kind: z.literal("unsupportedLinks"),
 	count: z.number(),
 }), z.object({
@@ -1192,6 +1195,7 @@ export const CapabilitiesSchema = z.object({
 	xrayVersion: z.string(),
 	singboxVersion: z.string(),
 	tun: z.boolean(),
+	unavailableProtocols: z.array(ProtocolSchema).optional(),
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
 
@@ -1810,7 +1814,7 @@ export const ResolvedIdentitySchema = z.object({
 export type ResolvedIdentity = z.infer<typeof ResolvedIdentitySchema>;
 
 
-export const UnsupportedInputSchema = z.union([z.literal("control"), z.literal("invalid"), z.literal("routingOff"), z.literal("sendToDevice"), z.literal("urlDecrypt")]);
+export const UnsupportedInputSchema = z.union([z.literal("control"), z.literal("invalid"), z.literal("routingOff"), z.literal("sendToDevice"), z.literal("unavailableProtocol"), z.literal("urlDecrypt")]);
 export type UnsupportedInput = z.infer<typeof UnsupportedInputSchema>;
 
 

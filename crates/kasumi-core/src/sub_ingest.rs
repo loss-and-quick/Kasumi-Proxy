@@ -456,6 +456,24 @@ fn map_warnings(warnings: &[happ_sub::Warning]) -> Vec<SubWarning> {
     out
 }
 
+/// Drop the ingested servers this device's cores can't run, so a subscription
+/// doesn't fill a group with profiles that fail to start; the warning counts them.
+pub fn withhold_unavailable_profiles(
+    ingested: &mut Ingested,
+    unavailable: &[crate::profile::Protocol],
+) {
+    let before = ingested.profiles.len();
+    ingested
+        .profiles
+        .retain(|p| !unavailable.contains(&p.protocol()));
+    let count = (before - ingested.profiles.len()) as u32;
+    if count > 0 {
+        ingested
+            .warnings
+            .push(SubWarning::UnavailableProtocols { count });
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -522,6 +540,27 @@ pub(crate) mod tests {
         assert_eq!(ing.routing.len(), 1);
         assert!(!ing.encrypted && !ing.used_legacy_parser);
         assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
+    }
+
+    #[test]
+    fn withholds_servers_the_device_cannot_run() {
+        use crate::profile::Protocol;
+        let body = b"vless://a@h.example:1#a\nnaive+https://u:p@n.example:443#n\n";
+        let mut ing = ingest(&input(URL, &[], body)).unwrap();
+        assert_eq!(ing.profiles.len(), 2);
+        withhold_unavailable_profiles(&mut ing, &[Protocol::Naive]);
+        assert_eq!(ing.profiles.len(), 1);
+        assert_eq!(ing.profiles[0].protocol(), Protocol::Vless);
+        assert_eq!(
+            ing.warnings,
+            [SubWarning::UnavailableProtocols { count: 1 }]
+        );
+
+        // Nothing unavailable: nothing dropped, no warning.
+        let mut ing = ingest(&input(URL, &[], body)).unwrap();
+        withhold_unavailable_profiles(&mut ing, &[]);
+        assert_eq!(ing.profiles.len(), 2);
+        assert_eq!(ing.warnings, []);
     }
 
     #[test]

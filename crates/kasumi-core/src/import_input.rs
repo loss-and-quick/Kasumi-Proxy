@@ -8,7 +8,9 @@ use happ_sub::deeplink::{Deeplink, parse_deeplink};
 use happ_sub::url_crypt::{UrlCryptError, builtin_keyring, decrypt_url};
 use serde::{Deserialize, Serialize};
 
+use crate::profile::Protocol;
 use crate::route::RoutePackage;
+use crate::share::parse_share_link;
 use crate::sub_changes::{routing_import, routing_package};
 use crate::sub_meta_types::RoutingImport;
 
@@ -28,7 +30,7 @@ pub enum ImportInput {
     },
 }
 
-/// Why a `happ://` link cannot be imported.
+/// Why a link in an import cannot be used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum UnsupportedInput {
@@ -44,6 +46,9 @@ pub enum UnsupportedInput {
     UrlDecrypt,
     /// A malformed `happ://` link, or one that does not lead to an http(s) URL.
     Invalid,
+    /// A share link for a protocol this device's cores can't run (see
+    /// [`withhold_unavailable`]).
+    UnavailableProtocol,
 }
 
 /// Classify one token (a line without spaces).
@@ -224,11 +229,59 @@ pub fn resolve_import_text(text: &str) -> ResolvedImport {
     out
 }
 
+/// Move the share links whose protocol this device can't run from `share_text` to
+/// `unsupported`, so the add sheet says why instead of importing profiles that
+/// can't start.
+pub fn withhold_unavailable(resolved: &mut ResolvedImport, unavailable: &[Protocol]) {
+    if unavailable.is_empty() {
+        return;
+    }
+    let mut kept = Vec::new();
+    for line in resolved.share_text.lines() {
+        match parse_share_link(line.trim(), None) {
+            Some(p) if unavailable.contains(&p.protocol()) => {
+                resolved.unsupported.push(UnsupportedLink {
+                    text: line.trim().to_owned(),
+                    kind: UnsupportedInput::UnavailableProtocol,
+                });
+            }
+            _ => kept.push(line),
+        }
+    }
+    resolved.share_text = kept.join("\n");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
+
+    const VLESS: &str = "vless://11111111-1111-1111-1111-111111111111@e.example:443?type=tcp&security=tls&sni=s#Home";
+    const NAIVE: &str = "naive+https://user:pass@n.example:443#Naive";
+
+    #[test]
+    fn withholds_share_links_the_device_cannot_run() {
+        let mut r = resolve_import_text(&format!("{VLESS}\n{NAIVE}"));
+        withhold_unavailable(&mut r, &[Protocol::Naive]);
+        assert_eq!(r.share_text, VLESS);
+        assert_eq!(
+            r.unsupported,
+            [UnsupportedLink {
+                text: NAIVE.into(),
+                kind: UnsupportedInput::UnavailableProtocol,
+            }]
+        );
+    }
+
+    #[test]
+    fn keeps_every_share_link_where_all_protocols_run() {
+        let text = format!("{VLESS}\n{NAIVE}");
+        let mut r = resolve_import_text(&text);
+        withhold_unavailable(&mut r, &[]);
+        assert_eq!(r.share_text, text);
+        assert!(r.unsupported.is_empty());
+    }
 
     /// Vendor-issued `happ://crypt5` links, copied from happ-sub's fixtures, with the
     /// probe URLs they were made for.

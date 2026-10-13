@@ -418,6 +418,8 @@ const en = {
   "add.unsupported.routingOff":
     "Turns a provider's routing off. Switch routes off in Settings → Routing instead.",
   "add.unsupported.urlDecrypt": "Kasumi has no key for this encrypted link.",
+  "add.unsupported.unavailableProtocol":
+    "Naive isn't available on Android: the bundled sing-box is built without it.",
   "add.unsupported.invalid": "Not a valid Happ link.",
   "add.linkUseAdd": "This is a link, not JSON. Add it with the Add button.",
   "groups.picker.new": "New group…",
@@ -752,6 +754,11 @@ const en = {
   "subs.warnings.unsupportedLinks": plural("count", {
     one: "# server uses a format Kasumi doesn't support",
     other: "# servers use a format Kasumi doesn't support",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    one: "# server uses a protocol this device can't run and was skipped (Naive isn't available on Android, the bundled sing-box is built without it)",
+    other:
+      "# servers use a protocol this device can't run and were skipped (Naive isn't available on Android, the bundled sing-box is built without it)",
   }),
   "subs.warnings.invalidRouting": "The provider's routing profile is invalid and was ignored.",
   "subs.warnings.invalidFragment": "Part of the settings after # in the URL couldn't be read.",

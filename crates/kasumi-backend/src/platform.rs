@@ -11,6 +11,7 @@ use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::ProxyMode;
 use kasumi_core::tun::TunOptions;
@@ -206,6 +207,13 @@ pub trait Platform: Send + Sync {
     /// a non-tun mode can't strip the tun inbound out from under the data path.
     fn supports_proxy_modes(&self) -> bool {
         false
+    }
+
+    /// Protocols this host's cores can't run. The UI hides them, imports and
+    /// subscriptions skip them with a reason, and a start refuses a profile that uses
+    /// one, instead of a core failing on it.
+    fn unavailable_protocols(&self) -> &'static [Protocol] {
+        &[]
     }
 
     /// Spawn the core for `engine` from the on-disk config and route traffic through

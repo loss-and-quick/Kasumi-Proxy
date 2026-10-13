@@ -144,6 +144,7 @@ describe("warningKey", () => {
       { kind: "usedFallback", host: "h" },
       { kind: "rejectedConfigs", count: 2 },
       { kind: "skippedOutbounds", count: 3 },
+      { kind: "unavailableProtocols", count: 1 },
     ];
     const keys = warnings.map(warningKey);
     expect(new Set(keys).size).toBe(keys.length);
