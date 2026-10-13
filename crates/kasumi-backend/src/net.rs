@@ -7,11 +7,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use kasumi_core::contract::FetchMode;
-use reqwest::cookie::{CookieStore, Jar};
+use reqwest::cookie::CookieStore;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tokio::net::TcpStream;
 
 use crate::fs::read_text;
+use crate::sub_cookies::SubCookies;
 
 /// Whether a core is up and the local ports to reach it on. The core exposes both
 /// a SOCKS inbound (used for proxied fetches) and an HTTP inbound (the platform's
@@ -42,7 +43,7 @@ pub struct FetchUrlOptions {
     pub max_body_bytes: Option<usize>,
     /// Cookies kept across fetches, keyed by host. A jar holding cookies for the URL
     /// replaces a `Cookie` in `headers`, as OkHttp's jar does for Happ.
-    pub cookie_jar: Option<Arc<Jar>>,
+    pub cookie_jar: Option<Arc<SubCookies>>,
     /// Resolve the host to IPv4 addresses only.
     pub ipv4_only: bool,
     /// Offer only gzip, as OkHttp does, instead of every supported encoding.
@@ -617,7 +618,7 @@ mod tests {
             http_response(200, &[], b"ok"),
         ])
         .await;
-        let jar = Arc::new(Jar::default());
+        let jar = Arc::new(SubCookies::default());
         let opts = FetchUrlOptions {
             headers: vec![("Cookie".into(), "0123456789abcdef".into())],
             cookie_jar: Some(jar),

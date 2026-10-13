@@ -2648,6 +2648,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "cookie_store",
  "h2",
  "happ-sub",
  "hmac",

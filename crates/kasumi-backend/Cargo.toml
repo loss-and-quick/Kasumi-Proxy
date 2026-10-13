@@ -39,6 +39,7 @@ reqwest = { version = "0.12", default-features = false, features = [
     "deflate",
     "cookies",
 ] }
+cookie_store = { version = "0.22", default-features = false }
 
 # Process identity is OS-specific: POSIX reads /proc + kill(2) (libc); Windows
 # queries the process image path + TerminateProcess (windows-sys). See proc.rs.
