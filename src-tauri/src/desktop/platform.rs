@@ -324,11 +324,11 @@ impl DesktopPlatform {
         let bypass =
             routing::bypass_cidrs(&servers, &self.tun_exclude_cidrs().await, !capture_dns).await;
 
-        // Bind the core's own egress outbounds (proxy + direct) to the physical
-        // uplink so they escape the tun at the socket layer instead of looping back
-        // through the external tun helper. Without this, the `direct` outbound
-        // carrying geo-`direct` (e.g. RU) traffic is captured by the split-default
-        // and loops. Gated on CAP_NET_RAW (the privileged data-path owner); a
+        // Bind every outbound the core dials the network with (servers + direct)
+        // to the physical uplink so they escape the tun at the socket layer instead
+        // of looping back through the external tun helper. Without this, the
+        // `direct` outbound carrying geo-`direct` (e.g. RU) traffic, or a server
+        // other than `proxy`, is captured by the split-default and loops. Gated on CAP_NET_RAW (the privileged data-path owner); a
         // harmless no-op in unprivileged in-process dev, where there's no managed
         // tun to escape. (sing-box's native `auto_route` path escapes via its own
         // `auto_detect_interface` and is bound elsewhere.)
@@ -735,9 +735,9 @@ impl Platform for DesktopPlatform {
     }
 }
 
-/// Rewrite a core's config to bind its egress outbounds (proxy + direct) to the
-/// physical uplink (`SO_BINDTODEVICE` / `bind_interface`) so its traffic escapes an
-/// active tun. Used for both the main bridged core (so its `direct` outbound doesn't
+/// Rewrite a core's config to bind every outbound that dials the network (see
+/// `bind_uplink_outbounds`) to the physical uplink (`SO_BINDTODEVICE` /
+/// `bind_interface`) so its traffic escapes an active tun. Used for both the main bridged core (so its `direct` outbound doesn't
 /// loop the split-default tun) and helper-spawned test cores. Returns whether a bind
 /// was actually written (needs a resolved uplink device and a writable JSON config);
 /// for a test core the caller grants the matching `CAP_NET_RAW` only when this is
