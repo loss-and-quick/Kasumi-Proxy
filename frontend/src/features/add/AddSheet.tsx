@@ -17,6 +17,7 @@ import {
   Sheet,
   SheetAction,
 } from "../../components";
+import type { Profile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import {
   type AddInput,
@@ -25,6 +26,7 @@ import {
   EMPTY_ADD_INPUT,
   NEW_SUB_DEFAULTS,
   parseSubscriptionDump,
+  profileDraft,
   resolveAddText,
   type SubDraft,
   subDraft,
@@ -70,7 +72,9 @@ export function AddSheet({
   /** Added from inside a group: everything, subscriptions too, goes there by
    *  default instead of each subscription getting a group of its own. */
   inGroup?: boolean;
-  onManualProfile?: () => void;
+  /** Opens the profile editor over the sheet, which stays open beneath it: on the
+   *  one profile the text holds (null for none or several), in the picked group. */
+  onManualProfile?: (draft: Profile | null, group: GroupChoice) => void;
   /** Opens the subscription editor over the sheet, on what the sheet holds. */
   onManualSub?: (draft: SubDraft) => void;
   onDone: (result: AddResult) => void;
@@ -173,6 +177,9 @@ export function AddSheet({
   const openManualSub = async () => {
     const options = { autoUpdate, interval, groupEach, group };
     onManualSub?.(await subDraft(text, options, groups, encryptedName, bridge));
+  };
+  const openManualProfile = async () => {
+    onManualProfile?.(await profileDraft(text, group, bridge), group);
   };
 
   const submit = async () => {
@@ -356,7 +363,7 @@ export function AddSheet({
                 icon="edit_note"
                 label={t("profiles.add.manual")}
                 sub={t("profiles.add.manualSub")}
-                onClick={onManualProfile}
+                onClick={() => void openManualProfile()}
               />
             )}
             {onManualSub && (

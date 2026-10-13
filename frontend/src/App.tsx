@@ -7,6 +7,7 @@
 // ============================================================
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Btn, ConfirmHost, Icon, Toaster } from "./components";
+import type { NewProfile } from "./features/editor/Editor";
 import Overview from "./features/overview/Overview";
 import { useProfilesView } from "./features/profiles/viewState";
 import { useT } from "./i18n";
@@ -85,7 +86,7 @@ export default function App() {
 
   const [tab, setTab] = useState<Tab>(getInitialTab);
   const [editorId, setEditorId] = useState<string | "new" | null>(null);
-  const [editorGroup, setEditorGroup] = useState<string | undefined>(undefined);
+  const [newProfile, setNewProfile] = useState<NewProfile>({});
   const [backupOpen, setBackupOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [appFilterOpen, setAppFilterOpen] = useState(false);
@@ -122,8 +123,8 @@ export default function App() {
         setTab(next);
         window.location.hash = next;
       },
-      openEditor(id: string | "new", groupId?: string) {
-        setEditorGroup(groupId);
+      openEditor(id: string | "new", fresh: NewProfile = {}) {
+        setNewProfile(fresh);
         setEditorId(id);
       },
       openBackup() {
@@ -223,7 +224,7 @@ export default function App() {
 
       {editorId && (
         <Suspense fallback={null}>
-          <Editor profileId={editorId} newGroupId={editorGroup} onClose={() => setEditorId(null)} />
+          <Editor profileId={editorId} newProfile={newProfile} onClose={() => setEditorId(null)} />
         </Suspense>
       )}
       {backupOpen && (

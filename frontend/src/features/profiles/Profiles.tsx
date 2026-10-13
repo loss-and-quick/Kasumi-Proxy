@@ -14,6 +14,7 @@ import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady } from "../../lib/gro
 import { profileSearchText } from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
+import type { NewProfile } from "../editor/Editor";
 import { copyText } from "./clipboard";
 import { askRemoveUnreachable } from "./confirmations";
 import { groupSections, sortProfiles } from "./order";
@@ -41,8 +42,7 @@ const ManageGroupsSheet = lazy(() =>
 export default function Profiles({
   onOpenEditor,
 }: {
-  /** `groupId` is where a new profile goes. */
-  onOpenEditor: (id: string | "new", groupId?: string) => void;
+  onOpenEditor: (id: string | "new", newProfile?: NewProfile) => void;
 }) {
   const profiles = useAppStore((s) => s.profiles);
   const testResults = useAppStore((s) => s.testResults);
@@ -379,11 +379,15 @@ export default function Profiles({
         // Pasted profiles land in the group being looked at, if any.
         defaultGroup={addDefaultGroup}
         inGroup={groupFilter !== "all"}
-        onManualProfile={() => {
-          setAddOpen(false);
-          // A profile made while looking at a group belongs to that group.
-          onOpenEditor("new", groupFilter !== "all" ? groupFilter : undefined);
-        }}
+        // The sheet stays open beneath the editor: cancelling returns to it, saving
+        // completes the add.
+        onManualProfile={(draft, group) =>
+          onOpenEditor("new", {
+            draft: draft ?? undefined,
+            group,
+            onSaved: () => setAddOpen(false),
+          })
+        }
         onDone={({ subs, profiles: added, profileGroup, routes }) => {
           if (subs) notify(t("subs.imported", { count: subs }));
           if (routes) notify(t("add.routingImported", { count: routes }));

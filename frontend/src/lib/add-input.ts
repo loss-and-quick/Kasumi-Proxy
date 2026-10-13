@@ -5,6 +5,7 @@
 // read here.
 // ============================================================
 
+import type { Profile } from "../generated/bindings";
 import type { DictKey } from "../i18n";
 import type { Bridge, ResolvedImport, Subscription } from "./bridge";
 import { type GroupChoice, hostOf } from "./groups";
@@ -194,6 +195,35 @@ export async function subDraft(
     }
   }
   return subDraftFrom(first, options, groups);
+}
+
+/** The profile "enter manually" opens with: the one share link the text holds,
+ *  filed under the picked group, or null when it holds none or several. */
+export function profileDraftFrom(parsed: readonly Profile[], group: GroupChoice): Profile | null {
+  if (parsed.length !== 1) return null;
+  const [p] = parsed;
+  return "id" in group ? { ...p, meta: { ...p.meta, groupId: group.id } } : p;
+}
+
+/** The backend's reading of `text` as a single profile, asked afresh like
+ *  {@link subDraft}. */
+export async function profileDraft(
+  text: string,
+  group: GroupChoice,
+  b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
+): Promise<Profile | null> {
+  if (!text.trim() || looksLikeJson(text)) return null;
+  // Unsorted, all of it is share-link text, as the sheet reads it then.
+  let shareText = text;
+  try {
+    shareText = (await b.resolveImportInput(text)).shareText;
+  } catch {}
+  if (!shareText.trim()) return null;
+  try {
+    return profileDraftFrom(await b.parseShareLinks(shareText), group);
+  } catch {
+    return null;
+  }
 }
 
 /** A scanned QR code goes on a line of its own after what the field holds. */

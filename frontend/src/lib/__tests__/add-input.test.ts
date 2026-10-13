@@ -4,10 +4,13 @@ import {
   addInputFrom,
   makeSubscription,
   parseSubscriptionDump,
+  profileDraft,
+  profileDraftFrom,
   subDraft,
   subDraftFrom,
 } from "../add-input";
 import type { ResolvedImport } from "../bridge";
+import { emptyProfile } from "../profile-utils";
 
 const defaults = { autoUpdate: false, interval: 360 };
 
@@ -179,5 +182,46 @@ describe("subDraft", () => {
     const b = bridgeOf(resolved({ shareText: "trojan://pw@h:443#T" }));
     expect((await subDraft("  ", options, [], "E", b)).sub.url).toBe("");
     expect((await subDraft("trojan://pw@h:443#T", options, [], "E", b)).sub.url).toBe("");
+  });
+});
+
+describe("profileDraftFrom", () => {
+  const link = emptyProfile("vless", "g-main");
+
+  it("is the one parsed profile, filed under the picked group", () => {
+    expect(profileDraftFrom([link], { id: "g-work" })?.meta.groupId).toBe("g-work");
+    // A group still to be made is resolved when the editor saves.
+    expect(profileDraftFrom([link], { newName: "New" })).toBe(link);
+  });
+
+  it("is null for none or several", () => {
+    expect(profileDraftFrom([], { id: "g-main" })).toBeNull();
+    expect(profileDraftFrom([link, link], { id: "g-main" })).toBeNull();
+  });
+});
+
+describe("profileDraft", () => {
+  const link = emptyProfile("vless", "g-main");
+  const asked: string[] = [];
+  const b = {
+    resolveImportInput: async (text: string) =>
+      resolved({ shareText: text.replace(/^https:\S+\s*/, "") }),
+    parseShareLinks: async (text: string) => {
+      asked.push(text);
+      return text.trim() ? [link] : [];
+    },
+  };
+
+  it("hands the backend only the share-link part of the text", async () => {
+    asked.length = 0;
+    const draft = await profileDraft("https://sub.example.com/s\nvless://x", { id: "g-work" }, b);
+    expect(draft?.meta.groupId).toBe("g-work");
+    expect(asked).toEqual(["vless://x"]);
+  });
+
+  it("is null for blank text, JSON and text with no share link", async () => {
+    expect(await profileDraft(" ", { id: "g-main" }, b)).toBeNull();
+    expect(await profileDraft('[{"url":"https://a"}]', { id: "g-main" }, b)).toBeNull();
+    expect(await profileDraft("https://sub.example.com/s", { id: "g-main" }, b)).toBeNull();
   });
 });
