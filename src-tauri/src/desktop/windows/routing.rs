@@ -9,14 +9,23 @@
 //! Everything is driven through `route` / `netsh` / `Get-Net*`, mirroring the Linux
 //! `ip` back-end. The exact set of installed routes is persisted so teardown is
 //! idempotent.
+//!
+//! With an xray core the system's DNS is sent into the tun as well (see
+//! [`point_dns_at_tun`]), and port 53 is closed everywhere else for as long as this
+//! process holds the [`dns_guard`].
+
+use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
 use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
+
+use super::dns_guard;
 
 /// The userspace tun's address + mask; `/15` covers the 198.18/15 test net.
 /// Address single-sourced from core so it can't drift from hev's / the routing's.
@@ -27,12 +36,142 @@ const TUN_MASK: &str = "255.254.0.0";
 /// `0.0.0.0/0` for its half without touching the real default.
 const SPLIT_DEFAULT: [(&str, &str); 2] = [("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0")];
 
+/// Resolver the tun advertises; see [`kasumi_core::tun::TUN_DNS_IPV4`].
+const TUN_DNS: &str = kasumi_core::tun::TUN_DNS_IPV4;
+
+static DNS_GUARD: Mutex<Option<dns_guard::Guard>> = Mutex::new(None);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
     tun: String,
     tun_ifindex: u32,
     /// Bypass host-routes we added (CIDR strings), to delete on teardown.
     bypass: Vec<String>,
+}
+
+/// `netsh` fallback for [`set_adapter_dns`] on Windows before 10 2004.
+fn netsh_dns_argv(tun: &str) -> Vec<String> {
+    [
+        "netsh",
+        "interface",
+        "ipv4",
+        "set",
+        "dnsservers",
+        &format!("name={tun}"),
+        "source=static",
+        &format!("address={TUN_DNS}"),
+        "register=none",
+        "validate=no",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+/// The lowest interface metric, which makes the tun the adapter Windows lists
+/// first and asks first.
+/// <https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-interface-metric>
+fn netsh_metric_argv(tun_ifindex: u32) -> Vec<String> {
+    [
+        "netsh",
+        "interface",
+        "ipv4",
+        "set",
+        "interface",
+        &format!("interface={tun_ifindex}"),
+        "metric=1",
+    ]
+    .map(String::from)
+    .to_vec()
+}
+
+async fn run_argv(argv: &[String]) -> i32 {
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    silent(&argv).await
+}
+
+fn luid_of(ifindex: u32) -> std::io::Result<NET_LUID_LH> {
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::NetworkManagement::IpHelper::ConvertInterfaceIndexToLuid;
+    // SAFETY: `luid` outlives the call.
+    unsafe {
+        let mut luid: NET_LUID_LH = std::mem::zeroed();
+        match ConvertInterfaceIndexToLuid(ifindex, &mut luid) {
+            ERROR_SUCCESS => Ok(luid),
+            rc => Err(std::io::Error::from_raw_os_error(rc as i32)),
+        }
+    }
+}
+
+/// Point the tun's DNS at [`TUN_DNS`] through `SetInterfaceDnsSettings`
+/// (Windows 10 2004+). It is looked up at run time: a static import of a missing
+/// export would stop the whole app from loading on older builds.
+/// <https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-setinterfacednssettings>
+fn set_adapter_dns(tun_ifindex: u32) -> std::io::Result<()> {
+    use windows_sys::Win32::Foundation::{ERROR_SUCCESS, WIN32_ERROR};
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        ConvertInterfaceLuidToGuid, DNS_INTERFACE_SETTINGS, DNS_INTERFACE_SETTINGS_VERSION1,
+        DNS_SETTING_NAMESERVER,
+    };
+    use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+    use windows_sys::core::GUID;
+
+    type SetDns = unsafe extern "system" fn(GUID, *const DNS_INTERFACE_SETTINGS) -> WIN32_ERROR;
+
+    let dll: Vec<u16> = "iphlpapi.dll\0".encode_utf16().collect();
+    // SAFETY: plain Win32 calls; every pointer outlives its call, and the
+    // transmuted pointer has the documented signature of the export it names.
+    unsafe {
+        let module = LoadLibraryW(dll.as_ptr());
+        if module.is_null() {
+            return Err(std::io::Error::last_os_error());
+        }
+        let Some(proc) = GetProcAddress(module, c"SetInterfaceDnsSettings".as_ptr().cast()) else {
+            return Err(std::io::Error::from(std::io::ErrorKind::Unsupported));
+        };
+        let set_dns: SetDns = std::mem::transmute(proc);
+
+        let luid = luid_of(tun_ifindex)?;
+        let mut guid: GUID = std::mem::zeroed();
+        let mut rc = ConvertInterfaceLuidToGuid(&luid, &mut guid);
+        if rc == ERROR_SUCCESS {
+            let mut servers: Vec<u16> = TUN_DNS.encode_utf16().chain(std::iter::once(0)).collect();
+            let mut settings: DNS_INTERFACE_SETTINGS = std::mem::zeroed();
+            settings.Version = DNS_INTERFACE_SETTINGS_VERSION1;
+            settings.Flags = u64::from(DNS_SETTING_NAMESERVER);
+            settings.NameServer = servers.as_mut_ptr();
+            rc = set_dns(guid, &settings);
+        }
+        match rc {
+            ERROR_SUCCESS => Ok(()),
+            rc => Err(std::io::Error::from_raw_os_error(rc as i32)),
+        }
+    }
+}
+
+/// Give the tun [`TUN_DNS`] as its resolver and the lowest metric, so Windows asks
+/// it first. Both live on the adapter and go away with it. Best effort.
+async fn point_dns_at_tun(tun: &str, tun_ifindex: u32) {
+    if let Err(e) = set_adapter_dns(tun_ifindex) {
+        log::info!("SetInterfaceDnsSettings unavailable ({e}); using netsh");
+        run_argv(&netsh_dns_argv(tun)).await;
+    }
+    run_argv(&netsh_metric_argv(tun_ifindex)).await;
+}
+
+/// Close port 53 outside the tun until [`clear_external_tun_routing`] or the end of
+/// this process. Best effort: without it, other adapters' resolvers stay reachable.
+fn guard_dns(tun_ifindex: u32, core_bin: &str) {
+    let installed = luid_of(tun_ifindex).and_then(|luid| {
+        let tun_dns = TUN_DNS.parse().map_err(std::io::Error::other)?;
+        // SAFETY: `Value` spans the whole LUID union.
+        let luid = unsafe { luid.Value };
+        let key = dns_guard::new_sublayer_key()?;
+        dns_guard::install(&dns_guard::plan(key, luid, tun_dns, core_bin))
+    });
+    match installed {
+        Ok(guard) => *DNS_GUARD.lock().unwrap_or_else(PoisonError::into_inner) = Some(guard),
+        Err(e) => log::warn!("DNS guard not installed ({e}); other resolvers stay reachable"),
+    }
 }
 
 /// Run a PowerShell one-liner, returning trimmed stdout (empty on failure).
@@ -126,13 +265,13 @@ fn split_cidr(cidr: &str) -> (&str, bool) {
 }
 
 /// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address the
-/// tun and split-default into it. Persists the installed set.
+/// tun and split-default into it. Persists the installed set. `core_bin` is the core
+/// whose own DNS stays allowed out of the uplink while `capture_dns` guards the rest.
 pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
-    // No Windows counterpart yet: route selection there is longest-prefix only, so
-    // a resolver on the LAN keeps being asked directly.
-    _capture_dns: bool,
+    capture_dns: bool,
+    core_bin: &str,
     route_state_file: &str,
 ) -> anyhow::Result<()> {
     let Some((gw, uplink)) = read_default_route().await else {
@@ -203,11 +342,21 @@ pub async fn apply_external_tun_routing(
         bypass: bypass.to_vec(),
     };
     write_text_atomic(route_state_file, &serde_json::to_string(&state)?).await?;
+    if capture_dns {
+        point_dns_at_tun(tun, tun_ifindex).await;
+        guard_dns(tun_ifindex, core_bin);
+    }
     Ok(())
 }
 
 /// Tear down everything `apply_external_tun_routing` installed. Idempotent.
 pub async fn clear_external_tun_routing(route_state_file: &str) {
+    // Dropping the guard removes its filters.
+    let guard = DNS_GUARD
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take();
+    drop(guard);
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };
@@ -316,6 +465,44 @@ mod tests {
             None
         );
         assert_eq!(parse_default_route("not json"), None);
+    }
+
+    // No adapter has this index: the call has to fail cleanly, either at the
+    // run-time export lookup (before Windows 10 2004) or at the index.
+    #[test]
+    fn adapter_dns_fails_cleanly_for_a_missing_interface() {
+        assert!(set_adapter_dns(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn netsh_targets_the_tun_only() {
+        let dns = netsh_dns_argv("kasumi0");
+        assert!(dns.contains(&"name=kasumi0".to_string()));
+        assert!(dns.contains(&format!("address={TUN_DNS}")));
+        assert!(dns.contains(&"validate=no".to_string()));
+        let metric = netsh_metric_argv(42);
+        assert!(metric.contains(&"interface=42".to_string()));
+        assert!(metric.contains(&"metric=1".to_string()));
+    }
+
+    // DNS capture leaves nothing for a later start to undo: its adapter settings go
+    // with the tun and its filters with this process, so only routes are recorded.
+    #[test]
+    fn route_state_records_only_routes() {
+        let state = RouteState {
+            tun: "kasumi0".into(),
+            tun_ifindex: 42,
+            bypass: vec!["1.2.3.4/32".into()],
+        };
+        let json = serde_json::to_value(&state).unwrap();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["bypass", "tun", "tun_ifindex"]);
     }
 
     #[test]

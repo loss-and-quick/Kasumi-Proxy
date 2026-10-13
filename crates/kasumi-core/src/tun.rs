@@ -26,6 +26,10 @@ pub const TUN_IPV4_CIDR: &str = "198.18.0.1/15";
 pub const TUN_IPV6: &str = "fdfe:dcba:9876::1";
 /// Primary tun IPv6 address with its interface prefix.
 pub const TUN_IPV6_CIDR: &str = "fdfe:dcba:9876::1/64";
+/// The resolver a Windows desktop tun hands to the OS. It lies inside the primary
+/// tun's on-link prefix, so queries to it enter the tun, where the core answers
+/// port 53 itself; nothing listens on the address.
+pub const TUN_DNS_IPV4: &str = "198.18.0.2";
 /// Force-proxy second tun IPv4 host (Android-only; desktop has a single tun).
 pub const TUN2_IPV4: &str = "198.19.0.1";
 /// Force-proxy second tun IPv4 with its interface prefix.
@@ -125,6 +129,23 @@ mod tests {
                 "{cidr} is not {host} + a prefix"
             );
         }
+    }
+
+    #[test]
+    fn tun_dns_is_on_link_but_not_the_tun_itself() {
+        use std::net::Ipv4Addr;
+        let addr = |s: &str| u32::from(s.parse::<Ipv4Addr>().unwrap());
+        let net = |cidr: &str| {
+            let (host, len) = cidr.split_once('/').unwrap();
+            let mask = u32::MAX << (32 - len.parse::<u32>().unwrap());
+            (addr(host) & mask, mask)
+        };
+        let dns = addr(TUN_DNS_IPV4);
+        let (tun_net, tun_mask) = net(TUN_IPV4_CIDR);
+        let (tun2_net, tun2_mask) = net(TUN2_IPV4_CIDR);
+        assert_eq!(dns & tun_mask, tun_net);
+        assert_ne!(dns & tun2_mask, tun2_net);
+        assert_ne!(TUN_DNS_IPV4, TUN_IPV4);
     }
 
     #[test]
