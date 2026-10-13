@@ -1351,6 +1351,26 @@ mod tests {
     }
 
     #[test]
+    fn importing_a_v0_backup_lifts_its_flat_profiles() {
+        // The first Backup screen exported profiles with every field at the top level.
+        let flat = json!({
+            "protocol": "trojan", "id": "t1", "remarks": "Home", "groupId": "g-main",
+            "address": "ex.com", "port": 443, "network": "tcp", "headerType": "none",
+            "security": "tls", "sni": "ex.com", "fingerprint": "chrome", "alpn": "",
+            "password": "pw", "muxEnabled": false
+        });
+        let mut backup = v1_backup();
+        backup["profiles"] = json!([flat]);
+        let mut s = base();
+        import(&mut s, &backup, "merge");
+        let Some(Profile::Trojan(t)) = s.profiles.iter().find(|p| p.meta().id == "t1") else {
+            panic!("{:?}", s.profiles);
+        };
+        assert_eq!(t.endpoint.address, "ex.com");
+        assert_eq!(t.tls.sni, "ex.com");
+    }
+
+    #[test]
     fn replace_state_swaps_wholesale() {
         let mut s = base();
         s.profiles = vec![with_id("trojan://pw@a.com:443#A", "a", "g-main")];
