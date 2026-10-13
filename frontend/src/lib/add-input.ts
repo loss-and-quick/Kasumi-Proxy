@@ -143,3 +143,29 @@ export function withClipboard(current: string, clip: string | null): string {
   const v = clip?.trim();
   return v && !current.trim() ? v : current;
 }
+
+/** What a typed subscription URL is: a link to store (`happ://add/` unwrapped, an
+ *  encrypted one kept), a `happ://` link that is no subscription, or anything else,
+ *  saved as typed. */
+export type SubscriptionUrlCheck =
+  | { kind: "url"; url: string; encrypted: boolean }
+  | { kind: "routing" }
+  | { kind: "unsupported"; reason: UnsupportedKind }
+  | { kind: "other" };
+
+export async function checkSubscriptionUrl(
+  url: string,
+  b: Pick<Bridge, "resolveImportInput">,
+): Promise<SubscriptionUrlCheck> {
+  let r: ResolvedImport;
+  try {
+    r = await b.resolveImportInput(url);
+  } catch {
+    return { kind: "other" };
+  }
+  if (r.unsupported.length) return { kind: "unsupported", reason: r.unsupported[0].kind };
+  if (r.routing.length) return { kind: "routing" };
+  if (r.subscriptions.length === 1 && !r.shareText.trim())
+    return { kind: "url", ...r.subscriptions[0] };
+  return { kind: "other" };
+}

@@ -324,6 +324,7 @@ const zh = {
   "subs.edit.revealedHint": "除非修改地址，链接会保持加密。",
   "subs.edit.replacesEncrypted": "新地址将替换加密链接。",
   "subs.edit.validationUrl": "订阅 URL 不能为空",
+  "subs.edit.routingLink": "这是 Happ 路由配置，不是订阅。请用“添加”按钮导入。",
   "subs.edit.validationInterval": "间隔必须大于 0",
   "subs.edit.validationFilter": "正则表达式无效",
   "editor.validation.remarks": "请填写名称",

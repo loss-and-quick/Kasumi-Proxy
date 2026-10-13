@@ -1,9 +1,16 @@
 // Every way text reaches the add flow (typed or pasted, the clipboard when the
-// sheet opens, a QR code from the camera or a photo) ends in the same backend
-// sorting, so a `happ://` link means the same thing whatever brought it in.
+// sheet opens, a QR code from the camera or a photo, the URL field of a new
+// subscription) ends in the same backend sorting, so a `happ://` link means the
+// same thing whatever brought it in.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addInputFrom, appendScanned, resolveAddText, withClipboard } from "../add-input";
+import {
+  addInputFrom,
+  appendScanned,
+  checkSubscriptionUrl,
+  resolveAddText,
+  withClipboard,
+} from "../add-input";
 import type { ResolvedImport } from "../bridge";
 import { mockBridge } from "../mock-bridge";
 
@@ -130,5 +137,37 @@ describe("import entry points", () => {
       shareText: SAMPLES.crypt5,
     });
     expect(profileCount).toBe(0);
+  });
+});
+
+describe("subscription URL field", () => {
+  it("stores the same URL the add sheet would", async () => {
+    for (const link of [SAMPLES.crypt5, SAMPLES.add]) {
+      const [sub] = (await outcome(link)).value.subscriptions;
+      expect(await checkSubscriptionUrl(link, mockBridge)).toEqual({ kind: "url", ...sub });
+    }
+  });
+
+  it("refuses a routing profile", async () => {
+    expect(await checkSubscriptionUrl(SAMPLES.routing, mockBridge)).toEqual({ kind: "routing" });
+  });
+
+  it("refuses a control link with the add sheet's reason", async () => {
+    expect(await checkSubscriptionUrl(SAMPLES.control, mockBridge)).toEqual({
+      kind: "unsupported",
+      reason: "control",
+    });
+  });
+
+  it("leaves a plain URL, a share link and several lines as typed", async () => {
+    expect(await checkSubscriptionUrl("https://a.example/s", mockBridge)).toEqual({
+      kind: "url",
+      url: "https://a.example/s",
+      encrypted: false,
+    });
+    expect(await checkSubscriptionUrl(SAMPLES.vless, mockBridge)).toEqual({ kind: "other" });
+    expect(
+      await checkSubscriptionUrl("https://a.example/s\nhttps://b.example/s", mockBridge),
+    ).toEqual({ kind: "other" });
   });
 });

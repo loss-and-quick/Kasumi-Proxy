@@ -322,6 +322,7 @@ const hi = {
   "subs.edit.revealedHint": "जब तक आप पता नहीं बदलते, लिंक एन्क्रिप्टेड रहता है।",
   "subs.edit.replacesEncrypted": "नया पता एन्क्रिप्टेड लिंक की जगह लेगा।",
   "subs.edit.validationUrl": "सदस्यता URL आवश्यक है",
+  "subs.edit.routingLink": "यह Happ रूटिंग प्रोफ़ाइल है, सदस्यता नहीं। इसे “जोड़ें” बटन से जोड़ें।",
   "subs.edit.validationInterval": "अंतराल 0 से बड़ा होना चाहिए",
   "subs.edit.validationFilter": "अमान्य regex",
   "editor.validation.remarks": "नाम आवश्यक है",
