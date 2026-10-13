@@ -425,6 +425,8 @@ const vi = {
   "settings.proxyTethering": "Proxy lưu lượng điểm phát sóng và chia sẻ kết nối",
   "settings.proxyTetheringSub":
     "Cho thiết bị dùng điểm phát Wi-Fi, USB hoặc Bluetooth đi qua proxy. Áp dụng trong vài giây; chỉ IPv4.",
+  "settings.proxyTetheringOffload":
+    "Hãy khởi động lại điểm phát hoặc chia sẻ USB: trước đó, một phần lưu lượng của thiết bị đã kết nối có thể đi vòng qua proxy.",
   "settings.domainStrategy4Xray": "Chiến lược tên miền (nhân lõi Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

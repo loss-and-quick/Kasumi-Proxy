@@ -436,6 +436,8 @@ const es = {
   "settings.proxyTethering": "Proxy para el tráfico de zona Wi-Fi y anclaje",
   "settings.proxyTetheringSub":
     "Envía por el proxy los dispositivos de tu zona Wi-Fi o anclaje USB/Bluetooth. Se aplica en segundos; solo IPv4.",
+  "settings.proxyTetheringOffload":
+    "Reinicia la zona Wi-Fi o el anclaje USB: hasta entonces, parte del tráfico de los dispositivos conectados puede saltarse el proxy.",
   "settings.domainStrategy4Xray": "Estrategia de dominio (núcleo Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

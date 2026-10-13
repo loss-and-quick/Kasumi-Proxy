@@ -2,6 +2,7 @@ import {
   Card,
   Disclosure,
   Field,
+  Icon,
   NumberInput,
   SectionLabel,
   Segmented,
@@ -23,6 +24,7 @@ import {
 import { type DictKey, useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
+import { useAppStore } from "../../../store/useAppStore";
 
 // Display labels for the TUN engines. Presentation only; the selectable engines,
 // per-core defaults and validity all come from the generated `TUN_BY_CORE`
@@ -66,6 +68,8 @@ export function TunEngineSection({
   const t = useT();
   // Tethering clients exist only on the phone; the desktop has no hotspot to proxy.
   const isDesktop = getRuntimeBridgeMode() === "tauri";
+  // Android still offloads a tethering session that predates the option.
+  const offloadBypass = useAppStore((s) => s.service.tetherOffloadBypass);
 
   const tunFor = (core: CoreEngine): TunEngine =>
     settings.tunByCore?.[core] ?? TUN_BY_CORE[core].default;
@@ -143,6 +147,17 @@ export function TunEngineSection({
               onChange={(value) => set("proxyTethering", value)}
             />
           </SettingRow>
+        )}
+        {!isDesktop && settings.proxyTethering && offloadBypass && (
+          <div
+            role="status"
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 0 12px" }}
+          >
+            <Icon name="gpp_maybe" style={{ fontSize: 18, color: "var(--warn)" }} />
+            <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--warn)" }}>
+              {t("settings.proxyTetheringOffload")}
+            </span>
+          </div>
         )}
         <SettingRow title={t("settings.tunMtu")}>
           <NumberInput

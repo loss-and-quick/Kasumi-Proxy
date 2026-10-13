@@ -500,6 +500,8 @@ const ar = {
   "settings.proxyTethering": "تمرير حركة نقطة الاتصال والتوصيل عبر الوكيل",
   "settings.proxyTetheringSub":
     "تمرير أجهزة نقطة الاتصال أو التوصيل عبر USB أو بلوتوث عبر الوكيل. يُطبَّق خلال ثوانٍ؛ IPv4 فقط.",
+  "settings.proxyTetheringOffload":
+    "أعد تشغيل نقطة الاتصال أو التوصيل عبر USB: حتى ذلك الحين، قد يتجاوز جزء من حركة الأجهزة المتصلة الوكيل.",
   "settings.domainStrategy4Xray": "استراتيجية النطاق (نواة Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

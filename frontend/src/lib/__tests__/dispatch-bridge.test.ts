@@ -192,6 +192,40 @@ describe("dispatch-bridge status stream", () => {
     expect(seen).toEqual([true, false]);
     expect((await bridge.status()).pendingRestart).toBe(false);
   });
+
+  it("reads the tethering offload flag from status replies and pushes", async () => {
+    let pushStatus: ((raw: unknown) => void) | undefined;
+    const push: PushStreams = {
+      subscribeStatus: (cb) => {
+        pushStatus = cb;
+        return () => {};
+      },
+      subscribeSubApplied: () => () => {},
+      subscribeAssetsUpdated: () => () => {},
+    };
+    // Unlike pendingRestart, the flag is part of the platform's ServiceState, so
+    // the bare status reply carries it.
+    const dispatch: Dispatch = vi.fn(async () => ({
+      kind: "status",
+      value: {
+        state: "connected",
+        uploadBytes: 0,
+        downloadBytes: 0,
+        uptimeSec: 1,
+        engine: "sing-box",
+        tetherOffloadBypass: true,
+      },
+    })) as Dispatch;
+    const bridge = createBridge(dispatch, push);
+    expect((await bridge.status()).tetherOffloadBypass).toBe(true);
+
+    const seen: boolean[] = [];
+    bridge.onStatus((s) => seen.push(s.tetherOffloadBypass));
+    pushStatus?.(statusFrame({ tetherOffloadBypass: true }));
+    // An older sender omits it: no warning.
+    pushStatus?.(statusFrame({}));
+    expect(seen).toEqual([true, false]);
+  });
 });
 
 describe("dispatch-bridge provider links", () => {

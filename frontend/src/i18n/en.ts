@@ -441,6 +441,8 @@ const en = {
   "settings.proxyTethering": "Proxy hotspot & tethering traffic",
   "settings.proxyTetheringSub":
     "Send devices on your hotspot, USB or Bluetooth tethering through the proxy. Applies within seconds; IPv4 only.",
+  "settings.proxyTetheringOffload":
+    "Restart the hotspot or USB tethering: until then, some traffic from connected devices may bypass the proxy.",
   "settings.domainStrategy4Xray": "Domain strategy (Xray core)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

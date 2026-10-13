@@ -479,6 +479,8 @@ const ru = {
   "settings.proxyTethering": "Проксировать трафик точки доступа и USB-модема",
   "settings.proxyTetheringSub":
     "Пускать устройства с точки доступа, USB- и Bluetooth-модема через прокси. Применяется за секунды; только IPv4.",
+  "settings.proxyTetheringOffload":
+    "Перезапустите точку доступа или USB-модем: до этого часть трафика подключённых устройств может идти мимо прокси.",
   "settings.domainStrategy4Xray": "Доменная стратегия (ядро Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

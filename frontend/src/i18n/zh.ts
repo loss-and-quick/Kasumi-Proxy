@@ -419,6 +419,8 @@ const zh = {
   "settings.proxyTethering": "代理热点与共享网络流量",
   "settings.proxyTetheringSub":
     "让通过热点、USB 或蓝牙共享上网的设备走代理。数秒内生效；仅限 IPv4。",
+  "settings.proxyTetheringOffload":
+    "请重启热点或 USB 共享网络：在此之前，已连接设备的部分流量可能绕过代理。",
   "settings.domainStrategy4Xray": "域名策略（Xray core）",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",
