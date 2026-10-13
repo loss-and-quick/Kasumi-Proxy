@@ -1397,6 +1397,8 @@ const ar = {
   },
   "store.backup.invalidJson": "JSON النسخة الاحتياطية غير صالح",
   "store.backup.invalidStructure": "بنية النسخة الاحتياطية غير صالحة",
+  "store.backup.newerVersion":
+    "هذه النسخة الاحتياطية من إصدار أحدث من التطبيق. حدّث التطبيق لاستعادتها",
   "store.backup.restored": "تمت استعادة النسخة الاحتياطية",
   "store.backup.merged": "تم دمج النسخة الاحتياطية",
   "store.backup.profilesSkipped": plural("count", {

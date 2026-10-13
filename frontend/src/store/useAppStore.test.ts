@@ -18,6 +18,7 @@ type BridgeMock = {
   [K in keyof Bridge]: ReturnType<typeof vi.fn<Bridge[K]>>;
 };
 
+import { SCHEMA_VERSION } from "../generated/defaults";
 import { applyMutation } from "../lib/apply-mutation";
 import { DEFAULT_ROUTE_ID, exportRoutePackage, newRoute, parseRoutePackage } from "../lib/routes";
 import { uid } from "../lib/utils";
@@ -563,6 +564,21 @@ describe("useAppStore", () => {
     });
     await useAppStore.getState().importBackup(legacy, "replace");
     expect(ruleIds()).toEqual(["r1"]);
+  });
+
+  it("a backup from a newer schema is refused before the service stops", async () => {
+    useAppStore.setState({
+      ...makeState(),
+      service: { ...DEFAULT_STATUS, state: "connected" },
+      toasts: [],
+    });
+    const newer = JSON.stringify({ ...makeState(), schemaVersion: SCHEMA_VERSION + 1 });
+    await useAppStore.getState().importBackup(newer, "replace");
+    expect(bridge.stop).not.toHaveBeenCalled();
+    expect(bridge.mutate).not.toHaveBeenCalled();
+    expect(useAppStore.getState().toasts.map((x) => x.msg)).toEqual([
+      "This backup is from a newer app version. Update the app to restore it",
+    ]);
   });
 
   it("a backup from before routes brings its flat rules in as a block", async () => {

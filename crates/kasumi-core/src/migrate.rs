@@ -34,20 +34,50 @@ const MIGRATIONS: &[MigrationStep] = &[
 /// The schema version the current code writes (the length of the ladder).
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
 
-/// Run every migration step from the document's stored `schemaVersion` up to
-/// [`SCHEMA_VERSION`], then stamp the current version. No-op once current.
+/// Run every migration step from the document's [stored version](stored_version)
+/// up to [`SCHEMA_VERSION`], then stamp the current version. No-op once current.
 pub fn migrate_app_state(v: &mut Value) {
-    let mut version = v
-        .get("schemaVersion")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
-        .min(MIGRATIONS.len() as u64) as usize;
+    let mut version = stored_version(v).min(MIGRATIONS.len() as u64) as usize;
     while version < MIGRATIONS.len() {
         MIGRATIONS[version](v);
         version += 1;
     }
     if let Some(obj) = v.as_object_mut() {
         obj.insert("schemaVersion".into(), Value::from(SCHEMA_VERSION));
+    }
+}
+
+/// Upgrade an imported backup the way stored state is upgraded. A backup from a
+/// newer schema is refused rather than clamped: the user can update the app
+/// first, while reading it here would drop whatever this build doesn't know.
+pub fn migrate_backup(v: &mut Value) -> Result<(), String> {
+    let version = stored_version(v);
+    if version > u64::from(SCHEMA_VERSION) {
+        return Err(format!(
+            "the backup is from a newer app version (schema {version}, this one reads up \
+             to {SCHEMA_VERSION}); update the app to restore it"
+        ));
+    }
+    migrate_app_state(v);
+    Ok(())
+}
+
+/// The schema a document was written at. Backups never carried `schemaVersion`
+/// and a wholesale state replace stored 0, so an unstamped document is dated by
+/// the newest field it holds: each marker is a field the step into that version
+/// introduced. Pre-versioning data holds none of them.
+fn stored_version(v: &Value) -> u64 {
+    match v.get("schemaVersion").and_then(Value::as_u64) {
+        Some(version) if version > 0 => version,
+        _ if v.pointer("/settings/requestIdentity").is_some() => 3,
+        _ if v
+            .get("subscriptions")
+            .and_then(Value::as_array)
+            .is_some_and(|subs| subs.iter().any(|s| s.get("manualTitle").is_some())) =>
+        {
+            2
+        }
+        _ => 0,
     }
 }
 
@@ -621,6 +651,37 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(sub.request.send_hwid, Some(false));
+    }
+
+    /// A provider-renamed subscription with a custom User-Agent that inherits the
+    /// device headers: every v1 → v3 step would change it.
+    fn current_sub() -> Value {
+        json!({ "id": "a", "remarks": "Provider Title", "url": "https://sub.example.org/s/1",
+                "userAgent": "v2rayNG/1.10.16", "manualTitle": false })
+    }
+
+    #[test]
+    fn unstamped_current_document_is_not_migrated_again() {
+        let settings = serde_json::to_value(crate::state::AdvancedSettings::default()).unwrap();
+        for stamp in [None, Some(json!(0))] {
+            let mut doc = json!({ "profiles": [], "subscriptions": [current_sub()],
+                                  "settings": settings.clone() });
+            if let Some(stamp) = &stamp {
+                doc["schemaVersion"] = stamp.clone();
+            }
+            migrate_app_state(&mut doc);
+            assert_eq!(doc["schemaVersion"], json!(SCHEMA_VERSION), "{stamp:?}");
+            assert_eq!(doc["subscriptions"][0], current_sub(), "{stamp:?}");
+        }
+    }
+
+    #[test]
+    fn unstamped_v2_document_runs_only_the_later_steps() {
+        let mut doc = json!({ "profiles": [], "subscriptions": [current_sub()], "settings": {} });
+        migrate_app_state(&mut doc);
+        let sub = &doc["subscriptions"][0];
+        assert_eq!(sub["manualTitle"], json!(false));
+        assert_eq!(sub["request"], json!({ "sendHwid": false }));
     }
 
     #[test]

@@ -1184,6 +1184,8 @@ const es = {
   },
   "store.backup.invalidJson": "JSON de copia no válido",
   "store.backup.invalidStructure": "Estructura de copia no válida",
+  "store.backup.newerVersion":
+    "Esta copia es de una versión más reciente de la app. Actualiza la app para restaurarla",
   "store.backup.restored": "Copia restaurada",
   "store.backup.merged": "Copia combinada",
   "store.backup.profilesSkipped": plural("count", {

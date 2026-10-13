@@ -215,6 +215,9 @@ pub enum MutationIntent {
     /// Restore a backup, merging into or replacing the current state. Replace keeps
     /// the current profiles (backups carry none).
     ImportBackup {
+        // Same wire shape; the deserializer only upgrades older documents first.
+        #[serde(deserialize_with = "migrated_backup")]
+        #[specta(type = Box<AppState>)]
         incoming: Box<AppState>,
         mode: ImportMode,
     },
@@ -223,6 +226,17 @@ pub enum MutationIntent {
     ReplaceState {
         state: Box<AppState>,
     },
+}
+
+/// Read a backup of any past schema through the migration ladder before typing
+/// it, since typing would default the fields the migrations read.
+fn migrated_backup<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Box<AppState>, D::Error> {
+    use serde::de::Error;
+    let mut doc = serde_json::Value::deserialize(d)?;
+    crate::migrate::migrate_backup(&mut doc).map_err(D::Error::custom)?;
+    serde_json::from_value(doc)
+        .map(Box::new)
+        .map_err(D::Error::custom)
 }
 
 /// Apply one [`MutationIntent`] to `state` in place. Pure: no I/O. Invariants that
@@ -633,6 +647,7 @@ mod tests {
     use super::*;
     use crate::share::parse_share_link;
     use crate::state::{Group, default_app_state};
+    use serde_json::{Value, json};
 
     fn p(uri: &str) -> Profile {
         parse_share_link(uri, None).unwrap()
@@ -1230,6 +1245,109 @@ mod tests {
             },
         );
         assert!(s.subscriptions.iter().any(|x| x.id == "s9"));
+    }
+
+    fn import_intent(incoming: &Value, mode: &str) -> Result<MutationIntent, serde_json::Error> {
+        serde_json::from_value(
+            json!({ "kind": "importBackup", "incoming": incoming, "mode": mode }),
+        )
+    }
+
+    fn import(state: &mut AppState, incoming: &Value, mode: &str) {
+        apply_mutation(state, &import_intent(incoming, mode).unwrap());
+    }
+
+    fn sub(state: &AppState, id: &str) -> Subscription {
+        state
+            .subscriptions
+            .iter()
+            .find(|s| s.id == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("subscription {id} missing"))
+    }
+
+    /// What the Backup screen exported before `manualTitle` (schema v1): no
+    /// `schemaVersion`, a flat rule list, settings without the request identity.
+    fn v1_backup() -> Value {
+        let mut settings = serde_json::to_value(AdvancedSettings::default()).unwrap();
+        settings.as_object_mut().unwrap().remove("requestIdentity");
+        let v1_sub = |id: &str, remarks: &str, url: &str, ua: &str| {
+            json!({
+                "id": id, "remarks": remarks, "url": url, "enabled": true,
+                "autoUpdate": false, "interval": 60, "allowInsecure": false,
+                "userAgent": ua, "filter": "", "lastUpdated": "", "count": 3,
+            })
+        };
+        json!({
+            "profiles": [],
+            "groups": [{ "id": "g-main", "name": "Main" }],
+            "subscriptions": [
+                v1_sub("s1", "My VPN", "https://sub.example.org/s/1", "v2rayNG/1.10.16"),
+                v1_sub("s2", "sub.example.org", "https://sub.example.org/s/2", ""),
+            ],
+            "routingRules": [],
+            "assetFiles": [],
+            "settings": settings,
+            "activeId": null,
+        })
+    }
+
+    /// A backup written by this build, with a provider-renamed subscription that
+    /// sends a custom User-Agent and inherits the device headers.
+    fn current_backup() -> Value {
+        let mut state = default_app_state();
+        state.subscriptions.push(Subscription {
+            id: "s1".into(),
+            remarks: "Provider Title".into(),
+            url: "https://sub.example.org/s/1".into(),
+            user_agent: "v2rayNG/1.10.16".into(),
+            manual_title: false,
+            ..Default::default()
+        });
+        serde_json::to_value(state).unwrap()
+    }
+
+    #[test]
+    fn importing_a_v1_backup_runs_the_migrations() {
+        for mode in ["replace", "merge"] {
+            let mut s = base();
+            import(&mut s, &v1_backup(), mode);
+            let typed = sub(&s, "s1");
+            assert!(typed.manual_title, "{mode}: a typed name stays the user's");
+            assert_eq!(typed.request.send_hwid, Some(false), "{mode}: custom UA");
+            let host = sub(&s, "s2");
+            assert!(
+                !host.manual_title,
+                "{mode}: the host default stays replaceable"
+            );
+            assert_eq!(host.request.send_hwid, None, "{mode}");
+            assert_eq!(s.schema_version, crate::migrate::SCHEMA_VERSION, "{mode}");
+        }
+    }
+
+    #[test]
+    fn importing_a_current_backup_changes_nothing() {
+        let stamped = current_backup();
+        // The Backup screen has never written `schemaVersion`.
+        let mut unstamped = stamped.clone();
+        unstamped.as_object_mut().unwrap().remove("schemaVersion");
+        let expected: AppState = serde_json::from_value(stamped.clone()).unwrap();
+        for backup in [stamped, unstamped] {
+            let MutationIntent::ImportBackup { incoming, .. } =
+                import_intent(&backup, "replace").unwrap()
+            else {
+                panic!("not an import");
+            };
+            assert_eq!(*incoming, expected);
+        }
+    }
+
+    #[test]
+    fn importing_a_backup_from_a_newer_schema_is_refused() {
+        let mut backup = current_backup();
+        backup["schemaVersion"] = json!(crate::migrate::SCHEMA_VERSION + 1);
+        let err = import_intent(&backup, "merge").unwrap_err().to_string();
+        assert!(err.contains("newer"), "{err}");
     }
 
     #[test]

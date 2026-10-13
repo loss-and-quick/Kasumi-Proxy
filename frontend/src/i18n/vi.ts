@@ -1143,6 +1143,8 @@ const vi = {
   },
   "store.backup.invalidJson": "JSON sao lưu không hợp lệ",
   "store.backup.invalidStructure": "Cấu trúc sao lưu không hợp lệ",
+  "store.backup.newerVersion":
+    "Bản sao lưu này từ phiên bản ứng dụng mới hơn. Hãy cập nhật ứng dụng để khôi phục",
   "store.backup.restored": "Đã khôi phục bản sao lưu",
   "store.backup.merged": "Đã gộp bản sao lưu",
   "store.backup.profilesSkipped": plural("count", {
