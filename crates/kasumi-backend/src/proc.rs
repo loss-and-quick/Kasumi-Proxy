@@ -645,4 +645,151 @@ mod tests {
         let body = crate::fs::read_text(&log).await.unwrap();
         assert!(body.contains("ran"));
     }
+
+    #[cfg(windows)]
+    fn in_job(child: &Child, job: windows_sys::Win32::Foundation::HANDLE) -> bool {
+        use windows_sys::Win32::System::JobObjects::IsProcessInJob;
+        let mut result = 0;
+        let process = child.raw_handle().unwrap();
+        // SAFETY: both handles are open for the duration of the call.
+        let ok = unsafe { IsProcessInJob(process as _, job, &mut result) };
+        assert_ne!(ok, 0, "{}", std::io::Error::last_os_error());
+        result != 0
+    }
+
+    #[cfg(windows)]
+    fn cmd(script: &str) -> Vec<String> {
+        vec!["cmd".into(), "/C".into(), script.into()]
+    }
+
+    // A child spawned suspended must still run to completion once it is resumed.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn spawn_logged_resumes_the_suspended_child() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("c.log");
+        let mut child = spawn_logged(&cmd("echo ran"), &HashMap::new(), &log, false)
+            .await
+            .unwrap();
+        let status = tokio::time::timeout(std::time::Duration::from_secs(10), child.wait())
+            .await
+            .expect("child still suspended")
+            .unwrap();
+        assert!(status.success());
+        let body = crate::fs::read_text(&log).await.unwrap();
+        assert!(body.contains("ran"));
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn spawn_logged_puts_the_child_in_the_parent_job() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = dir.path().join("c.log");
+        let mut child = spawn_logged(&cmd("ping -n 30 127.0.0.1"), &HashMap::new(), &log, true)
+            .await
+            .unwrap();
+        assert!(in_job(&child, job::parent_job().unwrap()));
+        child.kill().await.unwrap();
+    }
+
+    // The crash guarantee itself: closing the last job handle, which is what the
+    // kernel does when the parent dies, terminates the job's processes.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn closing_the_job_kills_its_processes() {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+
+        let job = job::kill_on_close_job().unwrap();
+        // Blocks reading the stdin pipe, which stays open for the whole test.
+        let mut child = Command::new("cmd")
+            .args(["/C", "set /p line="])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        let process = child.raw_handle().unwrap();
+        // SAFETY: both handles are open.
+        unsafe {
+            assert_ne!(AssignProcessToJobObject(job, process as _), 0);
+            assert!(in_job(&child, job));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "child exited on its own"
+        );
+        // SAFETY: the job handle is open and closed exactly once.
+        unsafe { CloseHandle(job) };
+        tokio::time::timeout(std::time::Duration::from_secs(10), child.wait())
+            .await
+            .expect("job close did not kill the child")
+            .unwrap();
+    }
+
+    #[cfg(windows)]
+    const JOB_ROLE: &str = "KASUMI_TEST_JOB_ROLE";
+
+    /// Re-runs this test binary as the parent or the grandchild of
+    /// `children_die_with_a_killed_parent`; returns at once in a normal run.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn job_role() {
+        let exe = std::env::current_exe()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        match std::env::var(JOB_ROLE).as_deref() {
+            Ok("parent") => {
+                let dir = tempfile::tempdir().unwrap();
+                let argv = [exe, "--exact".into(), "proc::tests::job_role".into()];
+                let env = HashMap::from([(JOB_ROLE.to_owned(), "child".to_owned())]);
+                let child = spawn_logged(&argv, &env, dir.path().join("c.log"), false)
+                    .await
+                    .unwrap();
+                println!("child-pid={}", child.id().unwrap());
+                tokio::time::sleep(std::time::Duration::from_secs(120)).await;
+            }
+            Ok("child") => tokio::time::sleep(std::time::Duration::from_secs(120)).await,
+            _ => {}
+        }
+    }
+
+    // The helper crash case: TerminateProcess on the parent runs none of its
+    // code, yet the core it spawned has to go with it.
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn children_die_with_a_killed_parent() {
+        use tokio::io::AsyncBufReadExt;
+
+        let exe = std::env::current_exe().unwrap();
+        let mut parent = Command::new(&exe)
+            .args(["--exact", "proc::tests::job_role", "--nocapture"])
+            .env(JOB_ROLE, "parent")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut lines = tokio::io::BufReader::new(parent.stdout.take().unwrap()).lines();
+        let pid = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            while let Some(line) = lines.next_line().await.unwrap() {
+                if let Some(pid) = line.strip_prefix("child-pid=") {
+                    return pid.trim().parse::<i32>().unwrap();
+                }
+            }
+            panic!("parent exited without spawning");
+        })
+        .await
+        .unwrap();
+        assert!(pid_matches_bin(pid, &exe).await);
+
+        parent.kill().await.unwrap();
+        for _ in 0..50 {
+            if !pid_matches_bin(pid, &exe).await {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        imp::kill(pid, false).await;
+        panic!("child {pid} outlived its killed parent");
+    }
 }
