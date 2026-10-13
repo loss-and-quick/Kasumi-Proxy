@@ -11,6 +11,7 @@ pub mod client;
 pub mod proto;
 pub mod remote;
 pub mod server;
+pub mod session;
 pub mod transport;
 
 pub use client::Client;
