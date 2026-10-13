@@ -1355,6 +1355,9 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("capabilities"),
 }), z.object({
+	cmd: z.literal("catchAllRules"),
+	rules: z.array(RoutingRule_SerializeSchema),
+}), z.object({
 	cmd: z.literal("chainCandidates"),
 	profile: ProfileSchema,
 }), z.object({
@@ -1592,6 +1595,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	profile: ProfileSchema,
 }), z.object({
 	cmd: z.literal("capabilities"),
+}), z.object({
+	cmd: z.literal("catchAllRules"),
+	rules: z.array(RoutingRule_DeserializeSchema),
 }), z.object({
 	cmd: z.literal("chainCandidates"),
 	profile: ProfileSchema,
@@ -1925,6 +1931,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("coreResolutions"),
 	value: z.array(CoreResolutionSchema),
 }), z.object({
+	kind: z.literal("flags"),
+	value: z.array(z.boolean()),
+}), z.object({
 	kind: z.literal("importInput"),
 	value: ResolvedImport_SerializeSchema,
 }), z.object({
@@ -1996,6 +2005,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("coreResolutions"),
 	value: z.array(CoreResolutionSchema),
+}), z.object({
+	kind: z.literal("flags"),
+	value: z.array(z.boolean()),
 }), z.object({
 	kind: z.literal("importInput"),
 	value: ResolvedImport_DeserializeSchema,
