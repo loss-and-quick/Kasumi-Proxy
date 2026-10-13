@@ -40,6 +40,7 @@ export function BasicsSection({
   changeProtocol,
   engineForced,
   engineHint,
+  engineError,
   route,
   routeOpts,
   setRoute,
@@ -57,6 +58,8 @@ export function BasicsSection({
   changeProtocol: (proto: Protocol) => void;
   engineForced: CoreEngine | null;
   engineHint: string;
+  /** Why the profile can't start; shown as an error under the engine. */
+  engineError: string;
   /** The route listing this profile; "" follows its group. */
   route: string;
   /** Empty while there is only the default route: nothing to choose. */
@@ -155,6 +158,7 @@ export function BasicsSection({
         }
         hint={engineHint}
       />
+      {engineError && <div className="hint error">{engineError}</div>}
     </>
   );
 }

@@ -780,6 +780,8 @@ const ru = {
   "profiles.row.more": "Ещё",
   "profiles.row.json": "JSON",
   "profiles.row.jsonHint": "Полный конфиг Xray из подписки (очищен)",
+  "profiles.conflict.unpinnedInsecureTls":
+    "Не запустится: этот профиль работает только на xray, а xray больше не пропускает проверку сертификата. Заполните «{pin}» или выключите «{insecure}».",
   // subscriptions extra
   "subs.saved": "Подписка сохранена",
   "subs.deleted": "Подписка удалена",

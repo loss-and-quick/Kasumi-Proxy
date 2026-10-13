@@ -1,0 +1,87 @@
+# Share links for `core_validation::link_corpus_validates_against_real_cores`:
+# each one is parsed, built for every core that can run it and checked by the
+# staged xray / sing-box. A link no core can run must be refused with the
+# reason (`core_conflict`). One link per line; lines starting with `#` and blank
+# lines are skipped. Hosts, ids and keys are anonymised; keys are well-formed
+# so the cores accept them.
+
+# ── from the anonymised live subscription (happ/01-happ-full.http) ──
+vless://00000000-0000-4000-8000-000000000001@node-01.example.org:8443?encryption=none&flow=xtls-rprx-vision&type=tcp&security=reality&sni=ff09eioxml.sni.example.com&pbk=QRGsb_EyIAiE7IgreKHILrE1JSC5uYAcBoXRD8bfQT8&sid=25751b8229954fc1&fp=firefox#%F0%9F%87%AD%F0%9F%87%BA%E2%9A%A1%D0%92%D0%B5%D0%BD%D0%B3%D1%80%D0%B8%D1%8F
+vless://00000000-0000-4000-8000-000000000001@2001:db8::4:8443?encryption=none&flow=xtls-rprx-vision&type=tcp&security=reality&sni=nqpxeofbwx.sni.example.com&pbk=rz0x_bzNwD2GV5sRamzcA35uP065OZeRqm3vD7coZkw&sid=71dee0994b1715a7&fp=firefox#%F0%9F%87%A8%F0%9F%87%AD%E2%9A%A1%D0%A8%D0%B2%D0%B5%D0%B9%D1%86%D0%B0%D1%80%D0%B8%D1%8F-2%20EXTRA
+hysteria2://00000000-0000-4000-8000-000000000001@node-11.example.org:8449?sni=hy-sni-01.example.net&alpn=h3&xray-extra-params=eyJmaW5hbG1hc2siOnsicXVpY1BhcmFtcyI6eyJkZWJ1ZyI6ZmFsc2UsImNvbmdlc3Rpb24iOiJiYnIifX0sImZpbmdlcnByaW50IjoiZmlyZWZveCJ9#%F0%9F%87%AB%F0%9F%87%AE%F0%9F%8E%AE%D0%A4%D0%B8%D0%BD%D0%BB%D1%8F%D0%BD%D0%B4%D0%B8%D1%8F%20GAMING
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpmcG5GUlJBbUFkVEw1UTdvNVN1T3JtbnFoVWFTaGluMQ@node-22.example.org:2030#%F0%9F%87%AE%F0%9F%87%B9%D0%98%D1%82%D0%B0%D0%BB%D0%B8%D1%8F%20SS
+
+# ── vless: every transport, plain / tls / reality ──
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=tcp&security=none#vless-tcp
+vless://11111111-1111-1111-1111-111111111111@v.example:80?type=tcp&headerType=http&host=h.example&path=%2Findex&security=none#vless-tcp-http
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=tcp&security=tls&sni=v.example&fp=chrome&alpn=h2%2Chttp%2F1.1#vless-tcp-tls
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=tcp&security=tls&sni=v.example&ech=AEb%2BDQBCAAAgACAYjkLlzMEK3J2Dcv8wBSVwYDz4j8o9tRSTBPSr%2Bm52FwAMAAEAAQABAAIAAQADAAtleGFtcGxlLmNvbQAA&pcs=aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd&vcn=verify.example#vless-tcp-tls-ech-pin
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=ws&security=tls&host=cdn.example&path=%2Fws%3Fed%3D2048&sni=cdn.example#vless-ws-tls-ed
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=grpc&security=tls&serviceName=gsvc&sni=v.example#vless-grpc-gun
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=grpc&security=tls&mode=multi&authority=auth.example&serviceName=gsvc#vless-grpc-multi
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=httpupgrade&security=tls&host=hu.example&path=%2Fhu#vless-httpupgrade
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=xhttp&security=tls&host=cdn.example&path=%2Fstream&mode=packet-up#vless-xhttp-packet-up
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=xhttp&security=tls&host=cdn.example&path=%2Fstream&mode=auto&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D#vless-xhttp-extra
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=xhttp&security=tls&sni=v.example&path=%2Fstream&allowInsecure=1&pcs=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855#vless-xhttp-insecure-pinned
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=xhttp&security=tls&sni=v.example&path=%2Fstream&allowInsecure=1#vless-xhttp-insecure-refused
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=h2&security=tls&host=h2.example&path=%2Fh2#vless-h2
+vless://11111111-1111-1111-1111-111111111111@v.example:4000?type=kcp&headerType=none&security=none#vless-kcp
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=quic&security=tls&sni=q.example#vless-quic
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=grpc&security=reality&sni=www.example.com&fp=chrome&pbk=c7twR4u_IvJsLGDqYsx2yb1nr2Kg74vsRlA_ou8c4QQ&sid=ab&serviceName=gsvc#vless-grpc-reality
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=xhttp&security=reality&sni=www.example.com&fp=chrome&pbk=c7twR4u_IvJsLGDqYsx2yb1nr2Kg74vsRlA_ou8c4QQ&sid=ab&path=%2Fx&mode=stream-one#vless-xhttp-reality
+vless://11111111-1111-1111-1111-111111111111@v.example:443?type=tcp&security=reality&sni=www.example.com&fp=chrome&pbk=c7twR4u_IvJsLGDqYsx2yb1nr2Kg74vsRlA_ou8c4QQ&sid=ab12&spx=%2F&flow=xtls-rprx-vision-udp443#vless-reality-vision-udp443
+
+# ── trojan ──
+trojan://password123@t.example:443?fp=chrome&security=tls&sni=t.example&type=tcp#%F0%9F%87%A6%F0%9F%87%B9%20Trojan%2FTLS%2FUTLS
+trojan://password123@t.example:443?security=tls&sni=t.example&flow=xtls-rprx-vision#trojan-vision
+trojan://password123@t.example:443?type=ws&security=tls&host=cdn.example&path=%2Ftr#trojan-ws
+trojan://password123@t.example:443?type=grpc&security=tls&serviceName=trsvc#trojan-grpc
+trojan://password123@t.example:443?type=httpupgrade&security=tls&host=hu.example&path=%2Fhu&allowInsecure=1#trojan-httpupgrade-insecure
+
+# ── vmess (base64 JSON) ──
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3Mtd3MtdGxzIiwiYWRkIjoidm0uZXhhbXBsZSIsInBvcnQiOiI0NDMiLCJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0Ijoid3MiLCJob3N0IjoiY2RuLmV4YW1wbGUiLCJwYXRoIjoiL3ZtP2VkPTIwNDgiLCJ0bHMiOiJ0bHMiLCJzbmkiOiJjZG4uZXhhbXBsZSIsImZwIjoiY2hyb21lIn0=
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MtZ3JwYy1tdWx0aSIsImFkZCI6InZtLmV4YW1wbGUiLCJwb3J0IjoiNDQzIiwiaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJhaWQiOiIwIiwibmV0IjoiZ3JwYyIsInR5cGUiOiJtdWx0aSIsImhvc3QiOiJhdXRoLmV4YW1wbGUiLCJwYXRoIjoidm1zdmMiLCJ0bHMiOiJ0bHMiLCJzbmkiOiJ2bS5leGFtcGxlIn0=
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MtdGNwLWh0dHAiLCJhZGQiOiJ2bS5leGFtcGxlIiwicG9ydCI6IjgwIiwiaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJhaWQiOiIwIiwic2N5IjoiYWVzLTEyOC1nY20iLCJuZXQiOiJ0Y3AiLCJ0eXBlIjoiaHR0cCIsImhvc3QiOiJoLmV4YW1wbGUiLCJwYXRoIjoiLyIsInRscyI6IiJ9
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3Mta2NwIiwiYWRkIjoidm0uZXhhbXBsZSIsInBvcnQiOiI0MDAwIiwiaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJhaWQiOiIwIiwibmV0Ijoia2NwIiwidHlwZSI6Im5vbmUiLCJ0bHMiOiIifQ==
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MtaDIiLCJhZGQiOiJ2bS5leGFtcGxlIiwicG9ydCI6IjQ0MyIsImlkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwiYWlkIjoiMCIsIm5ldCI6ImgyIiwiaG9zdCI6ImgyLmV4YW1wbGUiLCJwYXRoIjoiL2gyIiwidGxzIjoidGxzIiwic25pIjoiaDIuZXhhbXBsZSJ9
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MtaHR0cHVwZ3JhZGUiLCJhZGQiOiJ2bS5leGFtcGxlIiwicG9ydCI6IjQ0MyIsImlkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwiYWlkIjoiMCIsIm5ldCI6Imh0dHB1cGdyYWRlIiwiaG9zdCI6Imh1LmV4YW1wbGUiLCJwYXRoIjoiL2h1IiwidGxzIjoidGxzIiwic25pIjoiaHUuZXhhbXBsZSJ9
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MtcXVpYyIsImFkZCI6InZtLmV4YW1wbGUiLCJwb3J0IjoiNDQzIiwiaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJhaWQiOiIwIiwibmV0IjoicXVpYyIsInR5cGUiOiJub25lIiwidGxzIjoidGxzIiwic25pIjoicS5leGFtcGxlIn0=
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MteGh0dHAiLCJhZGQiOiJ2bS5leGFtcGxlIiwicG9ydCI6IjQ0MyIsImlkIjoiMTExMTExMTEtMTExMS0xMTExLTExMTEtMTExMTExMTExMTExIiwiYWlkIjoiMCIsIm5ldCI6InhodHRwIiwiaG9zdCI6InhoLmV4YW1wbGUiLCJwYXRoIjoiL3hoIiwidGxzIjoidGxzIiwic25pIjoieGguZXhhbXBsZSJ9
+vmess://eyJ2IjoiMiIsInBzIjoidm1lc3MtdGNwIiwiYWRkIjoidm0uZXhhbXBsZSIsInBvcnQiOjEwMDg2LCJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImFpZCI6MCwic2N5Ijoibm9uZSIsIm5ldCI6InRjcCIsInRscyI6IiJ9
+
+# ── shadowsocks: SIP002, legacy full-base64, ciphers, plugins ──
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQxMjM=@ss.example:8388#ss-aes-256-gcm
+ss://aes-128-gcm:password123@ss.example:8388#ss-plain-userinfo
+ss://Y2hhY2hhMjAtcG9seTEzMDU6cGFzc3dvcmQxMjM=@ss.example:8388#ss-chacha20-poly1305
+ss://bm9uZTpwYXNzd29yZDEyMw==@ss.example:8388#ss-none
+ss://MjAyMi1ibGFrZTMtYWVzLTEyOC1nY206TVRJek5EVTJOemc1TUdGaVkyUmxaZz09@ss.example:8388#ss-2022-aes-128
+ss://MjAyMi1ibGFrZTMtYWVzLTI1Ni1nY206TVRJek5EVTJOemc1TURFeU16UTFOamM0T1RBeE1qTTBOVFkzT0Rrd01UST0=@ss.example:8388#ss-2022-aes-256
+ss://YWVzLTEyOC1nY206cGFzc3dvcmQxMjNAc3MuZXhhbXBsZTo4Mzg4#ss-legacy-base64
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQxMjM=@ss.example:8388?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dcdn.example#ss-obfs-http
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQxMjM=@ss.example:443?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dcdn.example%3Bpath%3D%2Fws%3Btls#ss-v2ray-ws-tls
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQxMjM=@ss.example:80?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dcdn.example%3Bpath%3D%2Fws#ss-v2ray-ws
+ss://YWVzLTI1Ni1nY206cGFzc3dvcmQxMjM=@ss.example:443?plugin=v2ray-plugin%3Bmode%3Dquic%3Bhost%3Dq.example#ss-v2ray-quic
+
+# ── hysteria2 / tuic / anytls / naive / shadowtls (QUIC and sing-box-first protocols) ──
+hysteria2://password123@hy.example:443?sni=hy.example&obfs=salamander&obfs-password=obfs123&mport=20000-50000&insecure=1#hy2-salamander-hop
+hy2://password123@hy.example:8443?sni=hy.example#hy2-alias
+hysteria2://password123@hy.example:443?sni=hy.example&pinSHA256=aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd#hy2-pinned
+tuic://11111111-1111-1111-1111-111111111111:password123@t.example:8443?congestion_control=bbr&udp_relay_mode=native&zero_rtt_handshake=1&sni=t.example&alpn=h3#tuic
+tuic://11111111-1111-1111-1111-111111111111:password123@t.example:8443?congestion_control=cubic&udp_relay_mode=quic&sni=t.example&allow_insecure=1#tuic-cubic-insecure
+anytls://password123@a.example:443?sni=a.example&alpn=h2&allowInsecure=1#anytls
+anytls://password123@a.example:443?sni=a.example&fp=chrome#anytls-utls
+naive+https://user:password123@n.example:443?sni=n.example#naive-https
+naive+quic://user:password123@n.example:443?congestion_control=bbr&insecure-concurrency=8&sni=n.example#naive-quic
+shadowtls://password123@s.example:8443?version=3&sni=s.example&fp=chrome#shadowtls-v3
+shadowtls://pw%40x@s.example:443?version=2&sni=s.example#shadowtls-v2
+
+# ── wireguard ──
+wireguard://sOs7Qk6VSmoowjvnQw37LUnV39bIG2rOjmmVItntGUw%3D@wg.example:51820?address=10.8.1.3%2F32&presharedkey=YAnz7T2bQ4uR7Mm3y3Hzx2Ysj5PE2lqZqDY8Y8QpZHM%3D&reserved=1%2C2%2C3&publickey=xK8Tw4nv6TBWHl3WlVqoMLVrNsejQdC7%2F7jiTlR2rg8%3D&mtu=1280#wireguard
+wireguard://sOs7Qk6VSmoowjvnQw37LUnV39bIG2rOjmmVItntGUw%3D@wg.example?publickey=xK8Tw4nv6TBWHl3WlVqoMLVrNsejQdC7%2F7jiTlR2rg8%3D#wireguard-defaults
+
+# ── socks / http ──
+socks://user:password123@1.2.3.4:1080#socks
+socks5://u:p@1.2.3.4:1080#socks5
+socks5://1.2.3.4:1080#socks-no-auth
+http://user:password123@1.2.3.4:8080#http
+https://user:password123@1.2.3.4:443#https

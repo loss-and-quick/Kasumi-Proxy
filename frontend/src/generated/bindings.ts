@@ -643,6 +643,14 @@ export type ConnectionProbe = {
 
 export type ContentHint = "yaml" | "html" | "unknown";
 
+/**  Why no core can run a profile (`core::core_conflict`). */
+export type CoreConflict = 
+/**
+ *  TLS without a certificate check or a pinned certificate, on a profile only
+ *  xray runs: xray has dropped `allowInsecure`, so only a pin gets past its check.
+ */
+{ kind: "unpinnedInsecureTls" };
+
 /**  An actual proxy core. Wire values: `"xray"`, `"sing-box"`. */
 export type CoreEngine = "xray" | "sing-box";
 
@@ -655,6 +663,8 @@ export type CoreEngine = "xray" | "sing-box";
 export type CoreResolution = {
 	resolved: CoreEngine,
 	forced: CoreEngine | null,
+	/**  Set when no core can run the profile as configured; it can't start. */
+	conflict?: CoreConflict | null,
 	/**
 	 *  Whether that core can tell which program opened a connection in the current
 	 *  proxy mode — what the desktop per-app filter needs

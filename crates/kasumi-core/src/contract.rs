@@ -29,11 +29,34 @@ pub enum LogTarget {
 pub struct CoreResolution {
     pub resolved: CoreEngine,
     pub forced: Option<CoreEngine>,
+    /// Set when no core can run the profile as configured; it can't start.
+    #[serde(default)]
+    pub conflict: Option<CoreConflict>,
     /// Whether that core can tell which program opened a connection in the current
     /// proxy mode — what the desktop per-app filter needs
     /// (`app_process::sees_processes`).
     #[serde(default)]
     pub sees_processes: bool,
+}
+
+/// Why no core can run a profile (`core::core_conflict`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CoreConflict {
+    /// TLS without a certificate check or a pinned certificate, on a profile only
+    /// xray runs: xray has dropped `allowInsecure`, so only a pin gets past its check.
+    UnpinnedInsecureTls,
+}
+
+impl std::fmt::Display for CoreConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnpinnedInsecureTls => f.write_str(
+                "this profile runs only on xray, which no longer skips certificate checks: \
+                 pin the server certificate (SHA-256) or turn off \"Allow insecure\"",
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

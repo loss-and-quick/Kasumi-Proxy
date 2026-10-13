@@ -19,7 +19,7 @@ use kasumi_core::contract::{
     Capabilities, ConnectionProbe, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind,
     WsInfo,
 };
-use kasumi_core::core::{forced_core, resolve_core};
+use kasumi_core::core::{core_conflict, forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::import_input::{
@@ -625,6 +625,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                         CoreResolution {
                             resolved,
                             forced: forced_core(p),
+                            conflict: core_conflict(p),
                             sees_processes: kasumi_core::app_process::sees_processes(
                                 resolved, &settings,
                             ),
@@ -1313,6 +1314,12 @@ mod tests {
                 None,
             )
             .unwrap(),
+            // xhttp is xray-only, and xray can't skip the certificate check → conflict.
+            parse_share_link(
+                "vless://u@e.x:443?type=xhttp&security=tls&sni=e.x&allowInsecure=1",
+                None,
+            )
+            .unwrap(),
         ];
         let Response::CoreResolutions(rs) = dispatch(&p, Command::ResolveCores { profiles })
             .await
@@ -1320,7 +1327,12 @@ mod tests {
         else {
             panic!()
         };
-        assert_eq!(rs.len(), 3);
+        assert_eq!(rs.len(), 4);
+        assert!(rs[..3].iter().all(|r| r.conflict.is_none()), "{rs:?}");
+        assert_eq!(
+            rs[3].conflict,
+            Some(kasumi_core::contract::CoreConflict::UnpinnedInsecureTls)
+        );
         assert_eq!(rs[0].resolved, CoreEngine::SingBox);
         assert_eq!(rs[0].forced, Some(CoreEngine::SingBox));
         assert_eq!(rs[1].resolved, CoreEngine::Xray);

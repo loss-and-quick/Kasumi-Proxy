@@ -1,6 +1,7 @@
 //! Core-engine resolution — profile override + per-protocol defaults, with
 //! capability guards for transports/protocols only one core can build.
 
+use crate::contract::CoreConflict;
 use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
 use crate::profile::{Profile, Protocol};
@@ -23,8 +24,26 @@ pub fn default_core_for(proto: Protocol) -> CoreEngine {
 }
 
 /// Engine the profile MUST run on (protocol or transport capability), or `None`
-/// if it's selectable.
+/// if it's selectable. A profile with a [`core_conflict`] keeps the core its
+/// protocol or transport pins.
 pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
+    capability_core(p).or_else(|| skips_cert_check_unpinned(p).then_some(CoreEngine::SingBox))
+}
+
+/// TLS that skips the certificate check without a pinned certificate. Xray no
+/// longer can (a pin is its only way past the check), so this takes sing-box.
+pub(crate) fn skips_cert_check_unpinned(p: &Profile) -> bool {
+    p.tls()
+        .is_some_and(|t| t.security == Security::Tls && t.allow_insecure && t.pcs.is_empty())
+}
+
+/// Why no core can run the profile as configured, if none can.
+pub fn core_conflict(p: &Profile) -> Option<CoreConflict> {
+    (capability_core(p) == Some(CoreEngine::Xray) && skips_cert_check_unpinned(p))
+        .then_some(CoreConflict::UnpinnedInsecureTls)
+}
+
+fn capability_core(p: &Profile) -> Option<CoreEngine> {
     use CoreEngine::{SingBox, Xray};
     let proto = p.protocol();
     if proto == Protocol::Custom {
@@ -54,9 +73,6 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
             if v.vmess_global_padding || v.vmess_authenticated_length {
                 return Some(SingBox);
             }
-        }
-        Profile::Trojan(t) if t.flow != Flow::Empty => {
-            return Some(Xray);
         }
         Profile::Shadowsocks(ss) => {
             // Xray dropped its QUIC transport, so v2ray-plugin's QUIC mode runs only
@@ -275,10 +291,10 @@ mod tests {
             forced_core(&p("vless://u@e.x:443?type=xhttp&security=tls")),
             Some(CoreEngine::Xray)
         );
-        // trojan flow → xray
+        // A trojan flow pins nothing: xray rejects it and sing-box has none.
         assert_eq!(
             forced_core(&p("trojan://pw@e.x:443?security=tls&flow=xtls-rprx-vision")),
-            Some(CoreEngine::Xray)
+            None
         );
     }
 
@@ -289,6 +305,52 @@ mod tests {
             forced_core(&p("vless://u@e.x:443?type=h2&security=tls")),
             Some(CoreEngine::SingBox)
         );
+    }
+
+    const INSECURE: &str = "security=tls&sni=e.x&allowInsecure=1";
+    const PIN: &str = "pcs=aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd";
+
+    #[test]
+    fn an_unpinned_insecure_tls_profile_runs_on_singbox() {
+        use CoreEngine::SingBox;
+        let ws = p(&format!("vless://u@e.x:443?type=ws&{INSECURE}"));
+        assert_eq!(forced_core(&ws), Some(SingBox));
+        assert_eq!(core_conflict(&ws), None);
+        // It outranks the user's own pick of xray.
+        let mut picked = ws.clone();
+        picked.meta_mut().core_type = Some(CoreEngine::Xray);
+        assert_eq!(resolve_core(&picked, &AdvancedSettings::default()), SingBox);
+        assert_eq!(
+            forced_core(&p("hysteria2://pw@h.x:443?sni=h.x&insecure=1")),
+            Some(SingBox)
+        );
+        // A pinned certificate is xray's own way past the check.
+        let pinned = p(&format!("vless://u@e.x:443?type=ws&{INSECURE}&{PIN}"));
+        assert_eq!(forced_core(&pinned), None);
+    }
+
+    #[test]
+    fn an_xray_only_unpinned_insecure_profile_is_refused() {
+        let xhttp = p(&format!("vless://u@e.x:443?type=xhttp&{INSECURE}"));
+        assert_eq!(
+            core_conflict(&xhttp),
+            Some(CoreConflict::UnpinnedInsecureTls)
+        );
+        assert_eq!(forced_core(&xhttp), Some(CoreEngine::Xray));
+        let err = crate::core_config::build_core_config(
+            &xhttp,
+            &AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&xhttp),
+            "",
+        )
+        .unwrap_err();
+        assert_eq!(err, CoreConflict::UnpinnedInsecureTls.to_string());
+        // A pin or a certificate check lets it run on xray.
+        let pinned = p(&format!("vless://u@e.x:443?type=xhttp&{INSECURE}&{PIN}"));
+        assert_eq!(core_conflict(&pinned), None);
+        let checked = p("vless://u@e.x:443?type=xhttp&security=tls&sni=e.x");
+        assert_eq!(core_conflict(&checked), None);
     }
 
     #[test]

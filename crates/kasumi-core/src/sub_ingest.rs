@@ -572,6 +572,18 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_profile_no_core_can_run_is_kept_as_sent() {
+        let body = b"vless://a@h.example:1?type=xhttp&security=tls&allowInsecure=1#a\n";
+        let ing = ingest(&input(URL, &[], body)).unwrap();
+        let [p] = ing.profiles.as_slice() else {
+            panic!("{:?}", ing.profiles)
+        };
+        assert!(p.tls().unwrap().allow_insecure);
+        assert!(crate::core::core_conflict(p).is_some());
+        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
+    }
+
+    #[test]
     fn duplicate_links_and_web_pages_are_not_profiles() {
         let body = b"vless://a@h.example:1#a\nvless://a@h.example:1#a\nhttps://t.me/provider\n";
         let ing = ingest(&input(URL, &[], body)).unwrap();
