@@ -14,7 +14,13 @@ import { mergeSettings } from "../store/defaults";
 import type { AppState, ChangeAction, MutationIntent, RoutingImport, Subscription } from "./bridge";
 import { providerConfigsOf } from "./groups";
 import { uid } from "./profile-utils";
-import { DEFAULT_ROUTE_ID, normalizeRoutes, setProfileRoute, upsertRoute } from "./routes";
+import {
+  DEFAULT_ROUTE_ID,
+  normalizeRoutes,
+  type RoutePackage,
+  setProfileRoute,
+  upsertRoute,
+} from "./routes";
 
 const BASE_GROUP_ID = "g-main";
 
@@ -120,7 +126,7 @@ function removeProviderRouting(state: AppState, subId: string): AppState {
 type RoutingTarget = {
   blockId: string;
   routeId: string;
-  group: string | null;
+  group: string;
   sourceSubId: string | null;
 };
 
@@ -140,21 +146,8 @@ const linkTarget = (group: string): RoutingTarget => ({
   sourceSubId: null,
 });
 
-/** Mirrors `import_routing_route`. */
-const routeTarget = (routeId: string): RoutingTarget => ({
-  blockId: `${routeId}-block`,
-  routeId,
-  group: null,
-  sourceSubId: null,
-});
-
-/** Mirrors `import_routing`: one block and one route per target. */
-function importRouting(
-  state: AppState,
-  { blockId, routeId, group, sourceSubId }: RoutingTarget,
-  r: RoutingImport,
-  enabled: boolean,
-): AppState {
+/** Mirrors `routing_rules`: block, direct, proxy, Happ's default order. */
+function routingRules(idPrefix: string, r: RoutingImport): RoutingRule[] {
   const lists: [string, string, string[], boolean][] = [
     ["BlockSites", "block", r.blockSites, true],
     ["BlockIp", "block", r.blockIp, false],
@@ -163,25 +156,45 @@ function importRouting(
     ["ProxySites", "proxy", r.proxySites, true],
     ["ProxyIp", "proxy", r.proxyIp, false],
   ];
-  const rules: RoutingRule[] = lists
+  return lists
     .filter(([, , entries]) => entries.length > 0)
     .map(([name, outbound, entries, sites]) => ({
-      id: `${blockId}-${name.toLowerCase()}`,
+      id: `${idPrefix}-${name.toLowerCase()}`,
       remarks: name,
       enabled: true,
       outboundTag: outbound,
       domain: sites ? entries : null,
       ip: sites ? null : entries,
     }));
-  const block = { id: blockId, name: r.name, rules, sourceSubId };
+}
+
+const routingFinal = (r: RoutingImport) => (r.globalProxy === false ? "direct" : "proxy");
+
+/** Mirrors `routing_package`. */
+export function routingPackage(r: RoutingImport): RoutePackage {
+  return {
+    name: r.name,
+    finalOutbound: routingFinal(r),
+    blocks: [{ name: r.name, enabled: true, rules: routingRules("happ", r) }],
+  };
+}
+
+/** Mirrors `import_routing`: one block and one route per target. */
+function importRouting(
+  state: AppState,
+  { blockId, routeId, group, sourceSubId }: RoutingTarget,
+  r: RoutingImport,
+  enabled: boolean,
+): AppState {
+  const block = { id: blockId, name: r.name, rules: routingRules(blockId, r), sourceSubId };
   const route = {
     id: routeId,
     name: r.name,
     enabled,
     profiles: [],
-    groups: group ? [group] : [],
+    groups: [group],
     blocks: [{ blockId, enabled: true }],
-    finalOutbound: r.globalProxy === false ? "direct" : "proxy",
+    finalOutbound: routingFinal(r),
     sourceSubId,
   };
   return {
@@ -452,8 +465,6 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         : { ...state, routes: state.routes.filter((r) => r.id !== intent.id) };
     case "importRoutingLink":
       return importRouting(state, linkTarget(intent.groupId), intent.routing, intent.activate);
-    case "importRoutingRoute":
-      return importRouting(state, routeTarget(intent.routeId), intent.routing, true);
     case "setProfileRoute":
       return {
         ...state,

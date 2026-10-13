@@ -183,7 +183,26 @@ describe("links pasted where JSON is expected", () => {
       const link = await read(feed(SAMPLES.routing));
       expect(link).toMatchObject({
         kind: "routing",
-        routing: [{ name: "RU direct", directSites: ["geosite:category-ru"] }],
+        links: [
+          {
+            routing: { name: "RU direct", directSites: ["geosite:category-ru"] },
+            // GlobalProxy true keeps the proxy as the final outbound.
+            package: {
+              name: "RU direct",
+              finalOutbound: "proxy",
+              blocks: [
+                {
+                  name: "RU direct",
+                  enabled: true,
+                  rules: [
+                    { outboundTag: "block", domain: ["geosite:category-ads"] },
+                    { outboundTag: "direct", domain: ["geosite:category-ru"] },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
       });
     });
   }

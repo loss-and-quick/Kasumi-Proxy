@@ -6,7 +6,13 @@
 // rules stop being reachable) and back the mock bridge's copy of the reducer.
 // ============================================================
 
-import type { Profile, Route, RouteBlockRef, RoutingRule } from "../generated/bindings";
+import type {
+  Profile,
+  Route,
+  RouteBlockRef,
+  RoutePackage_Serialize,
+  RoutingRule,
+} from "../generated/bindings";
 import { DEFAULT_ROUTE_ID } from "../generated/defaults";
 import { isCatchAllRule } from "./routing-rules";
 
@@ -172,11 +178,7 @@ export function sameBlock(a: RuleBlock, b: { name: string; rules: RoutingRule[] 
 const PACKAGE_KEY = "kasumiRoute";
 const PACKAGE_VERSION = 1;
 
-export type RoutePackage = {
-  name: string;
-  finalOutbound: string;
-  blocks: { name: string; enabled: boolean; rules: RoutingRule[] }[];
-};
+export type RoutePackage = RoutePackage_Serialize;
 
 const SPECIAL_OUTBOUNDS = new Set(["proxy", "direct", "block"]);
 const portable = (tag: string) => (SPECIAL_OUTBOUNDS.has(tag) ? tag : PROXY_OUTBOUND);

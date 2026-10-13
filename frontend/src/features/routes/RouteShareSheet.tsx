@@ -48,7 +48,6 @@ export function RouteShareSheet({
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   const notify = useAppStore((s) => s.notify);
   const importRoutePackage = useAppStore((s) => s.importRoutePackage);
-  const importRoutingRoute = useAppStore((s) => s.importRoutingRoute);
   const [format, setFormat] = useState<"route" | "flat">("route");
   const [importText, setImportText] = useState("");
   const [qrOpen, setQrOpen] = useState(false);
@@ -61,13 +60,15 @@ export function RouteShareSheet({
   );
   const pkg = useMemo(() => parseRoutePackage(importText), [importText]);
   const link = useLinkInput(importText);
-  const happRoutes = link?.kind === "routing" ? link.routing : [];
+  const happLinks = link?.kind === "routing" ? link.links : [];
+  // A Happ routing link comes in the way a shared route does.
+  const packages = pkg ? [pkg] : happLinks.map((l) => l.package);
   const importHint = !importText.trim()
     ? t("routes.share.importHint")
     : pkg
       ? `${pkg.name} · ${t("routes.share.blocks", { count: pkg.blocks.length })}`
-      : happRoutes.length
-        ? t("routes.share.happRouting", { count: happRoutes.length })
+      : happLinks.length
+        ? t("routes.share.happRouting", { count: happLinks.length })
         : link
           ? t(linkInputText(link))
           : link === null
@@ -75,16 +76,11 @@ export function RouteShareSheet({
             : "";
 
   const addRoute = async () => {
-    if (pkg) {
-      const id = await importRoutePackage(pkg);
-      notify(t("routes.share.imported", { name: pkg.name }));
-      onImported(id);
-    } else if (happRoutes.length) {
-      const ids: string[] = [];
-      for (const routing of happRoutes) ids.push(await importRoutingRoute(routing));
-      notify(t("routes.share.imported", { name: formatList(happRoutes.map((r) => r.name)) }));
-      onImported(ids[0]);
-    } else return;
+    if (!packages.length) return;
+    const ids: string[] = [];
+    for (const p of packages) ids.push(await importRoutePackage(p));
+    notify(t("routes.share.imported", { name: formatList(packages.map((p) => p.name)) }));
+    onImported(ids[0]);
     onClose();
   };
 
@@ -156,16 +152,16 @@ export function RouteShareSheet({
           mono={false}
           hint={importHint}
         />
-        {happRoutes.map((routing, i) => (
+        {happLinks.map((l, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: the same profile may be pasted twice.
-          <RoutingImportCard key={i} routing={routing} />
+          <RoutingImportCard key={i} routing={l.routing} />
         ))}
         <div
           style={{
             display: "flex",
             gap: 10,
             flexWrap: "wrap",
-            marginTop: happRoutes.length ? 12 : 0,
+            marginTop: happLinks.length ? 12 : 0,
           }}
         >
           {nativeDialogsAvailable() && (
@@ -187,7 +183,7 @@ export function RouteShareSheet({
           <Btn variant="outline" icon="qr_code_scanner" onClick={() => setScannerOpen(true)}>
             {t("backup.scanQr")}
           </Btn>
-          <Btn icon="add" disabled={!pkg && !happRoutes.length} onClick={() => void addRoute()}>
+          <Btn icon="add" disabled={!packages.length} onClick={() => void addRoute()}>
             {t("routes.share.add")}
           </Btn>
         </div>

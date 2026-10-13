@@ -905,12 +905,6 @@ export type MutationIntent_Deserialize =
  */
 ({ kind: "importRoutingLink"; routing: RoutingImport_Deserialize; groupId: string; activate: boolean }) & { accept?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
- *  Add a routing profile from a `happ://routing` link as route `route_id`
- *  (block `{route_id}-block`) that applies to nothing until the user picks
- *  its profiles or groups.
- */
-({ kind: "importRoutingRoute"; routing: RoutingImport_Deserialize; routeId: string }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
-/**
  *  Run profile `profile_id` with route `route_id` (`None` or the default:
  *  whatever its group gets).
  */
@@ -1006,12 +1000,6 @@ export type MutationIntent_Serialize =
  */
 ({ kind: "importRoutingLink"; routing: RoutingImport_Serialize; groupId: string; activate: boolean }) & { accept?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
- *  Add a routing profile from a `happ://routing` link as route `route_id`
- *  (block `{route_id}-block`) that applies to nothing until the user picks
- *  its profiles or groups.
- */
-({ kind: "importRoutingRoute"; routing: RoutingImport_Serialize; routeId: string }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
-/**
  *  Run profile `profile_id` with route `route_id` (`None` or the default:
  *  whatever its group gets).
  */
@@ -1048,6 +1036,20 @@ export type Naive = {
 };
 
 export type NoticeColor = "red" | "blue" | "green" | "default";
+
+export type PackageBlock = PackageBlock_Serialize | PackageBlock_Deserialize;
+
+export type PackageBlock_Deserialize = {
+	name: string,
+	enabled: boolean,
+	rules: RoutingRule_Deserialize[],
+};
+
+export type PackageBlock_Serialize = {
+	name: string,
+	enabled: boolean,
+	rules: RoutingRule_Serialize[],
+};
 
 /**  VLESS/VMess UDP packet encoding. `""` means unset. */
 export type PacketEncoding = string;
@@ -1324,6 +1326,32 @@ export type RouteBlockRef = {
 	enabled?: boolean,
 };
 
+/**
+ *  A route as it travels between devices: its blocks come along, the profiles
+ *  and groups it applies to don't.
+ */
+export type RoutePackage = RoutePackage_Serialize | RoutePackage_Deserialize;
+
+/**
+ *  A route as it travels between devices: its blocks come along, the profiles
+ *  and groups it applies to don't.
+ */
+export type RoutePackage_Deserialize = {
+	name: string,
+	finalOutbound: string,
+	blocks: PackageBlock_Deserialize[],
+};
+
+/**
+ *  A route as it travels between devices: its blocks come along, the profiles
+ *  and groups it applies to don't.
+ */
+export type RoutePackage_Serialize = {
+	name: string,
+	finalOutbound: string,
+	blocks: PackageBlock_Serialize[],
+};
+
 /**  A Happ routing profile, cut down to what Kasumi's routes can express. */
 export type RoutingImport = RoutingImport_Serialize | RoutingImport_Deserialize;
 
@@ -1359,12 +1387,16 @@ export type RoutingLink = RoutingLink_Serialize | RoutingLink_Deserialize;
 
 export type RoutingLink_Deserialize = {
 	routing: RoutingImport_Deserialize,
+	/**  The same profile as a shared route, for the route import sheet. */
+	package: RoutePackage_Deserialize,
 	/**  `onadd` turns the route on; `add` only adds it. */
 	activate: boolean,
 };
 
 export type RoutingLink_Serialize = {
 	routing: RoutingImport_Serialize,
+	/**  The same profile as a shared route, for the route import sheet. */
+	package: RoutePackage_Serialize,
 	/**  `onadd` turns the route on; `add` only adds it. */
 	activate: boolean,
 };

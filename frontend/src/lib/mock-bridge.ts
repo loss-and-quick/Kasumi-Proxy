@@ -18,7 +18,7 @@ import type {
 } from "../generated/bindings";
 import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION, SCHEMA_VERSION } from "../generated/defaults";
 import { ProfileSchema } from "../generated/schemas";
-import { applyMutation } from "./apply-mutation";
+import { applyMutation, routingPackage } from "./apply-mutation";
 import type {
   AppState,
   Bridge,
@@ -172,7 +172,12 @@ function simResolveImport(text: string): ResolvedImport {
     inputs.forEach((x, i) => {
       if (!x) return;
       if ("sub" in x) out.subscriptions.push({ url: x.sub, encrypted: x.encrypted });
-      else if ("routing" in x) out.routing.push({ routing: x.routing, activate: x.activate });
+      else if ("routing" in x)
+        out.routing.push({
+          routing: x.routing,
+          package: routingPackage(x.routing),
+          activate: x.activate,
+        });
       else out.unsupported.push({ text: tokens[i], kind: x.unsupported });
     });
   }

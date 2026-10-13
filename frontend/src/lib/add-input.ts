@@ -6,7 +6,7 @@
 // ============================================================
 
 import type { DictKey } from "../i18n";
-import type { Bridge, ResolvedImport, RoutingImport, Subscription } from "./bridge";
+import type { Bridge, ResolvedImport, Subscription } from "./bridge";
 import { hostOf } from "./groups";
 import { uid } from "./utils";
 
@@ -189,7 +189,7 @@ export const isHappLink = (text: string) => /^\s*happ:\/\//i.test(text);
 /** Links pasted where JSON is expected: routing profiles alone, a `happ://` link
  *  Kasumi skips, or anything else the add sheet takes. */
 export type LinkInput =
-  | { kind: "routing"; routing: RoutingImport[] }
+  | { kind: "routing"; links: ResolvedImport["routing"] }
   | { kind: "unsupported"; reason: UnsupportedKind }
   | { kind: "add" };
 
@@ -203,7 +203,7 @@ export function linkInput({
 }): LinkInput | null {
   const others = value.subscriptions.length > 0 || profileCount > 0;
   if (value.routing.length && !others && !value.unsupported.length)
-    return { kind: "routing", routing: value.routing.map((r) => r.routing) };
+    return { kind: "routing", links: value.routing };
   if (value.unsupported.length && !others && !value.routing.length)
     return { kind: "unsupported", reason: value.unsupported[0].kind };
   return others || value.routing.length || value.unsupported.length ? { kind: "add" } : null;

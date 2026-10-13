@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 use crate::import_input::is_encrypted_url;
 use crate::profile::{CustomOrigin, Profile};
-use crate::route::{Route, RouteBlockRef, RuleBlock, upsert_route};
+use crate::route::{PackageBlock, Route, RouteBlockRef, RoutePackage, RuleBlock, upsert_route};
 use crate::state::{
     AdvancedSettings, AppState, AuditEntry, AuditOutcome, BASE_GROUP_ID, ChangeAction,
     ChangeDecision, PendingChange, RoutingImport, RoutingRule, Subscription, TunnelSetting,
@@ -680,11 +680,10 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
         } => {
             let target = RoutingTarget {
                 ids: provider_ids(&sub.id),
-                group: Some(
-                    sub.group_id
-                        .clone()
-                        .unwrap_or_else(|| BASE_GROUP_ID.to_owned()),
-                ),
+                group: sub
+                    .group_id
+                    .clone()
+                    .unwrap_or_else(|| BASE_GROUP_ID.to_owned()),
                 source_sub_id: Some(sub.id.clone()),
             };
             import_routing(state, target, routing, activate.unwrap_or(*offered));
@@ -707,11 +706,10 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
     }
 }
 
-/// Block and route ids, the routed group (none for a route of its own) and the
-/// subscription that sent the profile.
+/// Block and route ids, the routed group and the subscription that sent the profile.
 struct RoutingTarget {
     ids: (String, String),
-    group: Option<String>,
+    group: String,
     source_sub_id: Option<String>,
 }
 
@@ -727,58 +725,20 @@ pub fn import_routing_link(
             format!("link-block-{group_id}"),
             format!("link-route-{group_id}"),
         ),
-        group: Some(group_id.to_owned()),
+        group: group_id.to_owned(),
         source_sub_id: None,
     };
     import_routing(state, target, routing, enabled);
 }
 
-/// A `happ://routing` profile as a new route `route_id` that applies to nothing
-/// yet, the way a shared route comes in: the user picks its profiles and groups
-/// afterwards.
-pub fn import_routing_route(state: &mut AppState, route_id: &str, routing: &RoutingImport) {
-    let target = RoutingTarget {
-        ids: (format!("{route_id}-block"), route_id.to_owned()),
-        group: None,
-        source_sub_id: None,
-    };
-    import_routing(state, target, routing, true);
-}
-
-/// One block and one route for the target, replacing an earlier import.
-/// Rules run block, direct, proxy: Happ's default `BLOCK_DIRECT_PROXY` order.
+/// One block and one route for the target's group, replacing an earlier import.
 fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport, enabled: bool) {
     let RoutingTarget {
         ids: (block_id, route_id),
         group,
         source_sub_id,
     } = target;
-    let lists: [(&str, &str, &[String], bool); 6] = [
-        ("BlockSites", "block", &r.block_sites, true),
-        ("BlockIp", "block", &r.block_ip, false),
-        ("DirectSites", "direct", &r.direct_sites, true),
-        ("DirectIp", "direct", &r.direct_ip, false),
-        ("ProxySites", "proxy", &r.proxy_sites, true),
-        ("ProxyIp", "proxy", &r.proxy_ip, false),
-    ];
-    let rules = lists
-        .into_iter()
-        .filter(|(_, _, entries, _)| !entries.is_empty())
-        .map(|(name, outbound, entries, sites)| RoutingRule {
-            id: format!("{block_id}-{}", name.to_ascii_lowercase()),
-            remarks: name.to_owned(),
-            enabled: true,
-            outbound_tag: outbound.to_owned(),
-            domain: sites.then(|| entries.to_vec()),
-            ip: (!sites).then(|| entries.to_vec()),
-            port: None,
-            network: None,
-            protocol: None,
-            process: None,
-            package_name: None,
-            source_ip: None,
-        })
-        .collect();
+    let rules = routing_rules(&block_id, r);
     let block = RuleBlock {
         id: block_id.clone(),
         name: r.name.clone(),
@@ -797,19 +757,67 @@ fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport
             name: r.name.clone(),
             enabled,
             profiles: Vec::new(),
-            groups: group.into_iter().collect(),
+            groups: vec![group],
             blocks: vec![RouteBlockRef {
                 block_id,
                 enabled: true,
             }],
-            final_outbound: if r.global_proxy == Some(false) {
-                "direct".into()
-            } else {
-                "proxy".into()
-            },
+            final_outbound: routing_final(r),
             source_sub_id,
         },
     );
+}
+
+/// A Happ routing profile as a shared route: one block, the route's final
+/// outbound, and nothing it applies to yet.
+pub fn routing_package(r: &RoutingImport) -> RoutePackage {
+    RoutePackage {
+        name: r.name.clone(),
+        final_outbound: routing_final(r),
+        blocks: vec![PackageBlock {
+            name: r.name.clone(),
+            enabled: true,
+            rules: routing_rules("happ", r),
+        }],
+    }
+}
+
+/// Rules run block, direct, proxy: Happ's default `BLOCK_DIRECT_PROXY` order.
+fn routing_rules(id_prefix: &str, r: &RoutingImport) -> Vec<RoutingRule> {
+    let lists: [(&str, &str, &[String], bool); 6] = [
+        ("BlockSites", "block", &r.block_sites, true),
+        ("BlockIp", "block", &r.block_ip, false),
+        ("DirectSites", "direct", &r.direct_sites, true),
+        ("DirectIp", "direct", &r.direct_ip, false),
+        ("ProxySites", "proxy", &r.proxy_sites, true),
+        ("ProxyIp", "proxy", &r.proxy_ip, false),
+    ];
+    lists
+        .into_iter()
+        .filter(|(_, _, entries, _)| !entries.is_empty())
+        .map(|(name, outbound, entries, sites)| RoutingRule {
+            id: format!("{id_prefix}-{}", name.to_ascii_lowercase()),
+            remarks: name.to_owned(),
+            enabled: true,
+            outbound_tag: outbound.to_owned(),
+            domain: sites.then(|| entries.to_vec()),
+            ip: (!sites).then(|| entries.to_vec()),
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        })
+        .collect()
+}
+
+fn routing_final(r: &RoutingImport) -> String {
+    if r.global_proxy == Some(false) {
+        "direct".into()
+    } else {
+        "proxy".into()
+    }
 }
 
 /// Drop the routes and blocks imported from `sub_id`.
@@ -1188,31 +1196,38 @@ mod tests {
     }
 
     #[test]
-    fn routing_route_stands_alone_and_leaves_group_routes_alone() {
+    fn routing_package_holds_the_group_import_rules() {
         let mut st = state();
         let routing = routing_import(&routing_profile());
         import_routing_link(&mut st, "g-main", &routing, true);
-        import_routing_route(&mut st, "r1", &routing);
-        import_routing_route(&mut st, "r2", &routing);
+        let pkg = routing_package(&routing);
 
-        let route = st.routes.iter().find(|r| r.id == "r1").unwrap();
-        assert!(route.groups.is_empty() && route.profiles.is_empty());
-        assert!(route.enabled);
-        assert_eq!(route.source_sub_id, None);
-        assert_eq!(route.blocks[0].block_id, "r1-block");
-        let block = st.rule_blocks.iter().find(|b| b.id == "r1-block").unwrap();
-        assert_eq!(block.rules.len(), 4);
-        assert_eq!(
-            st.routes.len(),
-            4,
-            "the default, the group route and two imports"
-        );
-        let group_route = st
-            .routes
+        assert_eq!(pkg.name, routing.name);
+        assert_eq!(pkg.final_outbound, "direct");
+        assert_eq!(pkg.blocks.len(), 1);
+        assert!(pkg.blocks[0].enabled);
+        let block = st
+            .rule_blocks
             .iter()
-            .find(|r| r.id == "link-route-g-main")
+            .find(|b| b.id == "link-block-g-main")
             .unwrap();
-        assert_eq!(group_route.groups, ["g-main"]);
+        let without_ids = |rules: &[RoutingRule]| -> Vec<RoutingRule> {
+            rules
+                .iter()
+                .map(|r| RoutingRule {
+                    id: String::new(),
+                    ..r.clone()
+                })
+                .collect()
+        };
+        assert_eq!(pkg.blocks[0].name, block.name);
+        assert_eq!(without_ids(&pkg.blocks[0].rules), without_ids(&block.rules));
+
+        let proxied = RoutingImport {
+            global_proxy: None,
+            ..routing
+        };
+        assert_eq!(routing_package(&proxied).final_outbound, "proxy");
     }
 
     #[test]

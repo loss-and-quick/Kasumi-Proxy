@@ -20,10 +20,22 @@ type BridgeMock = {
 };
 
 import { SCHEMA_VERSION } from "../generated/defaults";
-import { applyMutation } from "../lib/apply-mutation";
+import { applyMutation, routingPackage } from "../lib/apply-mutation";
 import { DEFAULT_ROUTE_ID, exportRoutePackage, newRoute, parseRoutePackage } from "../lib/routes";
 import { uid } from "../lib/utils";
 import { EMPTY_SETTINGS } from "./defaults";
+
+const SCANNED = {
+  name: "Scanned",
+  directSites: ["geosite:ru"],
+  directIp: [],
+  proxySites: [],
+  proxyIp: [],
+  blockSites: ["geosite:ads"],
+  blockIp: [],
+  globalProxy: false,
+  ignoredFields: [],
+};
 
 const DEFAULT_SETTINGS: AdvancedSettings = {
   ...EMPTY_SETTINGS,
@@ -1304,41 +1316,49 @@ describe("useAppStore", () => {
     expect(route).toMatchObject({ name: "Pasted", groups: ["g-main"], enabled: true });
   });
 
-  it("importRoutingRoute adds a route of its own that applies to nothing yet", async () => {
+  it("a Happ routing profile comes in as a route package and reuses an identical block", async () => {
     bridge.readState.mockResolvedValue(makeState());
     await useAppStore.getState().hydrate();
-    const routing = {
-      name: "Scanned",
-      directSites: ["geosite:ru"],
-      directIp: [],
-      proxySites: [],
-      proxyIp: [],
-      blockSites: ["geosite:ads"],
-      blockIp: [],
-      globalProxy: false,
-      ignoredFields: [],
-    };
+    const pkg = routingPackage(SCANNED);
 
-    const id = await useAppStore.getState().importRoutingRoute(routing);
+    const first = await useAppStore.getState().importRoutePackage(pkg);
+    const second = await useAppStore.getState().importRoutePackage(pkg);
 
-    expect(bridge.mutate).toHaveBeenCalledWith({
-      kind: "importRoutingRoute",
-      routing,
-      routeId: id,
-    });
     const { routes, ruleBlocks } = useAppStore.getState();
-    expect(routes.find((r) => r.id === id)).toMatchObject({
-      name: "Scanned",
-      enabled: true,
-      groups: [],
-      profiles: [],
-      blocks: [{ blockId: `${id}-block`, enabled: true }],
-      finalOutbound: "direct",
-    });
-    expect(ruleBlocks.find((b) => b.id === `${id}-block`)?.rules).toMatchObject([
+    const made = ruleBlocks.filter((b) => b.name === "Scanned");
+    expect(made).toHaveLength(1);
+    expect(made[0].rules).toMatchObject([
       { outboundTag: "block", domain: ["geosite:ads"] },
       { outboundTag: "direct", domain: ["geosite:ru"] },
     ]);
+    for (const id of [first, second])
+      expect(routes.find((r) => r.id === id)).toMatchObject({
+        name: "Scanned",
+        enabled: true,
+        groups: [],
+        profiles: [],
+        blocks: [{ blockId: made[0].id, enabled: true }],
+        finalOutbound: "direct",
+      });
+  });
+
+  it("a route package never shares a provider's block", async () => {
+    const pkg = routingPackage(SCANNED);
+    const provider = {
+      id: "sub-block-s1",
+      name: "Scanned",
+      rules: pkg.blocks[0].rules.map((r, i) => ({ ...r, id: `p${i}` })),
+      sourceSubId: "s1",
+    };
+    bridge.readState.mockResolvedValue(makeState({ ruleBlocks: [provider] }));
+    await useAppStore.getState().hydrate();
+
+    const id = await useAppStore.getState().importRoutePackage(pkg);
+
+    const blockId = useAppStore.getState().routes.find((r) => r.id === id)?.blocks?.[0].blockId;
+    expect(blockId).toBeDefined();
+    expect(blockId).not.toBe("sub-block-s1");
+    expect(useAppStore.getState().ruleBlocks).toHaveLength(2);
   });
 
   it("a rejected request for full Xray configs fetches nothing", async () => {

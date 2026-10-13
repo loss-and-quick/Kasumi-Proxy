@@ -1235,10 +1235,6 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	groupId: z.string(),
 	activate: z.boolean(),
 }), z.object({
-	kind: z.literal("importRoutingRoute"),
-	routing: RoutingImport_SerializeSchema,
-	routeId: z.string(),
-}), z.object({
 	kind: z.literal("importRoutingRules"),
 	blockId: z.string(),
 	rules: z.array(RoutingRule_SerializeSchema),
@@ -1472,10 +1468,6 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	routing: RoutingImport_DeserializeSchema,
 	groupId: z.string(),
 	activate: z.boolean(),
-}), z.object({
-	kind: z.literal("importRoutingRoute"),
-	routing: RoutingImport_DeserializeSchema,
-	routeId: z.string(),
 }), z.object({
 	kind: z.literal("importRoutingRules"),
 	blockId: z.string(),
@@ -1731,6 +1723,26 @@ export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, M
 export type MutationIntent = z.infer<typeof MutationIntentSchema>;
 
 
+export const PackageBlock_SerializeSchema = z.object({
+	name: z.string(),
+	enabled: z.boolean(),
+	rules: z.array(RoutingRule_SerializeSchema),
+});
+export type PackageBlock_Serialize = z.infer<typeof PackageBlock_SerializeSchema>;
+
+
+export const PackageBlock_DeserializeSchema = z.object({
+	name: z.string(),
+	enabled: z.boolean(),
+	rules: z.array(RoutingRule_DeserializeSchema),
+});
+export type PackageBlock_Deserialize = z.infer<typeof PackageBlock_DeserializeSchema>;
+
+
+export const PackageBlockSchema = z.union([PackageBlock_DeserializeSchema, PackageBlock_SerializeSchema]);
+export type PackageBlock = z.infer<typeof PackageBlockSchema>;
+
+
 export const PendingChangeSchema = z.union([PendingChange_DeserializeSchema, PendingChange_SerializeSchema]);
 export type PendingChange = z.infer<typeof PendingChangeSchema>;
 
@@ -1788,8 +1800,17 @@ export const SubscriptionLinkSchema = z.object({
 export type SubscriptionLink = z.infer<typeof SubscriptionLinkSchema>;
 
 
+export const RoutePackage_SerializeSchema = z.object({
+	name: z.string(),
+	finalOutbound: z.string(),
+	blocks: z.array(PackageBlock_SerializeSchema),
+});
+export type RoutePackage_Serialize = z.infer<typeof RoutePackage_SerializeSchema>;
+
+
 export const RoutingLink_SerializeSchema = z.object({
 	routing: RoutingImport_SerializeSchema,
+	package: RoutePackage_SerializeSchema,
 	activate: z.boolean(),
 });
 export type RoutingLink_Serialize = z.infer<typeof RoutingLink_SerializeSchema>;
@@ -1804,8 +1825,17 @@ export const ResolvedImport_SerializeSchema = z.object({
 export type ResolvedImport_Serialize = z.infer<typeof ResolvedImport_SerializeSchema>;
 
 
+export const RoutePackage_DeserializeSchema = z.object({
+	name: z.string(),
+	finalOutbound: z.string(),
+	blocks: z.array(PackageBlock_DeserializeSchema),
+});
+export type RoutePackage_Deserialize = z.infer<typeof RoutePackage_DeserializeSchema>;
+
+
 export const RoutingLink_DeserializeSchema = z.object({
 	routing: RoutingImport_DeserializeSchema,
+	package: RoutePackage_DeserializeSchema,
 	activate: z.boolean(),
 });
 export type RoutingLink_Deserialize = z.infer<typeof RoutingLink_DeserializeSchema>;
@@ -1975,6 +2005,10 @@ export type Response_Deserialize = z.infer<typeof Response_DeserializeSchema>;
 
 export const ResponseSchema = z.union([Response_DeserializeSchema, Response_SerializeSchema]);
 export type Response = z.infer<typeof ResponseSchema>;
+
+
+export const RoutePackageSchema = z.union([RoutePackage_DeserializeSchema, RoutePackage_SerializeSchema]);
+export type RoutePackage = z.infer<typeof RoutePackageSchema>;
 
 
 export const RoutingImportSchema = z.union([RoutingImport_DeserializeSchema, RoutingImport_SerializeSchema]);
