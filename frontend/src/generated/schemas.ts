@@ -1693,9 +1693,16 @@ export const ConnectionProbeSchema = z.object({
 export type ConnectionProbe = z.infer<typeof ConnectionProbeSchema>;
 
 
+export const CoreConflictSchema = z.object({
+	kind: z.literal("unpinnedInsecureTls"),
+});
+export type CoreConflict = z.infer<typeof CoreConflictSchema>;
+
+
 export const CoreResolutionSchema = z.object({
 	resolved: CoreEngineSchema,
 	forced: CoreEngineSchema.nullable(),
+	conflict: CoreConflictSchema.nullable().optional(),
 	seesProcesses: z.boolean().optional(),
 });
 export type CoreResolution = z.infer<typeof CoreResolutionSchema>;

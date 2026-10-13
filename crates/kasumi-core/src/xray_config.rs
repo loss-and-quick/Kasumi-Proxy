@@ -9,6 +9,7 @@ use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
+use crate::core::{core_conflict, skips_cert_check_unpinned};
 use crate::custom_sanitize::{is_service_outbound, sanitize_provider_xray};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
@@ -203,9 +204,6 @@ fn build_tls_security(p: &Profile) -> Value {
     }
     if !tls.alpn.is_empty() {
         m.insert("alpn".into(), tls.alpn.clone().into());
-    }
-    if tls.allow_insecure {
-        m.insert("allowInsecure".into(), true.into());
     }
     if !tls.tls_min_version.is_empty() {
         m.insert("minVersion".into(), tls.tls_min_version.clone().into());
@@ -453,8 +451,11 @@ fn is_stream(p: &Profile) -> bool {
 /// Build the outbound `proxy` object for a profile (None if it can't run on xray).
 fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
     // Xray has removed its QUIC and HTTP/2 transports and rejects a config naming
-    // either, so such a profile (or chain hop) is left to sing-box.
-    if matches!(p.transport(), Some(Transport::Quic(_) | Transport::H2(_))) {
+    // either, so such a profile (or chain hop) is left to sing-box. Likewise TLS
+    // that skips the certificate check unpinned: xray would check it anyway.
+    if matches!(p.transport(), Some(Transport::Quic(_) | Transport::H2(_)))
+        || skips_cert_check_unpinned(p)
+    {
         return None;
     }
     let mut outbound = build_outbound_base(p)?;
@@ -655,12 +656,13 @@ fn attach_chain(
         if !emitted.insert(tag.clone()) {
             continue;
         }
-        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| {
-            format!(
+        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| match core_conflict(hop) {
+            Some(c) => format!("proxy chain hop \"{}\": {c}", hop.meta().remarks),
+            None => format!(
                 "proxy chain hop \"{}\" ({:?}) requires sing-box",
                 hop.meta().remarks,
                 hop.protocol()
-            )
+            ),
         })?;
         hop_ob["tag"] = tag.as_str().into();
         if let Some(next) = hops.get(i + 1) {
@@ -784,10 +786,10 @@ pub fn build_xray_config(
         // Sanitised on every build, not only at import: stored state can be edited.
         Profile::Custom(c) => provider_outbounds(c, profiles)?,
         _ => ActiveOutbounds {
-            outbounds: vec![
-                build_outbound(p, s)
-                    .ok_or_else(|| format!("{:?} requires sing-box", p.protocol()))?,
-            ],
+            outbounds: vec![build_outbound(p, s).ok_or_else(|| match core_conflict(p) {
+                Some(c) => c.to_string(),
+                None => format!("{:?} requires sing-box", p.protocol()),
+            })?],
             rules: Vec::new(),
             balancers: Vec::new(),
         },
@@ -1221,6 +1223,50 @@ mod tests {
         let server = &cfg["outbounds"][0]["settings"]["servers"][0];
         assert_eq!(server["method"], "2022-blake3-aes-128-gcm");
         assert!(server.get("uot").is_none(), "{server}");
+    }
+
+    #[test]
+    fn allow_insecure_is_never_written() {
+        let insecure = "vless://u@x.ex:443?type=xhttp&security=tls&sni=x.ex&allowInsecure=1";
+        // With a pin, xray checks the certificate against it instead.
+        let pinned = crate::share::parse_share_link(&format!("{insecure}&pcs=aabb"), None).unwrap();
+        let cfg = build_xray_config(&pinned, &AdvancedSettings::default(), &[], &[]).unwrap();
+        let tls = &cfg["outbounds"][0]["streamSettings"]["tlsSettings"];
+        assert_eq!(tls["pinnedPeerCertSha256"], "aabb");
+        assert!(tls.get("allowInsecure").is_none(), "{tls}");
+        // Without one the build is refused rather than run with the check back on.
+        let unpinned = crate::share::parse_share_link(insecure, None).unwrap();
+        let err = build_xray_config(&unpinned, &AdvancedSettings::default(), &[], &[]).unwrap_err();
+        assert_eq!(
+            err,
+            crate::contract::CoreConflict::UnpinnedInsecureTls.to_string()
+        );
+    }
+
+    #[test]
+    fn an_unpinned_insecure_hop_is_refused() {
+        let mut exit = crate::share::parse_share_link(
+            "vless://u@e.ex:443?type=tcp&security=tls&sni=e.ex",
+            None,
+        )
+        .unwrap();
+        exit.meta_mut().via = Some("hop".into());
+        let mut hop = crate::share::parse_share_link(
+            "vless://u@h.ex:443?type=xhttp&security=tls&sni=h.ex&allowInsecure=1#hop",
+            None,
+        )
+        .unwrap();
+        hop.meta_mut().id = "hop".into();
+        let profiles = [exit.clone(), hop];
+        let err =
+            build_xray_config(&exit, &AdvancedSettings::default(), &[], &profiles).unwrap_err();
+        assert_eq!(
+            err,
+            format!(
+                "proxy chain hop \"hop\": {}",
+                crate::contract::CoreConflict::UnpinnedInsecureTls
+            )
+        );
     }
 
     #[test]
