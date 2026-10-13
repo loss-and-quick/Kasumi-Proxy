@@ -921,6 +921,43 @@ impl AppFilterCapability for AndroidPlatform {
 mod tests {
     use super::*;
 
+    // The FATAL line sing-box logged when netd held the lock (#189).
+    const ANDROID_LOCK_LOG: &str = "FATAL[0000] start service: start inbound/tun[tun-in]: \
+        auto-redirect: setup iptables: exit status 4: /system/bin/iptables -t nat -I OUTPUT \
+        -j sing-box-output: Can't lock /system/etc/xtables.lock: Try again";
+
+    #[test]
+    fn detects_a_lost_xtables_lock() {
+        assert!(lost_xtables_race(ANDROID_LOCK_LOG));
+        assert!(lost_xtables_race(
+            "Another app is currently holding the xtables lock. Perhaps you want to use the -w option?"
+        ));
+        assert!(!lost_xtables_race(
+            "FATAL[0000] decode config: outbounds[0].server: unknown field"
+        ));
+        assert!(!lost_xtables_race(""));
+    }
+
+    #[test]
+    fn retries_a_native_singbox_once_after_a_backoff() {
+        assert_eq!(
+            start_retry_delay(true, 0, ANDROID_LOCK_LOG),
+            Some(XTABLES_BACKOFF)
+        );
+        // Bounded: the retry that loses again is the last.
+        assert_eq!(
+            start_retry_delay(true, XTABLES_RETRIES, ANDROID_LOCK_LOG),
+            None
+        );
+    }
+
+    #[test]
+    fn other_startup_failures_are_not_retried() {
+        // A config error, or an engine that runs no iptables itself.
+        assert_eq!(start_retry_delay(true, 0, "FATAL decode config"), None);
+        assert_eq!(start_retry_delay(false, 0, ANDROID_LOCK_LOG), None);
+    }
+
     #[tokio::test]
     async fn iface_traffic_parses_proc_net_dev_columns() {
         // Real /proc/net/dev isn't available deterministically; exercise the parser
