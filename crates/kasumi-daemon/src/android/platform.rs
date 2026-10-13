@@ -387,6 +387,28 @@ async fn bring_up_external_tun(
     Ok(())
 }
 
+/// Extra starts for a native sing-box that lost the `xtables.lock` race.
+const XTABLES_RETRIES: u32 = 1;
+/// Wait before the first such retry; doubles for each further one.
+const XTABLES_BACKOFF: Duration = Duration::from_millis(750);
+
+/// Whether a core that died on startup lost the race for the global
+/// `xtables.lock`. Android's iptables reports "Can't lock /system/etc/xtables.lock",
+/// upstream iptables "Another app is currently holding the xtables lock".
+fn lost_xtables_race(log: &str) -> bool {
+    let log = log.to_ascii_lowercase();
+    log.contains("xtables.lock") || log.contains("xtables lock")
+}
+
+/// How long to wait before starting a core that died on startup again, or `None`
+/// to give up. Only a native sing-box tun runs iptables itself (`auto_redirect`,
+/// without `-w`), so only it can lose the lock to another process such as netd,
+/// and that race is transient: it gets [`XTABLES_RETRIES`] more tries.
+fn start_retry_delay(native_singbox: bool, attempt: u32, log: &str) -> Option<Duration> {
+    (native_singbox && attempt < XTABLES_RETRIES && lost_xtables_race(log))
+        .then(|| XTABLES_BACKOFF * 2u32.pow(attempt))
+}
+
 async fn fail(reason: &str) -> anyhow::Result<()> {
     set_failed(reason).await;
     anyhow::bail!("{reason}")
@@ -435,27 +457,39 @@ async fn start_inner(
         }
     }
 
-    // stopDataPath always runs before a start/restart (Service), so the pidfile is
-    // clean here — that teardown is what fixes engine-switch orphans.
-    let child = spawn_core(bin, cfg, Path::new(log), DATADIR, false).await?;
-    let core_pid = child.id().unwrap_or(0) as i32;
-    let _ = write_text(PIDFILE, &core_pid.to_string()).await;
+    let native_singbox = engine == CoreEngine::SingBox && !external;
+    let mut attempt = 0;
+    loop {
+        // stopDataPath always runs before a start/restart (Service), so the pidfile is
+        // clean here — that teardown is what fixes engine-switch orphans.
+        let child = spawn_core(bin, cfg, Path::new(log), DATADIR, false).await?;
+        let core_pid = child.id().unwrap_or(0) as i32;
+        let _ = write_text(PIDFILE, &core_pid.to_string()).await;
 
-    // An external tun engine needs a userspace tun + helper + manual routing;
-    // a native sing-box auto_routes its own tun.
-    if external {
-        bring_up_external_tun(tun, socks_port, tun_opts).await?;
-    }
+        // An external tun engine needs a userspace tun + helper + manual routing;
+        // a native sing-box auto_routes its own tun.
+        if external {
+            bring_up_external_tun(tun, socks_port, tun_opts).await?;
+        }
 
-    if !verify_core_alive(core_pid, bin, 6, Duration::from_millis(250)).await {
-        return fail(&format!("core exited on startup — see {log}")).await;
+        if verify_core_alive(core_pid, bin, 6, Duration::from_millis(250)).await {
+            break;
+        }
+        let log_text = read_text(log).await.unwrap_or_default();
+        let Some(delay) = start_retry_delay(native_singbox, attempt, &log_text) else {
+            return fail(&format!("core exited on startup — see {log}")).await;
+        };
+        log::warn!("sing-box lost the xtables.lock race on startup; retrying in {delay:?}");
+        tokio::time::sleep(delay).await;
+        attempt += 1;
     }
 
     // Guard the proxy against apps kept outside it (both engines): no local proxy
     // ports, no binding to the tun. Deferred until the core is up so our iptables
     // don't contend with sing-box's system-stack `auto_redirect`, which installs its
-    // own iptables during startup and shells `iptables` without `-w` — a shared
-    // xtables.lock race would fail its start.
+    // own iptables during startup and shells `iptables` without `-w`. Another holder
+    // of the global xtables.lock (netd) can still fail that start; the loop above
+    // retries it.
     refresh_guards(socks_port).await;
     // Hotspot / tethering clients, if the user asked for them (watches the setting
     // and the tethering interfaces for as long as the data path runs).
