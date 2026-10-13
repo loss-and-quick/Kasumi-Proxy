@@ -1343,4 +1343,74 @@ describe("useAppStore", () => {
     expect(written.subscriptions[0].allowProviderConfigs).toBe(true);
     await vi.waitFor(() => expect(bridge.applySubscription).toHaveBeenCalledWith("s1"));
   });
+
+  it("an edit saves only what the user changed since the sheet opened", async () => {
+    const opened = makeSub({ id: "s1", remarks: "Old Title", autoUpdate: false });
+    const fetched = { ...opened, remarks: "New Title", autoUpdate: true };
+    bridge.readState.mockResolvedValue(makeState({ subscriptions: [fetched] }));
+    await useAppStore.getState().hydrate();
+
+    await useAppStore
+      .getState()
+      .saveSubscription({ ...opened, filter: "DE" }, { id: "g-main" }, opened);
+
+    expect(useAppStore.getState().subscriptions[0]).toMatchObject({
+      remarks: "New Title",
+      autoUpdate: true,
+      filter: "DE",
+    });
+  });
+
+  it("saving a copy from before a fetch keeps what the fetch wrote", async () => {
+    const before = makeSub({ id: "s1" });
+    const ask = {
+      key: "provider-configs",
+      value: "Xray JSON",
+      risk: "trustBoundary" as const,
+      action: { kind: "allowProviderConfigs" as const },
+      digest: "d-configs",
+      seenAt: "2026-10-13T00:00:00Z",
+    };
+    const fetched = {
+      ...before,
+      lastUpdated: "2026-10-13T10:00:00Z",
+      count: 7,
+      warnings: [{ kind: "legacyParser" as const }],
+      pendingChanges: [ask],
+    };
+    bridge.readState.mockResolvedValue(makeState({ subscriptions: [fetched] }));
+    await useAppStore.getState().hydrate();
+
+    await useAppStore.getState().upsertSub({ ...before, filter: "DE" });
+
+    expect(useAppStore.getState().subscriptions[0]).toMatchObject({
+      filter: "DE",
+      lastUpdated: "2026-10-13T10:00:00Z",
+      count: 7,
+      warnings: [{ kind: "legacyParser" }],
+      pendingChanges: [ask],
+    });
+  });
+
+  it("updateSub shows a failure the backend never saw as the subscription's error", async () => {
+    const sub = {
+      ...makeSub({ id: "s1", lastError: "HTTP 404" }),
+      lastErrorKind: { kind: "http" as const, status: 404 },
+    };
+    bridge.readState.mockResolvedValue(makeState({ subscriptions: [sub] }));
+    await useAppStore.getState().hydrate();
+    bridge.applySubscription.mockRejectedValue(new Error("socket closed"));
+
+    await useAppStore.getState().updateSub("s1");
+
+    expect(bridge.mutate).toHaveBeenCalledWith({
+      kind: "setSubError",
+      id: "s1",
+      message: "socket closed",
+    });
+    expect(useAppStore.getState().subscriptions[0]).toMatchObject({
+      lastError: "socket closed",
+      lastErrorKind: null,
+    });
+  });
 });

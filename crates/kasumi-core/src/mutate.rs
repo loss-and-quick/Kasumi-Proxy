@@ -106,9 +106,21 @@ pub enum MutationIntent {
     },
 
     // ---- subscriptions ----
-    /// Add or replace a subscription (by `id`).
+    /// Add a subscription, or replace the user's settings of the one with the
+    /// same `id`. Fetch results and the provider proposals with their answers
+    /// stay as stored.
     UpsertSub {
         subscription: Box<Subscription>,
+        /// The copy the edit started from. With it, only the settings that differ
+        /// from it are applied, so a fetch that changed the others meanwhile stays.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        original: Option<Box<Subscription>>,
+    },
+    /// Show `message` as the subscription's last error, for a failure the UI
+    /// detects itself (the backend wasn't reached, or the proxy isn't running).
+    SetSubError {
+        id: String,
+        message: String,
     },
     /// Remove a subscription and prune the profiles it still owns in its group.
     /// With `delete_group`, also remove the group made for it when nothing else
@@ -389,7 +401,15 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             move_item_by_index(&mut state.groups, from, (*to as usize).max(pinned));
         }
 
-        MutationIntent::UpsertSub { subscription } => {
+        MutationIntent::UpsertSub {
+            subscription,
+            original,
+        } => {
+            let mut next = (**subscription).clone();
+            if let Some(stored) = state.subscriptions.iter().find(|s| s.id == next.id) {
+                merge_sub_edit(&mut next, stored, original.as_deref());
+            }
+            let subscription = &next;
             rename_owned_group(state, subscription);
             // A subscription drags its profiles with its group. The sub currently in
             // state is still the old one here, so compare groups and move the
@@ -426,7 +446,13 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                     _ => {}
                 }
             }
-            upsert_by_id(&mut state.subscriptions, (**subscription).clone());
+            upsert_by_id(&mut state.subscriptions, next);
+        }
+        MutationIntent::SetSubError { id, message } => {
+            if let Some(sub) = state.subscriptions.iter_mut().find(|s| s.id == *id) {
+                sub.last_error = Some(message.clone());
+                sub.last_error_kind = None;
+            }
         }
         MutationIntent::RemoveSub { id, delete_group } => {
             let group = state
@@ -632,6 +658,93 @@ pub fn rename_owned_group(state: &mut AppState, next: &Subscription) {
     }) {
         g.name = next.remarks.clone();
     }
+}
+
+/// Merge `next`, the UI's copy of a subscription, with `stored`. A fetch can land
+/// while the edit sheet is open, and saving the older copy must not undo it: the
+/// fetch results and the provider proposals with their answers always stay as
+/// stored, and with `original`, the copy the edit started from, so does every
+/// setting the user left as it was. The destructuring is exhaustive, so a new
+/// field has to be sorted to one side.
+fn merge_sub_edit(next: &mut Subscription, stored: &Subscription, original: Option<&Subscription>) {
+    let Subscription {
+        last_updated,
+        count,
+        last_error,
+        last_error_kind,
+        prev_profile,
+        next_profile,
+        provider,
+        provider_interval_hours,
+        request_timeout_secs,
+        body_encrypted,
+        warnings,
+        pending_changes,
+        decisions,
+        audit,
+        // The user's settings. Taking back an accepted provider setting
+        // (`fallback_url`, `insecure_by_provider`, `allow_provider_configs`)
+        // is an edit too.
+        id: _,
+        remarks,
+        url,
+        enabled,
+        group_id,
+        auto_update,
+        interval,
+        allow_insecure,
+        user_agent,
+        filter,
+        update_mode,
+        manual_title,
+        interval_override,
+        request,
+        fallback_url,
+        insecure_by_provider,
+        allow_provider_configs,
+    } = stored.clone();
+    next.last_updated = last_updated;
+    next.count = count;
+    next.last_error = last_error;
+    next.last_error_kind = last_error_kind;
+    next.prev_profile = prev_profile;
+    next.next_profile = next_profile;
+    next.provider = provider;
+    next.provider_interval_hours = provider_interval_hours;
+    next.request_timeout_secs = request_timeout_secs;
+    next.body_encrypted = body_encrypted;
+    next.warnings = warnings;
+    next.pending_changes = pending_changes;
+    next.decisions = decisions;
+    next.audit = audit;
+    let Some(original) = original else {
+        return;
+    };
+    macro_rules! keep_unedited {
+        ($($field:ident),* $(,)?) => {$(
+            if next.$field == original.$field {
+                next.$field = $field;
+            }
+        )*};
+    }
+    keep_unedited!(
+        remarks,
+        url,
+        enabled,
+        group_id,
+        auto_update,
+        interval,
+        allow_insecure,
+        user_agent,
+        filter,
+        update_mode,
+        manual_title,
+        interval_override,
+        request,
+        fallback_url,
+        insecure_by_provider,
+        allow_provider_configs,
+    );
 }
 
 /// Add `profile` at the front, or replace the existing one with the same `meta.id`.
@@ -1002,6 +1115,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g2"))),
+                original: None,
             },
         );
         let group_of = |id: &str| {
@@ -1031,6 +1145,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g2"))),
+                original: None,
             },
         );
         assert!(s.profiles.iter().all(|p| p.meta().group_id == "g2"));
@@ -1045,9 +1160,219 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g2"))),
+                original: None,
             },
         );
         assert_eq!(s.profiles[0].meta().group_id, "g-main");
+        assert_eq!(s.subscriptions.len(), 1);
+    }
+
+    type SubField = (&'static str, fn(&mut Subscription));
+
+    /// Each field a fetch or a provider answer writes, set to a non-default value.
+    const FETCH_RESULTS: &[SubField] = &[
+        ("last_updated", |s| {
+            s.last_updated = "2026-10-13T10:00:00Z".into()
+        }),
+        ("count", |s| s.count = 7),
+        ("last_error", |s| s.last_error = Some("timed out".into())),
+        ("last_error_kind", |s| {
+            s.last_error_kind = Some(crate::state::SubErrorKind::Network);
+        }),
+        ("prev_profile", |s| s.prev_profile = Some("p0".into())),
+        ("next_profile", |s| s.next_profile = Some("p2".into())),
+        ("provider", |s| {
+            s.provider = Some(crate::state::ProviderInfo {
+                title: Some("Provider".into()),
+                ..Default::default()
+            });
+        }),
+        ("provider_interval_hours", |s| {
+            s.provider_interval_hours = Some(12);
+        }),
+        ("request_timeout_secs", |s| {
+            s.request_timeout_secs = Some(10)
+        }),
+        ("body_encrypted", |s| s.body_encrypted = true),
+        ("warnings", |s| {
+            s.warnings = vec![crate::state::SubWarning::LegacyParser];
+        }),
+        ("pending_changes", |s| {
+            crate::sub_changes::offer_provider_configs(s, "2026-10-13T10:00:00Z");
+        }),
+        ("decisions", |s| {
+            s.decisions = vec![crate::state::ChangeDecision {
+                key: "fallback-url".into(),
+                digest: "d".into(),
+                accepted: false,
+                at: "2026-10-13T10:00:00Z".into(),
+            }];
+        }),
+        ("audit", |s| {
+            s.audit = vec![crate::state::AuditEntry {
+                at: "2026-10-13T10:00:00Z".into(),
+                key: "profile-title".into(),
+                outcome: crate::state::AuditOutcome::AutoApplied,
+                summary: "Provider".into(),
+            }];
+        }),
+    ];
+
+    /// The edit sheet's copy, taken before the fetch, with the user's edits.
+    fn edited_copy() -> Subscription {
+        let mut s = mksub("s1", Some("g-main"));
+        s.remarks = "Mine".into();
+        s.manual_title = true;
+        s.filter = "DE".into();
+        s
+    }
+
+    #[test]
+    fn upsert_sub_keeps_each_fetch_result_a_stale_copy_lacks() {
+        for (field, set) in FETCH_RESULTS {
+            let mut s = base();
+            let mut fetched = mksub("s1", Some("g-main"));
+            set(&mut fetched);
+            s.subscriptions = vec![fetched];
+            apply_mutation(
+                &mut s,
+                &MutationIntent::UpsertSub {
+                    subscription: Box::new(edited_copy()),
+                    original: None,
+                },
+            );
+            let mut want = edited_copy();
+            set(&mut want);
+            assert_eq!(s.subscriptions[0], want, "{field}");
+        }
+    }
+
+    #[test]
+    fn upsert_sub_does_not_bring_back_what_a_fetch_cleared() {
+        for (field, set) in FETCH_RESULTS {
+            let mut s = base();
+            s.subscriptions = vec![mksub("s1", Some("g-main"))];
+            let mut stale = edited_copy();
+            set(&mut stale);
+            apply_mutation(
+                &mut s,
+                &MutationIntent::UpsertSub {
+                    subscription: Box::new(stale),
+                    original: None,
+                },
+            );
+            assert_eq!(s.subscriptions[0], edited_copy(), "{field}");
+        }
+    }
+
+    #[test]
+    fn upsert_sub_takes_back_accepted_provider_settings() {
+        let mut s = base();
+        let mut granted = mksub("s1", Some("g-main"));
+        granted.fallback_url = Some("https://backup.example/sub".into());
+        granted.allow_insecure = true;
+        granted.insecure_by_provider = true;
+        granted.allow_provider_configs = true;
+        s.subscriptions = vec![granted];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::UpsertSub {
+                subscription: Box::new(mksub("s1", Some("g-main"))),
+                original: None,
+            },
+        );
+        assert_eq!(s.subscriptions[0], mksub("s1", Some("g-main")));
+    }
+
+    /// The sheet opened on `opened`; then a fetch renamed the subscription (and
+    /// the group made for it) and switched auto-update on.
+    fn fetched_while_editing() -> (AppState, Subscription) {
+        let mut s = base();
+        let mut opened = mksub("s1", Some("gs"));
+        opened.remarks = "Old Title".into();
+        let mut fetched = opened.clone();
+        fetched.remarks = "New Title".into();
+        fetched.auto_update = true;
+        fetched.provider_interval_hours = Some(12);
+        owned_group(&mut s, "gs", "New Title", "s1");
+        s.subscriptions = vec![fetched];
+        (s, opened)
+    }
+
+    fn save_edit(s: &mut AppState, edited: Subscription, opened: &Subscription) {
+        apply_mutation(
+            s,
+            &MutationIntent::UpsertSub {
+                subscription: Box::new(edited),
+                original: Some(Box::new(opened.clone())),
+            },
+        );
+    }
+
+    #[test]
+    fn an_edit_keeps_the_settings_a_fetch_changed_meanwhile() {
+        let (mut s, opened) = fetched_while_editing();
+        let mut edited = opened.clone();
+        edited.filter = "DE".into();
+        save_edit(&mut s, edited, &opened);
+        let sub = &s.subscriptions[0];
+        assert_eq!(sub.filter, "DE");
+        assert_eq!(sub.remarks, "New Title");
+        assert!(sub.auto_update);
+        assert_eq!(sub.provider_interval_hours, Some(12));
+        assert_eq!(
+            s.groups.iter().find(|g| g.id == "gs").unwrap().name,
+            "New Title"
+        );
+    }
+
+    #[test]
+    fn an_edit_applies_what_the_user_changed() {
+        let (mut s, opened) = fetched_while_editing();
+        s.groups.push(Group {
+            id: "g3".into(),
+            name: "Three".into(),
+            sub_id: None,
+        });
+        s.profiles = vec![owned("trojan://pw@a.com:443#A", "a", "gs", "s1")];
+        let mut edited = opened.clone();
+        edited.remarks = "Mine".into();
+        edited.manual_title = true;
+        edited.group_id = Some("g3".into());
+        save_edit(&mut s, edited, &opened);
+        let sub = &s.subscriptions[0];
+        assert_eq!(sub.remarks, "Mine");
+        assert!(sub.manual_title);
+        assert_eq!(sub.group_id.as_deref(), Some("g3"));
+        assert_eq!(s.profiles[0].meta().group_id, "g3");
+    }
+
+    #[test]
+    fn set_sub_error_replaces_the_error_and_its_kind() {
+        let mut s = base();
+        let mut sub = mksub("s1", Some("g-main"));
+        sub.last_error = Some("HTTP 404".into());
+        sub.last_error_kind = Some(crate::state::SubErrorKind::Network);
+        s.subscriptions = vec![sub];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::SetSubError {
+                id: "s1".into(),
+                message: "proxy is not running".into(),
+            },
+        );
+        assert_eq!(
+            s.subscriptions[0].last_error.as_deref(),
+            Some("proxy is not running")
+        );
+        assert_eq!(s.subscriptions[0].last_error_kind, None);
+        apply_mutation(
+            &mut s,
+            &MutationIntent::SetSubError {
+                id: "gone".into(),
+                message: "x".into(),
+            },
+        );
         assert_eq!(s.subscriptions.len(), 1);
     }
 
@@ -1545,6 +1870,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(next.clone()),
+                original: None,
             },
         );
         assert_eq!(
@@ -1565,6 +1891,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(next),
+                original: None,
             },
         );
         assert_eq!(s.groups.iter().find(|g| g.id == "gs").unwrap().name, "Mine");

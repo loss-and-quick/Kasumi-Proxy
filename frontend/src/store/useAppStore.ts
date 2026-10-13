@@ -118,7 +118,8 @@ interface Store extends AppState {
   reorderGroups: (from: number, to: number) => Promise<void>;
 
   // subscriptions
-  upsertSub: (s: Subscription) => Promise<void>;
+  /** With `original`, the copy the edit started from, only what differs from it is saved. */
+  upsertSub: (s: Subscription, original?: Subscription) => Promise<void>;
   /** With `deleteGroup`, the group made for the subscription goes too when it's left empty. */
   removeSub: (id: string, deleteGroup?: boolean) => Promise<void>;
   /** Accept or reject provider-proposed changes; `activate` answers a routing import. */
@@ -131,7 +132,11 @@ interface Store extends AppState {
   /** Make a routing profile from a pasted `happ://routing` link the route of a group. */
   importRoutingLink: (routing: RoutingImport, groupId: string, activate: boolean) => Promise<void>;
   /** Save a subscription into its chosen group, creating the group if it's new. */
-  saveSubscription: (sub: Subscription, group: GroupChoice) => Promise<void>;
+  saveSubscription: (
+    sub: Subscription,
+    group: GroupChoice,
+    original?: Subscription,
+  ) => Promise<void>;
   updateSub: (id: string) => Promise<void>;
   updateAllSubs: () => Promise<void>;
 
@@ -336,8 +341,9 @@ export const useAppStore = create<Store>((set, get) => {
     // backend can't tell a stopped proxy from an unreachable URL).
     if (sub.updateMode === "proxy" && !isServiceUp(service.state)) {
       await mutate({
-        kind: "upsertSub",
-        subscription: { ...sub, lastError: translateCurrent("common.proxyNotRunning") },
+        kind: "setSubError",
+        id,
+        message: translateCurrent("common.proxyNotRunning"),
       });
       get().notify(translateCurrent("common.proxyNotRunning"));
       return;
@@ -350,7 +356,7 @@ export const useAppStore = create<Store>((set, get) => {
       // active data-path when affected; we just reflect the result.
       next = await bridge.applySubscription(id);
     } catch (e: unknown) {
-      await mutate({ kind: "upsertSub", subscription: { ...sub, lastError: errorMessage(e) } });
+      await mutate({ kind: "setSubError", id, message: errorMessage(e) });
       get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
       return;
     }
@@ -943,17 +949,17 @@ export const useAppStore = create<Store>((set, get) => {
       await mutate({ kind: "removeGroup", id });
     },
 
-    async upsertSub(sub) {
+    async upsertSub(sub, original) {
       // The daemon's auto-update loop re-reads state every tick, so a new or
       // edited subscription is picked up within a minute — no wakeup needed.
-      await mutate({ kind: "upsertSub", subscription: sub });
+      await mutate({ kind: "upsertSub", subscription: sub, original });
     },
-    async saveSubscription(sub, group) {
+    async saveSubscription(sub, group, original) {
       const groupId = await get().resolveGroup(group, sub.remarks, sub.id);
       const withdrawn =
         !sub.allowProviderConfigs &&
         get().subscriptions.some((s) => s.id === sub.id && s.allowProviderConfigs);
-      await mutate({ kind: "upsertSub", subscription: { ...sub, groupId } });
+      await mutate({ kind: "upsertSub", subscription: { ...sub, groupId }, original });
       if (withdrawn) await withdrawProviderConfigs(sub.id);
     },
     async removeSub(id, deleteGroup = false) {

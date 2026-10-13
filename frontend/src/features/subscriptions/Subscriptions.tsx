@@ -152,7 +152,7 @@ export default function Subscriptions({
               onOpenGroup={() => onOpenGroup(s.groupId ?? BASE_GROUP_ID)}
               revealed={!!revealed[s.id]}
               onReveal={() => setRevealed((r) => ({ ...r, [s.id]: !r[s.id] }))}
-              onToggle={(enabled) => upsertSub({ ...s, enabled })}
+              onToggle={(enabled) => upsertSub({ ...s, enabled }, s)}
               updating={updatingSubs.has(s.id)}
               onUpdate={() => void updateSub(s.id)}
               onEdit={() => setEdit(s)}
@@ -223,7 +223,7 @@ export default function Subscriptions({
         onSave={async (data, group) => {
           const isNew = edit === "new";
           try {
-            await saveSubscription(data, group);
+            await saveSubscription(data, group, edit && edit !== "new" ? edit : undefined);
           } catch (e) {
             if (!wasReported(e))
               notify(

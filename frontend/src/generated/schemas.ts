@@ -1300,6 +1300,10 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("setSettings"),
 	settings: AdvancedSettings_SerializeSchema,
 }), z.object({
+	kind: z.literal("setSubError"),
+	id: z.string(),
+	message: z.string(),
+}), z.object({
 	kind: z.literal("upsertAssetFile"),
 	asset: AssetFileSchema,
 }), z.object({
@@ -1318,6 +1322,7 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("upsertSub"),
 	subscription: Subscription_SerializeSchema,
+	original: Subscription_SerializeSchema.nullable().optional(),
 }), z.object({
 	kind: z.literal("withdrawProviderConfigs"),
 	subId: z.string(),
@@ -1534,6 +1539,10 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("setSettings"),
 	settings: AdvancedSettings_DeserializeSchema,
 }), z.object({
+	kind: z.literal("setSubError"),
+	id: z.string(),
+	message: z.string(),
+}), z.object({
 	kind: z.literal("upsertAssetFile"),
 	asset: AssetFileSchema,
 }), z.object({
@@ -1552,6 +1561,7 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("upsertSub"),
 	subscription: Subscription_DeserializeSchema,
+	original: Subscription_DeserializeSchema.nullable().optional(),
 }), z.object({
 	kind: z.literal("withdrawProviderConfigs"),
 	subId: z.string(),
