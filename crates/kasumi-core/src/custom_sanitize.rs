@@ -154,8 +154,9 @@ pub(crate) fn is_service_outbound(ob: &Value) -> bool {
         .is_some_and(|p| SERVICE_PROTOCOLS.contains(&p))
 }
 
-/// SHA-256 of a stored provider config's outbounds with their tags removed: a
-/// refresh that only renames tags is still the same server.
+/// SHA-256 of a stored provider config's outbounds with their tags and REALITY
+/// picks removed: a refresh that only renames tags, or draws another
+/// `serverName`/`shortId` from the provider's pool, is still the same server.
 pub fn provider_outbounds_identity(raw: &str) -> Option<String> {
     let v: Value = serde_json::from_str(raw).ok()?;
     let mut outbounds = v.get("outbounds")?.as_array()?.clone();
@@ -163,9 +164,36 @@ pub fn provider_outbounds_identity(raw: &str) -> Option<String> {
         if let Some(o) = ob.as_object_mut() {
             o.remove("tag");
         }
+        forget_reality_pick(ob);
     }
     let digest = Sha256::digest(Value::Array(outbounds).to_string().as_bytes());
     Some(digest.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// True when two stored provider configs differ at most in their outbounds'
+/// REALITY `serverName`/`shortId`.
+pub fn differs_only_in_reality_pick(a: &str, b: &str) -> bool {
+    let without_pick = |raw: &str| -> Option<Value> {
+        let mut v: Value = serde_json::from_str(raw).ok()?;
+        forget_reality_pick(v.get_mut("outbounds")?);
+        Some(v)
+    };
+    matches!((without_pick(a), without_pick(b)), (Some(x), Some(y)) if x == y)
+}
+
+/// Every `realitySettings` counts, an xhttp download leg's included.
+fn forget_reality_pick(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            if let Some(Value::Object(r)) = m.get_mut("realitySettings") {
+                r.remove("serverName");
+                r.remove("shortId");
+            }
+            m.values_mut().for_each(forget_reality_pick);
+        }
+        Value::Array(a) => a.iter_mut().for_each(forget_reality_pick),
+        _ => {}
+    }
 }
 
 /// Serialised size above `max`, counted without building the string.
@@ -677,6 +705,36 @@ mod tests {
             out.dropped
                 .contains(&"routing.rules[0].inboundTag".to_string())
         );
+    }
+
+    fn reality_config(sni: &str, sid: &str, public_key: &str) -> String {
+        let reality = json!({ "serverName": sni, "shortId": sid, "publicKey": public_key });
+        let mut ob = vless("proxy");
+        ob["streamSettings"] = json!({
+            "network": "xhttp", "security": "reality", "realitySettings": reality,
+            "xhttpSettings": { "extra": { "downloadSettings": {
+                "security": "reality", "realitySettings": reality,
+            }}},
+        });
+        json!({ "outbounds": [ob, { "tag": "direct", "protocol": "freedom" }] }).to_string()
+    }
+
+    #[test]
+    fn identity_ignores_only_the_reality_pick() {
+        let a = reality_config("a.sni.example", "aa", "PK");
+        let b = reality_config("b.sni.example", "bb", "PK");
+        let other_key = reality_config("a.sni.example", "aa", "PK2");
+        assert_eq!(
+            provider_outbounds_identity(&a),
+            provider_outbounds_identity(&b)
+        );
+        assert_ne!(
+            provider_outbounds_identity(&a),
+            provider_outbounds_identity(&other_key)
+        );
+        assert!(differs_only_in_reality_pick(&a, &b));
+        assert!(!differs_only_in_reality_pick(&a, &other_key));
+        assert!(!differs_only_in_reality_pick(&a, "not json"));
     }
 
     #[test]
