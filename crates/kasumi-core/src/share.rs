@@ -684,7 +684,7 @@ fn parse_ss(uri: &str, group_id: Option<&str>) -> Option<Profile> {
             port,
         },
         transport: Transport::default(),
-        tls: Tls::default(),
+        tls: Tls::off(),
         password,
         method: as_ss_method(&method),
         mux_enabled: false,
@@ -1835,5 +1835,64 @@ mod tests {
         assert!(uris.iter().any(|u| u.starts_with("http://user:")));
         assert!(!uris.iter().any(|u| u == "https://example.com/page"));
         assert!(uris.iter().any(|u| u.starts_with("vless://")));
+    }
+
+    fn parse_ss_link(uri: &str) -> Shadowsocks {
+        match parse_share_link(uri, None) {
+            Some(Profile::Shadowsocks(s)) => s,
+            other => panic!("not shadowsocks for {uri}: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn plain_shadowsocks_link_has_no_tls_and_exports_plain() {
+        for uri in [
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388#plain",
+            "ss://aes-256-gcm:pw@ss.example:8388#plain",
+            "ss://YWVzLTI1Ni1nY206cHdAc3MuZXhhbXBsZTo4Mzg4#legacy",
+        ] {
+            let ss = parse_ss_link(uri);
+            assert_eq!(ss.tls.security, Security::None, "{uri}");
+            assert_eq!(ss.transport, Transport::default(), "{uri}");
+
+            let link = build_share_link(&Profile::Shadowsocks(ss.clone()));
+            assert!(!link.contains("plugin"), "{uri} exported as {link}");
+            let again = parse_ss_link(&link);
+            assert_eq!(again.tls.security, Security::None, "{link}");
+        }
+    }
+
+    #[test]
+    fn v2ray_plugin_tls_option_alone_turns_on_tls() {
+        let with_tls = parse_ss_link(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dcdn.example%3Bpath%3D%2Fws%3Btls#ws-tls",
+        );
+        assert_eq!(with_tls.tls.security, Security::Tls);
+        assert_eq!(with_tls.tls.sni, "cdn.example");
+        assert!(matches!(&with_tls.transport, Transport::Ws(w) if w.path == "/ws"));
+        let link = build_share_link(&Profile::Shadowsocks(with_tls));
+        let plugin = Url::parse(&link)
+            .unwrap()
+            .query_pairs()
+            .find(|(k, _)| k == "plugin")
+            .map(|(_, v)| v.into_owned())
+            .unwrap_or_else(|| panic!("no plugin in {link}"));
+        assert!(plugin.starts_with("v2ray-plugin;"), "{plugin}");
+        assert!(plugin.split(';').any(|o| o == "tls"), "{plugin}");
+
+        let without_tls = parse_ss_link(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dcdn.example%3Bpath%3D%2Fws#ws",
+        );
+        assert_eq!(without_tls.tls.security, Security::None);
+        assert!(matches!(&without_tls.transport, Transport::Ws(_)));
+        let link = build_share_link(&Profile::Shadowsocks(without_tls));
+        let again = parse_ss_link(&link);
+        assert_eq!(again.tls.security, Security::None, "{link}");
+        assert!(matches!(&again.transport, Transport::Ws(_)), "{link}");
+
+        let obfs = parse_ss_link(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dcdn.example#obfs",
+        );
+        assert_eq!(obfs.tls.security, Security::None);
     }
 }

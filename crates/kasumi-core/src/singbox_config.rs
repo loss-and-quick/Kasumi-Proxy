@@ -2194,4 +2194,31 @@ mod tests {
         );
         assert_eq!(o["transport"]["headers"]["Host"], "front.example.com");
     }
+
+    #[test]
+    fn shadowsocks_outbound_carries_v2ray_plugin_tls_only_when_the_link_does() {
+        let outbound = |uri: &str| {
+            let p = crate::share::parse_share_link(uri, None).unwrap();
+            build_singbox_outbound(&p, &AdvancedSettings::default())
+        };
+
+        let plain = outbound("ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388#plain");
+        assert_eq!(plain["type"], "shadowsocks");
+        assert!(plain.get("plugin").is_none(), "{plain}");
+        assert!(plain.get("plugin_opts").is_none(), "{plain}");
+
+        let ws_tls = outbound(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dcdn.example%3Bpath%3D%2Fws%3Btls#ws-tls",
+        );
+        assert_eq!(ws_tls["plugin"], "v2ray-plugin");
+        let opts = ws_tls["plugin_opts"].as_str().unwrap();
+        assert!(opts.split(';').any(|o| o == "tls"), "{opts}");
+
+        let ws = outbound(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Bhost%3Dcdn.example%3Bpath%3D%2Fws#ws",
+        );
+        assert_eq!(ws["plugin"], "v2ray-plugin");
+        let opts = ws["plugin_opts"].as_str().unwrap();
+        assert!(!opts.split(';').any(|o| o == "tls"), "{opts}");
+    }
 }

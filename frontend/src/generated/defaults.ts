@@ -237,7 +237,7 @@ export const EMPTY_PROFILES = {
       "pqv": "",
       "publicKey": "",
       "rejectUnknownSni": false,
-      "security": "tls",
+      "security": "none",
       "shortId": "",
       "sni": "",
       "spiderX": "",

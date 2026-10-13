@@ -565,7 +565,7 @@
         "path": ""
       },
       "tls": {
-        "security": "tls",
+        "security": "none",
         "sni": "",
         "disableSni": false,
         "fingerprint": "chrome",

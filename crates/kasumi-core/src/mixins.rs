@@ -232,6 +232,16 @@ pub struct Tls {
     pub pqv: String,
 }
 
+impl Tls {
+    /// Every knob at its default but with TLS switched off.
+    pub fn off() -> Self {
+        Self {
+            security: Security::None,
+            ..Self::default()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

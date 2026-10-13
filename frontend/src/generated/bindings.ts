@@ -1484,6 +1484,10 @@ export type Shadowsocks = {
 	meta: Meta,
 	endpoint: Endpoint,
 	transport?: Transport,
+	/**
+	 *  Shadowsocks has no TLS of its own: this is v2ray-plugin's `tls` option,
+	 *  so it stays off unless the plugin asks for it.
+	 */
 	tls?: Tls,
 	password: string,
 	method?: SsMethod,
