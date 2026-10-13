@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::contract::RunState;
 use crate::core::owns_native_tun;
 use crate::enums::{CoreEngine, TunEngine};
+use crate::state::{DEFAULT_LOCAL_SOCKS_PORT, force_socks_port};
 use crate::tun::{
     TUN_IPV4, TUN_IPV4_CIDR, TUN_IPV6, TUN_IPV6_CIDR, TUN2_IPV4, TUN2_IPV4_CIDR, TUN2_IPV6,
     TUN2_IPV6_CIDR,
@@ -36,6 +37,11 @@ pub struct DataPathState {
     pub engine: Option<CoreEngine>,
     pub tun: TunSelection,
     pub socks_port: u16,
+    /// The core's http and `force-in` ports; 0 in a record from before they were kept.
+    #[serde(default)]
+    pub http_port: u16,
+    #[serde(default)]
+    pub force_port: u16,
     /// A second external helper bridges the force-proxy tun. Absent in documents
     /// written before the field existed, which never ran one.
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
@@ -101,6 +107,8 @@ impl Default for DataPathState {
             engine: None,
             tun: TunSelection::NoTun,
             socks_port: 0,
+            http_port: 0,
+            force_port: 0,
             force_tun: false,
             started_at: None,
         }
@@ -132,6 +140,19 @@ impl DataPathState {
                 (!native).then_some(tun)
             }
         }
+    }
+
+    /// The `(socks, http, force)` ports the recorded data path listens on. A record
+    /// without them falls back to the default socks port and `http_fallback`.
+    pub fn listening_ports(&self, http_fallback: u16) -> (u16, u16, u16) {
+        let or = |port: u16, fallback: u16| if port == 0 { fallback } else { port };
+        let socks = or(self.socks_port, DEFAULT_LOCAL_SOCKS_PORT);
+        let http = or(self.http_port, http_fallback);
+        (
+            socks,
+            http,
+            or(self.force_port, force_socks_port(socks, http)),
+        )
     }
 
     /// The helper processes this data path runs; start brings up exactly these and
@@ -166,6 +187,8 @@ mod tests {
             engine: Some(CoreEngine::Xray),
             tun: TunSelection::Engine(TunEngine::Tun2socks),
             socks_port: 10808,
+            http_port: 10809,
+            force_port: 10810,
             force_tun: true,
             started_at: Some(1_700_000_000),
         }
@@ -245,6 +268,18 @@ mod tests {
             assert!(slot.ipv6_cidr().starts_with(&format!("{}/", slot.ipv6())));
         }
         assert_ne!(TunSlot::Main.ipv4(), TunSlot::Force.ipv4());
+    }
+
+    #[test]
+    fn listening_ports_fall_back_for_an_older_record() {
+        assert_eq!(sample().listening_ports(1), (10808, 10809, 10810));
+        let mut v = serde_json::to_value(sample()).unwrap();
+        let obj = v.as_object_mut().unwrap();
+        obj.remove("http_port");
+        obj.remove("force_port");
+        let old = DataPathState::from_json(v.to_string().as_bytes()).unwrap();
+        // http on socks + 2 pushes force-in to socks + 3.
+        assert_eq!(old.listening_ports(10810), (10808, 10810, 10811));
     }
 
     #[test]

@@ -184,6 +184,8 @@ impl DataPathPlan {
             engine: Some(self.engine),
             tun,
             socks_port: self.ports.socks,
+            http_port: self.ports.http,
+            force_port: self.ports.force,
             force_tun: self.external().is_some_and(|e| e.force_tun),
             ..Default::default()
         }
