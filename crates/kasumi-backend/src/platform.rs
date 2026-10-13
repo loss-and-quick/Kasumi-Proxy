@@ -3,6 +3,7 @@
 //! desktop via the native network stack) provides a [`Platform`] implementation.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -318,6 +319,15 @@ pub trait Platform: Send + Sync {
         let bin = self.core_path(engine);
         let dat = self.paths().dat_dir.to_string_lossy().into_owned();
         spawn_local_test_core(&bin.to_string_lossy(), cfg_path, log_path, &dat).await
+    }
+
+    /// TCP-connect latency to `host:port` in ms, `None` when unreachable. The
+    /// connect must leave over the physical uplink, not an active tun, or it
+    /// measures the tunnel. The default plain connect is right where this
+    /// process is never captured: the Android daemon runs as root, which the
+    /// mark chain and the sing-box tun spare, and a desktop run with no tun.
+    async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
+        crate::net::tcp_ping(host, port, timeout).await
     }
 }
 

@@ -80,11 +80,8 @@ pub async fn run_ping(platform: &dyn Platform, profile_id: &str) -> Option<i64> 
     if addr.is_empty() {
         return None;
     }
-    // A plain TCP-connect from the daemon (unprivileged), so when a tun is up this
-    // measures the path to the server *through* the active tunnel. That's a known
-    // tcp-ping limitation while connected; real-ping/speed-test run their probe
-    // through a helper-spawned core that binds the uplink and escapes the tun.
-    tcp_ping(addr, port, Duration::from_secs(3))
+    platform
+        .tcp_ping(addr, port, Duration::from_secs(3))
         .await
         .map(|ms| ms as i64)
 }
