@@ -53,6 +53,8 @@ export function errorKey(kind: SubErrorKind): DictKey {
       return "subs.error.http";
     case "decrypt":
       return "subs.error.decrypt";
+    case "urlDecrypt":
+      return "subs.error.urlDecrypt";
     case "emptyBody":
       return "subs.error.empty";
     case "unknownContent":

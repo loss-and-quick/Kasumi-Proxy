@@ -703,6 +703,8 @@ const hi = {
   "subs.error.network": "प्रदाता से संपर्क नहीं हो सका: {detail}",
   "subs.error.http": "प्रदाता ने HTTP {status} लौटाया।",
   "subs.error.decrypt": "प्रदाता का जवाब डिक्रिप्ट नहीं हो सका{key}। पिछले सर्वर रखे गए।",
+  "subs.error.urlDecrypt":
+    "इस एन्क्रिप्टेड लिंक के लिए Kasumi के पास कुंजी नहीं है। पिछले सर्वर रखे गए; प्रदाता से सामान्य लिंक माँगें।",
   "subs.error.empty": "प्रदाता ने खाली जवाब भेजा। पिछले सर्वर रखे गए।",
   "subs.error.yaml": "प्रदाता ने Clash YAML कॉन्फ़िग भेजा। कोई दूसरा User-Agent चुनें।",
   "subs.error.html": "URL ने सदस्यता की जगह एक वेब पेज लौटाया।",

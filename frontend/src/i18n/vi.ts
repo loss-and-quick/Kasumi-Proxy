@@ -711,6 +711,8 @@ const vi = {
   "subs.error.http": "Nhà cung cấp trả về HTTP {status}.",
   "subs.error.decrypt":
     "Không giải mã được phản hồi của nhà cung cấp{key}. Đã giữ các máy chủ trước đó.",
+  "subs.error.urlDecrypt":
+    "Kasumi không có khóa cho liên kết mã hóa này. Đã giữ các máy chủ trước đó; hãy xin nhà cung cấp một liên kết thường.",
   "subs.error.empty": "Nhà cung cấp gửi phản hồi trống. Đã giữ các máy chủ trước đó.",
   "subs.error.yaml": "Nhà cung cấp gửi cấu hình Clash YAML. Hãy chọn User-Agent khác.",
   "subs.error.html": "URL trả về một trang web, không phải đăng ký.",

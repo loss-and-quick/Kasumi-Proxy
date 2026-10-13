@@ -721,6 +721,8 @@ const pt = {
   "subs.error.http": "O provedor respondeu HTTP {status}.",
   "subs.error.decrypt":
     "Não foi possível descriptografar a resposta do provedor{key}. Os servidores anteriores foram mantidos.",
+  "subs.error.urlDecrypt":
+    "O Kasumi não tem chave para este link criptografado. Os servidores anteriores foram mantidos; peça ao provedor um link comum.",
   "subs.error.empty":
     "O provedor enviou uma resposta vazia. Os servidores anteriores foram mantidos.",
   "subs.error.yaml": "O provedor enviou uma configuração Clash em YAML. Escolha outro User-Agent.",

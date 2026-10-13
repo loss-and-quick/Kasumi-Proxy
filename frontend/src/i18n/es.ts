@@ -724,6 +724,8 @@ const es = {
   "subs.error.http": "El proveedor respondió HTTP {status}.",
   "subs.error.decrypt":
     "No se pudo descifrar la respuesta del proveedor{key}. Se conservaron los servidores anteriores.",
+  "subs.error.urlDecrypt":
+    "Kasumi no tiene clave para este enlace cifrado. Se conservaron los servidores anteriores; pide al proveedor un enlace normal.",
   "subs.error.empty":
     "El proveedor envió una respuesta vacía. Se conservaron los servidores anteriores.",
   "subs.error.yaml": "El proveedor envió una configuración Clash en YAML. Elige otro User-Agent.",

@@ -697,6 +697,8 @@ const zh = {
   "subs.error.network": "无法连接服务商：{detail}",
   "subs.error.http": "服务商返回 HTTP {status}。",
   "subs.error.decrypt": "无法解密服务商的响应{key}，已保留之前的服务器。",
+  "subs.error.urlDecrypt":
+    "Kasumi 没有这个加密链接的密钥，已保留之前的服务器。请向服务商索取普通链接。",
   "subs.error.empty": "服务商返回了空响应，已保留之前的服务器。",
   "subs.error.yaml": "服务商返回的是 Clash YAML 配置，请换一个 User-Agent。",
   "subs.error.html": "该链接返回的是网页，而不是订阅。",

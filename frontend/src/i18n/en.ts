@@ -727,6 +727,8 @@ const en = {
   "subs.error.network": "Couldn't reach the provider: {detail}",
   "subs.error.http": "The provider answered HTTP {status}.",
   "subs.error.decrypt": "Couldn't decrypt the provider's response{key}. Kept the previous servers.",
+  "subs.error.urlDecrypt":
+    "Kasumi has no key for this encrypted link. Kept the previous servers; ask the provider for a regular link.",
   "subs.error.empty": "The provider sent an empty response. Kept the previous servers.",
   "subs.error.yaml": "The provider sent a Clash YAML config. Choose another User-Agent.",
   "subs.error.html": "The URL returned a web page, not a subscription.",
