@@ -18,7 +18,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex as StdMutex};
 
-use reqwest::cookie::Jar;
 use tokio::sync::{Mutex, broadcast};
 
 use kasumi_core::contract::PushFrame;
@@ -26,6 +25,7 @@ use kasumi_core::mutate::{Backup, MutationIntent};
 
 use crate::commands::{self, BackupRestored, Command, CommandError, Response};
 use crate::platform::Platform;
+use crate::sub_cookies::SubCookies;
 use crate::sub_update;
 
 use self::lifecycle::{LifecycleCmd, RunningPath};
@@ -64,7 +64,7 @@ pub struct Service {
     /// `current_status` just reports it.
     pending_restart: AtomicBool,
     /// Cookies providers set, shared by every subscription fetch and nothing else.
-    sub_cookies: Arc<Jar>,
+    sub_cookies: Arc<SubCookies>,
 }
 
 impl Service {
@@ -89,7 +89,7 @@ impl Service {
             data_path_generation: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
-            sub_cookies: Arc::new(Jar::default()),
+            sub_cookies: Arc::default(),
         })
     }
 

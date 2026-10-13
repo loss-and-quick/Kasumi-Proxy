@@ -30,6 +30,8 @@ async fn run_daemon(platform: Arc<dyn Platform>) {
     // Operational logging to stderr, which service.sh redirects into daemon.log.
     // Default to info; override at runtime with RUST_LOG (e.g. RUST_LOG=debug).
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        // Its debug log prints the cookies providers set.
+        .filter_module("cookie_store", log::LevelFilter::Info)
         .format_timestamp_secs()
         .target(env_logger::Target::Stderr)
         .init();

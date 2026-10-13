@@ -11,7 +11,6 @@ use std::time::Duration;
 use chrono::{SecondsFormat, Utc};
 use happ_sub::request::{RequestProfile, RetryCause};
 use happ_sub::{MergeMode, MetaMap, RoutingAction};
-use reqwest::cookie::Jar;
 use tokio::sync::Mutex;
 
 use kasumi_core::contract::SubAppliedEvent;
@@ -40,6 +39,7 @@ use crate::identity::resolve_request;
 use crate::net::{BodyTooLarge, FetchResponse, FetchUrlOptions, HttpStatusError, fetch};
 use crate::platform::Platform;
 use crate::state::read_app_state;
+use crate::sub_cookies::SubCookies;
 use crate::sub_meta;
 use crate::updater::{self, LifecycleControl, now_ms};
 
@@ -80,7 +80,7 @@ pub async fn tick(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
     serialize: &Mutex<()>,
-    cookies: &Arc<Jar>,
+    cookies: &Arc<SubCookies>,
     last_attempt: &mut HashMap<String, i64>,
     on_applied: &(dyn Fn(SubAppliedEvent) + Send + Sync),
 ) {
@@ -166,7 +166,7 @@ pub async fn update_subscription(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
     serialize: &Mutex<()>,
-    cookies: &Arc<Jar>,
+    cookies: &Arc<SubCookies>,
     sub_id: &str,
 ) -> Result<AppState, String> {
     let Some(state) = read_app_state(platform).await else {
@@ -290,7 +290,7 @@ struct Outcome {
 async fn fetch_and_map(
     platform: &dyn Platform,
     identity: &RequestIdentityDefaults,
-    cookies: &Arc<Jar>,
+    cookies: &Arc<SubCookies>,
     sub: &Subscription,
     filter: &ProfileFilter,
     merge: MergeMode,
@@ -856,8 +856,8 @@ mod tests {
         }
     }
 
-    fn jar() -> Arc<Jar> {
-        Arc::new(Jar::default())
+    fn jar() -> Arc<SubCookies> {
+        Arc::default()
     }
 
     /// Lower-cased header lines of request `i`.
@@ -1028,6 +1028,43 @@ mod tests {
             }
             let expect = enabled.then(|| "cf=1".to_owned());
             assert_eq!(sent_header(&requests, 1, "cookie"), expect);
+        }
+    }
+
+    #[tokio::test]
+    async fn cookies_are_never_written_to_disk() {
+        const VALUE: &str = "kasumi-cookie-sentinel";
+        let (p, dir) = TestPlatform::new();
+        let cookie = format!("id={VALUE}; Path=/; Max-Age=86400");
+        let (base, requests) = serve(vec![
+            http_response(200, &[("set-cookie", &cookie)], LINK),
+            http_response(200, &[], LINK),
+        ])
+        .await;
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", &format!("{base}/a"))];
+        write_app_state(&p, &state).await.unwrap();
+        let cookies = jar();
+        for _ in 0..2 {
+            update_subscription(&p, &lifecycle(), &Mutex::new(()), &cookies, "s1")
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            sent_header(&requests, 1, "cookie"),
+            Some(format!("id={VALUE}"))
+        );
+        let mut dirs = vec![dir.path().to_path_buf()];
+        while let Some(d) = dirs.pop() {
+            for entry in std::fs::read_dir(&d).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else {
+                    let text = String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned();
+                    assert!(!text.contains(VALUE), "{} holds a cookie", path.display());
+                }
+            }
         }
     }
 
