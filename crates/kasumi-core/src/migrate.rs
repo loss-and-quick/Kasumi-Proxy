@@ -81,11 +81,32 @@ fn stored_version(v: &Value) -> u64 {
     }
 }
 
-/// v0 → v1: nest each profile's field groups and tag its transport on `kind`.
+/// v0 → v1: nest each profile's field groups and tag its transport on `kind`, and
+/// convert subscription intervals from hours to minutes.
 fn migrate_v0_to_v1(v: &mut Value) {
     if let Some(arr) = v.get_mut("profiles").and_then(Value::as_array_mut) {
         for p in arr {
             migrate_profile(p);
+        }
+    }
+    // A document carrying the module `version` stamp was written after the UI had
+    // already converted it, so multiplying again would turn 6 h into 21600 min.
+    let converted = v
+        .get("version")
+        .and_then(Value::as_str)
+        .is_some_and(|version| !version.is_empty());
+    if converted {
+        return;
+    }
+    let Some(subs) = v.get_mut("subscriptions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for sub in subs {
+        let Some(interval) = sub.get_mut("interval") else {
+            continue;
+        };
+        if let Some(minutes) = interval.as_i64().and_then(|hours| hours.checked_mul(60)) {
+            *interval = Value::from(minutes);
         }
     }
 }
@@ -682,6 +703,57 @@ mod tests {
         let sub = &doc["subscriptions"][0];
         assert_eq!(sub["manualTitle"], json!(false));
         assert_eq!(sub["request"], json!({ "sendHwid": false }));
+    }
+
+    fn intervals(doc: &Value) -> Vec<Value> {
+        doc["subscriptions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["interval"].clone())
+            .collect()
+    }
+
+    #[test]
+    fn v0_to_v1_converts_hour_intervals_to_minutes() {
+        let mut doc = json!({ "profiles": [], "subscriptions": [
+            { "id": "a", "interval": 6 },
+            { "id": "b", "interval": 0 },
+            { "id": "c" },
+            { "id": "d", "interval": "6" },
+        ] });
+        migrate_app_state(&mut doc);
+        assert_eq!(
+            intervals(&doc),
+            [json!(360), json!(0), Value::Null, json!("6")]
+        );
+
+        // Already stamped: the ladder starts past v0, so a second pass is a no-op.
+        let again = doc.clone();
+        migrate_app_state(&mut doc);
+        assert_eq!(doc, again);
+    }
+
+    #[test]
+    fn versioned_document_keeps_its_minute_intervals() {
+        // The UI converted and stamped `version` before schemaVersion existed.
+        let mut doc = json!({ "version": "v0.3.2", "profiles": [],
+                              "subscriptions": [{ "id": "a", "interval": 360 }] });
+        migrate_app_state(&mut doc);
+        assert_eq!(intervals(&doc), [json!(360)]);
+        // An empty stamp is as good as none.
+        let mut doc = json!({ "version": "", "profiles": [],
+                              "subscriptions": [{ "id": "a", "interval": 6 }] });
+        migrate_app_state(&mut doc);
+        assert_eq!(intervals(&doc), [json!(360)]);
+    }
+
+    #[test]
+    fn stamped_document_without_a_module_version_keeps_its_intervals() {
+        let mut doc = json!({ "schemaVersion": 1, "profiles": [],
+                              "subscriptions": [{ "id": "a", "interval": 360 }] });
+        migrate_app_state(&mut doc);
+        assert_eq!(intervals(&doc), [json!(360)]);
     }
 
     #[test]

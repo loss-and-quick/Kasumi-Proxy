@@ -315,19 +315,20 @@ describe("useAppStore", () => {
     );
   });
 
-  it("hydrate migrates legacy subscription interval from hours to minutes", async () => {
+  it("hydrate does not touch subscription intervals of an unversioned state", async () => {
+    // The backend read path owns the hours → minutes step; whatever it returns is final.
     bridge.readState.mockResolvedValue(
-      makeState({ subscriptions: [makeSub({ id: "s1", interval: 6 })] }), // no version → legacy
+      makeState({ subscriptions: [makeSub({ id: "s1", interval: 6 })] }), // no version
     );
 
     await useAppStore.getState().hydrate();
 
-    expect(useAppStore.getState().subscriptions[0].interval).toBe(360);
+    expect(useAppStore.getState().subscriptions[0].interval).toBe(6);
     const replaces = bridge.mutate.mock.calls
       .map((c) => c[0])
       .filter((i): i is Extract<typeof i, { kind: "replaceState" }> => i.kind === "replaceState");
     const replace = replaces[replaces.length - 1];
-    expect(replace?.state.subscriptions[0].interval).toBe(360);
+    expect(replace?.state.subscriptions[0].interval).toBe(6);
     expect(replace?.state.version).toBeTruthy();
   });
 
