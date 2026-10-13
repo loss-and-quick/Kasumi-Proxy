@@ -170,6 +170,22 @@ export async function checkSubscriptionUrl(
   return { kind: "other" };
 }
 
+/** The name a subscription gets from its address when none is typed: the host it
+ *  fetches from, or the encrypted-link name. A `happ://` link that isn't read yet,
+ *  or isn't a subscription, gives none: its scheme words (`add`, `routing`) are no
+ *  name. */
+export function subscriptionNameFrom(
+  url: string,
+  check: SubscriptionUrlCheck | null,
+  encryptedName: string,
+): string {
+  if (check?.kind === "url") return check.encrypted ? encryptedName : hostOf(check.url);
+  if (check?.kind === "routing" || check?.kind === "unsupported") return "";
+  return isHappLink(url) ? "" : hostOf(url);
+}
+
+export const isHappLink = (text: string) => /^\s*happ:\/\//i.test(text);
+
 /** Links pasted where JSON is expected: routing profiles alone, a `happ://` link
  *  Kasumi skips, or anything else the add sheet takes. */
 export type LinkInput =

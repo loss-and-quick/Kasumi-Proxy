@@ -13,14 +13,19 @@ import {
   UpdateModeControl,
 } from "../../components";
 import { useT } from "../../i18n";
-import { checkSubscriptionUrl, UNSUPPORTED_TEXT } from "../../lib/add-input";
+import {
+  checkSubscriptionUrl,
+  isHappLink,
+  type SubscriptionUrlCheck,
+  subscriptionNameFrom,
+  UNSUPPORTED_TEXT,
+} from "../../lib/add-input";
 import type { Subscription } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import {
   BASE_GROUP_ID,
   type GroupChoice,
   groupChoiceReady,
-  hostOf,
   providerConfigsOf,
 } from "../../lib/groups";
 import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
@@ -50,6 +55,9 @@ export function SubEditSheet({
   // and the address behind it once the user asks to see it.
   const [encrypted, setEncrypted] = useState<boolean | null>(false);
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [urlCheck, setUrlCheck] = useState<{ url: string; check: SubscriptionUrlCheck } | null>(
+    null,
+  );
   const notify = useAppStore((s) => s.notify);
 
   useEffect(() => {
@@ -106,13 +114,37 @@ export function SubEditSheet({
     });
   }, [open, sub]);
 
+  // A typed `happ://` address is read by the backend before it can name anything.
+  const typedUrl = d?.url.trim() ?? "";
+  useEffect(() => {
+    if (!isHappLink(typedUrl)) return;
+    let alive = true;
+    const timer = window.setTimeout(async () => {
+      const check = await checkSubscriptionUrl(typedUrl, bridge);
+      if (alive) setUrlCheck({ url: typedUrl, check });
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [typedUrl]);
+
   if (!open || !d) return null;
   const set = <K extends keyof Subscription>(k: K, v: Subscription[K]) =>
     setD((s) => (s ? { ...s, [k]: v } : s));
   // The saved encrypted link, unless the user typed another address.
   const keepsLink = !!sub && encrypted === true && d.url === sub.url;
+  const encryptedName = t("add.encryptedName");
   // The name the subscription gets when the field is left empty.
-  const defaultName = d.provider?.title || (keepsLink ? t("add.encryptedName") : hostOf(d.url));
+  const defaultName =
+    d.provider?.title ||
+    (keepsLink
+      ? encryptedName
+      : subscriptionNameFrom(
+          d.url,
+          urlCheck?.url === typedUrl ? urlCheck.check : null,
+          encryptedName,
+        ));
   const name = d.remarks.trim() || defaultName;
   const providerHours = d.providerIntervalHours ?? null;
   const ownInterval = providerHours == null || d.intervalOverride;
@@ -130,8 +162,7 @@ export function SubEditSheet({
       else if (checked.kind === "url") {
         url = checked.url;
         if (!d.remarks.trim())
-          saveName =
-            d.provider?.title || (checked.encrypted ? t("add.encryptedName") : hostOf(url));
+          saveName = d.provider?.title || subscriptionNameFrom(url, checked, encryptedName);
       }
     }
     if (!url) nextErrors.url = t("subs.edit.validationUrl");

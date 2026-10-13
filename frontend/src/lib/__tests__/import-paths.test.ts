@@ -11,6 +11,7 @@ import {
   linkInputText,
   resolveAddText,
   resolveLinkInput,
+  subscriptionNameFrom,
   withClipboard,
 } from "../add-input";
 import type { ResolvedImport } from "../bridge";
@@ -227,5 +228,28 @@ describe("links pasted where JSON is expected", () => {
       parseShareLinks: async () => [],
     };
     expect(await resolveLinkInput("not a backup", none)).toBeNull();
+  });
+});
+
+describe("name a typed subscription URL suggests", () => {
+  const enc = "Encrypted subscription";
+  const nameOf = async (url: string) =>
+    subscriptionNameFrom(url, await checkSubscriptionUrl(url, mockBridge), enc);
+
+  it("names a happ:// link after what it resolves to, never its scheme word", async () => {
+    expect(await nameOf(SAMPLES.add)).toBe("sub.provider.example");
+    expect(await nameOf(SAMPLES.crypt5)).toBe(enc);
+    expect(await nameOf(SAMPLES.routing)).toBe("");
+    expect(await nameOf(SAMPLES.control)).toBe("");
+  });
+
+  it("suggests nothing for a happ:// link the backend hasn't read yet", () => {
+    expect(subscriptionNameFrom(SAMPLES.add, null, enc)).toBe("");
+    expect(subscriptionNameFrom(` ${SAMPLES.routing}`, null, enc)).toBe("");
+  });
+
+  it("names a plain URL after its host before and after the check", async () => {
+    expect(subscriptionNameFrom("https://a.example/s", null, enc)).toBe("a.example");
+    expect(await nameOf("https://a.example/s")).toBe("a.example");
   });
 });
