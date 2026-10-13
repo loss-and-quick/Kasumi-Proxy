@@ -547,12 +547,20 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "fakeDns": false,
   "fragment": false,
   "fragmentPackets": "tlshello",
+  "identityNoticeDismissed": false,
   "logRotateMaxKb": 512,
   "mux": false,
   "muxConcurrency": 8,
   "pingConcurrency": 3,
   "preferIpv6": false,
   "proxyMode": "tun",
+  "requestIdentity": {
+    "androidUser": 0,
+    "cookieJar": true,
+    "hwidInCookie": false,
+    "sendHwid": true,
+    "userAgent": ""
+  },
   "routeOnly": false,
   "routingMode": "global",
   "singboxFragment": "record",
@@ -576,6 +584,7 @@ export const DEFAULT_LOG_ROTATE_KB = 512;
 export const DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
 export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=10000000";
 export const DEFAULT_ROUTE_ID = "route-default";
+export const HAPP_VERSION = "4.7.1";
 
 /* Editor dropdown option lists (wire values, in declaration order). */
 export const PROTOCOL_OPTS: Protocol[] = ["vless","vmess","trojan","shadowsocks","socks","http","wireguard","hysteria2","tuic","anytls","naive","shadowtls","custom"];

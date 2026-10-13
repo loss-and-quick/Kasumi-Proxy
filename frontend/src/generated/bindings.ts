@@ -156,6 +156,9 @@ export type AdvancedSettings_Deserialize = {
 	 *  host-routes — so the same setting works on every engine.
 	 */
 	tunExcludeAddresses?: string | null,
+	requestIdentity?: RequestIdentityDefaults_Deserialize,
+	/**  The notice about the Happ-style request identity was dismissed. */
+	identityNoticeDismissed?: boolean,
 };
 
 /**
@@ -256,6 +259,9 @@ export type AdvancedSettings_Serialize = {
 	 *  host-routes — so the same setting works on every engine.
 	 */
 	tunExcludeAddresses?: string | null,
+	requestIdentity: RequestIdentityDefaults_Serialize,
+	/**  The notice about the Happ-style request identity was dismissed. */
+	identityNoticeDismissed: boolean,
 };
 
 export type Anytls = {
@@ -931,6 +937,43 @@ export type QuicTransport = {
 	headerType?: HeaderType,
 };
 
+/**  Settings-wide request identity; each subscription may override any part of it. */
+export type RequestIdentityDefaults = RequestIdentityDefaults_Serialize | RequestIdentityDefaults_Deserialize;
+
+/**  Settings-wide request identity; each subscription may override any part of it. */
+export type RequestIdentityDefaults_Deserialize = {
+	/**  Empty sends Happ's User-Agent. */
+	userAgent?: string,
+	sendHwid?: boolean,
+	hwidInCookie?: boolean,
+	/**  Keep the cookies providers set, per host, across subscription fetches. */
+	cookieJar?: boolean,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+	/**  Android user whose SSAID key derives the HWID; each user has its own. */
+	androidUser?: number,
+};
+
+/**  Settings-wide request identity; each subscription may override any part of it. */
+export type RequestIdentityDefaults_Serialize = {
+	/**  Empty sends Happ's User-Agent. */
+	userAgent: string,
+	sendHwid: boolean,
+	hwidInCookie: boolean,
+	/**  Keep the cookies providers set, per host, across subscription fetches. */
+	cookieJar: boolean,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+	/**  Android user whose SSAID key derives the HWID; each user has its own. */
+	androidUser: number,
+};
+
 /**  One reply. The tag `kind` selects the payload shape under `value`. */
 export type Response = Response_Serialize | Response_Deserialize;
 
@@ -1215,6 +1258,40 @@ export type SubErrorKind = { kind: "network" } | { kind: "http"; status: number 
 /**  A malformed envelope (server JSON, routing or deeplink). */
 { kind: "invalid" };
 
+/**
+ *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
+ *  `Subscription::user_agent`.
+ */
+export type SubRequestOverrides = SubRequestOverrides_Serialize | SubRequestOverrides_Deserialize;
+
+/**
+ *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
+ *  `Subscription::user_agent`.
+ */
+export type SubRequestOverrides_Deserialize = {
+	sendHwid?: boolean | null,
+	hwidInCookie?: boolean | null,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+};
+
+/**
+ *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
+ *  `Subscription::user_agent`.
+ */
+export type SubRequestOverrides_Serialize = {
+	sendHwid?: boolean | null,
+	hwidInCookie?: boolean | null,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+};
+
 /**  Something skipped while ingesting; the rest of the body was used. */
 export type SubWarning = { kind: "skippedLines"; count: number; sample: string } | { kind: "unsupportedLinks"; count: number } | { kind: "invalidRouting"; message: string } | { kind: "invalidFragment" } | { kind: "legacyParser" };
 
@@ -1255,6 +1332,8 @@ export type Subscription_Deserialize = {
 	bodyEncrypted?: boolean,
 	warnings?: SubWarning[],
 	lastErrorKind?: SubErrorKind | null,
+	/**  Where this subscription's request identity departs from the Settings one. */
+	request?: SubRequestOverrides_Deserialize,
 };
 
 /**  A subscription source (`SubscriptionSchema`). */
@@ -1288,6 +1367,8 @@ export type Subscription_Serialize = {
 	bodyEncrypted: boolean,
 	warnings?: SubWarning[],
 	lastErrorKind?: SubErrorKind | null,
+	/**  Where this subscription's request identity departs from the Settings one. */
+	request?: SubRequestOverrides_Serialize,
 };
 
 /**  Plain TCP, optionally wearing the HTTP fake-header obfuscation. */

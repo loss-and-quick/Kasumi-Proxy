@@ -20,6 +20,21 @@ export const RoutingMode_SerializeSchema = z.union([z.literal("custom"), z.liter
 export type RoutingMode_Serialize = z.infer<typeof RoutingMode_SerializeSchema>;
 
 
+export const RequestIdentityDefaults_SerializeSchema = z.object({
+	userAgent: z.string(),
+	sendHwid: z.boolean(),
+	hwidInCookie: z.boolean(),
+	cookieJar: z.boolean(),
+	hwid: z.string().nullable().optional(),
+	deviceOs: z.string().nullable().optional(),
+	osVersion: z.string().nullable().optional(),
+	deviceModel: z.string().nullable().optional(),
+	locale: z.string().nullable().optional(),
+	androidUser: z.number(),
+});
+export type RequestIdentityDefaults_Serialize = z.infer<typeof RequestIdentityDefaults_SerializeSchema>;
+
+
 export const ProxyModeSchema = z.union([z.literal("pac"), z.literal("proxy-only"), z.literal("system"), z.literal("tun")]);
 export type ProxyMode = z.infer<typeof ProxyModeSchema>;
 
@@ -111,12 +126,29 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	tunTcpBufferSize: z.number(),
 	tunUdpRecvBufferSize: z.number(),
 	tunExcludeAddresses: z.string().nullable().optional(),
+	requestIdentity: RequestIdentityDefaults_SerializeSchema,
+	identityNoticeDismissed: z.boolean(),
 });
 export type AdvancedSettings_Serialize = z.infer<typeof AdvancedSettings_SerializeSchema>;
 
 
 export const RoutingMode_DeserializeSchema = z.union([z.literal("bypass-lan"), z.literal("custom"), z.literal("global"), z.literal("rules")]);
 export type RoutingMode_Deserialize = z.infer<typeof RoutingMode_DeserializeSchema>;
+
+
+export const RequestIdentityDefaults_DeserializeSchema = z.object({
+	userAgent: z.string().optional(),
+	sendHwid: z.boolean().optional(),
+	hwidInCookie: z.boolean().optional(),
+	cookieJar: z.boolean().optional(),
+	hwid: z.string().nullable().optional(),
+	deviceOs: z.string().nullable().optional(),
+	osVersion: z.string().nullable().optional(),
+	deviceModel: z.string().nullable().optional(),
+	locale: z.string().nullable().optional(),
+	androidUser: z.number().optional(),
+});
+export type RequestIdentityDefaults_Deserialize = z.infer<typeof RequestIdentityDefaults_DeserializeSchema>;
 
 
 export const AdvancedSettings_DeserializeSchema = z.object({
@@ -174,6 +206,8 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	tunTcpBufferSize: z.number().optional(),
 	tunUdpRecvBufferSize: z.number().optional(),
 	tunExcludeAddresses: z.string().nullable().optional(),
+	requestIdentity: RequestIdentityDefaults_DeserializeSchema.optional(),
+	identityNoticeDismissed: z.boolean().optional(),
 });
 export type AdvancedSettings_Deserialize = z.infer<typeof AdvancedSettings_DeserializeSchema>;
 
@@ -290,6 +324,18 @@ export const SubWarningSchema = z.union([z.object({
 export type SubWarning = z.infer<typeof SubWarningSchema>;
 
 
+export const SubRequestOverrides_SerializeSchema = z.object({
+	sendHwid: z.boolean().nullable().optional(),
+	hwidInCookie: z.boolean().nullable().optional(),
+	hwid: z.string().nullable().optional(),
+	deviceOs: z.string().nullable().optional(),
+	osVersion: z.string().nullable().optional(),
+	deviceModel: z.string().nullable().optional(),
+	locale: z.string().nullable().optional(),
+});
+export type SubRequestOverrides_Serialize = z.infer<typeof SubRequestOverrides_SerializeSchema>;
+
+
 export const PayloadKindSchema = z.union([z.literal("jsonArray"), z.literal("singBoxJson"), z.literal("xrayJson")]);
 export type PayloadKind = z.infer<typeof PayloadKindSchema>;
 
@@ -384,6 +430,7 @@ export const Subscription_SerializeSchema = z.object({
 	bodyEncrypted: z.boolean(),
 	warnings: z.array(SubWarningSchema).optional(),
 	lastErrorKind: SubErrorKindSchema.nullable().optional(),
+	request: SubRequestOverrides_SerializeSchema.optional(),
 });
 export type Subscription_Serialize = z.infer<typeof Subscription_SerializeSchema>;
 
@@ -782,6 +829,18 @@ export const AppState_SerializeSchema = z.object({
 export type AppState_Serialize = z.infer<typeof AppState_SerializeSchema>;
 
 
+export const SubRequestOverrides_DeserializeSchema = z.object({
+	sendHwid: z.boolean().nullable().optional(),
+	hwidInCookie: z.boolean().nullable().optional(),
+	hwid: z.string().nullable().optional(),
+	deviceOs: z.string().nullable().optional(),
+	osVersion: z.string().nullable().optional(),
+	deviceModel: z.string().nullable().optional(),
+	locale: z.string().nullable().optional(),
+});
+export type SubRequestOverrides_Deserialize = z.infer<typeof SubRequestOverrides_DeserializeSchema>;
+
+
 export const TrafficInfo_DeserializeSchema = z.object({
 	upload: z.number(),
 	download: z.number(),
@@ -838,6 +897,7 @@ export const Subscription_DeserializeSchema = z.object({
 	bodyEncrypted: z.boolean().optional(),
 	warnings: z.array(SubWarningSchema).optional(),
 	lastErrorKind: SubErrorKindSchema.nullable().optional(),
+	request: SubRequestOverrides_DeserializeSchema.optional(),
 });
 export type Subscription_Deserialize = z.infer<typeof Subscription_DeserializeSchema>;
 
@@ -1330,6 +1390,10 @@ export const ProviderNoticeSchema = z.union([ProviderNotice_DeserializeSchema, P
 export type ProviderNotice = z.infer<typeof ProviderNoticeSchema>;
 
 
+export const RequestIdentityDefaultsSchema = z.union([RequestIdentityDefaults_DeserializeSchema, RequestIdentityDefaults_SerializeSchema]);
+export type RequestIdentityDefaults = z.infer<typeof RequestIdentityDefaultsSchema>;
+
+
 export const WsInfoSchema = z.object({
 	port: z.number(),
 	token: z.string(),
@@ -1501,6 +1565,10 @@ export const SubAppliedEventSchema = z.object({
 	count: z.number(),
 });
 export type SubAppliedEvent = z.infer<typeof SubAppliedEventSchema>;
+
+
+export const SubRequestOverridesSchema = z.union([SubRequestOverrides_DeserializeSchema, SubRequestOverrides_SerializeSchema]);
+export type SubRequestOverrides = z.infer<typeof SubRequestOverridesSchema>;
 
 
 export const SubscriptionSchema = z.union([Subscription_DeserializeSchema, Subscription_SerializeSchema]);

@@ -20,6 +20,7 @@
 //! - [`share`] — share-link parse/build
 //! - [`sub_ingest`] — subscription responses to profiles and provider meta
 //! - [`sub_policy`] — which provider meta is applied to a subscription, and how
+//! - [`request_identity`] — the identity a subscription fetch sends, built by happ-sub
 //! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
 
 pub mod app_process;
@@ -38,6 +39,7 @@ pub mod mutate;
 pub mod normalize;
 pub mod outbound_bind;
 pub mod profile;
+pub mod request_identity;
 pub mod route;
 pub mod share;
 pub mod singbox_config;

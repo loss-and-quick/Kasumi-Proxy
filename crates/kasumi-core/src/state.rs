@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::contract::FetchMode;
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::{Profile, Protocol};
+pub use crate::request_identity::{RequestIdentityDefaults, SubRequestOverrides};
 use crate::route::{Route, RuleBlock};
 pub use crate::sub_meta_types::{
     ContentHint, NoticeColor, PayloadKind, ProviderInfo, ProviderNotice, SubErrorKind, SubWarning,
@@ -117,6 +118,9 @@ pub struct Subscription {
     pub warnings: Vec<SubWarning>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error_kind: Option<SubErrorKind>,
+    /// Where this subscription's request identity departs from the Settings one.
+    #[serde(default, skip_serializing_if = "SubRequestOverrides::is_empty")]
+    pub request: SubRequestOverrides,
 }
 
 /// Transport scope of a routing rule.
@@ -426,6 +430,10 @@ pub struct AdvancedSettings {
     /// host-routes — so the same setting works on every engine.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tun_exclude_addresses: Option<String>,
+    // ---- Subscription requests ----
+    pub request_identity: RequestIdentityDefaults,
+    /// The notice about the Happ-style request identity was dismissed.
+    pub identity_notice_dismissed: bool,
 }
 
 impl Default for AdvancedSettings {
@@ -487,6 +495,8 @@ impl Default for AdvancedSettings {
             tun_tcp_buffer_size: 65_536,
             tun_udp_recv_buffer_size: 524_288,
             tun_exclude_addresses: None,
+            request_identity: RequestIdentityDefaults::default(),
+            identity_notice_dismissed: false,
         }
     }
 }

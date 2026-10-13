@@ -24,7 +24,7 @@ type MigrationStep = fn(&mut Value);
 
 /// The ordered migration ladder. Index `i` lifts version `i` to `i + 1`; append a
 /// new step (never reorder or delete) whenever the on-disk schema changes.
-const MIGRATIONS: &[MigrationStep] = &[migrate_v0_to_v1, migrate_v1_to_v2];
+const MIGRATIONS: &[MigrationStep] = &[migrate_v0_to_v1, migrate_v1_to_v2, migrate_v2_to_v3];
 
 /// The schema version the current code writes (the length of the ladder).
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -73,6 +73,30 @@ fn migrate_v1_to_v2(v: &mut Value) {
         let url = obj.get("url").and_then(Value::as_str).unwrap_or("");
         let manual = !remarks.is_empty() && remarks != default_sub_name(url);
         obj.insert("manualTitle".into(), Value::Bool(manual));
+    }
+}
+
+/// v2 → v3: fetches now send Happ's device headers by default. A subscription with
+/// a User-Agent the user typed keeps sending what it sent before, so it opts out.
+fn migrate_v2_to_v3(v: &mut Value) {
+    let Some(subs) = v.get_mut("subscriptions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for sub in subs {
+        let Some(obj) = sub.as_object_mut() else {
+            continue;
+        };
+        let custom_ua = obj
+            .get("userAgent")
+            .and_then(Value::as_str)
+            .is_some_and(|ua| !ua.trim().is_empty());
+        if !custom_ua {
+            continue;
+        }
+        let request = obj.entry("request").or_insert_with(|| json!({}));
+        if let Some(request) = request.as_object_mut() {
+            request.entry("sendHwid").or_insert(Value::Bool(false));
+        }
     }
 }
 
@@ -501,8 +525,8 @@ mod tests {
             }]
         });
         migrate_app_state(&mut doc);
-        assert_eq!(SCHEMA_VERSION, 2);
-        assert_eq!(doc["schemaVersion"], json!(2));
+        assert_eq!(SCHEMA_VERSION, 3);
+        assert_eq!(doc["schemaVersion"], json!(3));
         assert_eq!(doc["profiles"][0]["transport"]["kind"], "ws");
         assert!(doc["profiles"][0]["meta"].is_object());
 
@@ -524,7 +548,7 @@ mod tests {
             { "id": "c", "remarks": "", "url": "https://sub.example.org/s/3" },
         ]));
         migrate_app_state(&mut doc);
-        assert_eq!(doc["schemaVersion"], json!(2));
+        assert_eq!(doc["schemaVersion"], json!(3));
         let manual: Vec<&Value> = doc["subscriptions"]
             .as_array()
             .unwrap()
@@ -545,6 +569,27 @@ mod tests {
         migrate_app_state(&mut doc);
         assert_eq!(doc["subscriptions"][0]["manualTitle"], json!(false));
         assert_eq!(doc["subscriptions"][1]["manualTitle"], json!(false));
+    }
+
+    #[test]
+    fn v2_to_v3_custom_user_agent_keeps_device_headers_off() {
+        let mut doc = json!({ "schemaVersion": 2, "profiles": [], "subscriptions": [
+            { "id": "a", "userAgent": "" },
+            { "id": "b", "userAgent": "v2rayNG/1.10.16" },
+            { "id": "c" },
+        ] });
+        migrate_app_state(&mut doc);
+        let subs = &doc["subscriptions"];
+        assert!(subs[0].get("request").is_none());
+        assert_eq!(subs[1]["request"], json!({ "sendHwid": false }));
+        assert!(subs[2].get("request").is_none());
+        let sub: crate::state::Subscription = serde_json::from_value(json!({
+            "id": "b", "remarks": "", "url": "", "enabled": true, "autoUpdate": false,
+            "interval": 60, "allowInsecure": false, "userAgent": "x", "filter": "",
+            "lastUpdated": "", "count": 0, "request": subs[1]["request"].clone(),
+        }))
+        .unwrap();
+        assert_eq!(sub.request.send_hwid, Some(false));
     }
 
     #[test]
