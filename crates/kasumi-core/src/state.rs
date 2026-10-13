@@ -12,8 +12,9 @@ use crate::profile::{Profile, Protocol};
 pub use crate::request_identity::{RequestIdentityDefaults, SubRequestOverrides};
 use crate::route::{Route, RuleBlock};
 pub use crate::sub_meta_types::{
-    ContentHint, NoticeColor, PayloadKind, ProviderInfo, ProviderNotice, SubErrorKind, SubWarning,
-    TrafficInfo,
+    AuditEntry, AuditOutcome, ChangeAction, ChangeDecision, ContentHint, MetaRisk, NoticeColor,
+    PayloadKind, PendingChange, ProviderInfo, ProviderNotice, RoutingImport, SubErrorKind,
+    SubWarning, TrafficInfo, TunnelSetting,
 };
 
 // Default local inbound ports used when settings leave them unset.
@@ -121,6 +122,21 @@ pub struct Subscription {
     /// Where this subscription's request identity departs from the Settings one.
     #[serde(default, skip_serializing_if = "SubRequestOverrides::is_empty")]
     pub request: SubRequestOverrides,
+    /// Provider keys that wait for the user's answer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_changes: Vec<PendingChange>,
+    /// The user's answers, so an answered value is not asked about again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decisions: Vec<ChangeDecision>,
+    /// Newest first, at most [`crate::sub_policy::AUDIT_MAX`] entries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub audit: Vec<AuditEntry>,
+    /// The accepted `fallback-url`, fetched when the subscription URL fails.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_url: Option<String>,
+    /// `allow_insecure` came from an accepted provider `insecure`, not from the URL.
+    #[serde(default)]
+    pub insecure_by_provider: bool,
 }
 
 /// Transport scope of a routing rule.

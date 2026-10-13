@@ -41,6 +41,9 @@ pub struct RuleBlock {
     pub name: String,
     #[serde(default)]
     pub rules: Vec<RoutingRule>,
+    /// The subscription whose provider routing this block was imported from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_sub_id: Option<String>,
 }
 
 /// One block's place in a route. Turning it off keeps it in place (and in
@@ -75,6 +78,9 @@ pub struct Route {
     /// profile id.
     #[serde(default = "proxy_outbound")]
     pub final_outbound: String,
+    /// The subscription whose provider routing this route was imported from.
+    #[serde(default)]
+    pub source_sub_id: Option<String>,
 }
 
 fn enabled_by_default() -> bool {
@@ -95,6 +101,7 @@ pub fn default_route() -> Route {
         groups: Vec::new(),
         blocks: Vec::new(),
         final_outbound: PROXY_OUTBOUND.into(),
+        source_sub_id: None,
     }
 }
 
@@ -214,6 +221,7 @@ pub fn fold_legacy_rules(state: &mut AppState) {
         id: id.clone(),
         name: LEGACY_BLOCK_NAME.into(),
         rules: std::mem::take(&mut state.routing_rules),
+        source_sub_id: None,
     });
     state.routes[0].blocks.push(RouteBlockRef {
         block_id: id,
@@ -317,6 +325,7 @@ mod tests {
             id: id.into(),
             name: id.into(),
             rules: rules.iter().map(|r| rule(r, "direct")).collect(),
+            source_sub_id: None,
         }
     }
 
