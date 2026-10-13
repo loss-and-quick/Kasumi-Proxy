@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use crate::contract::RunState;
 use crate::core::owns_native_tun;
 use crate::enums::{CoreEngine, TunEngine};
+use crate::tun::{
+    TUN_IPV4, TUN_IPV4_CIDR, TUN_IPV6, TUN_IPV6_CIDR, TUN2_IPV4, TUN2_IPV4_CIDR, TUN2_IPV6,
+    TUN2_IPV6_CIDR,
+};
 
 /// The TUN a running data-path uses. `NoTun` (proxy-only/system/pac modes) is a first
 /// class value, not an absent marker — so "no tun" and "no data-path known" never
@@ -49,6 +53,36 @@ pub enum TunSlot {
     Main,
     /// The force-proxy apps' tun.
     Force,
+}
+
+impl TunSlot {
+    pub fn ipv4(self) -> &'static str {
+        match self {
+            Self::Main => TUN_IPV4,
+            Self::Force => TUN2_IPV4,
+        }
+    }
+
+    pub fn ipv4_cidr(self) -> &'static str {
+        match self {
+            Self::Main => TUN_IPV4_CIDR,
+            Self::Force => TUN2_IPV4_CIDR,
+        }
+    }
+
+    pub fn ipv6(self) -> &'static str {
+        match self {
+            Self::Main => TUN_IPV6,
+            Self::Force => TUN2_IPV6,
+        }
+    }
+
+    pub fn ipv6_cidr(self) -> &'static str {
+        match self {
+            Self::Main => TUN_IPV6_CIDR,
+            Self::Force => TUN2_IPV6_CIDR,
+        }
+    }
 }
 
 /// One external helper process a data path runs.
@@ -202,6 +236,15 @@ mod tests {
         v.as_object_mut().unwrap().remove("force_tun");
         let doc = DataPathState::from_json(v.to_string().as_bytes()).unwrap();
         assert!(!doc.force_tun);
+    }
+
+    #[test]
+    fn each_slot_carries_its_own_addresses() {
+        for slot in [TunSlot::Main, TunSlot::Force] {
+            assert!(slot.ipv4_cidr().starts_with(&format!("{}/", slot.ipv4())));
+            assert!(slot.ipv6_cidr().starts_with(&format!("{}/", slot.ipv6())));
+        }
+        assert_ne!(TunSlot::Main.ipv4(), TunSlot::Force.ipv4());
     }
 
     #[test]

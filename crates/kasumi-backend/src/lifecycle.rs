@@ -12,13 +12,12 @@ use regex::Regex;
 use tokio::process::Child;
 
 use kasumi_core::core_config::CoreConfig;
+use kasumi_core::data_path_state::TunSlot;
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
-use kasumi_core::tun2socks_config::build_tun2socks_config;
-// Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
-use kasumi_core::tun as tun_addr;
 use kasumi_core::tun::TunOptions;
+use kasumi_core::tun2socks_config::build_tun2socks_config;
 
 use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
@@ -351,15 +350,15 @@ async fn spawn_tun2socks(s: &TunSpawn<'_>) -> std::io::Result<Child> {
 
 /// Everything needed to bring up one external TUN engine, gathered so adding an
 /// engine is a single match arm. `bin` is the engine binary (resolved per-platform);
-/// `cfg_path` is where the engine's rendered config is written; `ipv4`/`ipv6` are
-/// the host addresses a self-addressing engine assigns to the tun it
-/// creates itself; `stack` is the sing-box tun stack (only the sidecar sing-box reads
+/// `cfg_path` is where the engine's rendered config is written; `slot` names the
+/// addresses a self-addressing engine gives the tun it creates, IPv6 too when
+/// `ipv6`; `stack` is the sing-box tun stack (only the sidecar sing-box reads
 /// it); `opts` carries the resolved tuning.
 pub struct TunSpawn<'a> {
     pub bin: &'a str,
     pub iface: &'a str,
-    pub ipv4: &'a str,
-    pub ipv6: Option<&'a str>,
+    pub slot: TunSlot,
+    pub ipv6: bool,
     pub socks_port: u16,
     pub log_path: &'a Path,
     pub fwmark: Option<u32>,
@@ -384,7 +383,8 @@ pub async fn spawn_tun_engine(tun: TunEngine, s: &TunSpawn<'_>) -> std::io::Resu
 /// hev creates and addresses its own tun from a YAML config: render it, write it
 /// next to the runtime state, then run `<hev_bin> <cfg>`.
 async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
-    let yaml = build_hev_config(s.iface, s.ipv4, s.ipv6, s.socks_port, s.fwmark, s.opts);
+    let ipv6 = s.ipv6.then(|| s.slot.ipv6());
+    let yaml = build_hev_config(s.iface, s.slot.ipv4(), ipv6, s.socks_port, s.fwmark, s.opts);
     write_text(s.cfg_path, &yaml).await?;
     let argv = [s.bin.to_owned(), s.cfg_path.to_string_lossy().into_owned()];
     spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await
@@ -395,24 +395,10 @@ async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
 /// it terminates a userspace tun and forwards to the core's SOCKS; the OS routing the
 /// shell installs drives traffic in. Uses sing-box's TUN stack, hence the `stack`.
 async fn spawn_singbox_bridge(s: &TunSpawn<'_>) -> std::io::Result<Child> {
-    // Host address → its CIDR (single-sourced in `kasumi_core::tun`). The shell hands
-    // us the force-proxy tun's address when bringing up the second tun.
-    let ipv4_cidr = if s.ipv4 == tun_addr::TUN2_IPV4 {
-        tun_addr::TUN2_IPV4_CIDR
-    } else {
-        tun_addr::TUN_IPV4_CIDR
-    };
-    let ipv6_cidr = s.ipv6.map(|v6| {
-        if v6 == tun_addr::TUN2_IPV6 {
-            tun_addr::TUN2_IPV6_CIDR
-        } else {
-            tun_addr::TUN_IPV6_CIDR
-        }
-    });
     let cfg = build_singbox_bridge_config(
         s.iface,
-        ipv4_cidr,
-        ipv6_cidr,
+        s.slot.ipv4_cidr(),
+        s.ipv6.then(|| s.slot.ipv6_cidr()),
         s.socks_port,
         i64::from(s.opts.mtu),
         s.stack,

@@ -33,7 +33,7 @@ use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
     AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
-use kasumi_core::tun::{TUN_IPV4, TUN_IPV6, TUN2_IPV4, TUN2_IPV6, TunOptions};
+use kasumi_core::tun::TunOptions;
 
 use super::network::run_watcher;
 use super::paths::{
@@ -110,9 +110,6 @@ struct HelperSpec {
     pidfile: &'static str,
     iface_file: &'static str,
     log: &'static str,
-    /// The addresses a self-addressing engine (hev, the sidecar) gives its tun.
-    ipv4: &'static str,
-    ipv6: &'static str,
 }
 
 fn helper_spec(h: HelperSlot) -> HelperSpec {
@@ -128,8 +125,6 @@ fn helper_spec(h: HelperSlot) -> HelperSpec {
             pidfile: TUN2SOCKS_PIDFILE,
             iface_file: TUN_IFACE_FILE,
             log: "tun-engine.log",
-            ipv4: TUN_IPV4,
-            ipv6: TUN_IPV6,
         },
         TunSlot::Force => HelperSpec {
             bin,
@@ -141,8 +136,6 @@ fn helper_spec(h: HelperSlot) -> HelperSpec {
             pidfile: TUN2SOCKS2_PIDFILE,
             iface_file: TUN2_IFACE_FILE,
             log: "tun-engine2.log",
-            ipv4: TUN2_IPV4,
-            ipv6: TUN2_IPV6,
         },
     }
 }
@@ -313,7 +306,7 @@ async fn core_version(engine: CoreEngine) -> Option<String> {
 /// of routing into a bridge that never came up and black-holing the device until
 /// the watchdog happens to notice.
 async fn bring_up_tun_helper(
-    engine: TunEngine,
+    helper: HelperSlot,
     spec: &HelperSpec,
     iface: &str,
     socks_port: u16,
@@ -324,8 +317,8 @@ async fn bring_up_tun_helper(
     let spawn = TunSpawn {
         bin: spec.bin,
         iface,
-        ipv4: spec.ipv4,
-        ipv6: Some(spec.ipv6),
+        slot: helper.slot,
+        ipv6: true,
         socks_port,
         log_path: Path::new(&log),
         fwmark: Some(FWMARK),
@@ -333,7 +326,7 @@ async fn bring_up_tun_helper(
         stack,
         opts,
     };
-    let child = spawn_tun_engine(engine, &spawn)
+    let child = spawn_tun_engine(helper.engine, &spawn)
         .await
         .map_err(|e| anyhow::anyhow!("spawn tun helper: {e} — see {log}"))?;
     let pid = child.id().unwrap_or(0);
@@ -365,7 +358,7 @@ async fn bring_up_external_tun(plan: &DataPathPlan, ext: &ExternalTun) -> anyhow
         let pid = read_pidfile(spec.pidfile).await;
         if !(pid > 0 && pid_matches_bin(pid, spec.bin).await) {
             let target = helper_target(h.slot, &plan.ports);
-            bring_up_tun_helper(h.engine, &spec, &iface, target, &stack, &ext.opts).await?;
+            bring_up_tun_helper(h, &spec, &iface, target, &stack, &ext.opts).await?;
         }
         ifaces.push((h.slot, iface));
     }
