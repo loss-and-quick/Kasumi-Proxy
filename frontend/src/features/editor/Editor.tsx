@@ -20,7 +20,7 @@ import type {
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
-import { emptyProfile, isProviderCustom, schemaFor } from "../../lib/profile-utils";
+import { emptyProfile, isProviderCustom, schemaFor, switchProtocol } from "../../lib/profile-utils";
 import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
@@ -93,33 +93,7 @@ export default function Editor({
   const setRoot = (patch: Record<string, unknown>) =>
     setDraft((d) => ({ ...d, ...patch }) as Profile);
 
-  // Switching protocol keeps a fresh per-protocol skeleton but carries over the
-  // identity, the endpoint/tls/transport sub-objects, and any overlapping root
-  // credential field. Mirrors the per-variant structs in `kasumi-core::mixins`.
-  const changeProtocol = (proto: Protocol) => {
-    setDraft((cur) => {
-      const next = emptyProfile(proto, cur.meta.groupId);
-      next.meta = {
-        ...next.meta,
-        id: cur.meta.id,
-        remarks: cur.meta.remarks,
-        subId: cur.meta.subId,
-        coreType: cur.meta.coreType,
-        via: cur.meta.via,
-      };
-      if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
-      if ("tls" in next && next.tls && "tls" in cur && cur.tls) next.tls = { ...cur.tls };
-      if ("transport" in next && "transport" in cur && cur.transport)
-        next.transport = cur.transport;
-      const skip = new Set(["meta", "endpoint", "tls", "transport", "protocol"]);
-      const from = cur as Record<string, unknown>;
-      const into = next as Record<string, unknown>;
-      for (const key of Object.keys(into)) {
-        if (!skip.has(key) && from[key] !== undefined) into[key] = from[key];
-      }
-      return next;
-    });
-  };
+  const changeProtocol = (proto: Protocol) => setDraft((cur) => switchProtocol(cur, proto));
 
   // The canonical share-link build lives in Rust; render the preview through the
   // bridge command (async) instead of a flat frontend builder.

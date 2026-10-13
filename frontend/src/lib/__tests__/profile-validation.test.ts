@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Profile } from "../../generated/bindings";
-import { emptyProfile, isProviderCustom, schemaFor } from "../profile-utils";
+import { emptyProfile, isProviderCustom, schemaFor, switchProtocol } from "../profile-utils";
 
 const issues = (p: Profile) => {
   const r = schemaFor(p.protocol).safeParse(p);
@@ -57,5 +57,26 @@ describe("provider custom profiles", () => {
     expect(isProviderCustom(provider)).toBe(true);
     expect(isProviderCustom(emptyProfile("custom"))).toBe(false);
     expect(isProviderCustom(emptyProfile("vless"))).toBe(false);
+  });
+});
+
+describe("switching protocol", () => {
+  const tlsOf = (p: Profile) => ("tls" in p && p.tls ? p.tls : null);
+
+  it("starts a new Shadowsocks profile without TLS", () => {
+    expect(tlsOf(emptyProfile("shadowsocks"))?.security).toBe("none");
+  });
+
+  it("doesn't carry TLS into Shadowsocks, where it is a v2ray-plugin option", () => {
+    const vless = emptyProfile("vless");
+    const draft = { ...vless, tls: { ...tlsOf(vless), security: "tls", sni: "s.example" } };
+    const ss = switchProtocol(draft as Profile, "shadowsocks");
+    expect(tlsOf(ss)).toMatchObject({ security: "none", sni: "s.example" });
+  });
+
+  it("carries the TLS mode between protocols that speak TLS themselves", () => {
+    const vless = emptyProfile("vless");
+    const draft = { ...vless, tls: { ...tlsOf(vless), security: "reality", sni: "s.example" } };
+    expect(tlsOf(switchProtocol(draft as Profile, "trojan"))?.security).toBe("reality");
   });
 });
