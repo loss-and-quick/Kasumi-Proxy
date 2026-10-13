@@ -381,10 +381,19 @@ async fn bring_up_external_tun(plan: &DataPathPlan, ext: &ExternalTun) -> anyhow
     if let Some(tun) = &tun_iface {
         lock_tun_iface(tun).await;
     }
+    // Route exactly the filter the plan was resolved with.
+    let filter = match &ext.uid_filter {
+        Some(f) => AppFilter {
+            capture_mode: f.capture_mode,
+            entries: f.entries.clone(),
+            strict: f.strict,
+        },
+        None => read_app_filter().await,
+    };
     let rs = RoutingState {
         tun_iface,
         tun2_iface: iface_of(TunSlot::Force),
-        filter: read_app_filter().await,
+        filter,
         socks_port: plan.ports.socks,
         http_port: plan.ports.http,
     };
