@@ -505,6 +505,59 @@ describe("useAppStore", () => {
     expect(s.profiles).toHaveLength(0);
   });
 
+  describe("withdrawing provider configs", () => {
+    const config = (id: string): Profile => {
+      const p = emptyProfile("custom", "gs");
+      return { ...p, origin: "provider", meta: { ...p.meta, id, subId: "s1" } } as Profile;
+    };
+    const setUp = (activeId: string) =>
+      useAppStore.setState({
+        profiles: [config("c1"), makeVless({ meta: { id: "v1", groupId: "gs", subId: "s1" } })],
+        groups: [
+          { id: "g-main", name: "Main" },
+          { id: "gs", name: "Sub", subId: "s1" },
+        ],
+        subscriptions: [makeSub({ id: "s1", groupId: "gs", allowProviderConfigs: true })],
+        settings: DEFAULT_SETTINGS,
+        activeId,
+        service: { ...DEFAULT_STATUS, state: "connected", activeId },
+      });
+    const save = (allowProviderConfigs: boolean) =>
+      useAppStore
+        .getState()
+        .saveSubscription(makeSub({ id: "s1", groupId: "gs", allowProviderConfigs }), {
+          id: "gs",
+        });
+    const kinds = () => bridge.mutate.mock.calls.map(([intent]) => intent.kind);
+
+    it("removes them on save and stops the core that ran one", async () => {
+      setUp("c1");
+      await save(false);
+      expect(kinds()).toEqual(["upsertSub", "withdrawProviderConfigs"]);
+      const s = useAppStore.getState();
+      expect(s.profiles.map((p) => p.meta.id)).toEqual(["v1"]);
+      expect(s.subscriptions[0].allowProviderConfigs).toBe(false);
+      expect(s.activeId).toBeNull();
+      expect(bridge.stop).toHaveBeenCalled();
+    });
+
+    it("leaves the running core alone when the active profile stays", async () => {
+      setUp("v1");
+      await save(false);
+      expect(useAppStore.getState().profiles.map((p) => p.meta.id)).toEqual(["v1"]);
+      expect(useAppStore.getState().activeId).toBe("v1");
+      expect(bridge.stop).not.toHaveBeenCalled();
+      expect(bridge.start).not.toHaveBeenCalled();
+    });
+
+    it("keeps them when the permission stays", async () => {
+      setUp("c1");
+      await save(true);
+      expect(kinds()).toEqual(["upsertSub"]);
+      expect(useAppStore.getState().profiles).toHaveLength(2);
+    });
+  });
+
   it("removeGroup moves the subscriptions fetching into it to Main", async () => {
     useAppStore.setState({
       profiles: [],

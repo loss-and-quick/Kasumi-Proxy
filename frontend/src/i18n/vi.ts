@@ -915,6 +915,11 @@ const vi = {
   "subs.edit.providerConfigsOff": "Chưa cho phép cấu hình Xray đầy đủ của nhà cung cấp",
   "subs.edit.stopUsing": "Ngừng dùng",
   "subs.edit.allow": "Cho phép",
+  "subs.edit.withdrawConfigsTitle": "Ngừng dùng cấu hình Xray đầy đủ?",
+  "subs.edit.withdrawConfigsBody": plural("count", {
+    one: "Khi lưu, # cấu hình Xray đầy đủ của nhà cung cấp này sẽ bị xóa.",
+    other: "Khi lưu, # cấu hình Xray đầy đủ của nhà cung cấp này sẽ bị xóa.",
+  }),
   "settings.identity.title": "Yêu cầu gói đăng ký",
   "settings.identity.sub":
     "Những gì việc cập nhật gói đăng ký gửi cho nhà cung cấp. Mỗi gói có thể thay đổi bất kỳ phần nào.",
@@ -1103,6 +1108,8 @@ const vi = {
   "store.service.stoppedProfileRemoved": "Dịch vụ đã dừng vì hồ sơ đang hoạt động đã bị gỡ",
   "store.service.stoppedProfileDeleted": "Dịch vụ đã dừng vì hồ sơ đang hoạt động đã bị xóa",
   "store.service.stoppedSubRemoved": "Dịch vụ đã dừng vì đăng ký của hồ sơ đang hoạt động đã bị gỡ",
+  "store.service.stoppedProviderConfigs":
+    "Dịch vụ đã dừng vì hồ sơ đang hoạt động là một trong các cấu hình Xray của nhà cung cấp đã bị xóa",
   "store.service.stoppedBeforeBackupRestore": "Dịch vụ đã dừng trước khi khôi phục bản sao lưu",
   "store.profile.copySuffix": "bản sao",
   "store.profile.imported": plural("count", {

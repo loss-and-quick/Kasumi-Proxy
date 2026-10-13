@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Profile } from "../../generated/bindings";
 import type { Group, Subscription } from "../bridge";
-import { groupChoiceReady, groupNamed, hostOf, ownedGroupLeftEmpty } from "../groups";
+import {
+  groupChoiceReady,
+  groupNamed,
+  hostOf,
+  ownedGroupLeftEmpty,
+  providerConfigsOf,
+} from "../groups";
 import { emptyProfile } from "../profile-utils";
 
 const profile = (groupId: string, subId: string | null): Profile => {
@@ -46,5 +52,23 @@ describe("groups", () => {
         "s1",
       ),
     ).toBeUndefined();
+  });
+
+  it("counts only the provider configs still in the subscription's group", () => {
+    const config = (id: string, groupId: string, origin: "provider" | "user"): Profile => {
+      const p = emptyProfile("custom", groupId);
+      return { ...p, origin, meta: { ...p.meta, id, subId: "s1" } } as Profile;
+    };
+    const profiles = [
+      config("a", "gs", "provider"),
+      config("moved", "g-main", "provider"),
+      config("own", "gs", "user"),
+      profile("gs", "s1"),
+    ];
+    const ids = (groupId: string | null) =>
+      providerConfigsOf(profiles, { id: "s1", groupId }).map((p) => p.meta.id);
+    expect(ids("gs")).toEqual(["a"]);
+    expect(ids(null)).toEqual(["a", "moved"]);
+    expect(providerConfigsOf(profiles, { id: "s2", groupId: "gs" })).toEqual([]);
   });
 });

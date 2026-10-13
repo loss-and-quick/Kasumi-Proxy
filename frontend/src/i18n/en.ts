@@ -940,6 +940,11 @@ const en = {
   "subs.edit.providerConfigsOff": "The provider's full Xray configs aren't allowed",
   "subs.edit.stopUsing": "Stop using",
   "subs.edit.allow": "Allow",
+  "subs.edit.withdrawConfigsTitle": "Stop using full Xray configs?",
+  "subs.edit.withdrawConfigsBody": plural("count", {
+    one: "# full Xray config from this provider will be removed when you save.",
+    other: "# full Xray configs from this provider will be removed when you save.",
+  }),
   "settings.identity.title": "Subscription requests",
   "settings.identity.sub":
     "What subscription updates send to providers. Each subscription can change any of it.",
@@ -1147,6 +1152,8 @@ const en = {
   "store.service.stoppedProfileDeleted": "Service stopped because the active profile was deleted",
   "store.service.stoppedSubRemoved":
     "Service stopped because the active profile's subscription was removed",
+  "store.service.stoppedProviderConfigs":
+    "Service stopped because the active profile was one of the provider's removed Xray configs",
   "store.service.stoppedBeforeBackupRestore": "Service stopped before backup restore",
   "store.profile.copySuffix": "copy",
   "store.profile.imported": plural("count", {

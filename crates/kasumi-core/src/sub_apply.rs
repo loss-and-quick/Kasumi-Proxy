@@ -192,20 +192,16 @@ pub fn remove_profiles_by_sub_id(
 ) -> Vec<Profile> {
     profiles
         .iter()
-        .filter(|p| {
-            let m = p.meta();
-            if m.sub_id.as_deref() != Some(sub_id) {
-                return true;
-            }
-            if let Some(g) = sub_group_id
-                && m.group_id != g
-            {
-                return true;
-            }
-            false
-        })
+        .filter(|p| !owned_by_sub(p, sub_id, sub_group_id))
         .cloned()
         .collect()
+}
+
+/// `p` came from `sub_id` and still sits in its group; one the user moved
+/// elsewhere is theirs.
+pub(crate) fn owned_by_sub(p: &Profile, sub_id: &str, sub_group_id: Option<&str>) -> bool {
+    let m = p.meta();
+    m.sub_id.as_deref() == Some(sub_id) && sub_group_id.is_none_or(|g| m.group_id == g)
 }
 
 /// Move a subscription's profiles from `old_group` to `new_group` in place,

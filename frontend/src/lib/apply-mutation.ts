@@ -12,6 +12,7 @@
 import type { Profile, RoutingRule } from "../generated/bindings";
 import { mergeSettings } from "../store/defaults";
 import type { AppState, ChangeAction, MutationIntent, RoutingImport, Subscription } from "./bridge";
+import { providerConfigsOf } from "./groups";
 import { uid } from "./profile-utils";
 import { DEFAULT_ROUTE_ID, normalizeRoutes, setProfileRoute, upsertRoute } from "./routes";
 
@@ -400,6 +401,18 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
     }
     case "resolveSubChange":
       return resolveSubChange(state, intent);
+    case "withdrawProviderConfigs": {
+      // The mock picks no successor for a removed active config: the
+      // dangling-active fixup unsets it.
+      const sub = state.subscriptions.find((s) => s.id === intent.subId);
+      if (!sub) return state;
+      const gone = new Set(providerConfigsOf(state.profiles, sub));
+      return {
+        ...state,
+        profiles: state.profiles.filter((p) => !gone.has(p)),
+        subscriptions: upsertById(state.subscriptions, { ...sub, allowProviderConfigs: false }),
+      };
+    }
 
     case "upsertRoutingRule":
       return editBlock(state, intent.blockId, (rules) => upsertById(rules, intent.rule));

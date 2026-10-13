@@ -885,6 +885,11 @@ const zh = {
   "subs.edit.providerConfigsOff": "未允许提供商的完整 Xray 配置",
   "subs.edit.stopUsing": "停止使用",
   "subs.edit.allow": "允许",
+  "subs.edit.withdrawConfigsTitle": "停止使用完整 Xray 配置？",
+  "subs.edit.withdrawConfigsBody": plural("count", {
+    one: "保存后将删除此提供商的 # 个完整 Xray 配置。",
+    other: "保存后将删除此提供商的 # 个完整 Xray 配置。",
+  }),
   "settings.identity.title": "订阅请求",
   "settings.identity.sub": "更新订阅时发送给服务商的内容。每个订阅都可以单独修改任意一项。",
   "settings.identity.cookieJar": "保留服务商 Cookie",
@@ -1067,6 +1072,7 @@ const zh = {
   "store.service.stoppedProfileRemoved": "活动配置被移除，因此服务已停止",
   "store.service.stoppedProfileDeleted": "活动配置被删除，因此服务已停止",
   "store.service.stoppedSubRemoved": "活动配置所属订阅被删除，因此服务已停止",
+  "store.service.stoppedProviderConfigs": "活动配置是已删除的提供商 Xray 配置之一，因此服务已停止",
   "store.service.stoppedBeforeBackupRestore": "恢复备份前已停止服务",
   "store.profile.copySuffix": "副本",
   "store.profile.imported": plural("count", {

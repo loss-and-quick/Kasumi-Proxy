@@ -26,7 +26,9 @@ use crate::state::{
 use crate::sub_apply::{
     deduplicate_profiles_scoped, migrate_profiles_to_new_group, remove_profiles_by_sub_id,
 };
-use crate::sub_changes::{import_routing_link, remove_provider_routing, resolve_changes};
+use crate::sub_changes::{
+    import_routing_link, remove_provider_routing, resolve_changes, withdraw_provider_configs,
+};
 use crate::sub_meta_types::RoutingImport;
 
 /// Merge vs replace, shared by list-import and backup-restore intents.
@@ -127,6 +129,12 @@ pub enum MutationIntent {
         #[serde(default)]
         activate: Option<bool>,
         at: String,
+    },
+    /// Take back the permission to import a subscription's full Xray configs and
+    /// remove the ones it imported.
+    #[serde(rename_all = "camelCase")]
+    WithdrawProviderConfigs {
+        sub_id: String,
     },
 
     // ---- routing rules (inside a block) ----
@@ -402,6 +410,9 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             activate,
             at,
         } => resolve_changes(state, sub_id, digests, *accept, *activate, at),
+        MutationIntent::WithdrawProviderConfigs { sub_id } => {
+            withdraw_provider_configs(state, sub_id);
+        }
 
         MutationIntent::UpsertRoutingRule { block_id, rule } => {
             if let Some(b) = block_mut(state, block_id) {
@@ -1500,6 +1511,15 @@ mod tests {
         assert!(matches!(
             intent,
             MutationIntent::ResolveSubChange { activate: None, .. }
+        ));
+        let intent: MutationIntent = serde_json::from_value(serde_json::json!({
+            "kind": "withdrawProviderConfigs",
+            "subId": "s1"
+        }))
+        .unwrap();
+        assert!(matches!(
+            intent,
+            MutationIntent::WithdrawProviderConfigs { sub_id } if sub_id == "s1"
         ));
         let intent: MutationIntent = serde_json::from_value(serde_json::json!({
             "kind": "importRoutingLink",
