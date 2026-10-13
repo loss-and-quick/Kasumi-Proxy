@@ -3,15 +3,16 @@
 //! the real core on PR by `core-compat.yml` (`tests/core_validation.rs`); targeted
 //! invariants (e.g. inbound/routing shape) are covered by the unit tests below.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
+use crate::custom_sanitize::{is_service_outbound, sanitize_provider_xray};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
-use crate::profile::{Profile, WG_DEFAULT_LOCAL_ADDRESS};
+use crate::profile::{Custom, CustomOrigin, Profile, WG_DEFAULT_LOCAL_ADDRESS};
 use crate::state::{
     AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, DEFAULT_REMOTE_DNS,
     FAKEIP_INET4_RANGE, RoutingRule, force_socks_port,
@@ -518,6 +519,7 @@ fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
 // ---------- routing / dns / rules ----------
 
 const SPECIAL_OUTBOUND_TAGS: [&str; 3] = ["proxy", "direct", "block"];
+const DNS_OUT: &str = "dns-out";
 
 fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
     let mut m = Map::new();
@@ -709,11 +711,14 @@ fn build_dns(s: &AdvancedSettings) -> Value {
     m
 }
 
+/// `provider_rules` go after Kasumi's own rules, so Kasumi's direct/block win, but
+/// before the catch-all to `proxy`, which would leave them unreachable.
 fn build_routing(
     s: &AdvancedSettings,
     dns_outbound_tag: &str,
     routing_rules: &[RoutingRule],
     resolve: &dyn Fn(&str) -> String,
+    provider_rules: &[Value],
 ) -> Value {
     let domain_strategy = wire(&s.domain_strategy);
     // Bypass-geo rule for the always-on `force-in` inbound — pushed first so traffic
@@ -733,6 +738,7 @@ fn build_routing(
         {
             rules.push(build_rule_object(r, resolve));
         }
+        rules.extend_from_slice(provider_rules);
         rules.push(final_rule);
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
     }
@@ -743,6 +749,7 @@ fn build_routing(
     {
         let mut rules: Vec<Value> = vec![force_rule, dns_rule];
         rules.extend(parsed);
+        rules.extend_from_slice(provider_rules);
         rules.push(final_rule);
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
     }
@@ -751,6 +758,7 @@ fn build_routing(
     if s.fake_dns {
         rules.push(json!({ "type": "field", "ip": [FAKEIP_INET4_RANGE], "outboundTag": "proxy" }));
     }
+    rules.extend_from_slice(provider_rules);
     rules.push(final_rule);
     json!({ "domainStrategy": domain_strategy, "rules": rules })
 }
@@ -762,15 +770,24 @@ pub fn build_xray_config(
     routing_rules: &[RoutingRule],
     profiles: &[Profile],
 ) -> Result<Value, String> {
-    if let Profile::Custom(c) = p {
-        return match parse_json_safe(&c.raw) {
-            Some(v @ Value::Object(_)) => Ok(v),
-            _ => Err("custom profile contains invalid JSON".to_string()),
-        };
-    }
-
-    let outbound =
-        build_outbound(p, s).ok_or_else(|| format!("{:?} requires sing-box", p.protocol()))?;
+    let provider = match p {
+        Profile::Custom(c) if c.origin == CustomOrigin::User => {
+            return match parse_json_safe(&c.raw) {
+                Some(v @ Value::Object(_)) => Ok(v),
+                _ => Err("custom profile contains invalid JSON".to_string()),
+            };
+        }
+        // Sanitised on every build, not only at import: stored state can be edited.
+        Profile::Custom(c) => provider_outbounds(c, profiles)?,
+        _ => ActiveOutbounds {
+            outbounds: vec![
+                build_outbound(p, s)
+                    .ok_or_else(|| format!("{:?} requires sing-box", p.protocol()))?,
+            ],
+            rules: Vec::new(),
+            balancers: Vec::new(),
+        },
+    };
     let po = build_profile_outbounds(p, s, routing_rules, profiles);
     let resolve = |tag: &str| -> String {
         if SPECIAL_OUTBOUND_TAGS.contains(&tag) {
@@ -837,14 +854,19 @@ pub fn build_xray_config(
         "settings": { "auth": "noauth", "udp": true },
     }));
 
-    let mut outbound = outbound;
+    let ActiveOutbounds {
+        outbounds: mut head,
+        rules: provider_rules,
+        balancers,
+    } = provider;
     let mut targets = po.outbounds.clone();
     let mut hops: Vec<Value> = Vec::new();
     let mut emitted: HashSet<String> = targets
         .iter()
         .filter_map(|o| o["tag"].as_str().map(str::to_string))
         .collect();
-    attach_chain(p, &mut outbound, s, profiles, &mut hops, &mut emitted)?;
+    let entry = direct_dialer(&head)?;
+    attach_chain(p, &mut head[entry], s, profiles, &mut hops, &mut emitted)?;
     for target in &mut targets {
         let id = target["tag"].as_str().unwrap_or_default().to_string();
         if let Some(tp) = profiles.iter().find(|x| x.meta().id == id) {
@@ -852,19 +874,176 @@ pub fn build_xray_config(
         }
     }
 
-    let mut outbounds = vec![outbound];
+    let mut outbounds = head;
     outbounds.extend(targets);
     outbounds.extend(hops);
     outbounds.push(json!({ "protocol": "freedom", "tag": "direct" }));
     outbounds.push(json!({ "protocol": "blackhole", "tag": "block" }));
 
+    let mut routing = build_routing(
+        s,
+        dns_outbound_tag,
+        routing_rules,
+        &resolve,
+        &provider_rules,
+    );
+    if !balancers.is_empty() {
+        routing["balancers"] = balancers.into();
+    }
     Ok(json!({
         "log": { "loglevel": log_level },
         "dns": build_dns(s),
         "inbounds": inbounds,
         "outbounds": outbounds,
-        "routing": build_routing(s, dns_outbound_tag, routing_rules, &resolve),
+        "routing": routing,
     }))
+}
+
+/// The active profile's outbounds, `proxy` first, and for a provider config the
+/// routing between them.
+struct ActiveOutbounds {
+    outbounds: Vec<Value>,
+    rules: Vec<Value>,
+    balancers: Vec<Value>,
+}
+
+/// Fit a provider config's sanitised outbounds into Kasumi's skeleton. Its first
+/// outbound that reaches a server becomes `proxy`, which Kasumi's own rules route
+/// to. A freedom `direct` or blackhole `block` gives way to Kasumi's identical
+/// one; any other tag that is, or prefixes, one of Kasumi's or a profile id (which
+/// tags chain hops and rule targets) is renamed so it can't shadow Kasumi's outbounds.
+fn provider_outbounds(c: &Custom, profiles: &[Profile]) -> Result<ActiveOutbounds, String> {
+    let raw = parse_json_safe(&c.raw).ok_or("custom profile contains invalid JSON")?;
+    let sanitized =
+        sanitize_provider_xray(&raw).map_err(|e| format!("provider config rejected: {e}"))?;
+    let proxy_idx = sanitized
+        .outbounds
+        .iter()
+        .position(|o| !is_service_outbound(o))
+        .ok_or("provider config rejected: no proxy outbound")?;
+
+    // Selectors match by prefix, so a tag that merely starts one of Kasumi's
+    // would pull it into a provider balancer.
+    let reserved = |t: &str| {
+        SPECIAL_OUTBOUND_TAGS
+            .iter()
+            .chain(&[DNS_OUT])
+            .any(|k| k.starts_with(t))
+            || profiles.iter().any(|p| p.meta().id.starts_with(t))
+    };
+    let mut taken: HashSet<String> = sanitized
+        .outbounds
+        .iter()
+        .filter_map(|o| o["tag"].as_str().map(str::to_string))
+        .collect();
+    let mut renames: BTreeMap<String, String> = BTreeMap::new();
+    let mut outbounds = Vec::new();
+    for (i, mut ob) in sanitized.outbounds.into_iter().enumerate() {
+        let tag = ob["tag"].as_str().map(str::to_string);
+        if i == proxy_idx {
+            if let Some(t) = tag.filter(|t| t != "proxy") {
+                renames.insert(t, "proxy".into());
+            }
+            ob["tag"] = "proxy".into();
+            outbounds.insert(0, ob);
+            continue;
+        }
+        // Without a tag nothing but the default route reaches it, and that is `proxy`.
+        let Some(tag) = tag else { continue };
+        let equivalent = match tag.as_str() {
+            "direct" => ob["protocol"] == "freedom",
+            "block" => ob["protocol"] == "blackhole",
+            _ => false,
+        };
+        if equivalent {
+            continue;
+        }
+        if reserved(&tag) {
+            let fresh = (1..)
+                .map(|n| {
+                    format!(
+                        "{tag}-provider{}",
+                        if n == 1 { String::new() } else { n.to_string() }
+                    )
+                })
+                .find(|t| !taken.contains(t) && !reserved(t))
+                .expect("an unused tag exists");
+            taken.insert(fresh.clone());
+            ob["tag"] = fresh.as_str().into();
+            renames.insert(tag, fresh);
+        }
+        outbounds.push(ob);
+    }
+
+    let routing = sanitized.routing.unwrap_or(Value::Null);
+    let mut rules: Vec<Value> = routing["rules"].as_array().cloned().unwrap_or_default();
+    let mut balancers: Vec<Value> = routing["balancers"].as_array().cloned().unwrap_or_default();
+    // One lookup per reference: a tag freed by one rename may be another's target.
+    for ob in &mut outbounds {
+        retarget_dialers(ob, &renames);
+        retarget(
+            ob.get_mut("proxySettings").and_then(|p| p.get_mut("tag")),
+            &renames,
+        );
+    }
+    for rule in &mut rules {
+        retarget(rule.get_mut("outboundTag"), &renames);
+    }
+    for b in &mut balancers {
+        retarget(b.get_mut("fallbackTag"), &renames);
+        if let Some(sel) = b.get_mut("selector").and_then(Value::as_array_mut) {
+            sel.iter_mut().for_each(|m| retarget(Some(m), &renames));
+        }
+    }
+    Ok(ActiveOutbounds {
+        outbounds,
+        rules,
+        balancers,
+    })
+}
+
+fn retarget(v: Option<&mut Value>, renames: &BTreeMap<String, String>) {
+    if let Some(v) = v
+        && let Some(new) = v.as_str().and_then(|t| renames.get(t))
+    {
+        *v = new.as_str().into();
+    }
+}
+
+fn retarget_dialers(v: &mut Value, renames: &BTreeMap<String, String>) {
+    match v {
+        Value::Object(m) => {
+            for (k, child) in m.iter_mut() {
+                if k == "dialerProxy" {
+                    retarget(Some(child), renames);
+                } else {
+                    retarget_dialers(child, renames);
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|c| retarget_dialers(c, renames)),
+        _ => {}
+    }
+}
+
+/// Index of the outbound in `head` that connects to its server itself: `proxy`,
+/// or the last of the outbounds it dials through. A profile's own `via` chain
+/// attaches there, in front of the provider's.
+fn direct_dialer(head: &[Value]) -> Result<usize, String> {
+    let mut at = 0;
+    let mut seen = HashSet::new();
+    while let Some(next) = head[at]["streamSettings"]["sockopt"]["dialerProxy"].as_str() {
+        if !seen.insert(at) {
+            return Err(
+                "provider config rejected: outbounds dial through each other in a loop".into(),
+            );
+        }
+        match head.iter().position(|o| o["tag"] == next) {
+            Some(i) => at = i,
+            None => break,
+        }
+    }
+    Ok(at)
 }
 
 /// Answer DNS that reaches the local inbounds with xray's own DNS module, instead of
@@ -876,7 +1055,6 @@ pub fn build_xray_config(
 /// upstream queries take the outbound the rule used to name, so "DNS via proxy"
 /// still decides how DNS leaves. Idempotent.
 pub fn hijack_inbound_dns(cfg: &mut Value) {
-    const DNS_OUT: &str = "dns-out";
     const DNS_MODULE: &str = "dns-module";
     let Some(rules) = cfg
         .get_mut("routing")
@@ -1203,5 +1381,247 @@ mod tests {
             v["header"]["request"]["headers"]["Host"],
             json!(["a.example", "b.example", "c.example"])
         );
+    }
+
+    fn custom(origin: &str, raw: &Value) -> Profile {
+        serde_json::from_value(json!({
+            "protocol": "custom",
+            "meta": { "id": "c", "remarks": "C", "groupId": "g-main" },
+            "raw": raw.to_string(),
+            "origin": origin,
+        }))
+        .unwrap()
+    }
+
+    fn provider_vless(tag: &str, host: &str) -> Value {
+        json!({
+            "tag": tag, "protocol": "vless",
+            "settings": { "vnext": [{ "address": host, "port": 443,
+                "users": [{ "id": "11111111-1111-1111-1111-111111111111", "encryption": "none" }] }] },
+            "streamSettings": { "network": "tcp", "security": "tls", "sockopt": { "mark": 255 } },
+        })
+    }
+
+    fn provider_raw() -> Value {
+        json!({
+            "log": { "loglevel": "debug", "error": "/data/adb/kasumi-proxy/x" },
+            "inbounds": [{ "tag": "in", "protocol": "socks", "listen": "0.0.0.0", "port": 1080 }],
+            "api": { "tag": "api", "services": ["HandlerService"] },
+            "stats": {},
+            "outbounds": [
+                { "tag": "direct", "protocol": "freedom" },
+                provider_vless("main", "main.example"),
+                provider_vless("backup", "backup.example"),
+            ],
+            "routing": { "rules": [
+                { "type": "field", "inboundTag": ["in"], "domain": ["geosite:ru"], "outboundTag": "direct" },
+                { "type": "field", "domain": ["b.example"], "outboundTag": "backup" },
+                { "type": "field", "domain": ["m.example"], "outboundTag": "main" },
+            ]},
+        })
+    }
+
+    fn tags(cfg: &Value) -> Vec<&str> {
+        cfg["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["tag"].as_str().unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn provider_custom_built_into_kasumi_skeleton() {
+        let p = custom("provider", &provider_raw());
+        let typed = build_xray_config(&sample(), &AdvancedSettings::default(), &[], &[]).unwrap();
+        let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+
+        assert_eq!(cfg["inbounds"], typed["inbounds"]);
+        assert_eq!(cfg["log"], typed["log"]);
+        assert_eq!(cfg["dns"], typed["dns"]);
+        for key in ["api", "stats", "policy", "reverse"] {
+            assert!(cfg.get(key).is_none(), "{key} survived");
+        }
+        // The first server outbound is what Kasumi's rules call `proxy`; the
+        // provider's freedom `direct` gives way to Kasumi's.
+        assert_eq!(tags(&cfg), ["proxy", "backup", "direct", "block"]);
+        assert_eq!(
+            cfg["outbounds"][0]["settings"]["vnext"][0]["address"],
+            "main.example"
+        );
+        let text = cfg.to_string();
+        assert!(
+            !text.contains("/data/adb") && !text.contains("\"mark\""),
+            "{text}"
+        );
+
+        // Provider rules sit after Kasumi's, before the catch-all to `proxy`.
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+        let n = rules.len();
+        assert_eq!(
+            rules[n - 1],
+            typed["routing"]["rules"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .clone()
+        );
+        assert_eq!(rules[n - 4]["outboundTag"], "direct");
+        assert!(rules[n - 4].get("inboundTag").is_none());
+        assert_eq!(rules[n - 3]["outboundTag"], "backup");
+        assert_eq!(rules[n - 2]["outboundTag"], "proxy");
+    }
+
+    #[test]
+    fn kasumi_rules_win_over_provider_rules() {
+        let p = custom("provider", &provider_raw());
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let rule = RoutingRule {
+            domain: Some(vec!["b.example".into()]),
+            ..source_rule("block")
+        };
+        let cfg = build_xray_config(&p, &s, &[rule], &[]).unwrap();
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+        let ours = rules
+            .iter()
+            .position(|r| r["outboundTag"] == "block")
+            .unwrap();
+        let theirs = rules
+            .iter()
+            .position(|r| r["outboundTag"] == "backup")
+            .unwrap();
+        assert!(ours < theirs);
+    }
+
+    #[test]
+    fn provider_tags_never_shadow_kasumi_outbounds() {
+        let mut main = provider_vless("main", "main.example");
+        main["streamSettings"]["sockopt"] = json!({ "dialerProxy": "block" });
+        let raw = json!({
+            "outbounds": [
+                main,
+                // A server tagged like Kasumi's blackhole, and one like a profile id.
+                provider_vless("block", "entry.example"),
+                provider_vless("c", "other.example"),
+            ],
+            "routing": {
+                "balancers": [{ "tag": "lb", "selector": ["m", "c"] }],
+                "rules": [
+                    { "type": "field", "ip": ["1.1.1.1"], "outboundTag": "block" },
+                    { "type": "field", "ip": ["8.8.8.8"], "balancerTag": "lb" },
+                ],
+            },
+        });
+        let p = custom("provider", &raw);
+        let cfg = build_xray_config(
+            &p,
+            &AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+        )
+        .unwrap();
+        assert_eq!(
+            tags(&cfg),
+            ["proxy", "block-provider", "c-provider", "direct", "block"]
+        );
+        assert_eq!(
+            cfg["outbounds"][0]["streamSettings"]["sockopt"]["dialerProxy"],
+            "block-provider"
+        );
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+        assert!(
+            rules
+                .iter()
+                .any(|r| r["ip"][0] == "1.1.1.1" && r["outboundTag"] == "block-provider")
+        );
+        // The balancer keeps exactly its members, under their new tags.
+        assert_eq!(
+            cfg["routing"]["balancers"],
+            json!([{ "tag": "lb", "selector": ["proxy", "c-provider"] }])
+        );
+    }
+
+    #[test]
+    fn provider_chain_dials_through_the_profile_via() {
+        let mut main = provider_vless("main", "main.example");
+        main["streamSettings"]["sockopt"] = json!({ "dialerProxy": "relay" });
+        let raw = json!({ "outbounds": [main, provider_vless("relay", "relay.example")] });
+        let mut p = custom("provider", &raw);
+        p.meta_mut().via = Some("entry".into());
+        let all = vec![
+            p.clone(),
+            chained("ss://YWVzLTEyOC1nY206cHc@entry.ex:8388", "entry", None),
+        ];
+        let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &all).unwrap();
+        let obs = cfg["outbounds"].as_array().unwrap();
+        let by_tag = |t: &str| obs.iter().find(|o| o["tag"] == t).unwrap();
+        assert_eq!(
+            by_tag("proxy")["streamSettings"]["sockopt"]["dialerProxy"],
+            "relay"
+        );
+        assert_eq!(
+            by_tag("relay")["streamSettings"]["sockopt"]["dialerProxy"],
+            "entry"
+        );
+    }
+
+    #[test]
+    fn provider_dial_loop_is_an_error() {
+        let mut a = provider_vless("a", "a.example");
+        a["streamSettings"]["sockopt"] = json!({ "dialerProxy": "b" });
+        let mut b = provider_vless("b", "b.example");
+        b["streamSettings"]["sockopt"] = json!({ "dialerProxy": "a" });
+        let mut p = custom("provider", &json!({ "outbounds": [a, b] }));
+        p.meta_mut().via = Some("entry".into());
+        let all = vec![
+            p.clone(),
+            chained("ss://YWVzLTEyOC1nY206cHc@entry.ex:8388", "entry", None),
+        ];
+        let err = build_xray_config(&p, &AdvancedSettings::default(), &[], &all).unwrap_err();
+        assert!(err.contains("loop"), "{err}");
+    }
+
+    #[test]
+    fn user_custom_still_verbatim() {
+        let raw = provider_raw();
+        let cfg = build_xray_config(
+            &custom("user", &raw),
+            &AdvancedSettings::default(),
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(cfg, raw);
+    }
+
+    #[test]
+    fn hand_edited_provider_raw_is_resanitised() {
+        // A state file edited after import still never runs provider listeners.
+        let mut raw = provider_raw();
+        raw["inbounds"] = json!([{ "tag": "x", "protocol": "dokodemo-door", "port": 9 }]);
+        raw["outbounds"][1]["streamSettings"]["sockopt"] = json!({ "interface": "wlan0" });
+        let cfg = build_xray_config(
+            &custom("provider", &raw),
+            &AdvancedSettings::default(),
+            &[],
+            &[],
+        )
+        .unwrap();
+        let text = cfg.to_string();
+        assert!(
+            !text.contains("dokodemo-door") && !text.contains("wlan0"),
+            "{text}"
+        );
+
+        let bad = custom(
+            "provider",
+            &json!({ "outbounds": [{ "protocol": "freedom" }] }),
+        );
+        let err = build_xray_config(&bad, &AdvancedSettings::default(), &[], &[]).unwrap_err();
+        assert!(err.contains("no proxy outbound"), "{err}");
     }
 }

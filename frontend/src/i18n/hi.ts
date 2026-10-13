@@ -174,6 +174,9 @@ const hi = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "Raw Xray कॉन्फ़िग (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "आपकी सदस्यता से प्राप्त, साफ़ किया गया",
+  "editor.custom.providerSub":
+    "केवल पढ़ने के लिए। Kasumi इसमें से केवल सर्वर और रूटिंग नियम लेता है और बाकी कॉन्फ़िग खुद देता है।",
   "editor.transport": "ट्रांसपोर्ट",
   "editor.network": "नेटवर्क",
   "editor.headerType": "हेडर प्रकार",

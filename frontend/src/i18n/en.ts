@@ -179,6 +179,9 @@ const en = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "Raw Xray config (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "Supplied by your subscription, sanitised",
+  "editor.custom.providerSub":
+    "Read-only. Kasumi uses only its servers and routing rules and supplies the rest of the config itself.",
   "editor.transport": "Transport",
   "editor.network": "Network",
   "editor.headerType": "Header type",

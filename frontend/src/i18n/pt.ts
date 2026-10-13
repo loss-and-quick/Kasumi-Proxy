@@ -178,6 +178,9 @@ const pt = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "Configuração bruta do Xray (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "Fornecido pela sua assinatura, higienizado",
+  "editor.custom.providerSub":
+    "Somente leitura. O Kasumi usa apenas os servidores e as regras de roteamento e fornece o restante da configuração.",
   "editor.transport": "Transporte",
   "editor.network": "Rede",
   "editor.headerType": "Tipo de cabeçalho",

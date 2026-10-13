@@ -611,9 +611,14 @@ export const HttpSchema = z.object({
 export type Http = z.infer<typeof HttpSchema>;
 
 
+export const CustomOriginSchema = z.union([z.literal("provider"), z.literal("user")]);
+export type CustomOrigin = z.infer<typeof CustomOriginSchema>;
+
+
 export const CustomSchema = z.object({
 	meta: MetaSchema,
 	raw: z.string().optional(),
+	origin: CustomOriginSchema.optional(),
 });
 export type Custom = z.infer<typeof CustomSchema>;
 

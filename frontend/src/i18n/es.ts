@@ -179,6 +179,9 @@ const es = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "Configuración Xray sin procesar (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "Proporcionado por tu suscripción, depurado",
+  "editor.custom.providerSub":
+    "Solo lectura. Kasumi usa únicamente sus servidores y reglas de enrutamiento y aporta el resto de la configuración.",
   "editor.transport": "Transporte",
   "editor.network": "Red",
   "editor.headerType": "Tipo de cabecera",

@@ -1442,3 +1442,82 @@ fn chain_matrix_validates_against_real_cores() {
 fn settings_matrix_validates_against_real_cores() {
     validate_all(settings_cases());
 }
+
+/// A subscription-delivered Xray config, with the parts the sanitiser strips,
+/// built into Kasumi's skeleton: its balancer, internal chain and rules must
+/// still be a config xray accepts once retagged beside Kasumi's outbounds.
+fn provider_custom_cases() -> Vec<Case> {
+    let server = |tag: &str, host: &str| {
+        json!({
+            "tag": tag, "protocol": "vless",
+            "settings": { "vnext": [{ "address": host, "port": 443,
+                "users": [{ "id": UUID, "encryption": "none", "flow": "xtls-rprx-vision" }] }] },
+            "streamSettings": {
+                "network": "tcp", "security": "reality",
+                "realitySettings": { "serverName": "s.example", "publicKey": REALITY_PBK,
+                    "shortId": "ab", "fingerprint": "chrome" },
+                "sockopt": { "mark": 255, "interface": "wlan0", "tcpFastOpen": true },
+            },
+        })
+    };
+    let mut relayed = server("de-2", "de2.example");
+    relayed["streamSettings"]["sockopt"]["dialerProxy"] = json!("relay");
+    let raw = json!({
+        "remarks": "Provider",
+        "log": { "loglevel": "debug", "access": "/data/adb/kasumi-proxy/a.log" },
+        "inbounds": [{ "tag": "socks", "protocol": "socks", "listen": "0.0.0.0", "port": 10808 }],
+        "api": { "tag": "api", "services": ["HandlerService", "StatsService"] },
+        "stats": {},
+        "policy": { "system": { "statsOutboundUplink": true } },
+        "outbounds": [
+            server("de-1", "de1.example"),
+            relayed,
+            server("relay", "relay.example"),
+            // Tagged like Kasumi's blackhole while carrying traffic.
+            server("block", "nl.example"),
+            { "tag": "direct", "protocol": "freedom", "settings": { "domainStrategy": "UseIPv4" } },
+            { "tag": "fragment", "protocol": "freedom",
+              "settings": { "fragment": { "packets": "tlshello", "length": "100-200", "interval": "10-20" } } },
+        ],
+        "routing": {
+            "domainStrategy": "IPIfNonMatch",
+            "balancers": [{ "tag": "de", "selector": ["de-"], "strategy": { "type": "roundRobin" } }],
+            "rules": [
+                { "type": "field", "inboundTag": ["socks"], "domain": ["domain:lan.example"], "outboundTag": "direct" },
+                { "type": "field", "domain": ["domain:nl.example"], "outboundTag": "block" },
+                { "type": "field", "domain": ["domain:de.example"], "balancerTag": "de" },
+                { "type": "field", "ip": ["10.0.0.0/8"], "outboundTag": "fragment" },
+            ],
+        },
+    });
+    let profile: Profile = serde_json::from_value(json!({
+        "protocol": "custom",
+        "meta": { "id": "provider", "remarks": "provider", "groupId": "g-main" },
+        "raw": raw.to_string(),
+        "origin": "provider",
+    }))
+    .unwrap();
+    let rules_mode = AdvancedSettings {
+        routing_mode: RoutingMode::Rules,
+        ..AdvancedSettings::default()
+    };
+    [
+        ("global", AdvancedSettings::default(), vec![]),
+        ("rules", rules_mode, plain_rules()),
+    ]
+    .into_iter()
+    .map(|(label, settings, rules)| Case {
+        name: format!("provider-custom/{label}"),
+        profile: profile.clone(),
+        settings,
+        rules,
+        needs_geo: false,
+        others: vec![],
+    })
+    .collect()
+}
+
+#[test]
+fn provider_custom_validates_against_real_xray() {
+    validate_all(provider_custom_cases());
+}

@@ -185,3 +185,7 @@ export function emptyProfile(protocol: Protocol, groupId = "g-main"): Profile {
   base.meta = { ...base.meta, id: uid(), groupId };
   return base;
 }
+
+/** A custom profile whose raw config came from a subscription, not the user. */
+export const isProviderCustom = (p: Profile): boolean =>
+  p.protocol === "custom" && p.origin === "provider";

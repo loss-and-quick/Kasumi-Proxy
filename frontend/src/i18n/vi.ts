@@ -175,6 +175,9 @@ const vi = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "Cấu hình Xray thô (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "Do gói đăng ký cung cấp, đã làm sạch",
+  "editor.custom.providerSub":
+    "Chỉ đọc. Kasumi chỉ dùng máy chủ và quy tắc định tuyến trong đó, phần còn lại của cấu hình do Kasumi tự cung cấp.",
   "editor.transport": "Transport",
   "editor.network": "Mạng",
   "editor.headerType": "Kiểu header",

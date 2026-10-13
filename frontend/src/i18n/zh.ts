@@ -174,6 +174,9 @@ const zh = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "原始 Xray 配置（JSON）",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "由订阅提供，已清理",
+  "editor.custom.providerSub":
+    "只读。Kasumi 仅使用其中的服务器和路由规则，其余配置由 Kasumi 自行提供。",
   "editor.transport": "传输",
   "editor.network": "网络",
   "editor.headerType": "头类型",

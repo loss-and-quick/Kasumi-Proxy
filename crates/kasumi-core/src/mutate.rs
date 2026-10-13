@@ -16,7 +16,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::profile::Profile;
+use crate::profile::{CustomOrigin, Profile};
 use crate::route::{
     DEFAULT_ROUTE_ID, Route, RuleBlock, fold_legacy_rules, set_profile_route, upsert_route,
 };
@@ -530,11 +530,17 @@ fn rename_owned_group(state: &mut AppState, next: &Subscription) {
 }
 
 /// Add `profile` at the front, or replace the existing one with the same `meta.id`.
-fn upsert_profile_front(profiles: &mut Vec<Profile>, profile: Profile) {
+fn upsert_profile_front(profiles: &mut Vec<Profile>, mut profile: Profile) {
     if let Some(slot) = profiles
         .iter_mut()
         .find(|p| p.meta().id == profile.meta().id)
     {
+        // Saving a provider's config from the editor must not make it trusted.
+        if let (Profile::Custom(old), Profile::Custom(new)) = (&*slot, &mut profile)
+            && old.origin == CustomOrigin::Provider
+        {
+            new.origin = CustomOrigin::Provider;
+        }
         *slot = profile;
     } else {
         profiles.insert(0, profile);
@@ -635,6 +641,31 @@ mod tests {
         );
         assert_eq!(s.profiles.len(), 1);
         assert_eq!(s.profiles[0].meta().remarks, "A2");
+    }
+
+    #[test]
+    fn upsert_keeps_a_provider_custom_untrusted() {
+        let custom = |origin: &str| -> Profile {
+            serde_json::from_value(serde_json::json!({
+                "protocol": "custom",
+                "meta": { "id": "c", "remarks": "C", "groupId": "g-main" },
+                "raw": "{}",
+                "origin": origin,
+            }))
+            .unwrap()
+        };
+        let mut s = base();
+        s.profiles = vec![custom("provider")];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::UpsertProfile {
+                profile: Box::new(custom("user")),
+            },
+        );
+        let Profile::Custom(c) = &s.profiles[0] else {
+            panic!()
+        };
+        assert_eq!(c.origin, CustomOrigin::Provider);
     }
 
     #[test]

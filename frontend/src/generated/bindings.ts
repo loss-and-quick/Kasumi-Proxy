@@ -505,7 +505,11 @@ export type CoreResolution = {
 export type Custom = {
 	meta: Meta,
 	raw?: string,
+	origin?: CustomOrigin,
 };
+
+/**  Who wrote a custom profile's raw config: a provider's runs only after sanitising. */
+export type CustomOrigin = "user" | "provider";
 
 /**  Xray domain resolution strategy. */
 export type DomainStrategy = "AsIs" | "IPIfNonMatch" | "IPOnDemand";

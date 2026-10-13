@@ -189,6 +189,9 @@ const ru = {
   "editor.mtu": "MTU",
   "editor.rawConfig": "Сырой Xray-конфиг (JSON)",
   "editor.rawPlaceholder": '{ "outbounds": [ ... ] }',
+  "editor.custom.provider": "Получен из подписки и очищен",
+  "editor.custom.providerSub":
+    "Только чтение. Kasumi берёт из него лишь серверы и правила маршрутизации, а остальную часть конфига задаёт сам.",
   "editor.transport": "Транспорт",
   "editor.network": "Сеть",
   "editor.headerType": "Тип заголовка",
