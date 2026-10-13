@@ -39,6 +39,46 @@ use super::{default_uplink, run_out, silent};
 
 /// Our own chain in `filter FORWARD` (accepts) and `nat PREROUTING` (DNS).
 const CHAIN: &str = "KASUMI_PROXY_TETHER";
+/// Our chain in IPv6 `filter INPUT`. Separate from [`CHAIN`], whose blanket IPv6
+/// reject would also cut the clients' neighbour discovery with the phone.
+const CHAIN_IN: &str = "KASUMI_PROXY_TETHER_IN";
+
+/// A built-in chain that jumps to one of ours.
+struct Hook {
+    bin: &'static str,
+    table: Option<&'static str>,
+    hook: &'static str,
+    chain: &'static str,
+}
+
+/// Every hook [`install`] uses, in the order of [`TetherPlan::sections`];
+/// [`clear_rules`] removes all of them.
+const HOOKS: [Hook; 4] = [
+    Hook {
+        bin: IPTABLES,
+        table: None,
+        hook: "FORWARD",
+        chain: CHAIN,
+    },
+    Hook {
+        bin: IP6TABLES,
+        table: None,
+        hook: "FORWARD",
+        chain: CHAIN,
+    },
+    Hook {
+        bin: IPTABLES,
+        table: Some("nat"),
+        hook: "PREROUTING",
+        chain: CHAIN,
+    },
+    Hook {
+        bin: IP6TABLES,
+        table: None,
+        hook: "INPUT",
+        chain: CHAIN_IN,
+    },
+];
 /// Holds the tethering subnets' connected routes, so the tun's replies can find the
 /// way back to the client without depending on how the OS files those routes.
 const REPLY_TABLE: &str = "1102";
@@ -96,15 +136,20 @@ pub struct TetherPlan {
     pub filter6: Vec<Vec<String>>,
     /// `nat PREROUTING` chain, IPv4.
     pub nat4: Vec<Vec<String>>,
+    /// `filter INPUT` chain, IPv6.
+    pub input6: Vec<Vec<String>>,
 }
 
 impl TetherPlan {
     pub fn is_empty(&self) -> bool {
         self.ip_routes.is_empty()
             && self.ip_rules.is_empty()
-            && self.filter4.is_empty()
-            && self.filter6.is_empty()
-            && self.nat4.is_empty()
+            && self.sections().iter().all(|s| s.is_empty())
+    }
+
+    /// The iptables rules for each of [`HOOKS`].
+    fn sections(&self) -> [&Vec<Vec<String>>; 4] {
+        [&self.filter4, &self.filter6, &self.nat4, &self.input6]
     }
 }
 
@@ -172,6 +217,25 @@ pub fn tether_plan(ifaces: &[TetherIface], tun: &str, table: &str) -> TetherPlan
                 "DNAT",
                 "--to-destination",
                 DNS_REDIRECT,
+            ]));
+        }
+        // With an IPv6 upstream, Tethering advertises the phone's own address on
+        // the downstream as the DNS server (`IpServer.getLocalDnsIpFor`). That is
+        // local delivery, which the IPv4-only redirect above cannot reach (the
+        // kernel may lack IPv6 NAT), and the phone answers from the upstream's DNS.
+        // Refuse it so clients fall back to their IPv4 resolver at once.
+        for (proto, reply) in [("udp", "icmp6-port-unreachable"), ("tcp", "tcp-reset")] {
+            plan.input6.push(args(&[
+                "-i",
+                name,
+                "-p",
+                proto,
+                "--dport",
+                "53",
+                "-j",
+                "REJECT",
+                "--reject-with",
+                reply,
             ]));
         }
     }
@@ -337,34 +401,27 @@ async fn install(plan: &TetherPlan) {
         let a: Vec<&str> = r.iter().map(String::as_str).collect();
         ip_rule(false, &a).await;
     }
-    for (bin, table, hook, rules) in [
-        (IPTABLES, None, "FORWARD", &plan.filter4),
-        (IP6TABLES, None, "FORWARD", &plan.filter6),
-        (IPTABLES, Some("nat"), "PREROUTING", &plan.nat4),
-    ] {
-        ipt(bin, table, &["-N", CHAIN]).await;
-        ipt(bin, table, &["-F", CHAIN]).await;
+    for (h, rules) in HOOKS.iter().zip(plan.sections()) {
+        let (bin, table, chain) = (h.bin, h.table, h.chain);
+        ipt(bin, table, &["-N", chain]).await;
+        ipt(bin, table, &["-F", chain]).await;
         for r in rules {
-            let mut a = vec!["-A", CHAIN];
+            let mut a = vec!["-A", chain];
             a.extend(r.iter().map(String::as_str));
             ipt(bin, table, &a).await;
         }
-        while ipt(bin, table, &["-D", hook, "-j", CHAIN]).await == 0 {}
-        ipt(bin, table, &["-I", hook, "1", "-j", CHAIN]).await;
+        while ipt(bin, table, &["-D", h.hook, "-j", chain]).await == 0 {}
+        ipt(bin, table, &["-I", h.hook, "1", "-j", chain]).await;
     }
 }
 
 /// Remove everything [`install`] adds, in any state. Safe to call when nothing
 /// was installed.
 async fn clear_rules() {
-    for (bin, table, hook) in [
-        (IPTABLES, None, "FORWARD"),
-        (IP6TABLES, None, "FORWARD"),
-        (IPTABLES, Some("nat"), "PREROUTING"),
-    ] {
-        while ipt(bin, table, &["-D", hook, "-j", CHAIN]).await == 0 {}
-        ipt(bin, table, &["-F", CHAIN]).await;
-        ipt(bin, table, &["-X", CHAIN]).await;
+    for h in &HOOKS {
+        while ipt(h.bin, h.table, &["-D", h.hook, "-j", h.chain]).await == 0 {}
+        ipt(h.bin, h.table, &["-F", h.chain]).await;
+        ipt(h.bin, h.table, &["-X", h.chain]).await;
     }
     for pref in [PRIO_STEER, PRIO_REPLY] {
         for _ in 0..8 {
@@ -494,6 +551,7 @@ mod tests {
             &plan.filter4,
             &plan.filter6,
             &plan.nat4,
+            &plan.input6,
         ]
         .iter()
         .flat_map(|v| v.iter().map(|r| r.join(" ")))
@@ -696,8 +754,51 @@ mod tests {
                 "-i rndis0 -j REJECT --reject-with icmp6-no-route",
                 "-i rndis0 -p udp --dport 53 -j DNAT --to-destination 1.1.1.1",
                 "-i rndis0 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1",
+                "-i rndis0 -p udp --dport 53 -j REJECT --reject-with icmp6-port-unreachable",
+                "-i rndis0 -p tcp --dport 53 -j REJECT --reject-with tcp-reset",
             ]
         );
+    }
+
+    #[test]
+    fn ipv6_dns_to_the_phone_is_refused_on_every_downstream() {
+        let ifaces = [
+            iface("rndis0", "10.249.48.0/24"),
+            iface("wlan0", "10.183.251.0/24"),
+        ];
+        let plan = tether_plan(&ifaces, "p2fbf546d", "2022");
+        let input6: Vec<String> = plan.input6.iter().map(|r| r.join(" ")).collect();
+        assert_eq!(
+            input6,
+            [
+                "-i rndis0 -p udp --dport 53 -j REJECT --reject-with icmp6-port-unreachable",
+                "-i rndis0 -p tcp --dport 53 -j REJECT --reject-with tcp-reset",
+                "-i wlan0 -p udp --dport 53 -j REJECT --reject-with icmp6-port-unreachable",
+                "-i wlan0 -p tcp --dport 53 -j REJECT --reject-with tcp-reset",
+            ]
+        );
+        // Only DNS: the clients' neighbour discovery with the phone stays open.
+        assert!(plan.input6.iter().all(|r| r.contains(&"53".to_string())));
+    }
+
+    #[test]
+    fn every_rule_lands_in_a_chain_that_teardown_removes() {
+        let ifaces = [
+            iface("rndis0", "10.249.48.0/24"),
+            iface("wlan0", "10.183.251.0/24"),
+        ];
+        let plan = tether_plan(&ifaces, "p2fbf546d", "2022");
+        // install() fills HOOKS[i] from sections()[i], clear_rules() walks HOOKS.
+        for (h, rules) in HOOKS.iter().zip(plan.sections()) {
+            assert!(!rules.is_empty(), "{} {}", h.bin, h.hook);
+        }
+        let mut hooks: Vec<_> = HOOKS.iter().map(|h| (h.bin, h.table, h.hook)).collect();
+        hooks.sort();
+        hooks.dedup();
+        assert_eq!(hooks.len(), HOOKS.len());
+        // The IPv6 INPUT jump must not reach the FORWARD chain's blanket reject.
+        let input = HOOKS.iter().find(|h| h.hook == "INPUT").unwrap();
+        assert_ne!(input.chain, CHAIN);
     }
 
     // USB tethering switched off and on with the option on (reported from the
