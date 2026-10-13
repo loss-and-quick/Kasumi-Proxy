@@ -117,6 +117,7 @@ impl Platform for TestPlatform {
             download_bytes: 2,
             uptime_sec: 3,
             engine: Some(CoreEngine::Xray),
+            tether_offload_bypass: false,
         })
     }
     async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {

@@ -1355,6 +1355,12 @@ export type ServiceState_Deserialize = {
 	uptimeSec: number,
 	/**  Engine actually running (PID truth), or `null` when nothing is up. */
 	engine: CoreEngine | null,
+	/**
+	 *  Android: hardware offload still forwards a tethering session that was
+	 *  running before "proxy tethering" turned it off, so some tethered traffic
+	 *  bypasses the proxy until tethering is restarted. Always `false` elsewhere.
+	 */
+	tetherOffloadBypass?: boolean,
 };
 
 /**  Runtime facts about the data-path (`status` RPC / `Platform::service_state`). */
@@ -1366,6 +1372,12 @@ export type ServiceState_Serialize = {
 	uptimeSec: number,
 	/**  Engine actually running (PID truth), or `null` when nothing is up. */
 	engine: CoreEngine | null,
+	/**
+	 *  Android: hardware offload still forwards a tethering session that was
+	 *  running before "proxy tethering" turned it off, so some tethered traffic
+	 *  bypasses the proxy until tethering is restarted. Always `false` elsewhere.
+	 */
+	tetherOffloadBypass: boolean,
 };
 
 /**  Full status frame pushed to clients: runtime facts + active profile + core label. */

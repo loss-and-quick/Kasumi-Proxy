@@ -31,7 +31,7 @@ use super::paths::{IP, IP6TABLES, IPTABLES, TUN_IFACE_FILE};
 use super::platform::{read_iface, read_settings};
 use super::routing::{TUN_TABLE, ip_rule};
 use super::sysctl::lock_tun_iface;
-use super::tether_offload::{detach_tether_bpf, restore_hw_offload, suppress_hw_offload};
+use super::tether_offload::{detach_tether_bpf, reconcile_hw_offload, restore_hw_offload};
 use super::{default_uplink, run_out, silent};
 
 /// Our own chain in `filter FORWARD` (accepts) and `nat PREROUTING` (DNS).
@@ -397,12 +397,7 @@ async fn watch(path: TetherPath) {
         // Kept off whenever the option is on, so a hotspot started later comes up
         // without hardware offload.
         if tun.is_some() {
-            if suppress_hw_offload().await && !want.is_empty() {
-                log::warn!(
-                    "tethering: hardware offload stays on for the running tethering \
-                     session until the hotspot / USB tethering is restarted"
-                );
-            }
+            reconcile_hw_offload().await;
         } else {
             restore_hw_offload().await;
         }

@@ -160,6 +160,7 @@ mod tests {
                 download_bytes: 2,
                 uptime_sec: 3,
                 engine: Some(CoreEngine::SingBox),
+                tether_offload_bypass: false,
             }),
             PrivReply::Proxy {
                 running: true,

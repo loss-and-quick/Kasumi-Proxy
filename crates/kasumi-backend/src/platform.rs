@@ -380,6 +380,7 @@ mod tests {
                 download_bytes: 0,
                 uptime_sec: 0,
                 engine: None,
+                tether_offload_bypass: false,
             })
         }
         async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {

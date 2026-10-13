@@ -28,12 +28,13 @@
 //! The setting's previous value is saved in the run dir before it is changed and
 //! put back exactly on teardown, also after a crash (boot init restores it).
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use kasumi_backend::fs::{read_text, remove_file};
 use kasumi_backend::fsjson::write_text_atomic;
 
-use super::paths::{CMD, TC, TETHER_OFFLOAD_SAVED};
+use super::paths::{CMD, DUMPSYS, TC, TETHER_OFFLOAD_SAVED};
 use super::{run_out, silent};
 
 const OFFLOAD_KEY: &str = "tether_offload_disabled";
@@ -51,10 +52,83 @@ async fn settings(args: &[&str]) -> Option<(i32, String)> {
     (code >= 0).then_some((code, out))
 }
 
+/// Set while the offload HAL still forwards a tethering session that was running
+/// before [`suppress_hw_offload`] changed the setting. Cleared once Tethering logs
+/// that offload stopped or was refused, and on restore.
+static HW_OFFLOAD_BYPASS: AtomicBool = AtomicBool::new(false);
+
+/// Whether tethered traffic may still bypass the proxy through the offload HAL
+/// until tethering is restarted.
+pub fn hw_offload_bypass() -> bool {
+    HW_OFFLOAD_BYPASS.load(Ordering::Relaxed)
+}
+
+/// `dumpsys tethering`, bounded like [`settings`].
+async fn tethering_dump() -> Option<String> {
+    let run = run_out(&[DUMPSYS, "tethering"]);
+    let (code, out) = tokio::time::timeout(Duration::from_secs(10), run)
+        .await
+        .ok()?;
+    (code == 0).then_some(out)
+}
+
+/// Whether `dumpsys tethering` shows the offload HAL running. Only telling while
+/// `tether_offload_disabled` is 0: otherwise `OffloadController.dump` prints just
+/// "Offload disabled", whatever the HAL does.
+fn hal_started(dump: &str) -> bool {
+    dump.lines().any(|l| l.trim() == "Offload HALs started")
+}
+
+/// The latest `OffloadController` start or stop in the Tethering log of
+/// `dumpsys tethering` (oldest entry first): `Some(true)` when offload last
+/// started, `Some(false)` when it last stopped or was refused, `None` when the log
+/// holds neither.
+fn last_offload_event(dump: &str) -> Option<bool> {
+    let mut last = None;
+    for line in dump.lines() {
+        let Some((_, msg)) = line.split_once("[OffloadController] tethering offload ") else {
+            continue;
+        };
+        if msg.starts_with("started") {
+            last = Some(true);
+        } else if ["stopped", "disabled", "not supported"]
+            .iter()
+            .any(|m| msg.starts_with(m))
+        {
+            last = Some(false);
+        }
+    }
+    last
+}
+
+/// Keep hardware offload off while the option is on, and track whether a session
+/// that predates the change still has it.
+pub async fn reconcile_hw_offload() {
+    if read_text(TETHER_OFFLOAD_SAVED).await.is_none() {
+        // Read before the change: once the setting is 1 the dump no longer tells.
+        let running = tethering_dump().await.is_some_and(|d| hal_started(&d));
+        if suppress_hw_offload().await && running {
+            log::warn!(
+                "tethering: hardware offload stays on for the running tethering \
+                 session until the hotspot / USB tethering is restarted"
+            );
+            HW_OFFLOAD_BYPASS.store(true, Ordering::Relaxed);
+        }
+        return;
+    }
+    if hw_offload_bypass()
+        && let Some(dump) = tethering_dump().await
+        && last_offload_event(&dump) == Some(false)
+    {
+        log::info!("tethering: hardware offload stopped");
+        HW_OFFLOAD_BYPASS.store(false, Ordering::Relaxed);
+    }
+}
+
 /// Turn hardware offload off, saving the current value first. A no-op while a
 /// saved value exists: the setting is already ours. Returns whether it changed
 /// the setting now.
-pub async fn suppress_hw_offload() -> bool {
+async fn suppress_hw_offload() -> bool {
     if read_text(TETHER_OFFLOAD_SAVED).await.is_some() {
         return false;
     }
@@ -82,6 +156,7 @@ pub async fn suppress_hw_offload() -> bool {
 /// Put back the value [`suppress_hw_offload`] saved, if any. Idempotent; the saved
 /// value is dropped only once the restore succeeded.
 pub async fn restore_hw_offload() {
+    HW_OFFLOAD_BYPASS.store(false, Ordering::Relaxed);
     let Some(saved) = read_text(TETHER_OFFLOAD_SAVED).await else {
         return;
     };
@@ -197,5 +272,47 @@ filter protocol ip pref 3 bpf chain 0 handle 0x1 prog_offload_schedcls_tether_up
         let out = "filter protocol all pref 1 bpf chain 0 handle 0x1 prog_clatd_schedcls_ingress6:[*fsobj] direct-action\n";
         assert!(tether_bpf_filters(out).is_empty());
         assert!(tether_bpf_filters("").is_empty());
+    }
+
+    // `dumpsys tethering` excerpts in the shape the reference phone prints them
+    // (Tethering's `dump`, then its SharedLog, oldest entry first).
+    const DUMP_HAL_RUNNING: &str = "\
+  Hardware offload:
+    Offload HALs started
+    Offload Control HAL version: AIDL
+  BPF offload:
+  Log:
+    2026-10-13T12:31:59.601200 - [OffloadController] tethering offload started, version: AIDL
+";
+    const DUMP_RESTARTED: &str = "\
+  Hardware offload:
+    Offload disabled
+  Log:
+    2026-10-13T12:31:59.601200 - [OffloadController] tethering offload started, version: AIDL
+    2026-10-13T12:40:02.118734 - [OffloadController] tethering offload stopped
+    2026-10-13T12:40:05.902211 - [OffloadController] tethering offload disabled
+";
+
+    #[test]
+    fn a_running_hal_is_seen_before_the_setting_changes() {
+        assert!(hal_started(DUMP_HAL_RUNNING));
+        assert_eq!(last_offload_event(DUMP_HAL_RUNNING), Some(true));
+    }
+
+    #[test]
+    fn a_tethering_restart_ends_the_bypass() {
+        assert!(!hal_started(DUMP_RESTARTED));
+        assert_eq!(last_offload_event(DUMP_RESTARTED), Some(false));
+    }
+
+    #[test]
+    fn hal_state_needs_the_exact_dump_line() {
+        assert!(!hal_started("    Offload HALs not started\n"));
+        assert!(!hal_started("    Offload disabled\n"));
+        assert_eq!(last_offload_event("  Log:\n"), None);
+        assert_eq!(
+            last_offload_event("x - [OffloadController] tethering offload not supported\n"),
+            Some(false)
+        );
     }
 }

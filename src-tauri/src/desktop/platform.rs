@@ -608,6 +608,7 @@ impl Platform for DesktopPlatform {
             upload_bytes: tx,
             uptime_sec,
             engine: self.running_engine().await,
+            tether_offload_bypass: false,
         })
     }
 

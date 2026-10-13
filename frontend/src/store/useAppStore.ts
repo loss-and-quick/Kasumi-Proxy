@@ -521,6 +521,7 @@ export const useAppStore = create<Store>((set, get) => {
       engine: null,
       pendingRestart: false,
       latencyMs: null,
+      tetherOffloadBypass: false,
     },
 
     async hydrate() {

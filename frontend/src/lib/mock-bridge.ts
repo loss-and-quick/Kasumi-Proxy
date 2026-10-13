@@ -64,6 +64,7 @@ let serviceState: ServiceStatus = {
   engine: "xray",
   pendingRestart: false,
   latencyMs: null,
+  tetherOffloadBypass: false,
 };
 
 function cloneServiceStatus(): ServiceStatus {

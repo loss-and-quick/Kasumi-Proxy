@@ -43,7 +43,7 @@ use super::routing::{
     has_force_proxy, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
-use super::tether_offload::restore_hw_offload;
+use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
 use super::tethering::{TetherPath, start_tether_watcher, stop_tether_watcher};
 use super::{run_out, silent, ssaid};
 
@@ -659,6 +659,7 @@ impl Platform for AndroidPlatform {
             upload_bytes: tx,
             uptime_sec,
             engine: running_engine().await,
+            tether_offload_bypass: hw_offload_bypass(),
         })
     }
 

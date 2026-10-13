@@ -1705,6 +1705,7 @@ export const ServiceState_SerializeSchema = z.object({
 	downloadBytes: z.number(),
 	uptimeSec: z.number(),
 	engine: CoreEngineSchema.nullable(),
+	tetherOffloadBypass: z.boolean(),
 });
 export type ServiceState_Serialize = z.infer<typeof ServiceState_SerializeSchema>;
 
@@ -1764,6 +1765,7 @@ export const ServiceState_DeserializeSchema = z.object({
 	downloadBytes: z.number(),
 	uptimeSec: z.number(),
 	engine: CoreEngineSchema.nullable(),
+	tetherOffloadBypass: z.boolean().optional(),
 });
 export type ServiceState_Deserialize = z.infer<typeof ServiceState_DeserializeSchema>;
 

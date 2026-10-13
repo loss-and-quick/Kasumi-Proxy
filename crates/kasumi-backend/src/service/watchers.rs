@@ -99,14 +99,17 @@ impl Service {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             let mut last_probe = None;
+            let mut last_offload_bypass = false;
             loop {
                 tokio::time::sleep(WATCHDOG_INTERVAL).await;
-                let up = this
-                    .platform
-                    .service_state()
-                    .await
-                    .map(|s| s.engine.is_some())
-                    .unwrap_or(false);
+                let state = this.platform.service_state().await.ok();
+                let up = state.as_ref().is_some_and(|s| s.engine.is_some());
+                // The platform raises this on its own schedule; push it when it flips.
+                let offload_bypass = state.is_some_and(|s| s.tether_offload_bypass);
+                if offload_bypass != last_offload_bypass {
+                    last_offload_bypass = offload_bypass;
+                    this.emit_status().await;
+                }
                 if !up {
                     if this.reset_connectivity() {
                         this.emit_status().await;

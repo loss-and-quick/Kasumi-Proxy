@@ -50,6 +50,7 @@ pub const IPTABLES: &str = "/system/bin/iptables";
 pub const IP6TABLES: &str = "/system/bin/ip6tables";
 pub const TC: &str = "/system/bin/tc";
 pub const CMD: &str = "/system/bin/cmd";
+pub const DUMPSYS: &str = "/system/bin/dumpsys";
 
 /// The backend's on-disk locations for the Android module.
 pub fn backend_paths() -> BackendPaths {

@@ -78,12 +78,13 @@ export interface AppEntry {
 
 /** ServiceStatus as screens consume it — keeps `error`, the reason carried by
  *  `failed` (couldn't start) and `noInternet` (up but no connectivity).
- *  `pendingRestart` and `latencyMs` are always concrete here (the parser defaults
- *  them), even though older senders may omit them on the wire. */
+ *  `pendingRestart`, `latencyMs` and `tetherOffloadBypass` are always concrete here
+ *  (the parser defaults them), even though older senders may omit them on the wire. */
 export interface ServiceStatus extends Omit<WireServiceStatus, "state"> {
   state: ServiceState;
   pendingRestart: boolean;
   latencyMs: number | null;
+  tetherOffloadBypass: boolean;
 }
 
 export type ResourceUpdateMode = FetchMode;
@@ -208,6 +209,7 @@ export function parseServiceStatus(value: unknown): ServiceStatus {
     engine: s.engine === "xray" || s.engine === "sing-box" ? s.engine : null,
     pendingRestart: s.pendingRestart === true,
     latencyMs: typeof s.latencyMs === "number" ? s.latencyMs : null,
+    tetherOffloadBypass: s.tetherOffloadBypass === true,
   };
 }
 
