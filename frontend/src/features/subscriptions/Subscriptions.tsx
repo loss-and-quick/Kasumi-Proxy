@@ -46,6 +46,8 @@ export default function Subscriptions({
   const [addOpen, setAddOpen] = useState(false);
   const addDefaultGroup = useMemo<GroupChoice>(() => ({ id: BASE_GROUP_ID }), []);
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
+  // The address typed in the Add sheet before it handed over to the editor.
+  const [newUrl, setNewUrl] = useState("");
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [delGroupToo, setDelGroupToo] = useState(true);
   const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
@@ -190,8 +192,9 @@ export default function Subscriptions({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         defaultGroup={addDefaultGroup}
-        onManualSub={() => {
+        onManualSub={(url) => {
           setAddOpen(false);
+          setNewUrl(url ?? "");
           setEdit("new");
         }}
         onDone={({ subs: added, profiles, profileGroup, routes }) => {
@@ -219,6 +222,7 @@ export default function Subscriptions({
       <SubEditSheet
         open={!!edit}
         sub={edit === "new" ? null : edit}
+        initialUrl={newUrl}
         onClose={() => setEdit(null)}
         onSave={async (data, group) => {
           const isNew = edit === "new";

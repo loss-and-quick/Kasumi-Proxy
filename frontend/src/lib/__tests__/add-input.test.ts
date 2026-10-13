@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addInputFrom, parseSubscriptionDump } from "../add-input";
+import { addInputFrom, firstSubscriptionUrl, parseSubscriptionDump } from "../add-input";
 import type { ResolvedImport } from "../bridge";
 
 const defaults = { autoUpdate: false, interval: 360 };
@@ -98,5 +98,38 @@ describe("parseSubscriptionDump", () => {
   it("is null for JSON without subscription URLs and for plain text", () => {
     expect(parseSubscriptionDump('{"outbounds":[]}', defaults)).toBeNull();
     expect(parseSubscriptionDump("https://a.example/s", defaults)).toBeNull();
+  });
+});
+
+describe("firstSubscriptionUrl", () => {
+  const bridgeOf = (value: ResolvedImport) => ({
+    resolveImportInput: async () => value,
+    parseShareLinks: async () => [],
+  });
+
+  it("is the first subscription the backend finds", async () => {
+    const b = bridgeOf(
+      resolved({
+        subscriptions: [
+          { url: "https://a.example.com/s", encrypted: false },
+          { url: "https://b.example.com/s", encrypted: false },
+        ],
+      }),
+    );
+    expect(await firstSubscriptionUrl("https://a.example.com/s", defaults, b)).toBe(
+      "https://a.example.com/s",
+    );
+  });
+
+  it("reads an exported dump without the backend", async () => {
+    const b = bridgeOf(resolved());
+    const dump = JSON.stringify([{ url: "https://d.example.com/s", remarks: "D" }]);
+    expect(await firstSubscriptionUrl(dump, defaults, b)).toBe("https://d.example.com/s");
+  });
+
+  it("is null for blank text and for text with no subscription", async () => {
+    const b = bridgeOf(resolved({ shareText: "trojan://pw@h:443#T" }));
+    expect(await firstSubscriptionUrl("  ", defaults, b)).toBeNull();
+    expect(await firstSubscriptionUrl("trojan://pw@h:443#T", defaults, b)).toBeNull();
   });
 });

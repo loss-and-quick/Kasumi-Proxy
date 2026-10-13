@@ -23,6 +23,7 @@ import {
   addInputFrom,
   appendScanned,
   EMPTY_ADD_INPUT,
+  firstSubscriptionUrl,
   parseSubscriptionDump,
   resolveAddText,
   UNSUPPORTED_TEXT,
@@ -67,7 +68,8 @@ export function AddSheet({
    *  default instead of each subscription getting a group of its own. */
   inGroup?: boolean;
   onManualProfile?: () => void;
-  onManualSub?: () => void;
+  /** Gets the subscription URL typed so far, if the text holds one. */
+  onManualSub?: (url: string | null) => void;
   onDone: (result: AddResult) => void;
 }) {
   const t = useT();
@@ -164,6 +166,10 @@ export function AddSheet({
   const showPicker = hasProfiles || (hasSubs && !groupEach);
   const singleSubName = fresh.length === 1 ? fresh[0].remarks : undefined;
   const nothing = stale || (!hasSubs && !hasProfiles && !hasRouting);
+
+  const openManualSub = async () => {
+    onManualSub?.(await firstSubscriptionUrl(text, { autoUpdate, interval }, bridge));
+  };
 
   const submit = async () => {
     if (showPicker && !groupChoiceReady(group, groupEach ? "" : (singleSubName ?? ""))) {
@@ -358,7 +364,7 @@ export function AddSheet({
                 icon="tune"
                 label={t("add.subWithOptions")}
                 sub={t("add.subWithOptionsSub")}
-                onClick={onManualSub}
+                onClick={() => void openManualSub()}
               />
             )}
           </div>
