@@ -1,17 +1,31 @@
 // ============================================================
 // src/lib/add-input.ts
-// Sorting pasted or scanned text into subscriptions and profile links.
+// Turning pasted or scanned text into subscriptions, routing profiles and profile
+// links. The backend sorts the text (`resolveImportInput`); an exported dump is
+// read here.
 // ============================================================
 
-import type { Subscription } from "./bridge";
+import type { ResolvedImport, Subscription } from "./bridge";
 import { hostOf } from "./groups";
 import { uid } from "./utils";
 
 export type SubDefaults = { autoUpdate: boolean; interval: number };
 
-/** What a paste holds: subscriptions to add, and the rest of the text for the
- *  backend's share-link parser. */
-export type AddInput = { subs: Subscription[]; profileText: string };
+/** What a paste holds: subscriptions to add, the rest of the text for the backend's
+ *  share-link parser, routing profiles and the links Kasumi can't use. */
+export type AddInput = {
+  subs: Subscription[];
+  profileText: string;
+  routing: ResolvedImport["routing"];
+  unsupported: ResolvedImport["unsupported"];
+};
+
+export const EMPTY_ADD_INPUT: AddInput = {
+  subs: [],
+  profileText: "",
+  routing: [],
+  unsupported: [],
+};
 
 /** A new subscription from a URL, or from an exported dump's fields. */
 export function makeSubscription(
@@ -44,26 +58,14 @@ export function makeSubscription(
   };
 }
 
-/** A plain `http(s)://` URL is a subscription. With a user part
- *  (`http://user:pass@host:port`) it's an HTTP proxy link, which the backend's
- *  share-link parser reads the same way. */
-function isSubscriptionUrl(token: string): boolean {
-  if (!/^https?:\/\//i.test(token)) return false;
-  try {
-    const u = new URL(token);
-    return !u.username && !u.password;
-  } catch {
-    return false;
-  }
-}
-
 /** The subscriptions in an exported dump (a JSON object or array with `url`s),
  *  or null when the text isn't one. */
-function parseSubscriptionDump(text: string, defaults: SubDefaults): Subscription[] | null {
-  if (!text.startsWith("[") && !text.startsWith("{")) return null;
+export function parseSubscriptionDump(text: string, defaults: SubDefaults): Subscription[] | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) return null;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(trimmed);
   } catch {
     return null;
   }
@@ -79,26 +81,22 @@ function parseSubscriptionDump(text: string, defaults: SubDefaults): Subscriptio
   return subs.length ? subs : null;
 }
 
-/** Split a paste into subscriptions and profile text. Subscription URLs are
- *  taken token by token, so a list of them works whatever separates them;
- *  everything else (share links, a base64 subscription body) stays as text. */
-export function classifyAddInput(text: string, defaults: SubDefaults): AddInput {
-  const trimmed = text.trim();
-  if (!trimmed) return { subs: [], profileText: "" };
-  const dump = parseSubscriptionDump(trimmed, defaults);
-  if (dump) return { subs: dump, profileText: "" };
-
-  const subs: Subscription[] = [];
-  const rest: string[] = [];
-  for (const line of trimmed.split(/\r?\n/)) {
-    // Share links can carry spaces in their #name, so only a line made of
-    // nothing but subscription URLs is taken apart.
-    const tokens = line.trim().split(/\s+/).filter(Boolean);
-    if (tokens.length && tokens.every(isSubscriptionUrl)) {
-      for (const url of tokens) subs.push(makeSubscription({ url }, defaults));
-    } else if (line.trim()) {
-      rest.push(line);
-    }
-  }
-  return { subs, profileText: rest.join("\n") };
+/** What the add sheet adds from the backend's sorting of a paste. An encrypted
+ *  link is named `encryptedName` until the provider sends a title. */
+export function addInputFrom(
+  resolved: ResolvedImport,
+  defaults: SubDefaults,
+  encryptedName: string,
+): AddInput {
+  return {
+    subs: resolved.subscriptions.map(({ url, encrypted }) =>
+      makeSubscription(
+        encrypted ? { url, remarks: encryptedName, manualTitle: false } : { url },
+        defaults,
+      ),
+    ),
+    profileText: resolved.shareText,
+    routing: resolved.routing,
+    unsupported: resolved.unsupported,
+  };
 }

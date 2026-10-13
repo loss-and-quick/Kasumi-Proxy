@@ -438,7 +438,7 @@ const ar = {
   "add.inputLabel": "روابط أو اشتراكات أو رمز QR",
   "add.inputPh": "https://… · vless://… · ss://…",
   "add.inputHint":
-    "روابط الاشتراكات أو روابط الملفات أو محتوى الاشتراك أو قائمة مُصدَّرة — يتم التعرف على كل منها",
+    "روابط الاشتراكات أو روابط happ:// أو روابط الملفات أو محتوى الاشتراك أو قائمة مُصدَّرة — يتم التعرف على كل منها",
   "add.nothingFound": "لم يتم التعرف على شيء بعد",
   "add.submit": "إضافة",
   "add.profilesGroup": "مجموعة الملفات",
@@ -448,6 +448,26 @@ const ar = {
   "add.foundProfiles": plural("count", { one: "ملف واحد", other: "# ملفات" }),
   "add.alreadyAdded": plural("count", { one: "# مضاف مسبقًا", other: "# مضافة مسبقًا" }),
   "add.groupEach": plural("count", { one: "مجموعة خاصة به", other: "مجموعة لكل اشتراك" }),
+  "add.foundRouting": plural("count", { one: "ملف توجيه واحد", other: "# ملفات توجيه" }),
+  "add.foundUnsupported": plural("count", {
+    one: "رابط واحد غير مدعوم",
+    other: "# روابط غير مدعومة",
+  }),
+  "add.encryptedName": "اشتراك مشفّر",
+  "add.encrypted.title": plural("count", { one: "رابط مشفّر", other: "# روابط مشفّرة" }),
+  "add.encrypted.body":
+    "يُخفي المزوّد العنوان. يحتفظ Kasumi بالرابط كما هو ويفك تشفيره عند كل تحديث.",
+  "add.routingGroup": "المجموعة",
+  "add.routingImported": plural("count", {
+    one: "تم استيراد ملف التوجيه",
+    other: "تم استيراد # ملفات توجيه",
+  }),
+  "add.unsupported.control": "أوامر تطبيق Happ (الاتصال، التبديل، الفتح) لا تفعل شيئًا في Kasumi.",
+  "add.unsupported.sendToDevice": "رابط مزامنة أجهزة Happ؛ لا يقرؤه إلا Happ.",
+  "add.unsupported.routingOff":
+    "يوقف توجيه المزوّد. أوقف المسارات من الإعدادات ← التوجيه بدلًا من ذلك.",
+  "add.unsupported.urlDecrypt": "لا يملك Kasumi مفتاحًا لهذا الرابط المشفّر.",
+  "add.unsupported.invalid": "ليس رابط Happ صالحًا.",
   "groups.picker.new": "مجموعة جديدة…",
   "groups.picker.newNamed": "مجموعة جديدة «{name}»",
   "groups.picker.nameLabel": "اسم المجموعة الجديدة",

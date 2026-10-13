@@ -1163,6 +1163,32 @@ describe("useAppStore", () => {
     expect(s.subscriptions[0].decisions?.[0]).toMatchObject({ digest: "d1", accepted: true });
   });
 
+  it("importRoutingLink sends the intent and adds the group route", async () => {
+    bridge.readState.mockResolvedValue(makeState());
+    await useAppStore.getState().hydrate();
+    const routing = {
+      name: "Pasted",
+      directSites: ["geosite:ru"],
+      directIp: [],
+      proxySites: [],
+      proxyIp: [],
+      blockSites: [],
+      blockIp: [],
+      ignoredFields: [],
+    };
+
+    await useAppStore.getState().importRoutingLink(routing, "g-main", true);
+
+    expect(bridge.mutate).toHaveBeenCalledWith({
+      kind: "importRoutingLink",
+      routing,
+      groupId: "g-main",
+      activate: true,
+    });
+    const route = useAppStore.getState().routes.find((r) => r.id === "link-route-g-main");
+    expect(route).toMatchObject({ name: "Pasted", groups: ["g-main"], enabled: true });
+  });
+
   it("a rejected request for full Xray configs fetches nothing", async () => {
     const ask = {
       key: "provider-configs",

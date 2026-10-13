@@ -370,7 +370,7 @@ const pt = {
   "add.inputLabel": "Links, assinaturas ou um QR code",
   "add.inputPh": "https://… · vless://… · ss://…",
   "add.inputHint":
-    "URLs de assinatura, links de perfis, o conteúdo de uma assinatura ou uma lista exportada — tudo é reconhecido",
+    "URLs de assinatura, links happ://, links de perfis, o conteúdo de uma assinatura ou uma lista exportada — tudo é reconhecido",
   "add.nothingFound": "Nada reconhecido ainda",
   "add.submit": "Adicionar",
   "add.profilesGroup": "Grupo para os perfis",
@@ -383,6 +383,34 @@ const pt = {
     one: "Grupo próprio",
     other: "Um grupo para cada assinatura",
   }),
+  "add.foundRouting": plural("count", {
+    one: "# perfil de roteamento",
+    other: "# perfis de roteamento",
+  }),
+  "add.foundUnsupported": plural("count", {
+    one: "# link não suportado",
+    other: "# links não suportados",
+  }),
+  "add.encryptedName": "Assinatura criptografada",
+  "add.encrypted.title": plural("count", {
+    one: "Link criptografado",
+    other: "# links criptografados",
+  }),
+  "add.encrypted.body":
+    "O provedor oculta o endereço. O Kasumi guarda o link como está e o descriptografa a cada atualização.",
+  "add.routingGroup": "Grupo",
+  "add.routingImported": plural("count", {
+    one: "Perfil de roteamento importado",
+    other: "# perfis de roteamento importados",
+  }),
+  "add.unsupported.control":
+    "Comandos para o app Happ (conectar, alternar, abrir) não fazem nada no Kasumi.",
+  "add.unsupported.sendToDevice":
+    "Um link de sincronização de dispositivos do Happ; só o Happ consegue lê-lo.",
+  "add.unsupported.routingOff":
+    "Desativa o roteamento de um provedor. Desative as rotas em Configurações → Roteamento.",
+  "add.unsupported.urlDecrypt": "O Kasumi não tem chave para este link criptografado.",
+  "add.unsupported.invalid": "Não é um link do Happ válido.",
   "groups.picker.new": "Novo grupo…",
   "groups.picker.newNamed": "Novo grupo “{name}”",
   "groups.picker.nameLabel": "Nome do novo grupo",

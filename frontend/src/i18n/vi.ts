@@ -363,7 +363,7 @@ const vi = {
   "add.inputLabel": "Liên kết, gói đăng ký hoặc mã QR",
   "add.inputPh": "https://… · vless://… · ss://…",
   "add.inputHint":
-    "URL gói đăng ký, liên kết hồ sơ, nội dung gói đăng ký hoặc danh sách đã xuất — đều được nhận diện",
+    "URL gói đăng ký, liên kết happ://, liên kết hồ sơ, nội dung gói đăng ký hoặc danh sách đã xuất — đều được nhận diện",
   "add.nothingFound": "Chưa nhận diện được gì",
   "add.submit": "Thêm",
   "add.profilesGroup": "Nhóm cho các hồ sơ",
@@ -373,6 +373,27 @@ const vi = {
   "add.foundProfiles": plural("count", { one: "# hồ sơ", other: "# hồ sơ" }),
   "add.alreadyAdded": plural("count", { one: "# đã có", other: "# đã có" }),
   "add.groupEach": plural("count", { one: "Nhóm riêng", other: "Mỗi gói đăng ký một nhóm" }),
+  "add.foundRouting": plural("count", { one: "# hồ sơ định tuyến", other: "# hồ sơ định tuyến" }),
+  "add.foundUnsupported": plural("count", {
+    one: "# liên kết không được hỗ trợ",
+    other: "# liên kết không được hỗ trợ",
+  }),
+  "add.encryptedName": "Gói đăng ký mã hóa",
+  "add.encrypted.title": plural("count", { one: "Liên kết mã hóa", other: "# liên kết mã hóa" }),
+  "add.encrypted.body":
+    "Nhà cung cấp ẩn địa chỉ. Kasumi giữ nguyên liên kết và giải mã nó mỗi lần cập nhật.",
+  "add.routingGroup": "Nhóm",
+  "add.routingImported": plural("count", {
+    one: "Đã nhập hồ sơ định tuyến",
+    other: "Đã nhập # hồ sơ định tuyến",
+  }),
+  "add.unsupported.control":
+    "Lệnh cho ứng dụng Happ (kết nối, bật/tắt, mở) không có tác dụng trong Kasumi.",
+  "add.unsupported.sendToDevice": "Liên kết đồng bộ thiết bị của Happ; chỉ Happ đọc được.",
+  "add.unsupported.routingOff":
+    "Tắt định tuyến của nhà cung cấp. Hãy tắt tuyến trong Cài đặt → Định tuyến.",
+  "add.unsupported.urlDecrypt": "Kasumi không có khóa cho liên kết mã hóa này.",
+  "add.unsupported.invalid": "Không phải liên kết Happ hợp lệ.",
   "groups.picker.new": "Nhóm mới…",
   "groups.picker.newNamed": "Nhóm mới “{name}”",
   "groups.picker.nameLabel": "Tên nhóm mới",

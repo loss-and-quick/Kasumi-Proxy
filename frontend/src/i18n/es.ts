@@ -371,7 +371,7 @@ const es = {
   "add.inputLabel": "Enlaces, suscripciones o un código QR",
   "add.inputPh": "https://… · vless://… · ss://…",
   "add.inputHint":
-    "URL de suscripción, enlaces de perfiles, el contenido de una suscripción o una lista exportada: todo se reconoce",
+    "URL de suscripción, enlaces happ://, enlaces de perfiles, el contenido de una suscripción o una lista exportada: todo se reconoce",
   "add.nothingFound": "Aún no se reconoce nada",
   "add.submit": "Añadir",
   "add.profilesGroup": "Grupo para los perfiles",
@@ -384,6 +384,31 @@ const es = {
     one: "Su propio grupo",
     other: "Un grupo para cada suscripción",
   }),
+  "add.foundRouting": plural("count", {
+    one: "# perfil de enrutamiento",
+    other: "# perfiles de enrutamiento",
+  }),
+  "add.foundUnsupported": plural("count", {
+    one: "# enlace no compatible",
+    other: "# enlaces no compatibles",
+  }),
+  "add.encryptedName": "Suscripción cifrada",
+  "add.encrypted.title": plural("count", { one: "Enlace cifrado", other: "# enlaces cifrados" }),
+  "add.encrypted.body":
+    "El proveedor oculta la dirección. Kasumi guarda el enlace tal cual y lo descifra en cada actualización.",
+  "add.routingGroup": "Grupo",
+  "add.routingImported": plural("count", {
+    one: "Perfil de enrutamiento importado",
+    other: "# perfiles de enrutamiento importados",
+  }),
+  "add.unsupported.control":
+    "Los comandos para la app Happ (conectar, alternar, abrir) no hacen nada en Kasumi.",
+  "add.unsupported.sendToDevice":
+    "Un enlace de sincronización de dispositivos de Happ; solo Happ puede leerlo.",
+  "add.unsupported.routingOff":
+    "Desactiva el enrutamiento de un proveedor. Desactiva las rutas en Ajustes → Enrutamiento.",
+  "add.unsupported.urlDecrypt": "Kasumi no tiene clave para este enlace cifrado.",
+  "add.unsupported.invalid": "No es un enlace de Happ válido.",
   "groups.picker.new": "Nuevo grupo…",
   "groups.picker.newNamed": "Nuevo grupo «{name}»",
   "groups.picker.nameLabel": "Nombre del nuevo grupo",

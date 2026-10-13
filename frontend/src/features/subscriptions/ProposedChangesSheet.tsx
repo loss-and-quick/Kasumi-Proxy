@@ -4,6 +4,7 @@ import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { Btn, Disclosure, Icon, Sheet } from "../../components";
 import { type DictKey, useFormatters, useT } from "../../i18n";
 import type { PendingChange, Subscription } from "../../lib/bridge";
+import { BASE_GROUP_ID } from "../../lib/groups";
 import { useIsWide } from "../../lib/useIsWide";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
@@ -259,7 +260,8 @@ function ChangeRow({
       {move && <DomainMoveCard from={move.from} to={move.to} other={move.otherDomain} />}
       {action.kind === "importRouting" ? (
         <RoutingImportCard
-          sub={sub}
+          groupId={sub.groupId ?? BASE_GROUP_ID}
+          ownerSubId={sub.id}
           routing={action.routing}
           activate={activate}
           onActivate={setActivate}
