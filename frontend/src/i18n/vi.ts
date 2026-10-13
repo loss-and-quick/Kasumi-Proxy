@@ -1253,6 +1253,8 @@ const vi = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Trực tiếp",
   "routes.out.block": "Chặn",
+  "profiles.label.deleted": "Hồ sơ đã xóa",
+  "profilePicker.title": "Chọn hồ sơ",
   "routes.block.add": "Thêm khối",
   "routes.block.insertHere": "Chèn khối vào đây",
   "routes.block.reorder": "Kéo để sắp xếp",

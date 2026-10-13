@@ -1209,6 +1209,8 @@ const zh = {
   "routes.out.proxy": "代理",
   "routes.out.direct": "直连",
   "routes.out.block": "阻止",
+  "profiles.label.deleted": "已删除的配置",
+  "profilePicker.title": "选择配置",
   "routes.block.add": "添加规则块",
   "routes.block.insertHere": "在此插入规则块",
   "routes.block.reorder": "拖动以排序",

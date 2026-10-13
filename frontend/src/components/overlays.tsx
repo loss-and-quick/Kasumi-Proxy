@@ -1,4 +1,15 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { useT } from "../i18n";
 import { registerSheet, useIsTopSheet } from "../lib/sheetPresence";
 import { useEscapeToClose } from "../lib/useEscapeToClose";
@@ -19,6 +30,22 @@ function Scrim({ onClose, leaving }: { onClose: () => void; leaving?: boolean })
   );
 }
 
+/** The sheet a component renders inside, for {@link BesideSheet}. */
+const SheetHost = createContext<RefObject<HTMLDivElement | null> | null>(null);
+
+/**
+ * Renders a sheet opened from inside another sheet next to it rather than in
+ * it: the host's transform would pin the child to the host's box, and the host
+ * hiding behind the new top sheet would take the child along.
+ */
+export function BesideSheet({ children }: { children: ReactNode }) {
+  const host = useContext(SheetHost);
+  const [target, setTarget] = useState<Element | null>(null);
+  useLayoutEffect(() => setTarget(host?.current?.parentElement ?? null), [host]);
+  if (!host) return <>{children}</>;
+  return target ? createPortal(children, target) : null;
+}
+
 export const Sheet = ({
   open,
   title,
@@ -26,6 +53,7 @@ export const Sheet = ({
   children,
   headRight,
   beforeClose,
+  full,
 }: {
   open: boolean;
   title?: ReactNode;
@@ -34,6 +62,8 @@ export const Sheet = ({
   headRight?: ReactNode;
   /** Asked before any close (swipe, scrim, Escape, ✕); false keeps the sheet open. */
   beforeClose?: () => boolean | Promise<boolean>;
+  /** Keep the full height, so filtering a long list doesn't resize the sheet. */
+  full?: boolean;
 }) => {
   const t = useT();
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -81,7 +111,7 @@ export const Sheet = ({
       {isTop && <Scrim onClose={() => void requestClose()} leaving={closing} />}
       <div
         ref={sheetRef}
-        className={`sheet${closing ? " leaving" : ""}${!isTop ? " stacked-behind" : ""}`}
+        className={`sheet${full ? " full" : ""}${closing ? " leaving" : ""}${!isTop ? " stacked-behind" : ""}`}
         onTransitionEnd={onTransitionEnd}
         aria-hidden={!isTop}
         style={
@@ -108,7 +138,9 @@ export const Sheet = ({
             />
           </div>
         </div>
-        <div className="sheet-body">{children}</div>
+        <div className="sheet-body">
+          <SheetHost.Provider value={sheetRef}>{children}</SheetHost.Provider>
+        </div>
       </div>
     </>
   );

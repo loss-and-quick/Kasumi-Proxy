@@ -1293,6 +1293,8 @@ const pt = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Direto",
   "routes.out.block": "Bloquear",
+  "profiles.label.deleted": "Perfil excluído",
+  "profilePicker.title": "Escolha um perfil",
   "routes.block.add": "Adicionar bloco",
   "routes.block.insertHere": "Inserir um bloco aqui",
   "routes.block.reorder": "Arraste para reordenar",

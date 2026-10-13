@@ -16,7 +16,7 @@ import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
 import { copyText } from "./clipboard";
 import { askRemoveUnreachable } from "./confirmations";
-import { sortProfiles } from "./order";
+import { groupSections, sortProfiles } from "./order";
 import { PingActionsSheet } from "./PingActionsSheet";
 import { ProfilesList } from "./ProfilesList";
 import { ProfilesToolbar } from "./ProfilesToolbar";
@@ -120,13 +120,9 @@ export default function Profiles({
     list = sortProfiles(list, sort, testResults);
   }
 
-  const byGroup: Record<string, Profile[]> = {};
-  list.forEach((profile) => {
-    const groupProfiles = byGroup[profile.meta.groupId] ?? [];
-    groupProfiles.push(profile);
-    byGroup[profile.meta.groupId] = groupProfiles;
-  });
-  const orderedGroups = groups.filter((group) => byGroup[group.id]?.length);
+  const sections = groupSections(list, groups);
+  const byGroup = Object.fromEntries(sections.map((s) => [s.group.id, s.profiles]));
+  const orderedGroups = sections.map((s) => s.group);
   // "All" means what the group filter and the search leave on screen.
   const visibleIds = list.map((profile) => profile.meta.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected[id]);

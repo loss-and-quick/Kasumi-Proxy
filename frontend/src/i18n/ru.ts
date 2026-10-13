@@ -1440,6 +1440,8 @@ const ru = {
   "routes.out.proxy": "Прокси",
   "routes.out.direct": "Напрямую",
   "routes.out.block": "Блокировать",
+  "profiles.label.deleted": "Удалённый профиль",
+  "profilePicker.title": "Выберите профиль",
   "routes.block.add": "Добавить блок",
   "routes.block.insertHere": "Вставить блок сюда",
   "routes.block.reorder": "Перетащите, чтобы изменить порядок",

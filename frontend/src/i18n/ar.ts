@@ -1532,6 +1532,8 @@ const ar = {
   "routes.out.proxy": "الوكيل",
   "routes.out.direct": "مباشر",
   "routes.out.block": "حظر",
+  "profiles.label.deleted": "ملف محذوف",
+  "profilePicker.title": "اختر ملفًا",
   "routes.block.add": "إضافة كتلة",
   "routes.block.insertHere": "إدراج كتلة هنا",
   "routes.block.reorder": "اسحب لإعادة الترتيب",

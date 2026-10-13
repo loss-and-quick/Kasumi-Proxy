@@ -1241,6 +1241,8 @@ const hi = {
   "routes.out.proxy": "प्रॉक्सी",
   "routes.out.direct": "सीधे",
   "routes.out.block": "ब्लॉक करें",
+  "profiles.label.deleted": "हटाई गई प्रोफ़ाइल",
+  "profilePicker.title": "प्रोफ़ाइल चुनें",
   "routes.block.add": "ब्लॉक जोड़ें",
   "routes.block.insertHere": "यहाँ ब्लॉक डालें",
   "routes.block.reorder": "क्रम बदलने के लिए खींचें",

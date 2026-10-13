@@ -1301,6 +1301,8 @@ const es = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Directo",
   "routes.out.block": "Bloquear",
+  "profiles.label.deleted": "Perfil eliminado",
+  "profilePicker.title": "Elige un perfil",
   "routes.block.add": "Añadir bloque",
   "routes.block.insertHere": "Insertar un bloque aquí",
   "routes.block.reorder": "Arrastra para reordenar",

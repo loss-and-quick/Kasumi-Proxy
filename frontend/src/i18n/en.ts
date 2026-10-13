@@ -1280,6 +1280,8 @@ const en = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Direct",
   "routes.out.block": "Block",
+  "profiles.label.deleted": "Deleted profile",
+  "profilePicker.title": "Choose a profile",
   "routes.block.add": "Add block",
   "routes.block.insertHere": "Insert a block here",
   "routes.block.reorder": "Drag to reorder",
