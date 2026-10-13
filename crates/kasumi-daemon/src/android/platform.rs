@@ -309,6 +309,12 @@ async fn bring_up_tun_helper(
     anyhow::bail!("tun helper tun {iface} never came up — see {log}")
 }
 
+/// The local port the force-proxy tun's helper bridges into: the core's `force-in`
+/// inbound, which skips the geo rules.
+fn force_tun_target(socks_port: u16, http_port: u16) -> u16 {
+    force_socks_port(socks_port, http_port)
+}
+
 /// External-tun data-path bring-up: a userspace tun bridged to the core's SOCKS via
 /// the chosen TUN engine, plus per-app routing (and a second tun for force-proxy
 /// apps). A native sing-box tun needs none of this — it auto_routes its own tun.
@@ -319,6 +325,7 @@ async fn bring_up_external_tun(
 ) -> anyhow::Result<()> {
     let helper_bin = tun_helper_bin(tun);
     let filter = read_app_filter().await;
+    let http = http_port().await;
     // The sidecar sing-box (SingboxTun engine) reads this; other engines ignore it.
     let stack = singbox_stack().await;
     let tun_iface = match read_iface(TUN_IFACE_FILE).await {
@@ -356,7 +363,7 @@ async fn bring_up_external_tun(
                 &t,
                 TUN2_IPV4,
                 Some(TUN2_IPV6),
-                socks_port + 2,
+                force_tun_target(socks_port, http),
                 tun_cfg_path(tun, true),
                 TUN2SOCKS2_PIDFILE,
                 "tun-engine2.log",
@@ -383,7 +390,7 @@ async fn bring_up_external_tun(
         tun2_iface,
         filter,
         socks_port,
-        http_port: http_port().await,
+        http_port: http,
     };
     apply_external_tun_routing(&rs).await;
     Ok(())
@@ -948,6 +955,43 @@ mod tests {
             "FATAL[0000] decode config: outbounds[0].server: unknown field"
         ));
         assert!(!lost_xtables_race(""));
+    }
+
+    #[test]
+    fn force_tun_bridges_into_the_force_inbound() {
+        use kasumi_core::share::parse_share_link;
+        use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
+        use kasumi_core::xray_config::build_xray_config;
+
+        let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let profiles = std::slice::from_ref(&p);
+        // Default layout, and an http port on socks + 2 that pushes force-in further.
+        for http in [10809, 10810] {
+            let s = AdvancedSettings {
+                local_socks_port: Some(10808),
+                local_http_port: Some(http),
+                ..Default::default()
+            };
+            let xray = build_xray_config(&p, &s, &[], profiles).unwrap();
+            let opts = SingboxBuildOpts {
+                no_tun: true,
+                srs_dir: "",
+            };
+            let sing_box = build_singbox_config(&p, &s, &[], profiles, opts).unwrap();
+            for (cfg, port_key) in [(&xray, "port"), (&sing_box, "listen_port")] {
+                let force_in = cfg["inbounds"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|i| i["tag"] == "force-in")
+                    .unwrap();
+                assert_eq!(
+                    force_in[port_key].as_u64(),
+                    Some(u64::from(force_tun_target(10808, http))),
+                    "http {http}"
+                );
+            }
+        }
     }
 
     #[test]
