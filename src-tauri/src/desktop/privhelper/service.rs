@@ -361,10 +361,10 @@ pub fn uninstall() -> anyhow::Result<()> {
         Ok(s) => s,
         Err(_) => return Ok(()),
     };
-    if let Ok(status) = service.query_status() {
-        if status.current_state != ServiceState::Stopped {
-            let _ = service.stop();
-        }
+    if let Ok(status) = service.query_status()
+        && status.current_state != ServiceState::Stopped
+    {
+        let _ = service.stop();
     }
     service.delete().context("delete service")?;
     Ok(())
