@@ -18,7 +18,7 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use kasumi_backend::platform::{Platform, StartDataPath, StopDataPath, TestCore};
 
-use super::proto::{PrivReply, PrivRequest};
+use super::proto::{PROTOCOL_VERSION, PrivReply, PrivRequest};
 use super::transport::{BoxRead, BoxWrite};
 
 /// Generous vs the longest single test (~18 s): a core still registered this long
@@ -65,7 +65,9 @@ impl Server {
         #[cfg(target_os = "linux")]
         let handoff = Handoff::for_request(&req);
         let reply = match req {
-            PrivRequest::Ping => PrivReply::Pong,
+            PrivRequest::Ping => PrivReply::Pong {
+                protocol: Some(PROTOCOL_VERSION),
+            },
             PrivRequest::BootInit => to_reply(self.platform.boot_init().await),
             PrivRequest::StartDataPath {
                 engine,

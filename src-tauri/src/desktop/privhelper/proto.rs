@@ -23,12 +23,19 @@ use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::state::ProxyMode;
 use kasumi_core::tun::TunOptions;
 
+/// Version of this protocol, reported in the helper's `Pong`. Bump it whenever a
+/// request or reply changes in a way the other side can't read, so a helper left
+/// over from another build is refused at the handshake instead of failing later on
+/// a request it doesn't know.
+pub const PROTOCOL_VERSION: u32 = 1;
+
 /// A privileged operation the GUI asks the helper to perform. Mirrors the
 /// privilege-needing methods of `Platform`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum PrivRequest {
-    /// Readiness probe — the GUI waits for a `Pong` after spawning the helper.
+    /// Readiness probe and handshake — the GUI waits for a `Pong` after spawning the
+    /// helper and checks its protocol version.
     Ping,
     /// One-time boot setup (run dirs, seed lifecycle state).
     BootInit,
@@ -78,7 +85,12 @@ pub enum PrivRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "reply", rename_all = "snake_case")]
 pub enum PrivReply {
-    Pong,
+    /// `protocol` is [`PROTOCOL_VERSION`]; a helper from before the handshake
+    /// existed sends none.
+    Pong {
+        #[serde(default)]
+        protocol: Option<u32>,
+    },
     /// An operation with no payload succeeded (`BootInit` / `StartDataPath` /
     /// `StopDataPath`).
     Ok,
@@ -105,10 +117,99 @@ pub enum PrivReply {
     },
 }
 
+/// The helper answered the handshake with another protocol version, or with none
+/// (a helper from before the handshake). It is a different build of the app, so
+/// retrying can't help: the helper has to be restarted or reinstalled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HelperOutdated {
+    pub helper: Option<u32>,
+}
+
+impl std::fmt::Display for HelperOutdated {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let helper = self
+            .helper
+            .map_or_else(|| "none".to_owned(), |v| v.to_string());
+        write!(
+            f,
+            "the privileged helper speaks protocol {helper}, this app {PROTOCOL_VERSION}; \
+             restart or reinstall Kasumi Proxy"
+        )
+    }
+}
+
+impl std::error::Error for HelperOutdated {}
+
+/// Accept the helper's reply to `Ping` only from a helper on this protocol.
+pub fn check_handshake(reply: &PrivReply) -> anyhow::Result<()> {
+    match reply {
+        PrivReply::Pong {
+            protocol: Some(PROTOCOL_VERSION),
+        } => Ok(()),
+        PrivReply::Pong { protocol } => Err(HelperOutdated { helper: *protocol }.into()),
+        other => anyhow::bail!("helper did not answer Ping: {other:?}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use kasumi_core::contract::RunState;
+
+    #[test]
+    fn pong_carries_the_protocol_version() {
+        let pong = PrivReply::Pong {
+            protocol: Some(PROTOCOL_VERSION),
+        };
+        assert_eq!(
+            serde_json::to_string(&pong).unwrap(),
+            format!(r#"{{"reply":"pong","protocol":{PROTOCOL_VERSION}}}"#)
+        );
+        assert!(check_handshake(&pong).is_ok());
+    }
+
+    // A helper from before the handshake answers a bare pong: that is a mismatch.
+    #[test]
+    fn a_pong_without_a_version_is_an_outdated_helper() {
+        let old: PrivReply = serde_json::from_str(r#"{"reply":"pong"}"#).unwrap();
+        assert_eq!(old, PrivReply::Pong { protocol: None });
+        let err = check_handshake(&old).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<HelperOutdated>(),
+            Some(&HelperOutdated { helper: None })
+        );
+    }
+
+    #[test]
+    fn another_protocol_version_is_refused() {
+        for v in [PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1] {
+            let err = check_handshake(&PrivReply::Pong { protocol: Some(v) }).unwrap_err();
+            assert_eq!(
+                err.downcast_ref::<HelperOutdated>(),
+                Some(&HelperOutdated { helper: Some(v) })
+            );
+        }
+        let err = check_handshake(&PrivReply::Ok).unwrap_err();
+        assert!(err.downcast_ref::<HelperOutdated>().is_none());
+    }
+
+    // An older GUI, whose `Pong` has no fields, still reads the new reply.
+    #[test]
+    fn an_older_gui_still_reads_the_versioned_pong() {
+        #[derive(Debug, PartialEq, Deserialize)]
+        #[serde(tag = "reply", rename_all = "snake_case")]
+        enum OldReply {
+            Pong,
+        }
+        let line = serde_json::to_string(&PrivReply::Pong {
+            protocol: Some(PROTOCOL_VERSION),
+        })
+        .unwrap();
+        assert_eq!(
+            serde_json::from_str::<OldReply>(&line).unwrap(),
+            OldReply::Pong
+        );
+    }
 
     /// One line in, one value out — every request/reply variant survives the JSON
     /// framing intact (the transport relies on this round-trip).
@@ -168,7 +269,9 @@ mod tests {
     #[test]
     fn replies_round_trip() {
         for r in [
-            PrivReply::Pong,
+            PrivReply::Pong {
+                protocol: Some(PROTOCOL_VERSION),
+            },
             PrivReply::Ok,
             PrivReply::State(ServiceState {
                 state: RunState::Connecting,

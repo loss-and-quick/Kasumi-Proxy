@@ -8,6 +8,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const zh = {
   // app shell
   "app.loading": "加载中…",
+  "startup.helperOutdated.title": "后台助手来自其他版本",
+  "startup.helperOutdated.body":
+    "Kasumi Proxy 通过后台助手运行隧道，但找到的助手属于另一个版本的应用。请重新启动 Kasumi Proxy。如果此消息再次出现，请重新安装应用，使应用与助手的版本一致。",
+  "startup.helperOutdated.detail": "应用协议 {app}，助手协议 {helper}",
+  "startup.helperOutdated.noVersion": "无",
   // nav
   "nav.overview": "概览",
   "nav.profiles": "配置",

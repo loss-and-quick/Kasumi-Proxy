@@ -8,6 +8,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const ru = {
   // app shell
   "app.loading": "Загрузка…",
+  "startup.helperOutdated.title": "Фоновый компонент от другой версии",
+  "startup.helperOutdated.body":
+    "Туннель работает через фоновый компонент Kasumi Proxy, но найденный компонент относится к другой версии приложения. Перезапустите Kasumi Proxy. Если сообщение появится снова, переустановите приложение, чтобы версии совпадали.",
+  "startup.helperOutdated.detail": "Протокол приложения: {app}, компонента: {helper}",
+  "startup.helperOutdated.noVersion": "не указан",
   // nav
   "nav.overview": "Обзор",
   "nav.profiles": "Профили",

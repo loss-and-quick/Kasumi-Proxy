@@ -10,7 +10,7 @@ use anyhow::Context;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
-use super::proto::{PrivReply, PrivRequest};
+use super::proto::{PrivReply, PrivRequest, check_handshake};
 use super::transport::{self, BoxRead, BoxWrite};
 
 /// A held-open connection to the privilege helper.
@@ -49,6 +49,13 @@ impl Client {
         Client::connect(&self.addr).await?.call(req).await
     }
 
+    /// Ping the helper and accept it only on this build's protocol. A mismatch is a
+    /// [`HelperOutdated`](super::proto::HelperOutdated) error, which retrying
+    /// won't fix.
+    pub async fn handshake(&self) -> anyhow::Result<()> {
+        check_handshake(&self.call_raw(PrivRequest::Ping).await?)
+    }
+
     /// Send one request and await its reply. A `PrivReply::Err` from the helper is
     /// surfaced as an `Err` so callers see failures as failures.
     pub async fn call(&self, req: PrivRequest) -> anyhow::Result<PrivReply> {
@@ -83,6 +90,8 @@ mod tests {
 
     use async_trait::async_trait;
     use serde_json::Value;
+
+    use super::super::proto::PROTOCOL_VERSION;
 
     use kasumi_backend::net::ProxyStatus;
     use kasumi_backend::platform::{
@@ -199,10 +208,7 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         };
 
-        assert_eq!(
-            client.call(PrivRequest::Ping).await.unwrap(),
-            PrivReply::Pong
-        );
+        client.handshake().await.unwrap();
         assert_eq!(
             client.call(PrivRequest::BootInit).await.unwrap(),
             PrivReply::Ok
@@ -270,10 +276,38 @@ mod tests {
         );
         assert_eq!(
             client.call(PrivRequest::Ping).await.unwrap(),
-            PrivReply::Pong
+            PrivReply::Pong {
+                protocol: Some(PROTOCOL_VERSION),
+            }
         );
         assert!(!slow.is_finished());
         slow.abort();
         let _ = stub; // kept alive for the duration of the server task
+    }
+
+    /// A helper built before the versioned handshake answers `Ping` with a bare
+    /// pong; the client must refuse it with the typed error the UI explains.
+    #[tokio::test]
+    async fn refuses_a_helper_from_before_the_handshake() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("helper.sock");
+        let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+        tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut write) = stream.into_split();
+            let mut lines = BufReader::new(read).lines();
+            while let Ok(Some(_)) = lines.next_line().await {
+                write.write_all(b"{\"reply\":\"pong\"}\n").await.unwrap();
+            }
+        });
+
+        let client = Client::connect(&sock.to_string_lossy()).await.unwrap();
+        let err = client.handshake().await.unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<super::super::proto::HelperOutdated>(),
+            Some(&super::super::proto::HelperOutdated { helper: None })
+        );
     }
 }

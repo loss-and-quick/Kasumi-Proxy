@@ -8,6 +8,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const ar = {
   // app shell
   "app.loading": "جارٍ التحميل…",
+  "startup.helperOutdated.title": "المساعد من إصدار آخر",
+  "startup.helperOutdated.body":
+    "يشغّل Kasumi Proxy النفق عبر مساعد يعمل في الخلفية، لكن المساعد الذي وجده ينتمي إلى إصدار آخر من التطبيق. أعد تشغيل Kasumi Proxy. إذا ظهرت هذه الرسالة مرة أخرى، فأعد تثبيت التطبيق حتى يتطابق إصداره مع إصدار المساعد.",
+  "startup.helperOutdated.detail": "بروتوكول التطبيق {app}، بروتوكول المساعد {helper}",
+  "startup.helperOutdated.noVersion": "غير محدد",
   // nav
   "nav.overview": "نظرة عامة",
   "nav.profiles": "الملفات التعريفية",

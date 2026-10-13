@@ -8,6 +8,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const vi = {
   // app shell
   "app.loading": "Đang tải…",
+  "startup.helperOutdated.title": "Trình trợ giúp thuộc phiên bản khác",
+  "startup.helperOutdated.body":
+    "Kasumi Proxy vận hành đường hầm qua một trình trợ giúp chạy nền, nhưng trình trợ giúp hiện có thuộc một phiên bản khác của ứng dụng. Hãy khởi động lại Kasumi Proxy. Nếu thông báo này vẫn xuất hiện, hãy cài đặt lại ứng dụng để hai phiên bản khớp nhau.",
+  "startup.helperOutdated.detail": "Giao thức ứng dụng: {app}, trình trợ giúp: {helper}",
+  "startup.helperOutdated.noVersion": "không có",
   // nav
   "nav.overview": "Tổng quan",
   "nav.profiles": "Hồ sơ",
