@@ -15,6 +15,7 @@ import type {
   LogTarget,
   Profile,
   ResolvedIdentity,
+  ResolvedImport_Serialize as ResolvedImport,
   RunState,
   SubAppliedEvent,
   TestKind,
@@ -41,6 +42,7 @@ export type {
   PendingChange_Serialize as PendingChange,
   RequestIdentityDefaults_Serialize as RequestIdentityDefaults,
   ResolvedIdentity,
+  ResolvedImport_Serialize as ResolvedImport,
   RoutingImport_Serialize as RoutingImport,
   RoutingRule,
   SubAppliedEvent,
@@ -178,6 +180,12 @@ export interface Bridge {
   chainCandidates(profile: Profile): Promise<string[]>;
 
   // import / export / backup
+  // What pasted or scanned text holds, sorted by the backend's grammar: subscription
+  // URLs (an encrypted `happ://crypt` link stays encrypted), routing profiles from
+  // `happ://routing`, links Kasumi can't use, and the rest for `parseShareLinks`.
+  resolveImportInput(text: string): Promise<ResolvedImport>;
+  // The URL behind an encrypted subscription link, only when the user asks to see it.
+  revealSubscriptionUrl(url: string): Promise<string>;
   parseShareLinks(text: string): Promise<Profile[]>; // vless:// vmess:// trojan://
   buildShareLink(p: Profile): Promise<string>;
   exportBackup(): Promise<Blob>;

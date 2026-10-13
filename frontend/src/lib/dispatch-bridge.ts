@@ -324,6 +324,13 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);
     },
+    async resolveImportInput(text) {
+      const r = await dispatch({ cmd: "resolveImportInput", text });
+      return r.kind === "importInput" ? r.value : wrongKind(r, "importInput");
+    },
+    async revealSubscriptionUrl(url) {
+      return asText(await dispatch({ cmd: "revealSubscriptionUrl", url }));
+    },
     async buildShareLink(p) {
       return asText(await dispatch({ cmd: "buildShareLink", profile: p }));
     },

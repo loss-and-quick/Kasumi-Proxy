@@ -279,3 +279,32 @@ describe("dispatch-bridge request identity", () => {
     });
   });
 });
+
+describe("dispatch-bridge import input", () => {
+  it("resolveImportInput returns the backend's sorting", async () => {
+    const value = {
+      subscriptions: [{ url: "happ://crypt5/abc", encrypted: true }],
+      routing: [],
+      unsupported: [{ text: "happ://toggle", kind: "control" as const }],
+      shareText: "vless://x",
+    };
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "importInput", value }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.resolveImportInput("text")).toEqual(value);
+    expect(dispatch).toHaveBeenCalledWith({ cmd: "resolveImportInput", text: "text" });
+  });
+
+  it("revealSubscriptionUrl asks for the link it was given", async () => {
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "text", value: "https://sub.example/s" }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.revealSubscriptionUrl("happ://crypt5/abc")).toBe("https://sub.example/s");
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "revealSubscriptionUrl",
+      url: "happ://crypt5/abc",
+    });
+  });
+});

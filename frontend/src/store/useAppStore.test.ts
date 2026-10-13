@@ -178,6 +178,13 @@ function createBridgeMock(): BridgeMock {
     ),
     chainCandidates: vi.fn(async (_profile: Profile) => []),
     parseShareLinks: vi.fn(async (_text: string) => []),
+    resolveImportInput: vi.fn(async (_text: string) => ({
+      subscriptions: [],
+      routing: [],
+      unsupported: [],
+      shareText: "",
+    })),
+    revealSubscriptionUrl: vi.fn(async (_url: string) => ""),
     buildShareLink: vi.fn(async (_profile: Profile) => ""),
     exportBackup: vi.fn(async () => new Blob()),
     importBackup: vi.fn(async (_file: Blob, _mode: "merge" | "replace") => {}),
