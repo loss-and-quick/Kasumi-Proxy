@@ -83,7 +83,8 @@ pub struct Route {
     /// A switched-off route lets its profiles fall back to the default route.
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
-    /// Profile ids this route applies to. Empty on the default route.
+    /// Profile ids this route applies to. On the default route: profiles pinned
+    /// to it against their group's route.
     #[serde(default)]
     pub profiles: Vec<String>,
     /// Group ids this route applies to (every profile in them, unless a route
@@ -123,9 +124,10 @@ pub fn default_route() -> Route {
     }
 }
 
-/// The route `profile` runs with: the enabled route listing it, else the one
-/// listing its group, else the default. `None` only when state has no routes
-/// at all (before [`normalize_routes`] ran).
+/// The route `profile` runs with: the enabled route listing it (the default
+/// route too, which pins it there), else the one listing its group, else the
+/// default. `None` only when state has no routes at all (before
+/// [`normalize_routes`] ran).
 pub fn route_for<'a>(state: &'a AppState, profile: &Profile) -> Option<&'a Route> {
     let meta = profile.meta();
     let live = || state.routes.iter().filter(|r| r.enabled);
@@ -178,8 +180,8 @@ fn catch_all_rule(outbound: &str) -> RoutingRule {
 ///
 /// - The flat rule list of older versions (and of older backups) becomes a
 ///   block at the end of the default route.
-/// - The default route exists, comes first, is on, and lists no one (it covers
-///   whoever the others don't).
+/// - The default route exists, comes first, is on, and lists no group (it covers
+///   whoever the others don't); the profiles it lists are pinned to it.
 /// - A route only names blocks that exist, each once.
 /// - A profile or group is listed by one route only (the first that lists it),
 ///   and only while it exists.
@@ -202,10 +204,8 @@ pub fn normalize_routes(state: &mut AppState) {
             .blocks
             .retain(|b| blocks.contains(b.block_id.as_str()) && seen.insert(b.block_id.clone()));
         if route.id == DEFAULT_ROUTE_ID {
-            route.profiles.clear();
             route.groups.clear();
             route.enabled = true;
-            continue;
         }
         route
             .profiles
@@ -273,17 +273,14 @@ pub fn upsert_route(state: &mut AppState, route: Route) {
     }
 }
 
-/// Make `profile_id` run with `route_id`: listed there and nowhere else. The
-/// default route (or `None`) only takes it off the others, so its group's route
-/// or the default applies again.
+/// Make `profile_id` run with `route_id`: listed there and nowhere else, the
+/// default route included (which pins it against its group's route). `None`
+/// only takes it off every route, so its group's route or the default applies.
 pub fn set_profile_route(state: &mut AppState, profile_id: &str, route_id: Option<&str>) {
     for route in &mut state.routes {
         route.profiles.retain(|id| id != profile_id);
     }
-    if let Some(route) = route_id
-        .filter(|id| *id != DEFAULT_ROUTE_ID)
-        .and_then(|id| state.routes.iter_mut().find(|r| r.id == id))
-    {
+    if let Some(route) = route_id.and_then(|id| state.routes.iter_mut().find(|r| r.id == id)) {
         route.profiles.push(profile_id.to_string());
     }
 }
@@ -495,7 +492,7 @@ mod tests {
         late.profiles = vec!["a".into()];
         late.groups = vec!["g2".into()];
         let mut default = s.routes.remove(0);
-        default.profiles = vec!["b".into()];
+        default.profiles = vec!["b".into(), "deleted".into()];
         default.enabled = false;
         s.routes = vec![work, default, late];
 
@@ -505,7 +502,12 @@ mod tests {
         assert_eq!(s, again, "idempotent");
 
         assert_eq!(s.routes[0].id, DEFAULT_ROUTE_ID);
-        assert!(s.routes[0].enabled && s.routes[0].profiles.is_empty());
+        assert!(s.routes[0].enabled);
+        assert_eq!(
+            s.routes[0].profiles,
+            ["b"],
+            "a pin to the default route stays"
+        );
         let work = &s.routes[1];
         assert_eq!(work.blocks, refs(&["work"]));
         assert_eq!(work.profiles, ["a"]);
@@ -531,7 +533,33 @@ mod tests {
         assert!(s.routes[1].profiles.is_empty());
         assert_eq!(s.routes[2].profiles, ["a"]);
         set_profile_route(&mut s, "a", Some(DEFAULT_ROUTE_ID));
+        assert_eq!(s.routes[0].profiles, ["a"]);
+        assert!(s.routes[1..].iter().all(|r| r.profiles.is_empty()));
+        set_profile_route(&mut s, "a", None);
         assert!(s.routes.iter().all(|r| r.profiles.is_empty()));
+    }
+
+    #[test]
+    fn a_profile_pinned_to_the_default_route_leaves_its_groups_route() {
+        let mut s = state();
+        let mut team = route("team", &["work"]);
+        team.groups = vec!["g2".into()];
+        s.routes.push(team);
+        let (b, c) = (s.profiles[1].clone(), s.profiles[2].clone());
+
+        set_profile_route(&mut s, "b", Some(DEFAULT_ROUTE_ID));
+        normalize_routes(&mut s);
+        assert_eq!(route_for(&s, &b).unwrap().id, DEFAULT_ROUTE_ID);
+        assert_eq!(ids(&resolve_route(&s, &b)), ["ad", "ru"]);
+        // The rest of the group still runs the group's route.
+        assert_eq!(route_for(&s, &c).unwrap().id, "team");
+
+        // Listing the profile on another route takes the pin away.
+        let mut solo = route("solo", &["ru"]);
+        solo.profiles = vec!["b".into()];
+        upsert_route(&mut s, solo);
+        assert!(s.routes[0].profiles.is_empty());
+        assert_eq!(route_for(&s, &b).unwrap().id, "solo");
     }
 
     #[test]

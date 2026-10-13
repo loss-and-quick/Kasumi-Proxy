@@ -1330,6 +1330,7 @@ const en = {
     "It comes in without profiles: pick who it applies to afterwards. Blocks you already have are reused.",
   "editor.route": "Route",
   "editor.routeFollow": "Same as the group: {route}",
+  "editor.routePinDefault": "Always “{route}”, not the group's route",
   "editor.routeHint": "Which routing rules this profile runs with in Rules mode.",
   "overview.route": "Route: {route}",
   "overview.routeOpen": "Open the route",

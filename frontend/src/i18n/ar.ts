@@ -1594,6 +1594,7 @@ const ar = {
     "يُضاف بلا ملفات: اختر لاحقًا على من يُطبَّق. تُعاد الكتل المطابقة الموجودة لديك.",
   "editor.route": "المسار",
   "editor.routeFollow": "مثل المجموعة: {route}",
+  "editor.routePinDefault": "دائمًا «{route}»، لا مسار المجموعة",
   "editor.routeHint": "قواعد التوجيه التي يعمل بها هذا الملف في وضع القواعد.",
   "overview.route": "المسار: {route}",
   "overview.routeOpen": "فتح المسار",

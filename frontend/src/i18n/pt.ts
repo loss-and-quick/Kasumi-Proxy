@@ -1344,6 +1344,7 @@ const pt = {
     "Ela entra sem perfis: escolha depois a quem se aplica. Blocos iguais que você já tem são reaproveitados.",
   "editor.route": "Rota",
   "editor.routeFollow": "Igual ao grupo: {route}",
+  "editor.routePinDefault": "Sempre “{route}”, não a rota do grupo",
   "editor.routeHint": "Com quais regras de roteamento este perfil funciona no modo de regras.",
   "overview.route": "Rota: {route}",
   "overview.routeOpen": "Abrir a rota",

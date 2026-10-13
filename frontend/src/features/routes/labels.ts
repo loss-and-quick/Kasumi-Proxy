@@ -21,7 +21,7 @@ export function outboundLabel(tag: string, t: T, profiles: Pick<Profile, "meta">
   return profiles.find((p) => p.meta.id === tag)?.meta.remarks ?? t("routes.out.proxy");
 }
 
-/** "Everyone else", or the groups and profiles a route lists. */
+/** "Everyone else" (plus pinned profiles), or the groups and profiles a route lists. */
 export function scopeSummary(
   route: Route,
   t: T,
@@ -29,15 +29,16 @@ export function scopeSummary(
   groups: Group[],
   profiles: Pick<Profile, "meta">[],
 ): string {
-  if (isDefaultRoute(route)) return t("routes.scope.everyoneElse");
+  const everyoneElse = isDefaultRoute(route) ? t("routes.scope.everyoneElse") : null;
   const groupNames = routeGroups(route)
     .map((id) => groups.find((g) => g.id === id)?.name)
     .filter((name): name is string => !!name);
   const profileNames = routeProfiles(route)
     .map((id) => profiles.find((p) => p.meta.id === id)?.meta.remarks)
     .filter((name): name is string => !!name);
-  if (!groupNames.length && !profileNames.length) return t("routes.scope.nobody");
-  const parts: string[] = [];
+  if (!groupNames.length && !profileNames.length) return everyoneElse ?? t("routes.scope.nobody");
+  // The default route covers everyone else, plus the profiles pinned to it.
+  const parts: string[] = everyoneElse ? [everyoneElse] : [];
   if (groupNames.length) parts.push(formatters.formatList(groupNames));
   if (profileNames.length)
     parts.push(

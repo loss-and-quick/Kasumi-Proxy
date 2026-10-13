@@ -45,7 +45,10 @@ export function newRoute(id: string, name: string): Route {
   };
 }
 
-/** Mirrors `route_for`: the route listing the profile, else its group, else the default. */
+/**
+ * Mirrors `route_for`: the route listing the profile (the default route too,
+ * which pins it there), else its group's, else the default.
+ */
 export function routeFor(
   routes: Route[],
   profile: Pick<Profile, "meta"> | undefined,
@@ -65,8 +68,9 @@ export function routeReason(
   route: Route | undefined,
   profile: Pick<Profile, "meta">,
 ): "profile" | "group" | "default" {
-  if (!route || isDefaultRoute(route)) return "default";
-  return routeProfiles(route).includes(profile.meta.id) ? "profile" : "group";
+  if (!route) return "default";
+  if (routeProfiles(route).includes(profile.meta.id)) return "profile";
+  return isDefaultRoute(route) ? "default" : "group";
 }
 
 /** The routes a block sits in. */
@@ -110,7 +114,7 @@ export function setProfileRoute(
 ): Route[] {
   return routes.map((r) => {
     const profiles = routeProfiles(r).filter((id) => id !== profileId);
-    if (r.id === routeId && !isDefaultRoute(r)) profiles.push(profileId);
+    if (r.id === routeId) profiles.push(profileId);
     return { ...r, profiles };
   });
 }
@@ -151,9 +155,17 @@ export function normalizeRoutes<
     const refs = routeBlocks(r).filter(
       (b) => blocks.has(b.blockId) && !seen.has(b.blockId) && seen.add(b.blockId),
     );
-    if (isDefaultRoute(r)) return { ...r, blocks: refs, profiles: [], groups: [], enabled: true };
     const keep = (ids: string[], live: Set<string>, taken: Set<string>) =>
       ids.filter((id) => live.has(id) && !taken.has(id) && taken.add(id));
+    if (isDefaultRoute(r)) {
+      return {
+        ...r,
+        blocks: refs,
+        profiles: keep(routeProfiles(r), profiles, takenProfiles),
+        groups: [],
+        enabled: true,
+      };
+    }
     return {
       ...r,
       blocks: refs,

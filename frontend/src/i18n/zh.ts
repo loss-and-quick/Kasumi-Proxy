@@ -1255,6 +1255,7 @@ const zh = {
   "routes.share.importNote": "导入后不含任何配置，请稍后选择适用对象。已有的相同规则块会被复用。",
   "editor.route": "路由",
   "editor.routeFollow": "与分组相同：{route}",
+  "editor.routePinDefault": "始终使用「{route}」，不跟随分组的路由",
   "editor.routeHint": "在规则模式下此配置使用哪些路由规则。",
   "overview.route": "路由：{route}",
   "overview.routeOpen": "打开路由",

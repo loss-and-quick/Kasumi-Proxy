@@ -1289,6 +1289,7 @@ const hi = {
     "यह बिना प्रोफ़ाइल के जुड़ता है: बाद में चुनें कि यह किस पर लागू हो। आपके पास पहले से मौजूद ब्लॉक दोबारा इस्तेमाल होते हैं।",
   "editor.route": "रूट",
   "editor.routeFollow": "समूह जैसा: {route}",
+  "editor.routePinDefault": "हमेशा “{route}”, समूह का रूट नहीं",
   "editor.routeHint": "नियम मोड में यह प्रोफ़ाइल किन रूटिंग नियमों से चलती है।",
   "overview.route": "रूट: {route}",
   "overview.routeOpen": "रूट खोलें",

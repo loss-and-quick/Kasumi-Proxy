@@ -1352,6 +1352,7 @@ const es = {
     "Llega sin perfiles: elige después a quién se aplica. Los bloques iguales que ya tienes se reutilizan.",
   "editor.route": "Ruta",
   "editor.routeFollow": "Igual que el grupo: {route}",
+  "editor.routePinDefault": "Siempre «{route}», no la ruta del grupo",
   "editor.routeHint": "Con qué reglas de enrutamiento funciona este perfil en el modo de reglas.",
   "overview.route": "Ruta: {route}",
   "overview.routeOpen": "Abrir la ruta",
