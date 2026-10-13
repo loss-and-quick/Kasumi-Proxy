@@ -342,10 +342,9 @@ pub fn core_env(dat_dir: &str) -> HashMap<String, String> {
 }
 
 /// Spawn the selected core (`<bin> run -c <cfg>`), logging to `log_path`. The
-/// caller persists the returned pid to its pidfile. On Unix the child is tied to
-/// its parent via `PR_SET_PDEATHSIG` (see [`proc::spawn_logged`]); capability
-/// grants across exec live process-wide in the helper's ambient set, so no
-/// per-spawn `pre_exec` is needed here.
+/// caller persists the returned pid to its pidfile. The child dies with its parent
+/// (see [`proc::spawn_logged`]); capability grants across exec live process-wide
+/// in the helper's ambient set, so no per-spawn `pre_exec` is needed here.
 pub async fn spawn_core(
     bin: &str,
     cfg: &str,

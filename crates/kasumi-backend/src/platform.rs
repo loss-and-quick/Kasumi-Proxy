@@ -48,9 +48,9 @@ impl TestCore for LocalTestCore {
 /// Spawn a test core in this process (kill-on-drop) and box it as a [`TestCore`].
 /// The building block for [`Platform::spawn_test_core`] and any privileged override
 /// that first rewrites the config (e.g. the desktop helper injecting an uplink bind).
-/// On Unix the child is tied to its parent via `PR_SET_PDEATHSIG` (see
-/// [`proc::spawn_logged`]); any capability it needs across exec comes from the
-/// helper's ambient set, so there's no per-spawn `pre_exec` variant.
+/// The child dies with its parent (see [`proc::spawn_logged`]); any capability it
+/// needs across exec comes from the helper's ambient set, so there's no per-spawn
+/// `pre_exec` variant.
 pub async fn spawn_local_test_core(
     bin: &str,
     cfg_path: &Path,

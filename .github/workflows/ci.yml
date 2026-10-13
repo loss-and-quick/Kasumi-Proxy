@@ -322,6 +322,11 @@ jobs:
       - name: Compile the Tauri app (no bundle)
         run: cargo build -p kasumi-desktop
 
+      # The job-object reaping in proc.rs is Windows-only code with Windows-only
+      # tests; the Linux `rust` job never compiles them.
+      - name: Windows process tests
+        run: 'cargo test -p kasumi-backend --lib -- proc::'
+
   # ── The single required status check. It always runs and aggregates the gated
   #    jobs above: a skipped area (its files weren't touched) is fine; only a real
   #    failure or cancellation fails CI. Point branch protection at THIS context so
