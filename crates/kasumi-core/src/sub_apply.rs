@@ -6,8 +6,9 @@ use std::collections::{HashMap, HashSet};
 
 use fancy_regex::Regex;
 
+use crate::custom_sanitize::provider_outbounds_identity;
 use crate::enums::Security;
-use crate::profile::Profile;
+use crate::profile::{CustomOrigin, Profile};
 use crate::state::{BASE_GROUP_ID, Subscription};
 
 /// A compiled profile filter (a leading `(?i)` selects case-insensitive).
@@ -91,13 +92,31 @@ pub fn profile_matches_filter(profile: &Profile, filter: &ProfileFilter) -> bool
     re.is_match(&haystack).unwrap_or(false)
 }
 
-/// Same endpoint identity: protocol + address + port + name. Lets the active
-/// selection survive a refresh that re-creates ids.
+/// Same endpoint identity: protocol + address + port + name, or for a provider's
+/// Xray config the same outbounds. Lets the active selection survive a refresh
+/// that re-creates ids.
 pub fn same_profile_identity(a: &Profile, b: &Profile) -> bool {
-    a.protocol() == b.protocol()
-        && a.address() == b.address()
-        && a.port() == b.port()
-        && a.meta().remarks == b.meta().remarks
+    match (provider_config_identity(a), provider_config_identity(b)) {
+        (None, None) => {
+            a.protocol() == b.protocol()
+                && a.address() == b.address()
+                && a.port() == b.port()
+                && a.meta().remarks == b.meta().remarks
+        }
+        (Some(Some(x)), Some(Some(y))) => x == y,
+        _ => false,
+    }
+}
+
+/// `None` for every profile but a provider's Custom; that one has no endpoint of
+/// its own, so it is known by its outbounds.
+fn provider_config_identity(p: &Profile) -> Option<Option<String>> {
+    match p {
+        Profile::Custom(c) if c.origin == CustomOrigin::Provider => {
+            Some(provider_outbounds_identity(&c.raw))
+        }
+        _ => None,
+    }
 }
 
 fn profile_dedup_key(p: &Profile) -> String {
@@ -646,6 +665,48 @@ mod tests {
             &a,
             &p("vless://u1@e.x:443?type=tcp#Other")
         ));
+    }
+
+    fn provider_custom(id: &str, name: &str, tag: &str, host: &str) -> Profile {
+        let raw = serde_json::json!({ "outbounds": [
+            { "tag": tag, "protocol": "trojan",
+              "settings": { "servers": [{ "address": host, "port": 443, "password": "pw" }] } },
+            { "tag": "direct", "protocol": "freedom" },
+        ]});
+        serde_json::from_value(serde_json::json!({
+            "protocol": "custom",
+            "meta": { "id": id, "remarks": name, "groupId": "g-main", "subId": "s1" },
+            "raw": raw.to_string(),
+            "origin": "provider",
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn provider_custom_identity_stable_across_tag_changes() {
+        let old = provider_custom("old", "DE", "proxy", "de.example");
+        // A refresh that renames the config and its tags is the same server.
+        let fresh = provider_custom("new", "Germany", "de-1", "de.example");
+        assert!(same_profile_identity(&old, &fresh));
+        assert!(!same_profile_identity(
+            &old,
+            &provider_custom("x", "DE", "proxy", "nl.example")
+        ));
+
+        let next = next_active_id_after_subscription_update(
+            std::slice::from_ref(&old),
+            Some("old"),
+            "s1",
+            &[provider_custom("nl", "NL", "proxy", "nl.example"), fresh],
+        );
+        assert_eq!(next.as_deref(), Some("new"));
+
+        // The user's own Custom with the same config is not the provider's.
+        let mut user = old.clone();
+        if let Profile::Custom(c) = &mut user {
+            c.origin = CustomOrigin::User;
+        }
+        assert!(!same_profile_identity(&old, &user));
     }
 
     #[test]

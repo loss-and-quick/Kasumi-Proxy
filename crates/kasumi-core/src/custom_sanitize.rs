@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 
 use crate::sub_ingest::limits;
 
@@ -151,6 +152,20 @@ pub(crate) fn is_service_outbound(ob: &Value) -> bool {
     ob.get("protocol")
         .and_then(Value::as_str)
         .is_some_and(|p| SERVICE_PROTOCOLS.contains(&p))
+}
+
+/// SHA-256 of a stored provider config's outbounds with their tags removed: a
+/// refresh that only renames tags is still the same server.
+pub fn provider_outbounds_identity(raw: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(raw).ok()?;
+    let mut outbounds = v.get("outbounds")?.as_array()?.clone();
+    for ob in &mut outbounds {
+        if let Some(o) = ob.as_object_mut() {
+            o.remove("tag");
+        }
+    }
+    let digest = Sha256::digest(Value::Array(outbounds).to_string().as_bytes());
+    Some(digest.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Serialised size above `max`, counted without building the string.
