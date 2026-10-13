@@ -531,16 +531,13 @@ export const useAppStore = create<Store>((set, get) => {
     async hydrate() {
       const state = await bridge.readState();
       const needsMigration = !state.version;
-      const subscriptions = needsMigration
-        ? state.subscriptions.map((s) => ({ ...s, interval: s.interval * 60 }))
-        : state.subscriptions;
-      // Base group, legacy default assets and a dangling active_id are normalized by
-      // the backend read path now; the frontend just renders what it returns.
+      // Base group, legacy subscription intervals, default assets and a dangling
+      // active_id are normalized by the backend read path; the frontend just renders
+      // what it returns.
       const assetFiles0 = state.assetFiles;
       const settings = mergeSettings(state.settings);
       set({
         ...state,
-        subscriptions,
         assetFiles: assetFiles0,
         settings,
         version: __MODULE_VERSION__,
@@ -585,7 +582,6 @@ export const useAppStore = create<Store>((set, get) => {
           // phase the intent wants, which the backend re-stamps on write.
           state: {
             ...state,
-            subscriptions,
             assetFiles,
             settings,
             version: __MODULE_VERSION__,
