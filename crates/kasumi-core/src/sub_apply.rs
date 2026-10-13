@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use fancy_regex::Regex;
 
-use crate::custom_sanitize::provider_outbounds_identity;
+use crate::custom_sanitize::{differs_only_in_reality_pick, provider_outbounds_identity};
 use crate::enums::Security;
 use crate::profile::{CustomOrigin, Profile};
 use crate::state::{BASE_GROUP_ID, Subscription};
@@ -366,22 +366,36 @@ pub fn apply_subscription_profiles(
 /// active profile keeps the pair it runs with when nothing else changed, so a
 /// refresh does not restart the core over a value that was equally valid before.
 fn keep_reality_pick(old: &Profile, fresh: &mut Profile) {
-    let (Some(o), Some(f)) = (old.tls(), fresh.tls()) else {
-        return;
-    };
-    if o.security != Security::Reality || f.security != Security::Reality {
-        return;
-    }
     let mut kept = fresh.clone();
-    if let Some(t) = kept.tls_mut() {
-        t.sni.clone_from(&o.sni);
-        t.short_id.clone_from(&o.short_id);
+    if !take_reality_pick(old, &mut kept) {
+        return;
     }
     kept.meta_mut().id.clone_from(&old.meta().id);
     if kept == *old {
         kept.meta_mut().id.clone_from(&fresh.meta().id);
         *fresh = kept;
     }
+}
+
+/// Copy `old`'s REALITY pick into `fresh`; false when there is none to copy.
+fn take_reality_pick(old: &Profile, fresh: &mut Profile) -> bool {
+    if let (Profile::Custom(o), Profile::Custom(f)) = (old, &mut *fresh) {
+        // A provider config carries its picks inside the JSON, so it is kept whole.
+        if !differs_only_in_reality_pick(&o.raw, &f.raw) {
+            return false;
+        }
+        f.raw.clone_from(&o.raw);
+        return true;
+    }
+    let (Some(o), Some(f)) = (old.tls(), fresh.tls_mut()) else {
+        return false;
+    };
+    if o.security != Security::Reality || f.security != Security::Reality {
+        return false;
+    }
+    f.sni.clone_from(&o.sni);
+    f.short_id.clone_from(&o.short_id);
+    true
 }
 
 #[cfg(test)]
@@ -785,10 +799,16 @@ mod tests {
 
     fn refresh_active(edit: impl Fn(&mut Profile)) -> (Profile, Profile) {
         let s = sub("s1", Some("g-main"));
-        let first = fixture_batch(&s);
-        let active = first[0].clone();
         let mut second = fixture_batch(&s);
         edit(&mut second[0]);
+        refresh_first(fixture_batch(&s), second)
+    }
+
+    /// Apply `second` over `first` with `first[0]` active; the active profile
+    /// before and after.
+    fn refresh_first(first: Vec<Profile>, second: Vec<Profile>) -> (Profile, Profile) {
+        let s = sub("s1", Some("g-main"));
+        let active = first[0].clone();
         let r = apply_subscription_profiles(
             &first,
             std::slice::from_ref(&s),
@@ -825,6 +845,42 @@ mod tests {
         });
         assert_eq!(next.tls().unwrap().sni, "q1w2e3r4t5.sni.example.com");
         assert_ne!(without_id(next), without_id(active));
+    }
+
+    fn reality_custom(id: &str, sni: &str, sid: &str, port: u16) -> Profile {
+        let raw = serde_json::json!({ "outbounds": [
+            { "tag": "proxy", "protocol": "vless",
+              "settings": { "vnext": [{ "address": "r.example", "port": port,
+                  "users": [{ "id": "11111111-1111-1111-1111-111111111111", "encryption": "none" }] }] },
+              "streamSettings": { "network": "tcp", "security": "reality",
+                  "realitySettings": { "serverName": sni, "shortId": sid, "publicKey": "PK" } } },
+            { "tag": "direct", "protocol": "freedom" },
+        ]});
+        serde_json::from_value(serde_json::json!({
+            "protocol": "custom",
+            "meta": { "id": id, "remarks": "Node", "groupId": "g-main", "subId": "s1" },
+            "raw": raw.to_string(),
+            "origin": "provider",
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn active_provider_config_keeps_its_reality_pick() {
+        let old = reality_custom("old", "a1.sni.example.com", "aaaa", 443);
+        let fresh = reality_custom("new", "b2.sni.example.com", "bbbb", 443);
+        assert!(same_profile_identity(&old, &fresh));
+        let (active, next) = refresh_first(vec![old], vec![fresh]);
+        assert_eq!(next.meta().id, "new");
+        assert_eq!(without_id(next), without_id(active));
+    }
+
+    #[test]
+    fn other_changes_to_the_active_provider_config_still_apply() {
+        let old = reality_custom("old", "a1.sni.example.com", "aaaa", 443);
+        let fresh = reality_custom("new", "b2.sni.example.com", "bbbb", 8443);
+        let (_, next) = refresh_first(vec![old], vec![fresh.clone()]);
+        assert_eq!(next, fresh);
     }
 
     #[test]
