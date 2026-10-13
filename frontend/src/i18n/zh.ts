@@ -98,7 +98,7 @@ const zh = {
   "profiles.pingAll": "全部测速",
   "profiles.pingSheet.title": "测试与清理",
   "profiles.pingSheet.tcping": "TCPing 全部",
-  "profiles.pingSheet.tcpingSub": "TCP 连接到 host:port",
+  "profiles.pingSheet.tcpingSub": "TCP 连接到 host:port（代理链则连接其第一跳）",
   "profiles.pingSheet.realping": "RealPing 全部",
   "profiles.pingSheet.realpingSub": "通过代理核心发送 HTTP 请求",
   "profiles.pingSheet.speedtest": "全部测速",

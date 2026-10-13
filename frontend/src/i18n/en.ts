@@ -103,7 +103,7 @@ const en = {
   "profiles.pingAll": "Ping all",
   "profiles.pingSheet.title": "Test & clean",
   "profiles.pingSheet.tcping": "TCPing all",
-  "profiles.pingSheet.tcpingSub": "TCP connect to host:port",
+  "profiles.pingSheet.tcpingSub": "TCP connect to host:port (for a chain, its first hop)",
   "profiles.pingSheet.realping": "RealPing all",
   "profiles.pingSheet.realpingSub": "HTTP through proxy core",
   "profiles.pingSheet.speedtest": "Speed test all",

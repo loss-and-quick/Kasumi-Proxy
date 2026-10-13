@@ -102,7 +102,7 @@ const pt = {
   "profiles.pingAll": "Testar ping de todos",
   "profiles.pingSheet.title": "Testar e limpar",
   "profiles.pingSheet.tcping": "TCPing todos",
-  "profiles.pingSheet.tcpingSub": "Conexão TCP a host:port",
+  "profiles.pingSheet.tcpingSub": "Conexão TCP a host:port (numa cadeia, ao primeiro salto)",
   "profiles.pingSheet.realping": "RealPing todos",
   "profiles.pingSheet.realpingSub": "HTTP pelo núcleo do proxy",
   "profiles.pingSheet.speedtest": "Teste de velocidade em todos",

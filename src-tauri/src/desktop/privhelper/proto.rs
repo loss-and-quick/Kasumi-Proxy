@@ -62,6 +62,14 @@ pub enum PrivRequest {
     /// Kill a test core spawned by `SpawnTestCore`. Idempotent (a handle the helper's
     /// orphan-sweep already reaped is silently ignored).
     KillTestCore { handle: u64 },
+    /// Time a TCP connect to `host:port` with the socket bound to the physical
+    /// uplink (`SO_BINDTODEVICE` needs `CAP_NET_RAW`), so an active tun can't
+    /// capture the probe.
+    TcpPing {
+        host: String,
+        port: u16,
+        timeout_ms: u64,
+    },
 }
 
 /// The helper's reply to one [`PrivRequest`]. `ProxyStatus` is flattened to
@@ -86,6 +94,10 @@ pub enum PrivReply {
     /// The handle of a freshly spawned test core (to pass back to `KillTestCore`).
     TestCoreSpawned {
         handle: u64,
+    },
+    /// A `TcpPing` result in ms; `None` when the server didn't answer.
+    Latency {
+        ms: Option<u64>,
     },
     /// An operation failed; carries the reason (a stringified `anyhow::Error`).
     Err {
@@ -143,6 +155,11 @@ mod tests {
                 log_path: "/run/test-43210.log".into(),
             },
             PrivRequest::KillTestCore { handle: 7 },
+            PrivRequest::TcpPing {
+                host: "e.example".into(),
+                port: 443,
+                timeout_ms: 3000,
+            },
         ] {
             req_roundtrip(&r);
         }
@@ -171,6 +188,8 @@ mod tests {
                 healthy: Some(false),
             },
             PrivReply::TestCoreSpawned { handle: 7 },
+            PrivReply::Latency { ms: Some(12) },
+            PrivReply::Latency { ms: None },
             PrivReply::Err {
                 message: "boom".into(),
             },

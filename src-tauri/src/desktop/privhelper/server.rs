@@ -141,6 +141,16 @@ impl Server {
                 }
                 PrivReply::Ok
             }
+            PrivRequest::TcpPing {
+                host,
+                port,
+                timeout_ms,
+            } => PrivReply::Latency {
+                ms: self
+                    .platform
+                    .tcp_ping(&host, port, Duration::from_millis(timeout_ms))
+                    .await,
+            },
         };
         #[cfg(target_os = "linux")]
         self.hand_files_to_owner(handoff).await;

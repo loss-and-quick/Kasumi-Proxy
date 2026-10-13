@@ -138,7 +138,7 @@ const ar = {
   "profiles.pingAll": "اختبار Ping للجميع",
   "profiles.pingSheet.title": "اختبار وتنظيف",
   "profiles.pingSheet.tcping": "TCPing للجميع",
-  "profiles.pingSheet.tcpingSub": "اتصال TCP بـ host:port",
+  "profiles.pingSheet.tcpingSub": "اتصال TCP بـ host:port (في السلسلة: بأول قفزة فيها)",
   "profiles.pingSheet.realping": "RealPing للجميع",
   "profiles.pingSheet.realpingSub": "HTTP عبر نواة البروكسي",
   "profiles.pingSheet.speedtest": "اختبار السرعة للجميع",

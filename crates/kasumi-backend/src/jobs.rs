@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::Semaphore;
 
+use kasumi_core::chain::chain_hops;
 use kasumi_core::contract::{FetchMode, TEST_PORT_BASE, TEST_PORT_SPAN, TestKind};
 use kasumi_core::core::resolve_core;
 use kasumi_core::enums::CoreEngine;
@@ -66,20 +67,21 @@ async fn load_profile(platform: &dyn Platform, profile_id: &str) -> Option<Loade
     })
 }
 
-/// TCP-connect latency to the profile's server endpoint (no core needed). `None`
-/// if the endpoint is unknown or unreachable.
+/// TCP-connect latency to the server the device dials for this profile (no core
+/// needed): its own endpoint, or for a proxy chain the last hop, the only one
+/// reached directly. `None` if that endpoint is unknown, unreachable, or the
+/// chain is broken.
 pub async fn run_ping(platform: &dyn Platform, profile_id: &str) -> Option<i64> {
     let loaded = load_profile(platform, profile_id).await?;
-    let addr = loaded.profile.address();
-    let port = loaded.profile.port()?;
+    let hops = chain_hops(&loaded.profile, &loaded.profiles).ok()?;
+    let target = hops.last().copied().unwrap_or(&loaded.profile);
+    let addr = target.address();
+    let port = target.port()?;
     if addr.is_empty() {
         return None;
     }
-    // A plain TCP-connect from the daemon (unprivileged), so when a tun is up this
-    // measures the path to the server *through* the active tunnel. That's a known
-    // tcp-ping limitation while connected; real-ping/speed-test run their probe
-    // through a helper-spawned core that binds the uplink and escapes the tun.
-    tcp_ping(addr, port, Duration::from_secs(3))
+    platform
+        .tcp_ping(addr, port, Duration::from_secs(3))
         .await
         .map(|ms| ms as i64)
 }
@@ -465,6 +467,37 @@ mod tests {
             .await
             .unwrap();
         assert!(run_ping(&p, &id).await.is_some_and(|ms| ms >= 0));
+    }
+
+    #[tokio::test]
+    async fn ping_of_a_chain_measures_the_hop_dialed_directly() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let live = listener.local_addr().unwrap().port();
+        let at = |port: u16, id: &str, via: Option<&str>| {
+            let mut p = vless_at(port);
+            p.meta_mut().id = id.into();
+            p.meta_mut().via = via.map(str::to_owned);
+            p
+        };
+        // Only the entry hop listens; the exit and the middle hop refuse (port 1
+        // on loopback), as servers reached only through the chain would.
+        let profiles = vec![
+            at(1, "exit", Some("mid")),
+            at(1, "mid", Some("entry")),
+            at(live, "entry", None),
+            at(1, "broken", Some("broken")),
+        ];
+        let (p, _d) = TestPlatform::new();
+        write_json_atomic(&p.paths().app_state, &default_app_state())
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &profiles)
+            .await
+            .unwrap();
+        assert!(run_ping(&p, "exit").await.is_some());
+        assert!(run_ping(&p, "mid").await.is_some());
+        // A looped chain can't connect at all.
+        assert_eq!(run_ping(&p, "broken").await, None);
     }
 
     #[tokio::test]

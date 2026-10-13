@@ -16,6 +16,8 @@ use super::transport::{self, BoxRead, BoxWrite};
 /// A held-open connection to the privilege helper.
 pub struct Client {
     inner: Mutex<Conn>,
+    #[cfg(unix)]
+    addr: String,
 }
 
 struct Conn {
@@ -33,7 +35,18 @@ impl Client {
                 reader: BufReader::new(read).lines(),
                 writer,
             }),
+            #[cfg(unix)]
+            addr: addr.to_owned(),
         })
+    }
+
+    /// Send one request on a connection of its own, for a slow request (a probe
+    /// waiting out its timeout) that must not hold up the shared connection the
+    /// data path is driven over. Unix only: the Windows service pipe serves one
+    /// client and tears the data path down when it leaves.
+    #[cfg(unix)]
+    pub async fn call_oneshot(&self, req: PrivRequest) -> anyhow::Result<PrivReply> {
+        Client::connect(&self.addr).await?.call(req).await
     }
 
     /// Send one request and await its reply. A `PrivReply::Err` from the helper is
@@ -147,6 +160,17 @@ mod tests {
         fn tune_config(&self, _engine: Engine, _config: &mut Value) {
             unimplemented!("pure method must stay GUI-side")
         }
+        async fn tcp_ping(
+            &self,
+            host: &str,
+            _port: u16,
+            _timeout: std::time::Duration,
+        ) -> Option<u64> {
+            if host == "slow.example" {
+                std::future::pending::<()>().await;
+            }
+            Some(42)
+        }
         async fn data_path_healthy(&self) -> Option<bool> {
             Some(true)
         }
@@ -219,6 +243,37 @@ mod tests {
                 .unwrap(),
             PrivReply::Ok
         );
+
+        // A probe stuck on its own connection leaves the shared one usable.
+        let slow = tokio::spawn({
+            let sock = sock_str.clone();
+            async move {
+                let side = Client::connect(&sock).await.unwrap();
+                side.call_oneshot(PrivRequest::TcpPing {
+                    host: "slow.example".into(),
+                    port: 443,
+                    timeout_ms: 3000,
+                })
+                .await
+            }
+        });
+        assert_eq!(
+            client
+                .call_oneshot(PrivRequest::TcpPing {
+                    host: "e.example".into(),
+                    port: 443,
+                    timeout_ms: 3000,
+                })
+                .await
+                .unwrap(),
+            PrivReply::Latency { ms: Some(42) }
+        );
+        assert_eq!(
+            client.call(PrivRequest::Ping).await.unwrap(),
+            PrivReply::Pong
+        );
+        assert!(!slow.is_finished());
+        slow.abort();
         let _ = stub; // kept alive for the duration of the server task
     }
 }

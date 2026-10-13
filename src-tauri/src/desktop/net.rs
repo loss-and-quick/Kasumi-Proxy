@@ -4,8 +4,32 @@
 //! Windows routing back-ends.
 
 use std::collections::{BTreeMap, HashSet};
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use std::time::Duration;
 
 use serde_json::Value;
+
+/// TCP-connect latency to `host:port` in ms, with the socket bound to the
+/// physical uplink the way test cores bind their outbounds, so an active tun
+/// can't capture the connect. Without a resolvable uplink it connects unbound.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub async fn uplink_tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
+    let addr = tokio::net::lookup_host((host, port)).await.ok()?.next()?;
+    let socket = if addr.is_ipv4() {
+        tokio::net::TcpSocket::new_v4()
+    } else {
+        tokio::net::TcpSocket::new_v6()
+    }
+    .ok()?;
+    if let Err(e) = super::routing::bind_uplink(&socket, addr.ip()).await {
+        log::warn!("tcp-ping {host}: uplink bind failed, connecting unbound: {e}");
+    }
+    let start = std::time::Instant::now();
+    match tokio::time::timeout(timeout, socket.connect(addr)).await {
+        Ok(Ok(_stream)) => Some(start.elapsed().as_millis() as u64),
+        _ => None,
+    }
+}
 
 /// Resolve a host (domain or literal IP) to its IPs, or `[]` on failure.
 pub async fn resolve_ips(host: &str) -> Vec<String> {

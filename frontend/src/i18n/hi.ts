@@ -98,7 +98,7 @@ const hi = {
   "profiles.pingAll": "सभी को पिंग करें",
   "profiles.pingSheet.title": "जाँच और सफाई",
   "profiles.pingSheet.tcping": "सभी का TCPing",
-  "profiles.pingSheet.tcpingSub": "host:port से TCP कनेक्शन",
+  "profiles.pingSheet.tcpingSub": "host:port से TCP कनेक्शन (चेन में उसके पहले हॉप से)",
   "profiles.pingSheet.realping": "सभी का RealPing",
   "profiles.pingSheet.realpingSub": "प्रॉक्सी कोर से HTTP",
   "profiles.pingSheet.speedtest": "सभी का स्पीड टेस्ट",
