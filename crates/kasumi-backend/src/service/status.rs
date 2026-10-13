@@ -7,9 +7,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 
 use kasumi_core::contract::{ConnectionProbe, FetchMode, PushFrame, RunState, ServiceStatus};
-use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL};
+use kasumi_core::state::DEFAULT_DELAY_TEST_URL;
 
-use crate::fsjson::read_json;
 use crate::net::{FetchUrlOptions, fetch_url};
 
 use super::Service;
@@ -59,7 +58,7 @@ impl Service {
     /// initial frame a client gets on connect.
     pub async fn current_status(&self) -> Option<ServiceStatus> {
         let mut service = self.platform.service_state().await.ok()?;
-        let state = read_json::<AppState>(&self.platform.paths().app_state).await;
+        let state = crate::state::read_state_shell(&self.platform.paths().app_state).await;
         let check = state.as_ref().is_none_or(|s| s.settings.connectivity_check);
         let active_id = state.and_then(|s| s.active_id);
         let mut latency_ms = None;
@@ -119,7 +118,7 @@ impl Service {
             Ok(p) if p.running => p,
             _ => return Connectivity::Unknown,
         };
-        let url = read_json::<AppState>(&self.platform.paths().app_state)
+        let url = crate::state::read_state_shell(&self.platform.paths().app_state)
             .await
             .and_then(|s| s.settings.delay_test_url)
             .filter(|u| !u.is_empty())
@@ -178,7 +177,7 @@ impl Service {
             .map(|r| r.profile_id.clone());
         match running {
             Some(id) => Some(id),
-            None => read_json::<AppState>(&self.platform.paths().app_state)
+            None => crate::state::read_state_shell(&self.platform.paths().app_state)
                 .await
                 .and_then(|s| s.active_id),
         }

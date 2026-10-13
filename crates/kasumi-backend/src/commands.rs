@@ -423,7 +423,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         }
 
         Command::RotateLogs { max_kb } => {
-            let default_kb = read_json::<AppState>(&paths.app_state)
+            let default_kb = crate::state::read_state_shell(&paths.app_state)
                 .await
                 .map(|s| s.settings.log_rotate_max_kb)
                 .unwrap_or(DEFAULT_LOG_ROTATE_KB);
@@ -527,7 +527,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         }
 
         Command::ResolveCores { profiles } => {
-            let settings = read_json::<AppState>(&paths.app_state)
+            let settings = crate::state::read_state_shell(&paths.app_state)
                 .await
                 .map(|s| s.settings)
                 .unwrap_or_default();

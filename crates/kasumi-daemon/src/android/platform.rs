@@ -11,7 +11,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
-use kasumi_backend::fsjson::{read_data_path_state, read_json, write_data_path_state};
+use kasumi_backend::fsjson::{read_data_path_state, write_data_path_state};
 use kasumi_backend::lifecycle::{
     TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core,
     spawn_tun_engine, sync_geo_asset, verify_core_alive,
@@ -27,7 +27,7 @@ use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
-    AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
+    AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
 use kasumi_core::tun::{TUN_IPV4, TUN_IPV6, TUN2_IPV4, TUN2_IPV6, TunOptions};
 
@@ -162,7 +162,7 @@ async fn set_failed(reason: &str) {
 }
 
 pub(super) async fn read_settings() -> Option<AdvancedSettings> {
-    read_json::<AppState>(&app_state_path())
+    kasumi_backend::state::read_state_shell(Path::new(&app_state_path()))
         .await
         .map(|s| s.settings)
 }

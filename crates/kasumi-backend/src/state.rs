@@ -2,6 +2,8 @@
 //! but profiles) + `profiles.json`. The two are merged into one in-memory
 //! [`AppState`] so the daemon and the UI see the same shape.
 
+use std::path::Path;
+
 use kasumi_core::state::AppState;
 use serde_json::Value;
 
@@ -23,12 +25,24 @@ pub async fn read_app_state(platform: &dyn Platform) -> Option<AppState> {
     {
         obj.insert("profiles".into(), profiles);
     }
-    kasumi_core::migrate::migrate_app_state(&mut doc);
-    let mut state: AppState = serde_json::from_value(doc).ok()?;
+    let mut state = migrated(doc)?;
     // Typed read-side normalization (g-main, legacy assets, dangling active_id) — the
     // load-time counterpart to the write-side chain, so callers get canonical state.
     kasumi_core::normalize::normalize_app_state(&mut state);
     Some(state)
+}
+
+/// `app-state.json` alone, upgraded the same way, for readers that want the
+/// settings or the active id without loading every profile. Not normalized: that
+/// needs the profiles (a dangling `active_id` is judged against them).
+pub async fn read_state_shell(app_state: &Path) -> Option<AppState> {
+    migrated(read_json(app_state).await?)
+}
+
+/// Run the migration ladder over a stored document, then type it.
+fn migrated(mut doc: Value) -> Option<AppState> {
+    kasumi_core::migrate::migrate_app_state(&mut doc);
+    serde_json::from_value(doc).ok()
 }
 
 /// Persist an [`AppState`] back to the split files (both writes atomic).
@@ -89,6 +103,37 @@ mod tests {
             kasumi_core::migrate::SCHEMA_VERSION,
             "{doc}"
         );
+    }
+
+    #[tokio::test]
+    async fn shell_read_migrates_a_legacy_document() {
+        let (p, _d) = TestPlatform::new();
+        // Before the split layout and the nested profiles: one flat profile inline,
+        // and settings from before the request identity.
+        let mut doc = serde_json::to_value(default_app_state()).unwrap();
+        let obj = doc.as_object_mut().unwrap();
+        obj.remove("schemaVersion");
+        obj["settings"]
+            .as_object_mut()
+            .unwrap()
+            .remove("requestIdentity");
+        obj.insert(
+            "profiles".into(),
+            serde_json::json!([{
+                "protocol": "trojan", "id": "t1", "remarks": "Home", "groupId": "g-main",
+                "address": "ex.com", "port": 443, "network": "tcp", "security": "tls",
+                "sni": "ex.com", "password": "pw"
+            }]),
+        );
+        obj.insert("activeId".into(), "t1".into());
+        write_json_atomic(&p.paths().app_state, &doc).await.unwrap();
+
+        // Typed as it is on disk, the flat profile fails the whole document.
+        assert!(read_json::<AppState>(&p.paths().app_state).await.is_none());
+        let state = read_state_shell(&p.paths().app_state).await.unwrap();
+        assert_eq!(state.active_id.as_deref(), Some("t1"));
+        assert_eq!(state.profiles.len(), 1);
+        assert_eq!(state.schema_version, kasumi_core::migrate::SCHEMA_VERSION);
     }
 
     #[tokio::test]

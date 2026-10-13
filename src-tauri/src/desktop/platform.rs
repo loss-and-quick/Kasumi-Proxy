@@ -15,7 +15,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
-use kasumi_backend::fsjson::{read_data_path_state, read_json, write_data_path_state};
+use kasumi_backend::fsjson::{read_data_path_state, write_data_path_state};
 use kasumi_backend::lifecycle::{
     missing_rule_sets, random_tun_iface, referenced_srs, spawn_core, sync_geo_asset,
     verify_core_alive,
@@ -31,7 +31,7 @@ use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
-    AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
+    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
     force_socks_port,
 };
 use kasumi_core::tun::TunOptions;
@@ -146,14 +146,14 @@ impl DesktopPlatform {
     }
 
     async fn http_port(&self) -> u16 {
-        read_json::<AppState>(&self.p.backend.app_state)
+        kasumi_backend::state::read_state_shell(&self.p.backend.app_state)
             .await
             .and_then(|s| s.settings.local_http_port)
             .unwrap_or(DEFAULT_LOCAL_HTTP_PORT)
     }
 
     async fn pac_port(&self) -> u16 {
-        read_json::<AppState>(&self.p.backend.app_state)
+        kasumi_backend::state::read_state_shell(&self.p.backend.app_state)
             .await
             .and_then(|s| s.settings.local_pac_port)
             .unwrap_or(DEFAULT_LOCAL_PAC_PORT)
@@ -163,7 +163,7 @@ impl DesktopPlatform {
     /// settings, parsed into a list. Empty when unset — the proxy-server bypass
     /// still applies on its own.
     async fn tun_exclude_cidrs(&self) -> Vec<String> {
-        read_json::<AppState>(&self.p.backend.app_state)
+        kasumi_backend::state::read_state_shell(&self.p.backend.app_state)
             .await
             .map(|s| s.settings.tun_exclude_cidrs())
             .unwrap_or_default()
