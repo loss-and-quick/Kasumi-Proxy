@@ -511,6 +511,8 @@ const zh = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "内部 SOCKS 端口（紧随 SOCKS）",
+  "settings.portCollision": "端口 {port} 会被占用两次：{first} 和 {second}。请换一个端口。",
   "settings.allowNonLocalhost": "允许非本机访问",
   "settings.allowNonLocalhostSub": "将代理端口绑定到 0.0.0.0，允许局域网设备连接",
   "settings.dnsRemote": "远程 DNS（经代理）",

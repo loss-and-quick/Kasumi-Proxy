@@ -7,6 +7,7 @@
 // impl never touches a screen.
 // ============================================================
 import type {
+  AdvancedSettings_Serialize as AdvancedSettings,
   AssetsUpdatedEvent,
   BackupRestored_Serialize as BackupRestored,
   Capabilities,
@@ -16,6 +17,7 @@ import type {
   IdentityInput_Serialize as IdentityInput,
   ImportMode,
   LogTarget,
+  PortCollision,
   Profile,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
@@ -45,6 +47,7 @@ export type {
   LogTarget,
   MutationIntent_Serialize as MutationIntent,
   PendingChange_Serialize as PendingChange,
+  PortCollision,
   RequestIdentityDefaults_Serialize as RequestIdentityDefaults,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
@@ -184,6 +187,11 @@ export interface Bridge {
   // through, checked by the backend's `chain::chain_candidates` — the same rule
   // the config builders enforce, so the UI never re-implements chain validity.
   chainCandidates(profile: Profile): Promise<string[]>;
+
+  // The local-port clash these (possibly unsaved) settings would have on this
+  // platform, by the backend check a settings write is refused by; `null` when
+  // the ports are fine.
+  checkLocalPorts(settings: AdvancedSettings): Promise<PortCollision | null>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription

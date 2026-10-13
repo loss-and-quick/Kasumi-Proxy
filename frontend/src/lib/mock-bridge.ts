@@ -540,6 +540,12 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return state.profiles.filter((p) => p.meta.id !== profile.meta.id).map((p) => p.meta.id);
   },
 
+  // Dev stub: no clash check (the real answer lives behind the backend's
+  // `checkLocalPorts`).
+  async checkLocalPorts() {
+    return null;
+  },
+
   // Dev stub: one nested placeholder profile per line that holds a share link.
   async parseShareLinks(text: string): Promise<Profile[]> {
     await new Promise((r) => setTimeout(r, 150));

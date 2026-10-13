@@ -548,6 +548,9 @@ const pt = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "a porta SOCKS interna (segue a SOCKS)",
+  "settings.portCollision":
+    "A porta {port} seria usada duas vezes: {first} e {second}. Escolha outra porta.",
   "settings.allowNonLocalhost": "Permitir acesso não local",
   "settings.allowNonLocalhostSub":
     "Vincular portas do proxy a 0.0.0.0 para que outros dispositivos na rede possam conectar",

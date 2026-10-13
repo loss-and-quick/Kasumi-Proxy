@@ -519,6 +519,9 @@ const hi = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "आंतरिक SOCKS पोर्ट (SOCKS के बाद वाला)",
+  "settings.portCollision":
+    "पोर्ट {port} दो बार इस्तेमाल होगा: {first} और {second}। कोई दूसरा पोर्ट चुनें।",
   "settings.allowNonLocalhost": "गैर-लोकलहोस्ट एक्सेस की अनुमति दें",
   "settings.allowNonLocalhostSub":
     "प्रॉक्सी पोर्ट को 0.0.0.0 से बांधें ताकि नेटवर्क पर अन्य उपकरण कनेक्ट हो सकें",
