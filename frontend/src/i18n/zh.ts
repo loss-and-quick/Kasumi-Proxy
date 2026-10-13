@@ -866,6 +866,7 @@ const zh = {
   "subs.routing.final.proxy": "其余流量走代理。",
   "subs.routing.final.direct": "其余流量直连。",
   "subs.routing.appliesTo": "将成为分组 {group} 中配置的路由。",
+  "subs.routing.standalone": "将作为一条独立的新路由添加。在分组或配置使用它之后生效。",
   "subs.routing.conflict": "会替换此分组的路由“{route}”。",
   "subs.routing.ignored": "不会应用，Kasumi 中这些是所有配置共用的设置：",
   "subs.routing.modeNote": "路由模式为“规则编辑器”时路由才生效。",

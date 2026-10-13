@@ -889,6 +889,8 @@ const hi = {
   "subs.routing.final.proxy": "बाकी सब प्रॉक्सी से जाता है।",
   "subs.routing.final.direct": "बाकी सब सीधे जाता है।",
   "subs.routing.appliesTo": "समूह {group} की प्रोफ़ाइलों का रूट बनेगा।",
+  "subs.routing.standalone":
+    "यह एक अलग नए रूट के रूप में जुड़ेगा। जब कोई समूह या प्रोफ़ाइल इसे इस्तेमाल करेगी, तब यह लागू होगा।",
   "subs.routing.conflict": "इस समूह के लिए रूट “{route}” की जगह लेगा।",
   "subs.routing.ignored": "लागू नहीं होगा; Kasumi में ये सभी प्रोफ़ाइलों की सेटिंग हैं:",
   "subs.routing.modeNote": "रूट तभी लागू होते हैं जब रूटिंग मोड “नियम संपादक” हो।",

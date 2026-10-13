@@ -920,6 +920,8 @@ const en = {
   "subs.routing.final.proxy": "Everything else goes through the proxy.",
   "subs.routing.final.direct": "Everything else goes direct.",
   "subs.routing.appliesTo": "Becomes the route of the profiles in group {group}.",
+  "subs.routing.standalone":
+    "Comes in as a new route of its own. It takes effect once a group or profile uses it.",
   "subs.routing.conflict": "It replaces the route “{route}” for this group.",
   "subs.routing.ignored": "Not applied, Kasumi sets these for all profiles:",
   "subs.routing.modeNote": "Routes take effect when the routing mode is Rules editor.",

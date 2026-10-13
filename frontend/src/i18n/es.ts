@@ -928,6 +928,8 @@ const es = {
   "subs.routing.final.proxy": "Todo lo demás va por el proxy.",
   "subs.routing.final.direct": "Todo lo demás va directo.",
   "subs.routing.appliesTo": "Será la ruta de los perfiles del grupo {group}.",
+  "subs.routing.standalone":
+    "Se añade como una ruta nueva e independiente. Se aplica cuando un grupo o un perfil la usa.",
   "subs.routing.conflict": "Sustituye la ruta «{route}» para este grupo.",
   "subs.routing.ignored": "No se aplica; en Kasumi son ajustes para todos los perfiles:",
   "subs.routing.modeNote": "Las rutas funcionan con el modo de enrutamiento «Editor de reglas».",

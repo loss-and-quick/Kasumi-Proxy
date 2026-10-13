@@ -925,6 +925,8 @@ const pt = {
   "subs.routing.final.proxy": "Todo o resto passa pelo proxy.",
   "subs.routing.final.direct": "Todo o resto vai direto.",
   "subs.routing.appliesTo": "Vira a rota dos perfis do grupo {group}.",
+  "subs.routing.standalone":
+    "Entra como uma rota nova e independente. Passa a valer quando um grupo ou perfil a usar.",
   "subs.routing.conflict": "Substitui a rota “{route}” para este grupo.",
   "subs.routing.ignored": "Não aplicado; no Kasumi são configurações de todos os perfis:",
   "subs.routing.modeNote": "As rotas valem no modo de roteamento “Editor de regras”.",

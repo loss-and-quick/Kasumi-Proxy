@@ -1079,6 +1079,7 @@ const ar = {
   "subs.routing.final.proxy": "كل ما عدا ذلك يمر عبر الوكيل.",
   "subs.routing.final.direct": "كل ما عدا ذلك يمر مباشرة.",
   "subs.routing.appliesTo": "سيصبح مسار الملفات في المجموعة {group}.",
+  "subs.routing.standalone": "يُضاف كمسار جديد مستقل. يسري مفعوله عندما تستخدمه مجموعة أو ملف.",
   "subs.routing.conflict": "يحلّ محلّ المسار «{route}» لهذه المجموعة.",
   "subs.routing.ignored": "لا يُطبَّق؛ هذه في Kasumi إعدادات لكل الملفات:",
   "subs.routing.modeNote": "تعمل المسارات حين يكون وضع التوجيه «محرر القواعد».",

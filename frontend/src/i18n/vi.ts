@@ -896,6 +896,8 @@ const vi = {
   "subs.routing.final.proxy": "Mọi thứ khác đi qua proxy.",
   "subs.routing.final.direct": "Mọi thứ khác đi thẳng.",
   "subs.routing.appliesTo": "Sẽ là tuyến của các hồ sơ trong nhóm {group}.",
+  "subs.routing.standalone":
+    "Được thêm thành một tuyến mới riêng. Tuyến có hiệu lực khi một nhóm hoặc hồ sơ dùng nó.",
   "subs.routing.conflict": "Thay thế tuyến “{route}” cho nhóm này.",
   "subs.routing.ignored": "Không áp dụng; trong Kasumi đây là cài đặt chung cho mọi hồ sơ:",
   "subs.routing.modeNote": "Tuyến có hiệu lực khi chế độ định tuyến là “Trình sửa quy tắc”.",

@@ -81,7 +81,11 @@ export function RoutingImportCard({
           : t("subs.routing.final.proxy")}
       </div>
       {children}
-      {groupName !== undefined && <div>{t("subs.routing.appliesTo", { group: groupName })}</div>}
+      <div>
+        {groupId === undefined
+          ? t("subs.routing.standalone")
+          : t("subs.routing.appliesTo", { group: groupName ?? groupId })}
+      </div>
       {replaces && (
         <div style={{ display: "flex", gap: 8, color: "var(--warn)" }}>
           <Icon name="warning" style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }} />
