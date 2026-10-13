@@ -4,11 +4,12 @@
 
 use serde_json::Value;
 
-use crate::core::{resolve_core, resolve_tun};
+use crate::core::{owns_native_tun, resolve_core, resolve_tun};
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::Profile;
 use crate::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use crate::state::{AdvancedSettings, ProxyMode, RoutingRule};
+use crate::tun::TunOptions;
 use crate::xray_config::build_xray_config;
 
 /// Engine + TUN engine + config JSON for a profile, mirroring what the core is
@@ -22,6 +23,10 @@ pub struct CoreConfig {
     /// The built config as a JSON value (serialize to a string when writing it
     /// to disk; comparing values is order-independent for restart diffing).
     pub config: Value,
+    /// The external tun engine's tuning, `None` when no external engine runs
+    /// (a non-tun proxy mode, or sing-box owning its native tun). The engine
+    /// reads it only at start, so a change to it needs a restart too.
+    pub external_tun: Option<TunOptions>,
 }
 
 /// Build the launch config for a profile. `srs_dir` is the platform's rule-set
@@ -52,18 +57,24 @@ pub fn build_core_config(
         )?,
         CoreEngine::Xray => build_xray_config(profile, settings, routing_rules, profiles)?,
     };
+    let external_tun = (settings.proxy_mode == ProxyMode::Tun && !owns_native_tun(engine, tun))
+        .then(|| settings.tun_options());
     Ok(CoreConfig {
         engine,
         tun,
         config,
+        external_tun,
     })
 }
 
 /// True when two resolved core configs differ — i.e. the core must be restarted.
-/// A TUN-engine switch counts too: it changes how the data-path is brought up even
-/// when the xray config JSON is identical.
+/// A TUN-engine switch or a retuned external engine counts too: it changes how the
+/// data-path is brought up even when the core config JSON is identical.
 pub fn active_config_changed(prev: &CoreConfig, next: &CoreConfig) -> bool {
-    prev.engine != next.engine || prev.tun != next.tun || prev.config != next.config
+    prev.engine != next.engine
+        || prev.tun != next.tun
+        || prev.config != next.config
+        || prev.external_tun != next.external_tun
 }
 
 /// What a settings mutation means for a running data path, decided against the
@@ -182,6 +193,70 @@ mod tests {
         s2.fragment = true; // changes the built config
         let c = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
         assert!(active_config_changed(&a, &c));
+    }
+
+    #[test]
+    fn external_tun_tuning_counts_as_change() {
+        let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let build = |s: &AdvancedSettings| {
+            build_core_config(&p, s, &[], std::slice::from_ref(&p), "").unwrap()
+        };
+        let s = AdvancedSettings::default();
+        let base = build(&s);
+        assert_eq!(base.external_tun, Some(s.tun_options()));
+
+        // The xray config is identical, but tun2socks would start with other knobs.
+        for edit in [
+            |s: &mut AdvancedSettings| s.tun_mtu = 1280,
+            |s: &mut AdvancedSettings| s.tun_tcp_buffer_size = 131_072,
+            |s: &mut AdvancedSettings| s.tun_udp_rw_timeout_ms = 30_000,
+        ] {
+            let mut s2 = s.clone();
+            edit(&mut s2);
+            let next = build(&s2);
+            assert_eq!(next.config, base.config);
+            assert!(active_config_changed(&base, &next));
+            assert_eq!(
+                mutation_effect(&base, ProxyMode::Tun, &next, ProxyMode::Tun),
+                MutationEffect::SetPending(true)
+            );
+        }
+    }
+
+    #[test]
+    fn tun_tuning_without_an_external_engine_is_not_a_change() {
+        let xray = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
+        let retune = |s: &AdvancedSettings| AdvancedSettings {
+            tun_tcp_buffer_size: 131_072,
+            tun_connect_timeout_ms: 2_000,
+            ..s.clone()
+        };
+
+        // No tun at all in a non-tun mode.
+        let proxy_only = AdvancedSettings {
+            proxy_mode: ProxyMode::ProxyOnly,
+            ..Default::default()
+        };
+        let a =
+            build_core_config(&xray, &proxy_only, &[], std::slice::from_ref(&xray), "").unwrap();
+        let b = build_core_config(
+            &xray,
+            &retune(&proxy_only),
+            &[],
+            std::slice::from_ref(&xray),
+            "",
+        )
+        .unwrap();
+        assert_eq!(a.external_tun, None);
+        assert!(!active_config_changed(&a, &b));
+
+        // sing-box owns its native tun; the external-engine knobs never reach it.
+        let s = AdvancedSettings::default();
+        let a = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+        let b = build_core_config(&sb, &retune(&s), &[], std::slice::from_ref(&sb), "").unwrap();
+        assert_eq!(a.external_tun, None);
+        assert!(!active_config_changed(&a, &b));
     }
 
     #[test]

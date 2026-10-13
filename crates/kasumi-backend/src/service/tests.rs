@@ -323,6 +323,24 @@ async fn config_mutation_flags_pending_restart_until_restart() {
 }
 
 #[tokio::test]
+async fn tun_engine_tuning_flags_pending_restart() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+
+    // The xray core runs behind tun2socks, which reads its MTU only at start.
+    set_settings(&svc, |s| s.tun_mtu = 1280).await;
+    assert!(pending_restart(&svc).await);
+
+    let defaults = kasumi_core::state::AdvancedSettings::default();
+    set_settings(&svc, |s| s.tun_mtu = defaults.tun_mtu).await;
+    assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
 async fn ui_only_mutation_keeps_pending_restart_clear() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;
