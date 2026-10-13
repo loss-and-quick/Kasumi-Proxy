@@ -45,12 +45,18 @@ const fallback = change("fallback-url", {
   url: "https://f.example.org/s",
   host: "f.example.org",
 });
+const configs = change("provider-configs", { kind: "allowProviderConfigs" });
 
 describe("groupChanges", () => {
   it("orders trust, tunnel, then unsupported, and the URL moves first", () => {
-    const groups = groupChanges([noises, mux, insecure, perApp, fallback, newUrl]);
+    const groups = groupChanges([noises, mux, insecure, configs, perApp, fallback, newUrl]);
     expect(groups.map((g) => g.group)).toEqual(["trust", "tunnel", "unsupported"]);
-    expect(groups[0].items.map((c) => c.key)).toEqual(["new-url", "fallback-url", "insecure"]);
+    expect(groups[0].items.map((c) => c.key)).toEqual([
+      "new-url",
+      "fallback-url",
+      "provider-configs",
+      "insecure",
+    ]);
     expect(groups[1].items).toEqual([mux]);
     // An unsupported key is dismiss-only whatever its tier.
     expect(groups[2].items.map((c) => c.key)).toEqual(["noises-enable", "per-app-proxy-list"]);
@@ -64,7 +70,7 @@ describe("groupChanges", () => {
 
 describe("safeDigests", () => {
   it("takes only applicable tuning changes", () => {
-    expect(safeDigests([mux, noises, insecure, newUrl])).toEqual(["d-mux-enable"]);
+    expect(safeDigests([mux, noises, insecure, newUrl, configs])).toEqual(["d-mux-enable"]);
     expect(tunnelKeys([mux, noises, insecure])).toEqual(["mux-enable"]);
   });
 });
@@ -84,6 +90,7 @@ describe("labels and values", () => {
   it("labels known keys and leaves others raw", () => {
     expect(keyLabel("new-url")).toBe("subs.changes.key.newUrl");
     expect(keyLabel("mux-enable")).toBe("settings.mux");
+    expect(keyLabel("provider-configs")).toBe("subs.changes.key.providerConfigs");
     expect(keyLabel("per-app-proxy-list")).toBeNull();
   });
 

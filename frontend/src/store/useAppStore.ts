@@ -944,6 +944,11 @@ export const useAppStore = create<Store>((set, get) => {
     },
     async resolveSubChange(subId, digests, accept, activate) {
       if (!digests.length) return;
+      const pending = get().subscriptions.find((s) => s.id === subId)?.pendingChanges ?? [];
+      // Allowed configs are fetched right away rather than at the next scheduled update.
+      const fetchConfigs =
+        accept &&
+        pending.some((p) => digests.includes(p.digest) && p.action.kind === "allowProviderConfigs");
       await mutate({
         kind: "resolveSubChange",
         subId,
@@ -952,6 +957,7 @@ export const useAppStore = create<Store>((set, get) => {
         activate: activate ?? null,
         at: new Date().toISOString(),
       });
+      if (fetchConfigs) void get().updateSub(subId);
     },
     async updateSub(id) {
       // One fetch per subscription at a time; a second tap waits for the first.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SubErrorKind } from "../../../generated/bindings";
+import type { SubErrorKind, SubWarning } from "../../../generated/bindings";
 import en from "../../../i18n/en";
 import type { Subscription } from "../../../lib/bridge";
 import {
@@ -11,6 +11,7 @@ import {
   expiryState,
   intervalLabel,
   trafficUsage,
+  warningKey,
 } from "../sub-display";
 
 const sub = (o: Partial<Subscription> = {}): Subscription => ({
@@ -31,6 +32,7 @@ const sub = (o: Partial<Subscription> = {}): Subscription => ({
   intervalOverride: false,
   bodyEncrypted: false,
   insecureByProvider: false,
+  allowProviderConfigs: false,
   ...o,
 });
 
@@ -108,7 +110,7 @@ describe("errorKey", () => {
     { kind: "unknownContent", hint: "yaml" },
     { kind: "unknownContent", hint: "html" },
     { kind: "unknownContent", hint: "unknown" },
-    { kind: "unsupportedPayload", payload: "singBoxJson" },
+    { kind: "unsupportedPayload", payload: "jsonArray" },
     { kind: "noProfiles" },
     { kind: "limit" },
     { kind: "invalid" },
@@ -127,5 +129,23 @@ describe("errorKey", () => {
     expect(errorVars({ kind: "network" }, "operation timed out")).toEqual({
       detail: "operation timed out",
     });
+  });
+});
+
+describe("warningKey", () => {
+  it("has a distinct translated message for every kind", () => {
+    const warnings: SubWarning[] = [
+      { kind: "skippedLines", count: 1, sample: "x" },
+      { kind: "unsupportedLinks", count: 1 },
+      { kind: "invalidRouting", message: "m" },
+      { kind: "invalidFragment" },
+      { kind: "legacyParser" },
+      { kind: "usedFallback", host: "h" },
+      { kind: "rejectedConfigs", count: 2 },
+      { kind: "skippedOutbounds", count: 3 },
+    ];
+    const keys = warnings.map(warningKey);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const key of keys) expect(en[key]).toBeTruthy();
   });
 });

@@ -185,6 +185,7 @@ export const SUBS_SEED: Subscription[] = [
     intervalOverride: false,
     bodyEncrypted: true,
     insecureByProvider: false,
+    allowProviderConfigs: false,
     pendingChanges: AURORA_PENDING,
     audit: AURORA_AUDIT,
     provider: {
@@ -215,6 +216,7 @@ export const SUBS_SEED: Subscription[] = [
     intervalOverride: false,
     bodyEncrypted: false,
     insecureByProvider: false,
+    allowProviderConfigs: false,
     warnings: [
       { kind: "skippedLines", count: 3, sample: "Remaining traffic: unlimited | Next reset: 1st" },
       { kind: "unsupportedLinks", count: 2 },
@@ -249,6 +251,7 @@ export const SUBS_SEED: Subscription[] = [
     intervalOverride: false,
     bodyEncrypted: true,
     insecureByProvider: false,
+    allowProviderConfigs: false,
     lastError: "subscription body could not be decrypted with key02",
     lastErrorKind: { kind: "decrypt", keyId: "key02" },
     provider: {
@@ -257,7 +260,87 @@ export const SUBS_SEED: Subscription[] = [
       renewUrl: "https://relay.example.org/renew",
     },
   },
+  {
+    id: "s-orbit",
+    remarks: "Orbit VPN",
+    url: "https://panel.orbit.example.com/sub/7c1e94d2",
+    groupId: "g-main",
+    enabled: true,
+    autoUpdate: true,
+    interval: 360,
+    lastUpdated: "2026-06-05 08:30",
+    count: 2,
+    userAgent: "",
+    filter: "",
+    allowInsecure: false,
+    updateMode: "auto",
+    manualTitle: false,
+    intervalOverride: false,
+    bodyEncrypted: false,
+    insecureByProvider: false,
+    // Full Xray configs, allowed: each became a sanitised Custom profile.
+    allowProviderConfigs: true,
+    warnings: [{ kind: "rejectedConfigs", count: 1 }],
+  },
+  {
+    id: "s-polar",
+    remarks: "Polar Link",
+    url: "https://polar.example.net/api/sub?token=4be0c7",
+    groupId: "g-main",
+    enabled: true,
+    autoUpdate: true,
+    interval: 720,
+    lastUpdated: "2026-06-01 19:12",
+    count: 3,
+    userAgent: "",
+    filter: "",
+    allowInsecure: false,
+    updateMode: "auto",
+    manualTitle: false,
+    intervalOverride: false,
+    bodyEncrypted: false,
+    insecureByProvider: false,
+    allowProviderConfigs: false,
+    // Left by the last sing-box body; the provider now sends Xray configs.
+    warnings: [{ kind: "skippedOutbounds", count: 3 }],
+    lastError: "JSON array configs are not allowed for this subscription",
+    lastErrorKind: { kind: "unsupportedPayload", payload: "jsonArray" },
+    pendingChanges: [
+      {
+        key: "provider-configs",
+        value: "Xray JSON",
+        risk: "trustBoundary",
+        action: { kind: "allowProviderConfigs" },
+        digest: "seed-provider-configs",
+        seenAt: daysAgo(0),
+      },
+    ],
+    audit: [{ at: daysAgo(0), key: "provider-configs", outcome: "offered", summary: "Xray JSON" }],
+  },
 ];
+
+// What the sanitiser keeps of a provider's Xray config: outbounds and routing.
+const orbitConfig = (cc: string) =>
+  JSON.stringify({
+    outbounds: [
+      {
+        tag: "proxy",
+        protocol: "vless",
+        settings: {
+          vnext: [
+            {
+              address: `${cc}.orbit.example.com`,
+              port: 443,
+              users: [{ id: "5e1b7c2a-8d3f-4a6b-9c0d-1e2f3a4b5c6d", encryption: "none" }],
+            },
+          ],
+        },
+        streamSettings: { network: "tcp", security: "tls" },
+      },
+      { tag: "direct", protocol: "freedom" },
+    ],
+    routing: { rules: [{ type: "field", ip: ["geoip:private"], outboundTag: "direct" }] },
+  });
 
 export const PROFILES_SEED: Profile[] = [
   mk("vless", {
@@ -361,6 +444,12 @@ export const PROFILES_SEED: Profile[] = [
       congestionControl: "bbr",
     },
   }),
+  ...["🇩🇪 Orbit Frankfurt", "🇫🇮 Orbit Helsinki"].map((remarks, i) =>
+    mk("custom", {
+      meta: { remarks, groupId: "g-main", subId: "s-orbit" },
+      root: { origin: "provider", raw: orbitConfig(i === 0 ? "de" : "fi") },
+    }),
+  ),
 ];
 
 const rule = (id: string, remarks: string, fields: Partial<RoutingRule>): RoutingRule => ({

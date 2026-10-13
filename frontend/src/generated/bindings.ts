@@ -458,6 +458,8 @@ export type ChangeAction_Deserialize = ({ kind: "replaceUrl"; url: string; fromH
 ({ kind: "lockUserAgent"; on: boolean }) & { activate?: never; fromHost?: never; host?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | ({ kind: "setInsecure"; on: boolean }) & { activate?: never; fromHost?: never; host?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | ({ kind: "importRouting"; routing: RoutingImport_Deserialize; activate: boolean }) & { fromHost?: never; host?: never; on?: never; otherDomain?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | ({ kind: "setRoutingEnabled"; on: boolean }) & { activate?: never; fromHost?: never; host?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | 
 /**  A global setting: it changes every profile, not just this subscription's. */
 ({ kind: "tunnelSetting"; setting: TunnelSetting }) & { activate?: never; fromHost?: never; host?: never; on?: never; otherDomain?: never; routing?: never; toHost?: never; url?: never; userAgent?: never } | 
+/**  Import the full Xray configs the provider sends, sanitised. */
+({ kind: "allowProviderConfigs" }) & { activate?: never; fromHost?: never; host?: never; on?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | 
 /**  Shown, but Kasumi has nothing to apply it to: it can only be dismissed. */
 ({ kind: "unsupported" }) & { activate?: never; fromHost?: never; host?: never; on?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never };
 
@@ -467,6 +469,8 @@ export type ChangeAction_Serialize = ({ kind: "replaceUrl"; url: string; fromHos
 ({ kind: "lockUserAgent"; on: boolean }) & { activate?: never; fromHost?: never; host?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | ({ kind: "setInsecure"; on: boolean }) & { activate?: never; fromHost?: never; host?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | ({ kind: "importRouting"; routing: RoutingImport_Serialize; activate: boolean }) & { fromHost?: never; host?: never; on?: never; otherDomain?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | ({ kind: "setRoutingEnabled"; on: boolean }) & { activate?: never; fromHost?: never; host?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | 
 /**  A global setting: it changes every profile, not just this subscription's. */
 ({ kind: "tunnelSetting"; setting: TunnelSetting }) & { activate?: never; fromHost?: never; host?: never; on?: never; otherDomain?: never; routing?: never; toHost?: never; url?: never; userAgent?: never } | 
+/**  Import the full Xray configs the provider sends, sanitised. */
+({ kind: "allowProviderConfigs" }) & { activate?: never; fromHost?: never; host?: never; on?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never } | 
 /**  Shown, but Kasumi has nothing to apply it to: it can only be dismissed. */
 ({ kind: "unsupported" }) & { activate?: never; fromHost?: never; host?: never; on?: never; otherDomain?: never; routing?: never; setting?: never; toHost?: never; url?: never; userAgent?: never };
 
@@ -1522,7 +1526,14 @@ export type SubRequestOverrides_Serialize = {
 /**  Something skipped while ingesting; the rest of the body was used. */
 export type SubWarning = { kind: "skippedLines"; count: number; sample: string } | { kind: "unsupportedLinks"; count: number } | { kind: "invalidRouting"; message: string } | { kind: "invalidFragment" } | { kind: "legacyParser" } | 
 /**  The primary URL failed and the accepted fallback URL answered. */
-{ kind: "usedFallback"; host: string };
+{ kind: "usedFallback"; host: string } | 
+/**  Provider Xray configs the sanitiser could not use. */
+{ kind: "rejectedConfigs"; count: number } | 
+/**
+ *  sing-box outbounds that are not servers Kasumi can import (groups, `direct`,
+ *  `block`, unknown types).
+ */
+{ kind: "skippedOutbounds"; count: number };
 
 /**  A subscription source (`SubscriptionSchema`). */
 export type Subscription = Subscription_Serialize | Subscription_Deserialize;
@@ -1573,6 +1584,8 @@ export type Subscription_Deserialize = {
 	fallbackUrl?: string | null,
 	/**  `allow_insecure` came from an accepted provider `insecure`, not from the URL. */
 	insecureByProvider?: boolean,
+	/**  The user agreed to import the full Xray configs this provider sends. */
+	allowProviderConfigs?: boolean,
 };
 
 /**  A subscription source (`SubscriptionSchema`). */
@@ -1618,6 +1631,8 @@ export type Subscription_Serialize = {
 	fallbackUrl?: string | null,
 	/**  `allow_insecure` came from an accepted provider `insecure`, not from the URL. */
 	insecureByProvider: boolean,
+	/**  The user agreed to import the full Xray configs this provider sends. */
+	allowProviderConfigs: boolean,
 };
 
 /**  Plain TCP, optionally wearing the HTTP fake-header obfuscation. */

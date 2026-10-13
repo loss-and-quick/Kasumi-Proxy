@@ -669,6 +669,8 @@ const es = {
   "profiles.row.select": "Seleccionar",
   "profiles.row.edit": "Editar",
   "profiles.row.more": "Más",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "Una configuración completa de Xray de la suscripción, depurada",
   // subscriptions extra
   "subs.saved": "Suscripción guardada",
   "subs.deleted": "Suscripción eliminada",
@@ -727,7 +729,8 @@ const es = {
   "subs.error.yaml": "El proveedor envió una configuración Clash en YAML. Elige otro User-Agent.",
   "subs.error.html": "La URL devolvió una página web, no una suscripción.",
   "subs.error.unknown": "La respuesta no está en un formato de suscripción que Kasumi pueda leer.",
-  "subs.error.unsupportedJson": "Las suscripciones JSON aún no son compatibles.",
+  "subs.error.jsonConsent":
+    "El proveedor envía configuraciones completas de Xray. Permítelas en los cambios propuestos o en Editar. Se mantuvieron los servidores anteriores.",
   "subs.error.noProfiles":
     "La respuesta no contiene servidores compatibles. Se conservaron los servidores anteriores.",
   "subs.error.limit": "La respuesta del proveedor es demasiado grande.",
@@ -783,6 +786,15 @@ const es = {
   "subs.identityNotice.dismiss": "Entendido",
   "subs.warnings.usedFallback":
     "La URL de la suscripción no respondió, así que los servidores se obtuvieron de la URL de respaldo en {host}.",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "# configuración de Xray del proveedor no se pudo usar y se omitió",
+    other: "# configuraciones de Xray del proveedor no se pudieron usar y se omitieron",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "# outbound de sing-box no es un servidor que Kasumi pueda importar (un grupo, direct, block o un tipo desconocido) y se omitió",
+    other:
+      "# outbounds de sing-box no son servidores que Kasumi pueda importar (grupos, direct, block o tipos desconocidos) y se omitieron",
+  }),
   "subs.menu.more": "Más",
   "subs.menu.history": "Cambios del proveedor",
   "subs.menu.historySub": plural("count", {
@@ -832,6 +844,10 @@ const es = {
   "subs.changes.otherDomain":
     "Es un dominio distinto. Acéptalo solo si tu proveedor anunció el cambio.",
   "subs.changes.hint.fallback": "Solo se usa cuando la URL de la suscripción falla.",
+  "subs.changes.providerConfigs":
+    "Este proveedor envía configuraciones completas de Xray en lugar de enlaces a servidores.",
+  "subs.changes.providerConfigsKept":
+    "Kasumi conserva solo sus outbounds y el enrutamiento y construye el resto por sí mismo: se descartan los registros, los puertos de escucha y los demás ajustes del proveedor.",
   "subs.changes.hint.userAgent":
     "Se usa salvo que esta suscripción tenga su propio User-Agent. Algunos proveedores envían otro formato a otro User-Agent.",
   "subs.changes.hint.lockUserAgent":
@@ -841,6 +857,7 @@ const es = {
   "subs.changes.key.newUrl": "Nueva URL de suscripción",
   "subs.changes.key.newDomain": "Nuevo dominio de suscripción",
   "subs.changes.key.fallbackUrl": "URL de respaldo",
+  "subs.changes.key.providerConfigs": "Configuraciones completas de Xray",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "Fijar el User-Agent",
   "subs.changes.key.insecure": "Omitir la comprobación del certificado",
@@ -890,6 +907,11 @@ const es = {
   "subs.edit.remove": "Quitar",
   "subs.edit.insecureByProvider": "La comprobación del certificado está desactivada",
   "subs.edit.checkTls": "Activar",
+  "subs.edit.providerConfigs": "Se usan las configuraciones completas de Xray",
+  "subs.edit.providerConfigsOff":
+    "Las configuraciones completas de Xray del proveedor no están permitidas",
+  "subs.edit.stopUsing": "Dejar de usar",
+  "subs.edit.allow": "Permitir",
   "settings.identity.title": "Solicitudes de suscripción",
   "settings.identity.sub":
     "Lo que envían las actualizaciones de suscripciones a los proveedores. Cada suscripción puede cambiar cualquier parte.",

@@ -727,6 +727,8 @@ const ru = {
   "profiles.row.select": "Выбрать",
   "profiles.row.edit": "Изменить",
   "profiles.row.more": "Ещё",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "Полный конфиг Xray из подписки (очищен)",
   // subscriptions extra
   "subs.saved": "Подписка сохранена",
   "subs.deleted": "Подписка удалена",
@@ -790,7 +792,8 @@ const ru = {
   "subs.error.yaml": "Провайдер прислал конфиг Clash в YAML. Укажите другой User-Agent.",
   "subs.error.html": "По ссылке открылась веб-страница, а не подписка.",
   "subs.error.unknown": "Ответ не похож на подписку в формате, который понимает Kasumi.",
-  "subs.error.unsupportedJson": "Подписки в формате JSON пока не поддерживаются.",
+  "subs.error.jsonConsent":
+    "Провайдер присылает полные конфиги Xray. Разрешите их в предложенных изменениях или в настройках подписки. Прежние серверы сохранены.",
   "subs.error.noProfiles": "В ответе нет поддерживаемых серверов. Прежние серверы сохранены.",
   "subs.error.limit": "Ответ провайдера слишком большой.",
   "subs.error.invalid": "Ответ провайдера повреждён.",
@@ -843,6 +846,19 @@ const ru = {
   "subs.identityNotice.dismiss": "Понятно",
   "subs.warnings.usedFallback":
     "Адрес подписки не ответил, поэтому серверы загружены с запасного адреса на {host}.",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "# конфиг Xray от провайдера не удалось использовать, он пропущен",
+    few: "# конфига Xray от провайдера не удалось использовать, они пропущены",
+    many: "# конфигов Xray от провайдера не удалось использовать, они пропущены",
+    other: "# конфига Xray от провайдера не удалось использовать, они пропущены",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "# outbound из sing-box пропущен: это не сервер, который Kasumi может импортировать (группа, direct, block или неизвестный тип)",
+    few: "# outbound из sing-box пропущены: это не серверы, которые Kasumi может импортировать (группы, direct, block или неизвестные типы)",
+    many: "# outbound из sing-box пропущены: это не серверы, которые Kasumi может импортировать (группы, direct, block или неизвестные типы)",
+    other:
+      "# outbound из sing-box пропущены: это не серверы, которые Kasumi может импортировать (группы, direct, block или неизвестные типы)",
+  }),
   "subs.menu.more": "Ещё",
   "subs.menu.history": "Изменения от провайдера",
   "subs.menu.historySub": plural("count", {
@@ -901,6 +917,10 @@ const ru = {
   "subs.changes.otherDomain":
     "Это другой домен. Принимайте, только если провайдер сам объявил о переезде.",
   "subs.changes.hint.fallback": "Используется, только когда основной адрес подписки не отвечает.",
+  "subs.changes.providerConfigs":
+    "Этот провайдер присылает готовые конфиги Xray вместо ссылок на серверы.",
+  "subs.changes.providerConfigsKept":
+    "Kasumi возьмёт из них только серверы и маршрутизацию, а остальное соберёт сам: логи, входящие подключения и прочие настройки провайдера будут отброшены.",
   "subs.changes.hint.userAgent":
     "Применяется, если у подписки нет своего User-Agent. Некоторые провайдеры отдают другому User-Agent другой формат.",
   "subs.changes.hint.lockUserAgent":
@@ -910,6 +930,7 @@ const ru = {
   "subs.changes.key.newUrl": "Новый адрес подписки",
   "subs.changes.key.newDomain": "Новый домен подписки",
   "subs.changes.key.fallbackUrl": "Запасной адрес",
+  "subs.changes.key.providerConfigs": "Полные конфиги Xray",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "Закрепить User-Agent",
   "subs.changes.key.insecure": "Не проверять сертификат",
@@ -971,6 +992,10 @@ const ru = {
   "subs.edit.remove": "Убрать",
   "subs.edit.insecureByProvider": "Проверка сертификата отключена",
   "subs.edit.checkTls": "Включить",
+  "subs.edit.providerConfigs": "Используются полные конфиги Xray",
+  "subs.edit.providerConfigsOff": "Полные конфиги Xray от провайдера не разрешены",
+  "subs.edit.stopUsing": "Отключить",
+  "subs.edit.allow": "Разрешить",
   "settings.identity.title": "Запросы подписок",
   "settings.identity.sub":
     "Что обновление подписки отправляет провайдеру. В каждой подписке любое из этого можно изменить.",

@@ -645,6 +645,8 @@ const zh = {
   "profiles.row.select": "选择",
   "profiles.row.edit": "编辑",
   "profiles.row.more": "更多",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "来自订阅的完整 Xray 配置，已清理",
   // subscriptions extra
   "subs.saved": "订阅已保存",
   "subs.deleted": "订阅已删除",
@@ -699,7 +701,8 @@ const zh = {
   "subs.error.yaml": "服务商返回的是 Clash YAML 配置，请换一个 User-Agent。",
   "subs.error.html": "该链接返回的是网页，而不是订阅。",
   "subs.error.unknown": "响应不是 Kasumi 能读取的订阅格式。",
-  "subs.error.unsupportedJson": "暂不支持 JSON 格式的订阅。",
+  "subs.error.jsonConsent":
+    "提供商发送的是完整的 Xray 配置。请在建议的更改或“编辑”中允许使用。已保留之前的服务器。",
   "subs.error.noProfiles": "响应中没有受支持的服务器，已保留之前的服务器。",
   "subs.error.limit": "服务商的响应过大。",
   "subs.error.invalid": "服务商的响应格式错误。",
@@ -751,6 +754,14 @@ const zh = {
   "subs.identityNotice.settings": "设置",
   "subs.identityNotice.dismiss": "知道了",
   "subs.warnings.usedFallback": "订阅地址无响应，服务器取自 {host} 上的备用地址。",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "提供商的 # 个 Xray 配置无法使用，已跳过",
+    other: "提供商的 # 个 Xray 配置无法使用，已跳过",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "# 个 sing-box 出站不是 Kasumi 可导入的服务器（分组、direct、block 或未知类型），已跳过",
+    other: "# 个 sing-box 出站不是 Kasumi 可导入的服务器（分组、direct、block 或未知类型），已跳过",
+  }),
   "subs.menu.more": "更多",
   "subs.menu.history": "服务商的更改",
   "subs.menu.historySub": plural("count", {
@@ -794,6 +805,9 @@ const zh = {
   "subs.changes.domainMoveBody": "之后将从新地址获取更新。",
   "subs.changes.otherDomain": "这是另一个域名。只有在服务商公告过迁移时才接受。",
   "subs.changes.hint.fallback": "仅在订阅地址失败时使用。",
+  "subs.changes.providerConfigs": "此提供商发送的是完整的 Xray 配置，而不是服务器链接。",
+  "subs.changes.providerConfigsKept":
+    "Kasumi 只保留其中的出站和路由，其余部分由自己生成：提供商的日志、监听端口和其他设置都会被丢弃。",
   "subs.changes.hint.userAgent":
     "除非此订阅有自己的 User-Agent，否则使用它。有些服务商会对不同的 User-Agent 返回不同格式。",
   "subs.changes.hint.lockUserAgent":
@@ -802,6 +816,7 @@ const zh = {
   "subs.changes.key.newUrl": "新的订阅地址",
   "subs.changes.key.newDomain": "新的订阅域名",
   "subs.changes.key.fallbackUrl": "备用地址",
+  "subs.changes.key.providerConfigs": "完整 Xray 配置",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "锁定 User-Agent",
   "subs.changes.key.insecure": "跳过证书校验",
@@ -845,6 +860,10 @@ const zh = {
   "subs.edit.remove": "移除",
   "subs.edit.insecureByProvider": "证书校验已关闭",
   "subs.edit.checkTls": "开启",
+  "subs.edit.providerConfigs": "正在使用完整 Xray 配置",
+  "subs.edit.providerConfigsOff": "未允许提供商的完整 Xray 配置",
+  "subs.edit.stopUsing": "停止使用",
+  "subs.edit.allow": "允许",
   "settings.identity.title": "订阅请求",
   "settings.identity.sub": "更新订阅时发送给服务商的内容。每个订阅都可以单独修改任意一项。",
   "settings.identity.cookieJar": "保留服务商 Cookie",

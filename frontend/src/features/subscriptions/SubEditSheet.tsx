@@ -69,6 +69,7 @@ export function SubEditSheet({
       bodyEncrypted: false,
       warnings: [],
       insecureByProvider: false,
+      allowProviderConfigs: false,
     });
   }, [open, sub]);
 
@@ -118,6 +119,11 @@ export function SubEditSheet({
     }
   };
 
+  // Refused full Xray configs with no question left open: the user rejected it once.
+  const configsRefused =
+    !d.allowProviderConfigs &&
+    d.lastErrorKind?.kind === "unsupportedPayload" &&
+    !(d.pendingChanges ?? []).some((p) => p.action.kind === "allowProviderConfigs");
   const showInsecureHint =
     d.url.trim() !== "" && isInsecureHttpUrl(d.url) && !isLocalOrPrivateHost(d.url);
 
@@ -218,7 +224,7 @@ export function SubEditSheet({
           )}
         </SettingGroup>
       )}
-      {(d.fallbackUrl || d.insecureByProvider) && (
+      {(d.fallbackUrl || d.insecureByProvider || d.allowProviderConfigs) && (
         <SettingGroup>
           <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--on-surface-variant)" }}>
             {t("subs.edit.fromProvider")}
@@ -242,6 +248,24 @@ export function SubEditSheet({
               }
             />
           )}
+          {d.allowProviderConfigs && (
+            <ProviderSetting
+              icon="data_object"
+              title={t("subs.edit.providerConfigs")}
+              action={t("subs.edit.stopUsing")}
+              onAction={() => set("allowProviderConfigs", false)}
+            />
+          )}
+        </SettingGroup>
+      )}
+      {configsRefused && (
+        <SettingGroup>
+          <ProviderSetting
+            icon="data_object"
+            title={t("subs.edit.providerConfigsOff")}
+            action={t("subs.edit.allow")}
+            onAction={() => set("allowProviderConfigs", true)}
+          />
         </SettingGroup>
       )}
       <Disclosure

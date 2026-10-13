@@ -60,7 +60,7 @@ export function errorKey(kind: SubErrorKind): DictKey {
       if (kind.hint === "html") return "subs.error.html";
       return "subs.error.unknown";
     case "unsupportedPayload":
-      return "subs.error.unsupportedJson";
+      return "subs.error.jsonConsent";
     case "noProfiles":
       return "subs.error.noProfiles";
     case "limit":
@@ -98,5 +98,9 @@ export function warningKey(w: SubWarning): DictKey {
       return "subs.warnings.legacyParser";
     case "usedFallback":
       return "subs.warnings.usedFallback";
+    case "rejectedConfigs":
+      return "subs.warnings.rejectedConfigs";
+    case "skippedOutbounds":
+      return "subs.warnings.skippedOutbounds";
   }
 }

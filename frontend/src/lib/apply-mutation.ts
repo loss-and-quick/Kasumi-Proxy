@@ -182,6 +182,8 @@ function applyChange(
       return action.on ? withSub({ userAgent: "" }) : state;
     case "setInsecure":
       return withSub({ allowInsecure: action.on, insecureByProvider: action.on });
+    case "allowProviderConfigs":
+      return withSub({ allowProviderConfigs: true });
     case "setRoutingEnabled":
       return {
         ...state,

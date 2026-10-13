@@ -27,9 +27,11 @@ use kasumi_core::sub_apply::{
     ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
     map_fetched_subscription_profiles, profile_filter_regex, refreshed_id,
 };
-use kasumi_core::sub_changes::{consented_keys, host_of, offer_changes, push_audit, routing_off};
+use kasumi_core::sub_changes::{
+    consented_keys, host_of, offer_changes, offer_provider_configs, push_audit, routing_off,
+};
 use kasumi_core::sub_ingest::{
-    IngestInput, StoredSubMeta, ingest, limits, record_after, stored_for_url,
+    IngestError, IngestInput, StoredSubMeta, ingest, limits, record_after, stored_for_url,
 };
 use kasumi_core::sub_policy::{apply_auto, effective_interval_minutes};
 
@@ -146,7 +148,7 @@ pub async fn tick(
             Err(e) => {
                 log::warn!("sub-update {}: failed: {}", sub.remarks, e.message);
                 let _g = serialize.lock().await;
-                record_error(platform, &sub.id, &e.message, e.kind).await;
+                record_error(platform, &sub.id, &e).await;
             }
         }
     }
@@ -218,7 +220,7 @@ async fn record_and_reload(
 ) -> Result<AppState, String> {
     {
         let _g = serialize.lock().await;
-        record_error(platform, sub_id, &e.message, e.kind).await;
+        record_error(platform, sub_id, &e).await;
     }
     read_app_state(platform).await.ok_or(e.message)
 }
@@ -227,6 +229,8 @@ async fn record_and_reload(
 struct SubFetchError {
     message: String,
     kind: Option<SubErrorKind>,
+    /// The body was full Xray configs the user has not allowed yet.
+    needs_consent: bool,
 }
 
 impl SubFetchError {
@@ -234,6 +238,7 @@ impl SubFetchError {
         Self {
             message: message.to_owned(),
             kind: None,
+            needs_consent: false,
         }
     }
 }
@@ -329,6 +334,7 @@ async fn fetch_and_map(
             let failed = SubFetchError {
                 message: display_fetch_error(&e),
                 kind: Some(fetch_error_kind(&e)),
+                needs_consent: false,
             };
             // Only a fallback URL the user accepted is ever contacted, and a redirect
             // from it may not lead to a private address.
@@ -360,12 +366,15 @@ async fn fetch_and_map(
         body: &res.body,
         stored,
         merge,
+        allow_provider_configs: sub.allow_provider_configs,
+        title: &sub.remarks,
     })
     .map_err(|e| {
         log::warn!("subscription {}: {e}", sub.remarks);
         SubFetchError {
             message: e.to_string(),
             kind: Some(e.kind()),
+            needs_consent: matches!(e, IngestError::UnsupportedPayload(_)),
         }
     })?;
     let mut warnings = ingested.warnings.clone();
@@ -573,12 +582,7 @@ fn config_changed(prev: &AppState, old_active: Option<&Profile>, next: &AppState
     }
 }
 
-async fn record_error(
-    platform: &dyn Platform,
-    sub_id: &str,
-    message: &str,
-    kind: Option<SubErrorKind>,
-) {
+async fn record_error(platform: &dyn Platform, sub_id: &str, e: &SubFetchError) {
     let Some(prev) = read_app_state(platform).await else {
         return;
     };
@@ -588,8 +592,14 @@ async fn record_error(
     let mut next = prev.clone();
     for x in next.subscriptions.iter_mut() {
         if x.id == sub_id {
-            x.last_error = Some(message.to_owned());
-            x.last_error_kind.clone_from(&kind);
+            x.last_error = Some(e.message.clone());
+            x.last_error_kind.clone_from(&e.kind);
+            if e.needs_consent && offer_provider_configs(x, &now_iso()) {
+                log::info!(
+                    "subscription {}: asked to allow its Xray configs",
+                    x.remarks
+                );
+            }
         }
     }
     let _ = crate::commands::persist_with_chain(platform, &prev, &mut next).await;
@@ -1425,5 +1435,82 @@ mod tests {
             next.subscriptions[0].audit[0].outcome,
             AuditOutcome::AutoApplied
         );
+    }
+
+    fn xray_array(tag: &str, names: [&str; 2]) -> Vec<u8> {
+        let config = |name: &str, host: &str| {
+            serde_json::json!({
+                "remarks": name,
+                "log": { "access": "/data/adb/kasumi-proxy/a.log" },
+                "outbounds": [{ "tag": tag, "protocol": "trojan",
+                    "settings": { "servers": [{ "address": host, "port": 443, "password": "pw" }] } }],
+            })
+        };
+        serde_json::json!([config(names[0], "a.example"), config(names[1], "b.example")])
+            .to_string()
+            .into_bytes()
+    }
+
+    #[tokio::test]
+    async fn json_configs_wait_for_consent_then_import() {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![
+            http_response(200, &[], &xray_array("proxy", ["A", "B"])),
+            http_response(200, &[], &xray_array("proxy", ["A", "B"])),
+            http_response(200, &[], &xray_array("proxy", ["A", "B"])),
+            http_response(200, &[], &xray_array("renamed", ["A1", "B1"])),
+        ])
+        .await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        update(&p).await;
+        assert_kept(&p, "not allowed").await;
+        let s = sub_after(&p).await;
+        assert_eq!(
+            s.last_error_kind,
+            Some(SubErrorKind::UnsupportedPayload {
+                payload: kasumi_core::state::PayloadKind::JsonArray
+            })
+        );
+        // Asked once, however many refused fetches.
+        assert_eq!(s.pending_changes.len(), 1);
+        assert_eq!(
+            s.pending_changes[0].action,
+            kasumi_core::state::ChangeAction::AllowProviderConfigs
+        );
+        assert_eq!(s.audit.len(), 1);
+
+        let mut state = read_app_state(&p).await.unwrap();
+        let digest = s.pending_changes[0].digest.clone();
+        kasumi_core::sub_changes::resolve_changes(&mut state, "s1", &[digest], true, None, "t");
+        write_app_state(&p, &state).await.unwrap();
+        let next = update(&p).await;
+        let s = &next.subscriptions[0];
+        assert!(s.allow_provider_configs && s.last_error.is_none());
+        assert!(s.pending_changes.is_empty());
+        let names: Vec<&str> = next
+            .profiles
+            .iter()
+            .map(|x| x.meta().remarks.as_str())
+            .collect();
+        assert_eq!(names, ["A", "B"]);
+        assert!(
+            next.profiles
+                .iter()
+                .all(|x| matches!(x, Profile::Custom(c) if !c.raw.contains("/data/adb")))
+        );
+
+        // A refresh that renames the configs and their tags keeps the selection.
+        let mut state = next.clone();
+        let picked = state.profiles[1].meta().id.clone();
+        state.active_id = Some(picked);
+        write_app_state(&p, &state).await.unwrap();
+        let next = update(&p).await;
+        let active = next
+            .profiles
+            .iter()
+            .find(|x| Some(&x.meta().id) == next.active_id.as_ref())
+            .unwrap();
+        assert_eq!(active.meta().remarks, "B1");
     }
 }
