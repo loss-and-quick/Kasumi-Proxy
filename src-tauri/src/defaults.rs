@@ -106,11 +106,11 @@ pub fn render() -> String {
 
     // Backend constants (single source: `kasumi-core` contract/state).
     out.push_str(
-        "/* Backend constants (port-test windows, local ports, probe URLs, log rotation). */\n",
+        "/* Backend constants (local ports, probe URLs, log rotation, state schema). */\n",
     );
     // Test-core ports are backend-internal now (the daemon leases them from one
     // shared pool); the frontend just names a profile, so they're not exported.
-    let nums: [(&str, i64); 4] = [
+    let nums: [(&str, i64); 5] = [
         (
             "DEFAULT_LOCAL_SOCKS_PORT",
             state::DEFAULT_LOCAL_SOCKS_PORT as i64,
@@ -124,6 +124,11 @@ pub fn render() -> String {
             state::DEFAULT_LOCAL_PAC_PORT as i64,
         ),
         ("DEFAULT_LOG_ROTATE_KB", state::DEFAULT_LOG_ROTATE_KB),
+        // Stamped on exported backups so a restore runs the right migrations.
+        (
+            "SCHEMA_VERSION",
+            i64::from(kasumi_core::migrate::SCHEMA_VERSION),
+        ),
     ];
     for (name, value) in nums {
         out.push_str(&format!("export const {name} = {value};\n"));

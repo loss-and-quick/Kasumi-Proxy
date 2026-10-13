@@ -5,6 +5,7 @@
 
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
+import { SCHEMA_VERSION } from "../../generated/defaults";
 import { AppStateSchema } from "../../generated/schemas";
 import { useT } from "../../i18n";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
@@ -40,7 +41,17 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const backupJson = useMemo(
     () =>
       JSON.stringify(
-        { profiles, groups, subscriptions, ruleBlocks, routes, assetFiles, settings, activeId },
+        {
+          schemaVersion: SCHEMA_VERSION,
+          profiles,
+          groups,
+          subscriptions,
+          ruleBlocks,
+          routes,
+          assetFiles,
+          settings,
+          activeId,
+        },
         null,
         2,
       ),

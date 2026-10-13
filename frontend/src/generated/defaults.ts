@@ -577,11 +577,12 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "tunUdpRwTimeoutMs": 60000
 } as AdvancedSettings_Serialize;
 
-/* Backend constants (port-test windows, local ports, probe URLs, log rotation). */
+/* Backend constants (local ports, probe URLs, log rotation, state schema). */
 export const DEFAULT_LOCAL_SOCKS_PORT = 10808;
 export const DEFAULT_LOCAL_HTTP_PORT = 10809;
 export const DEFAULT_LOCAL_PAC_PORT = 10811;
 export const DEFAULT_LOG_ROTATE_KB = 512;
+export const SCHEMA_VERSION = 4;
 export const DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
 export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=10000000";
 export const DEFAULT_ROUTE_ID = "route-default";
