@@ -27,6 +27,7 @@ use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
+use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::stored_for_url;
 use kasumi_core::sub_policy::safe_provider_link;
 
@@ -486,7 +487,9 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             let meta = sub
                 .and_then(|s| stored_for_url(stored.as_ref(), &s.url))
                 .map(|s| &s.meta);
-            let resolved = crate::identity::resolve_request(platform, &input, meta).await;
+            let consented = sub.map_or_else(Vec::new, |s| consented_keys(s, meta));
+            let resolved =
+                crate::identity::resolve_request(platform, &input, meta, &consented).await;
             Ok(Response::RequestIdentity(Box::new(resolved.view)))
         }
 

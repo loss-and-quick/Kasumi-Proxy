@@ -191,12 +191,6 @@ pub fn client_os(name: &str) -> ClientOs {
     }
 }
 
-/// Whether the user accepted a provider's trust-boundary key. `change-user-agent` and
-/// `manual-block-user-agent` are accepted in the review step, which has none yet.
-pub fn consent(_key: &str) -> bool {
-    false
-}
-
 fn given(v: Option<&String>) -> Option<&str> {
     v.map(|s| s.trim()).filter(|s| !s.is_empty())
 }
@@ -273,21 +267,32 @@ pub struct Resolved {
 }
 
 /// Resolve the request a subscription with `meta` (its stored provider keys) sends.
+/// `consented` lists the trust-boundary keys whose current value the user accepted.
 pub fn resolve(
     input: &IdentityInput,
     facts: &DeviceFacts,
     auto: &AutoHwid,
     meta: Option<&MetaMap>,
+    consented: &[String],
     unix_secs: u64,
 ) -> Resolved {
+    let consent = |key: &str| consented.iter().any(|k| k == key);
     let (hwid, hwid_source) = pick_hwid(&input.defaults, &input.request, auto);
-    let id = identity(
+    let mut id = identity(
         &input.defaults,
         &input.user_agent,
         &input.request,
         facts,
         &hwid,
     );
+    // An accepted provider User-Agent ranks below the subscription's own and above
+    // the Settings one; happ-sub applies it when no override is given.
+    let provider_ua = meta
+        .and_then(|m| m.get("change-user-agent"))
+        .is_some_and(|ua| !ua.trim().is_empty() && consent("change-user-agent"));
+    if provider_ua && input.user_agent.trim().is_empty() {
+        id.user_agent_override = None;
+    }
     let profile = build(&id, meta, unix_secs, consent);
     // The same device with no user switches shows what the provider's keys do alone.
     let alone = build(
@@ -380,7 +385,7 @@ mod tests {
 
     #[test]
     fn defaults_match_happ_header_set_and_order() {
-        let r = resolve(&input(), &facts(), &auto(), None, DAY);
+        let r = resolve(&input(), &facts(), &auto(), None, &[], DAY);
         let names: Vec<&str> = headers(&r).into_iter().map(|(n, _)| n).collect();
         assert_eq!(
             names,
@@ -409,10 +414,10 @@ mod tests {
         let mut d = input();
         d.defaults.user_agent = "Global/1".into();
         d.user_agent = "v2rayNG/1.10.16".into();
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "User-agent"), Some("v2rayNG/1.10.16"));
         d.user_agent = "  ".into();
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "User-agent"), Some("Global/1"));
     }
 
@@ -420,22 +425,22 @@ mod tests {
     fn sub_override_beats_provider_beats_settings() {
         let off = meta(&[("subscription-send-hwid-enabled", "false")]);
         // Settings at Happ's default: the provider decides.
-        let r = resolve(&input(), &facts(), &auto(), Some(&off), DAY);
+        let r = resolve(&input(), &facts(), &auto(), Some(&off), &[], DAY);
         assert_eq!(header(&r, "X-Device-OS"), None);
         assert!(r.view.provider_hides_device);
         // A per-subscription switch wins over the provider.
         let mut d = input();
         d.request.send_hwid = Some(true);
-        let r = resolve(&d, &facts(), &auto(), Some(&off), DAY);
+        let r = resolve(&d, &facts(), &auto(), Some(&off), &[], DAY);
         assert_eq!(header(&r, "X-HWID"), Some(HWID));
         assert!(r.view.provider_hides_device);
         // Turned off in Settings: off everywhere, unless the subscription says on.
         let mut d = input();
         d.defaults.send_hwid = false;
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-HWID"), None);
         d.request.send_hwid = Some(true);
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-HWID"), Some(HWID));
     }
 
@@ -443,13 +448,13 @@ mod tests {
     fn hwid_in_cookie_replaces_the_header() {
         let mut d = input();
         d.defaults.hwid_in_cookie = true;
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-HWID"), None);
         assert_eq!(header(&r, "Cookie"), Some(HWID));
         assert!(!r.view.provider_hwid_cookie);
 
         let on = meta(&[("subscription-hwid-in-cookie-enable", "1")]);
-        let r = resolve(&input(), &facts(), &auto(), Some(&on), DAY);
+        let r = resolve(&input(), &facts(), &auto(), Some(&on), &[], DAY);
         assert!(r.view.locks.hwid_in_cookie && r.view.provider_hwid_cookie);
     }
 
@@ -459,7 +464,7 @@ mod tests {
         d.defaults.hwid = Some("settings-hwid".into());
         d.defaults.device_model = Some("PC".into());
         d.request.locale = Some("en_US".into());
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-HWID"), Some("settings-hwid"));
         assert_eq!(r.view.hwid_source, HwidSource::Settings);
         assert_eq!(header(&r, "X-Device-model"), Some("PC"));
@@ -467,7 +472,7 @@ mod tests {
 
         d.request.hwid = Some("sub-hwid".into());
         d.request.device_model = Some("  ".into());
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-HWID"), Some("sub-hwid"));
         assert_eq!(r.view.hwid_source, HwidSource::Subscription);
         assert_eq!(header(&r, "X-Device-model"), Some("PC"), "blank inherits");
@@ -481,7 +486,7 @@ mod tests {
         }
         let mut d = input();
         d.request.hwid = Some("a\r\nX-Evil: 1".into());
-        let r = resolve(&d, &facts(), &auto(), None, DAY);
+        let r = resolve(&d, &facts(), &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-HWID"), Some(HWID));
         assert_eq!(r.view.hwid_source, HwidSource::HappComputed);
     }
@@ -492,9 +497,29 @@ mod tests {
             ("change-user-agent", "Provider/1"),
             ("manual-block-user-agent", "true"),
         ]);
-        let r = resolve(&input(), &facts(), &auto(), Some(&m), DAY);
+        let r = resolve(&input(), &facts(), &auto(), Some(&m), &[], DAY);
         assert_ne!(header(&r, "User-agent"), Some("Provider/1"));
         assert!(!r.view.locks.user_agent);
+    }
+
+    #[test]
+    fn accepted_user_agent_ranks_between_sub_and_settings() {
+        let m = meta(&[
+            ("change-user-agent", "Provider/1"),
+            ("manual-block-user-agent", "true"),
+        ]);
+        let consented = [
+            "change-user-agent".to_owned(),
+            "manual-block-user-agent".to_owned(),
+        ];
+        let mut d = input();
+        d.defaults.user_agent = "Global/1".into();
+        let r = resolve(&d, &facts(), &auto(), Some(&m), &consented, DAY);
+        assert_eq!(header(&r, "User-agent"), Some("Provider/1"));
+        assert!(r.view.locks.user_agent);
+        d.user_agent = "Mine/1".into();
+        let r = resolve(&d, &facts(), &auto(), Some(&m), &consented, DAY);
+        assert_eq!(header(&r, "User-agent"), Some("Mine/1"));
     }
 
     #[test]
@@ -505,7 +530,7 @@ mod tests {
         assert_eq!(client_os("Haiku"), ClientOs::Other("Haiku".into()));
         let mut f = facts();
         f.os = "Linux".into();
-        let r = resolve(&input(), &f, &auto(), None, DAY);
+        let r = resolve(&input(), &f, &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-Device-OS"), Some("Linux"));
         assert!(header(&r, "User-agent").unwrap().contains("/Linux/"));
     }

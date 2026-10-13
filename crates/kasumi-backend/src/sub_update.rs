@@ -25,6 +25,7 @@ use kasumi_core::sub_apply::{
     ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
     map_fetched_subscription_profiles, profile_filter_regex, refreshed_id,
 };
+use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::{
     IngestInput, StoredSubMeta, ingest, limits, record_after, stored_for_url,
 };
@@ -289,10 +290,12 @@ async fn fetch_and_map(
         .map_err(|e| SubFetchError::plain(&e.to_string()))?;
     let stored = sub_meta::read_all(platform).await;
     let stored = stored_for_url(stored.get(&sub.id), &sub.url);
+    let consented = consented_keys(sub, stored.map(|s| &s.meta));
     let request = resolve_request(
         platform,
         &IdentityInput::stored(identity, Some(sub)),
         stored.map(|s| &s.meta),
+        &consented,
     )
     .await
     .profile;
