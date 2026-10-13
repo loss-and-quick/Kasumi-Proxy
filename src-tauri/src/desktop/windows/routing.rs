@@ -293,9 +293,10 @@ pub async fn bind_uplink(
 
 /// Source-address pin for the uplink bind. Windows binds by interface index
 /// (`IP_UNICAST_IF`), which doesn't suffer the multi-homed source-selection issue the
-/// Linux `SO_BINDTODEVICE` path does, so no source override is emitted here.
-pub async fn uplink_source() -> Option<String> {
-    None
+/// Linux `SO_BINDTODEVICE` path does, so no source override is emitted here, for
+/// either family.
+pub async fn uplink_source(_dev: &str) -> kasumi_core::outbound_bind::UplinkSource {
+    kasumi_core::outbound_bind::UplinkSource::default()
 }
 
 #[cfg(test)]

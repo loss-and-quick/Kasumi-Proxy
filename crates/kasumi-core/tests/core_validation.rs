@@ -31,7 +31,7 @@ use kasumi_core::enums::{
     PacketEncoding, Security, SsMethod, VmessEnc,
 };
 use kasumi_core::mixins::Transport;
-use kasumi_core::outbound_bind::bind_uplink_outbounds;
+use kasumi_core::outbound_bind::{UplinkSource, bind_uplink_outbounds};
 use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{
@@ -1806,7 +1806,12 @@ fn bridged_uplink_bind_validates_against_real_cores() {
         if engine == CoreEngine::Xray {
             hijack_inbound_dns(cfg);
         }
-        bind_uplink_outbounds(engine, cfg, "eth0", Some("192.0.2.10"));
+        // Both families: sing-box pins each, xray keeps the IPv4 one only.
+        let source = UplinkSource {
+            v4: Some("192.0.2.10".into()),
+            v6: Some("2001:db8::10".into()),
+        };
+        bind_uplink_outbounds(engine, cfg, "eth0", &source);
         if engine == CoreEngine::Xray {
             let dns = cfg["outbounds"]
                 .as_array()
