@@ -25,7 +25,7 @@ use kasumi_core::enums::CoreEngine;
 use kasumi_core::import_input::{
     ResolvedImport, is_encrypted_url, resolve_import_text, subscription_fetch_url,
 };
-use kasumi_core::mutate::{MutationIntent, apply_mutation};
+use kasumi_core::mutate::{Backup, ImportMode, MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
@@ -73,6 +73,14 @@ pub enum Command {
     /// under the state-write lock; the stateless `dispatch` rejects it.
     Mutate {
         intent: Box<MutationIntent>,
+    },
+    /// Restore a backup of any past schema: read as a [`Backup`] (migrated, with
+    /// the profiles that still don't fit left out and counted), then applied as an
+    /// `ImportBackup` intent. Routed through the `Service` like `Mutate`.
+    ImportBackup {
+        #[specta(type = Box<AppState>)]
+        backup: Box<Backup>,
+        mode: ImportMode,
     },
     #[serde(rename_all = "camelCase")]
     FetchSubscription {
@@ -235,6 +243,15 @@ pub enum Response {
     Ok,
     RequestIdentity(Box<ResolvedIdentity>),
     ImportInput(Box<ResolvedImport>),
+    BackupRestored(Box<BackupRestored>),
+}
+
+/// A restored backup: the new state and how many of its profiles were left out.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupRestored {
+    pub state: AppState,
+    pub skipped_profiles: u32,
 }
 
 /// Reject path traversal / quoting tricks in asset filenames.
@@ -563,6 +580,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             .map_err(err),
 
         Command::Mutate { .. }
+        | Command::ImportBackup { .. }
         | Command::Start { .. }
         | Command::Stop
         | Command::Restart { .. }

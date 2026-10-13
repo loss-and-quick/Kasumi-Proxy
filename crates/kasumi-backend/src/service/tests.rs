@@ -241,6 +241,33 @@ async fn concurrent_mutations_serialize_without_lost_update() {
     assert_eq!(ids, vec!["a", "b"]);
 }
 
+#[tokio::test]
+async fn importing_a_backup_reports_the_profiles_left_out() {
+    let (platform, _d) = RecordingPlatform::new();
+    crate::state::write_app_state(&*platform, &default_app_state())
+        .await
+        .unwrap();
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    let mut backup = serde_json::to_value(default_app_state()).unwrap();
+    backup["profiles"] = serde_json::json!([
+        serde_json::to_value(sample_vless()).unwrap(),
+        { "protocol": "vless", "meta": { "id": "broken" } },
+    ]);
+    let cmd: Command = serde_json::from_value(serde_json::json!({
+        "cmd": "importBackup", "backup": backup, "mode": "merge"
+    }))
+    .unwrap();
+    let Response::BackupRestored(restored) = svc.dispatch(cmd).await.unwrap() else {
+        panic!("expected backupRestored")
+    };
+    assert_eq!(restored.skipped_profiles, 1);
+    assert_eq!(restored.state.profiles.len(), 1);
+    let Response::State(state) = svc.dispatch(Command::ReadState).await.unwrap() else {
+        panic!()
+    };
+    assert_eq!(state.profiles.len(), 1);
+}
+
 /// Mutate the persisted settings through the service (the UI's write path).
 async fn set_settings(svc: &Service, edit: impl FnOnce(&mut kasumi_core::state::AdvancedSettings)) {
     let Response::State(state) = svc.dispatch(Command::ReadState).await.unwrap() else {

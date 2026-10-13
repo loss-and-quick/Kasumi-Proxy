@@ -1169,6 +1169,24 @@ export const AppStateSchema = z.union([AppState_DeserializeSchema, AppState_Seri
 export type AppState = z.infer<typeof AppStateSchema>;
 
 
+export const BackupRestored_SerializeSchema = z.object({
+	state: AppState_SerializeSchema,
+	skippedProfiles: z.number(),
+});
+export type BackupRestored_Serialize = z.infer<typeof BackupRestored_SerializeSchema>;
+
+
+export const BackupRestored_DeserializeSchema = z.object({
+	state: AppState_DeserializeSchema,
+	skippedProfiles: z.number(),
+});
+export type BackupRestored_Deserialize = z.infer<typeof BackupRestored_DeserializeSchema>;
+
+
+export const BackupRestoredSchema = z.union([BackupRestored_DeserializeSchema, BackupRestored_SerializeSchema]);
+export type BackupRestored = z.infer<typeof BackupRestoredSchema>;
+
+
 export const CapabilitiesSchema = z.object({
 	bridge: z.string(),
 	xrayVersion: z.string(),
@@ -1348,6 +1366,10 @@ export const Command_SerializeSchema = z.union([z.object({
 	start: z.number().nullable(),
 	count: z.number().nullable(),
 	span: z.number().nullable(),
+}), z.object({
+	cmd: z.literal("importBackup"),
+	backup: AppState_SerializeSchema,
+	mode: ImportModeSchema,
 }), z.object({
 	cmd: z.literal("listApps"),
 }), z.object({
@@ -1571,6 +1593,10 @@ export const Command_DeserializeSchema = z.union([z.object({
 	start: z.number().nullable().optional(),
 	count: z.number().nullable().optional(),
 	span: z.number().nullable().optional(),
+}), z.object({
+	cmd: z.literal("importBackup"),
+	backup: AppState_DeserializeSchema,
+	mode: ImportModeSchema,
 }), z.object({
 	cmd: z.literal("listApps"),
 }), z.object({
@@ -1814,6 +1840,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("assets"),
 	value: z.array(z.string()),
 }), z.object({
+	kind: z.literal("backupRestored"),
+	value: BackupRestored_SerializeSchema,
+}), z.object({
 	kind: z.literal("capabilities"),
 	value: CapabilitiesSchema,
 }), z.object({
@@ -1879,6 +1908,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("assets"),
 	value: z.array(z.string()),
+}), z.object({
+	kind: z.literal("backupRestored"),
+	value: BackupRestored_DeserializeSchema,
 }), z.object({
 	kind: z.literal("capabilities"),
 	value: CapabilitiesSchema,
