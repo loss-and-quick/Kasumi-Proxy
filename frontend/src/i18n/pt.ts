@@ -1179,6 +1179,8 @@ const pt = {
   },
   "store.backup.invalidJson": "JSON de backup inválido",
   "store.backup.invalidStructure": "Estrutura de backup inválida",
+  "store.backup.newerVersion":
+    "Este backup é de uma versão mais recente do app. Atualize o app para restaurá-lo",
   "store.backup.restored": "Backup restaurado",
   "store.backup.merged": "Backup mesclado",
   "store.backup.profilesSkipped": plural("count", {

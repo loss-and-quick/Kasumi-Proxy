@@ -1310,6 +1310,8 @@ const ru = {
   },
   "store.backup.invalidJson": "Некорректный JSON резервной копии",
   "store.backup.invalidStructure": "Некорректная структура резервной копии",
+  "store.backup.newerVersion":
+    "Резервная копия из более новой версии приложения. Обновите приложение, чтобы восстановить её",
   "store.backup.restored": "Резервная копия восстановлена",
   "store.backup.merged": "Резервная копия объединена",
   "store.backup.profilesSkipped": plural("count", {

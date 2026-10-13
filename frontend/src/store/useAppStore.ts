@@ -13,6 +13,7 @@ import type {
   RouteBlockRef,
   TestKind,
 } from "../generated/bindings";
+import { SCHEMA_VERSION } from "../generated/defaults";
 import { translateCurrent } from "../i18n";
 import type {
   AdvancedSettings,
@@ -1144,6 +1145,11 @@ export const useAppStore = create<Store>((set, get) => {
       // `safeParse` yields the `Serialize | Deserialize` union; narrow to the
       // all-fields phase the importBackup intent carries.
       const parsedState = parsed.data as AppState_Serialize;
+      // The backend refuses it as well; checking first keeps a running service up.
+      if ((parsedState.schemaVersion ?? 0) > SCHEMA_VERSION) {
+        get().notify(translateCurrent("store.backup.newerVersion"));
+        return;
+      }
       // Older backups carry no routing rules or resource files. Reading those as
       // "none" would wipe the current ones on Replace, so they stay as they are.
       // A backup from before routes carries a flat rule list instead, which the

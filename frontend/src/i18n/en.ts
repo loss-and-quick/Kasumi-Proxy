@@ -1190,6 +1190,8 @@ const en = {
   },
   "store.backup.invalidJson": "Invalid backup JSON",
   "store.backup.invalidStructure": "Invalid backup structure",
+  "store.backup.newerVersion":
+    "This backup is from a newer app version. Update the app to restore it",
   "store.backup.restored": "Backup restored",
   "store.backup.merged": "Backup merged",
   "store.backup.profilesSkipped": plural("count", {

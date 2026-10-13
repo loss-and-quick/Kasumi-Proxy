@@ -1108,6 +1108,7 @@ const zh = {
   },
   "store.backup.invalidJson": "备份 JSON 无效",
   "store.backup.invalidStructure": "备份结构无效",
+  "store.backup.newerVersion": "此备份来自更新版本的应用。请先更新应用再恢复",
   "store.backup.restored": "备份已恢复",
   "store.backup.merged": "备份已合并",
   "store.backup.profilesSkipped": plural("count", {
