@@ -29,6 +29,20 @@ export const commands = {
 	 */
 	dispatch: (cmd: Command_Deserialize) => typedError<Response_Serialize, string>(__TAURI_INVOKE("dispatch", { cmd })),
 	/**
+	 *  Resolves once startup is over: null when the data-path is ready, otherwise the
+	 *  [`StartupProblem`]. Never resolves after a failure shown in the native dialog,
+	 *  which quits the app.
+	 */
+	startupProblem: () => __TAURI_INVOKE<
+/**
+ *  The privileged helper is another build of the app and speaks another
+ *  protocol version (`helperProtocol` is null for a helper older than the
+ *  versioned handshake).
+ */
+{ kind: "helperOutdated"; appProtocol: number; helperProtocol: number | null } | null>("startup_problem"),
+	/**  Quit the app from the UI (the window's close button only hides it to the tray). */
+	quit: () => __TAURI_INVOKE<void>("quit"),
+	/**
 	 *  Rebuild the tray menu from the UI's current profiles + active selection. The UI
 	 *  calls this on hydrate and whenever the active/recent profiles or language
 	 *  change; clicks come back as [`TrayAction`] events (or `show`/`quit`).
@@ -1692,6 +1706,18 @@ export type Socks = {
 
 /**  Shadowsocks cipher (incl. the 2022 AEAD methods). */
 export type SsMethod = "aes-256-gcm" | "aes-128-gcm" | "chacha20-poly1305" | "chacha20-ietf-poly1305" | "xchacha20-poly1305" | "none" | "plain" | "2022-blake3-aes-128-gcm" | "2022-blake3-aes-256-gcm" | "2022-blake3-chacha20-poly1305";
+
+/**
+ *  Why the app came up without a usable data-path, for the UI to explain in the
+ *  user's language. Any other startup failure ends in the native error dialog.
+ */
+export type StartupProblem = 
+/**
+ *  The privileged helper is another build of the app and speaks another
+ *  protocol version (`helperProtocol` is null for a helper older than the
+ *  versioned handshake).
+ */
+{ kind: "helperOutdated"; appProtocol: number; helperProtocol: number | null };
 
 /**  Live service status pushed to the UI (the 1 Hz + on-change stream). */
 export type StatusChanged = StatusChanged_Serialize | StatusChanged_Deserialize;

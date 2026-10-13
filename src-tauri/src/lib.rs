@@ -206,6 +206,49 @@ async fn dispatch(
     service.get().await.dispatch(cmd).await.map_err(|e| e.0)
 }
 
+/// Why the app came up without a usable data-path, for the UI to explain in the
+/// user's language. Any other startup failure ends in the native error dialog.
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum StartupProblem {
+    /// The privileged helper is another build of the app and speaks another
+    /// protocol version (`helperProtocol` is null for a helper older than the
+    /// versioned handshake).
+    HelperOutdated {
+        app_protocol: u32,
+        helper_protocol: Option<u32>,
+    },
+}
+
+/// Resolves once startup is over: null when the data-path is ready, otherwise the
+/// [`StartupProblem`]. Never resolves after a failure shown in the native dialog,
+/// which quits the app.
+#[tauri::command]
+#[specta::specta]
+async fn startup_problem(app: tauri::AppHandle) -> Option<StartupProblem> {
+    let handle = app.state::<ServiceHandle>().inner().clone();
+    handle.settled().await
+}
+
+/// Quit the app from the UI (the window's close button only hides it to the tray).
+#[tauri::command]
+#[specta::specta]
+fn quit(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+/// Where the background bring-up stands.
+#[derive(Clone)]
+enum Startup {
+    Pending,
+    Ready(Arc<Service>),
+    Failed(StartupProblem),
+}
+
 /// Managed handle to the [`Service`], which is built **off** the `setup` thread.
 ///
 /// The privileged data-path bring-up (UAC prompt + helper handshake) takes seconds,
@@ -215,23 +258,39 @@ async fn dispatch(
 /// Service is published through a watch channel once it's ready and `dispatch` awaits
 /// it, so the UI just shows its normal loading state until the data-path is up.
 #[derive(Clone)]
-struct ServiceHandle(tokio::sync::watch::Receiver<Option<Arc<Service>>>);
+struct ServiceHandle(tokio::sync::watch::Receiver<Startup>);
 
 impl ServiceHandle {
-    /// Resolve the Service, waiting if the background bring-up is still in flight.
-    /// The watch retains its last value, so a call after bring-up returns at once.
-    async fn get(&self) -> Arc<Service> {
+    /// Wait until the bring-up has either published the Service or a
+    /// [`StartupProblem`]. The watch retains its last value, so a call after
+    /// bring-up returns at once.
+    async fn wait(&self) -> Result<Arc<Service>, StartupProblem> {
         let mut rx = self.0.clone();
         loop {
-            if let Some(service) = rx.borrow_and_update().clone() {
-                return service;
+            match rx.borrow_and_update().clone() {
+                Startup::Ready(service) => return Ok(service),
+                Startup::Failed(problem) => return Err(problem),
+                Startup::Pending => {}
             }
             if rx.changed().await.is_err() {
-                // Sender dropped with no Service — bring-up failed and the app is
+                // Sender dropped while pending — bring-up failed and the app is
                 // exiting via the error dialog; park until that takes effect.
                 std::future::pending::<()>().await;
             }
         }
+    }
+
+    /// Resolve the Service. After a [`StartupProblem`] there is none: the UI shows
+    /// the problem instead, so the call parks.
+    async fn get(&self) -> Arc<Service> {
+        match self.wait().await {
+            Ok(service) => service,
+            Err(_) => std::future::pending().await,
+        }
+    }
+
+    async fn settled(&self) -> Option<StartupProblem> {
+        self.wait().await.err()
     }
 }
 
@@ -488,6 +547,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             autostart_enabled,
             set_autostart,
             dispatch,
+            startup_problem,
+            quit,
             update_tray,
             set_tray_status
         ])
@@ -629,7 +690,7 @@ pub fn run() {
             // already-loading webview's first `dispatch` would race `manage` and wedge
             // the UI. `dispatch` awaits the channel; the UI shows its loading state
             // until the data-path is ready. See [`ServiceHandle`].
-            let (tx, rx) = tokio::sync::watch::channel::<Option<Arc<Service>>>(None);
+            let (tx, rx) = tokio::sync::watch::channel(Startup::Pending);
             app.manage(ServiceHandle(rx));
 
             let handle = app.handle().clone();
@@ -653,6 +714,20 @@ pub fn run() {
                 let service = match built {
                     Ok(service) => service,
                     Err(e) => {
+                        // The UI explains this one in the user's language.
+                        #[cfg(any(target_os = "linux", target_os = "windows"))]
+                        if let Some(outdated) =
+                            e.downcast_ref::<desktop::privhelper::proto::HelperOutdated>()
+                        {
+                            log::error!("startup failed: {e}");
+                            let _ = tx.send(Startup::Failed(StartupProblem::HelperOutdated {
+                                app_protocol: desktop::privhelper::proto::PROTOCOL_VERSION,
+                                helper_protocol: outdated.helper,
+                            }));
+                            #[cfg(desktop)]
+                            show_main(&handle);
+                            return;
+                        }
                         let msg = e.to_string();
                         log::error!("startup failed: {msg}");
                         // Surface the reason in a native modal, then quit on dismissal.
@@ -690,7 +765,7 @@ pub fn run() {
 
                 // Publish; the watch retains it, so even after `tx` drops here every
                 // `ServiceHandle::get` returns it.
-                let _ = tx.send(Some(service));
+                let _ = tx.send(Startup::Ready(service));
             });
 
             Ok(())
