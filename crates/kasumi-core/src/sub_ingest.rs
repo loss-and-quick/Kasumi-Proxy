@@ -1,6 +1,7 @@
 //! Subscription response ingest: the Happ envelope (meta, body decryption, body
-//! form) is decoded by `happ-sub`, and the links it yields go through the share
-//! parser. Pure: the backend fetches and persists.
+//! form) is decoded by `happ-sub`; the links it yields go through the share parser,
+//! full Xray configs through the sanitiser and sing-box configs through
+//! [`crate::singbox_import`]. Pure: the backend fetches and persists.
 
 use std::collections::HashSet;
 
@@ -14,6 +15,7 @@ use serde_json::{Map, Value};
 use crate::custom_sanitize::sanitize_provider_xray;
 use crate::profile::{Custom, CustomOrigin, Profile};
 use crate::share::{meta as share_meta, parse_share_link, parse_share_links};
+use crate::singbox_import::{SingboxImport, import_singbox};
 use crate::sub_changes::host_of;
 pub use crate::sub_meta_types::{ContentHint, PayloadKind, SubErrorKind, SubWarning};
 
@@ -247,8 +249,15 @@ fn ingest_body(input: &IngestInput) -> Result<Ingested, IngestError> {
             let kind = PayloadKind::JsonArray;
             xray_configs(input, &parsed.meta, &a, kind, &mut warnings)?
         }
-        Payload::SingBoxJson(_) => {
-            return Err(IngestError::UnsupportedPayload(PayloadKind::SingBoxJson));
+        Payload::SingBoxJson(v) => {
+            let SingboxImport { profiles, skipped } = import_singbox(&v);
+            if skipped > 0 {
+                warnings.push(SubWarning::SkippedOutbounds { count: skipped });
+            }
+            if profiles.is_empty() {
+                return Err(IngestError::NoProfiles);
+            }
+            profiles
         }
     };
 
@@ -544,13 +553,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn sing_box_json_is_unsupported_payload() {
+    fn singbox_fixture_decomposes_to_29_profiles() {
+        // No consent needed: the result is typed profiles, not the provider's JSON.
         let (headers, body) = http_fixture("07-sing-box");
-        let err = ingest(&input(URL, &headers, &body)).unwrap_err();
-        assert_eq!(
-            err,
-            IngestError::UnsupportedPayload(PayloadKind::SingBoxJson)
-        );
+        let ing = ingest(&input(URL, &headers, &body)).unwrap();
+        assert_eq!(ing.profiles.len(), 29);
+        assert_eq!(count(&ing.profiles, "vless"), 25);
+        assert_eq!(count(&ing.profiles, "hysteria2"), 4);
+        // The selector, the urltest group and `direct`.
+        assert_eq!(ing.warnings, [SubWarning::SkippedOutbounds { count: 3 }]);
+        assert_eq!(ing.meta.profile_title(), Some("Example VPN 🗽"));
     }
 
     fn encrypted(key_id: &str, plaintext: &[u8]) -> (Vec<(String, String)>, Vec<u8>) {

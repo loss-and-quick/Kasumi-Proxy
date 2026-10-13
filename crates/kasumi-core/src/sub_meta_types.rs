@@ -83,6 +83,11 @@ pub enum SubWarning {
     RejectedConfigs {
         count: u32,
     },
+    /// sing-box outbounds that are not servers Kasumi can import (groups, `direct`,
+    /// `block`, unknown types).
+    SkippedOutbounds {
+        count: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

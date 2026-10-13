@@ -191,7 +191,7 @@ fn as_security(v: Option<&str>) -> Security {
     }
 }
 
-fn as_fingerprint(v: Option<&str>) -> Fingerprint {
+pub(crate) fn as_fingerprint(v: Option<&str>) -> Fingerprint {
     match v.unwrap_or("") {
         "firefox" => Fingerprint::Firefox,
         "safari" => Fingerprint::Safari,
@@ -207,8 +207,8 @@ fn as_fingerprint(v: Option<&str>) -> Fingerprint {
     }
 }
 
-fn as_flow(v: Option<&String>) -> Flow {
-    match v.map(String::as_str) {
+pub(crate) fn as_flow(v: Option<&str>) -> Flow {
+    match v {
         Some("xtls-rprx-vision") => Flow::Vision,
         Some("xtls-rprx-vision-udp443") => Flow::VisionUdp443,
         _ => Flow::Empty,
@@ -347,7 +347,7 @@ fn parse_url_based(uri: &str, proto: UrlProto, group_id: Option<&str>) -> Option
             transport: t,
             tls,
             uuid: cred,
-            flow: as_flow(q.get("flow")),
+            flow: as_flow(q.get("flow").map(String::as_str)),
             encryption: q
                 .get("encryption")
                 .cloned()
@@ -361,7 +361,7 @@ fn parse_url_based(uri: &str, proto: UrlProto, group_id: Option<&str>) -> Option
             transport: t,
             tls,
             password: cred,
-            flow: as_flow(q.get("flow")),
+            flow: as_flow(q.get("flow").map(String::as_str)),
             mux_enabled: false,
         })),
     }
@@ -457,7 +457,7 @@ fn parse_wireguard(uri: &str, group_id: Option<&str>) -> Option<Profile> {
     }))
 }
 
-fn as_ss_method(v: &str) -> SsMethod {
+pub(crate) fn as_ss_method(v: &str) -> SsMethod {
     match v {
         "aes-128-gcm" => SsMethod::Aes128Gcm,
         "chacha20-poly1305" => SsMethod::Chacha20Poly1305,
@@ -472,7 +472,7 @@ fn as_ss_method(v: &str) -> SsMethod {
     }
 }
 
-fn as_cc(v: Option<&str>) -> CongestionControl {
+pub(crate) fn as_cc(v: Option<&str>) -> CongestionControl {
     match v {
         Some("cubic") => CongestionControl::Cubic,
         Some("new_reno") => CongestionControl::NewReno,
@@ -690,6 +690,13 @@ fn parse_ss(uri: &str, group_id: Option<&str>) -> Option<Profile> {
         mux_enabled: false,
     };
 
+    apply_ss_plugin(&mut p, &plugin);
+    Some(Profile::Shadowsocks(p))
+}
+
+/// A SIP003 `plugin` value (`name;opt;opt`) as the profile's transport: obfs-local's
+/// HTTP obfuscation, or v2ray-plugin's websocket or QUIC with optional TLS.
+pub(crate) fn apply_ss_plugin(p: &mut Shadowsocks, plugin: &str) {
     if !plugin.is_empty() {
         let parts: Vec<&str> = plugin.split(';').filter(|s| !s.is_empty()).collect();
         let mut name = parts.first().copied().unwrap_or("");
@@ -740,8 +747,6 @@ fn parse_ss(uri: &str, group_id: Option<&str>) -> Option<Profile> {
             }
         }
     }
-
-    Some(Profile::Shadowsocks(p))
 }
 
 fn parse_hysteria2(uri: &str, group_id: Option<&str>) -> Option<Profile> {

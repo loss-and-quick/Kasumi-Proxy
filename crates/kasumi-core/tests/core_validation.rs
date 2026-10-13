@@ -1581,3 +1581,58 @@ fn xray_array_body_cases() -> Vec<Case> {
 fn xray_array_body_validates_against_real_xray() {
     validate_all(xray_array_body_cases());
 }
+
+/// The live sing-box subscription fixture, decomposed into typed profiles: a
+/// REALITY vless node and a hysteria2 node, each built for sing-box (and the vless
+/// one for xray too).
+fn singbox_body_cases() -> Vec<Case> {
+    let raw = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/happ/07-sing-box.http"
+    ))
+    .unwrap();
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let ing = ingest(&IngestInput {
+        url: "https://sub.example.org/s",
+        headers: &[],
+        body: &raw[split + 4..],
+        stored: None,
+        merge: MergeMode::Full,
+        allow_provider_configs: false,
+        title: "Sub",
+    })
+    .expect("sing-box body decomposes");
+    let first = |protocol: Protocol| {
+        ing.profiles
+            .iter()
+            .find(|p| p.protocol() == protocol)
+            .cloned()
+            .unwrap()
+    };
+    let vless = first(Protocol::Vless);
+    let mut cases = vec![(vless.clone(), CoreEngine::Xray)];
+    cases.extend([vless, first(Protocol::Hysteria2)].map(|p| (p, CoreEngine::SingBox)));
+    cases
+        .into_iter()
+        .map(|(mut profile, engine)| {
+            profile.meta_mut().core_type = Some(engine);
+            Case {
+                name: format!(
+                    "sing-box-body/{}/{}",
+                    wire(&profile.protocol()),
+                    wire(&engine)
+                ),
+                profile,
+                settings: AdvancedSettings::default(),
+                rules: vec![],
+                needs_geo: false,
+                others: vec![],
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn singbox_body_profiles_validate_against_real_cores() {
+    validate_all(singbox_body_cases());
+}

@@ -23,6 +23,7 @@
 //! - [`sub_changes`] — provider changes that wait for the user's consent
 //! - [`request_identity`] — the identity a subscription fetch sends, built by happ-sub
 //! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
+//! - [`singbox_import`] — provider sing-box JSON decomposed into typed profiles
 
 pub mod app_process;
 pub mod chain;
@@ -44,6 +45,7 @@ pub mod request_identity;
 pub mod route;
 pub mod share;
 pub mod singbox_config;
+pub mod singbox_import;
 pub mod state;
 pub mod sub_apply;
 pub mod sub_changes;

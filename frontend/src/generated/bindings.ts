@@ -1528,7 +1528,12 @@ export type SubWarning = { kind: "skippedLines"; count: number; sample: string }
 /**  The primary URL failed and the accepted fallback URL answered. */
 { kind: "usedFallback"; host: string } | 
 /**  Provider Xray configs the sanitiser could not use. */
-{ kind: "rejectedConfigs"; count: number };
+{ kind: "rejectedConfigs"; count: number } | 
+/**
+ *  sing-box outbounds that are not servers Kasumi can import (groups, `direct`,
+ *  `block`, unknown types).
+ */
+{ kind: "skippedOutbounds"; count: number };
 
 /**  A subscription source (`SubscriptionSchema`). */
 export type Subscription = Subscription_Serialize | Subscription_Deserialize;

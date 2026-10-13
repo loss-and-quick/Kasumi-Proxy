@@ -323,6 +323,9 @@ export const SubWarningSchema = z.union([z.object({
 	count: z.number(),
 	sample: z.string(),
 }), z.object({
+	kind: z.literal("skippedOutbounds"),
+	count: z.number(),
+}), z.object({
 	kind: z.literal("unsupportedLinks"),
 	count: z.number(),
 }), z.object({
