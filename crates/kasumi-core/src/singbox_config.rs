@@ -1162,7 +1162,7 @@ fn build_singbox_resolve_rule(s: &AdvancedSettings) -> Value {
 
 // ---------- tun inbounds ----------
 
-fn uid_of(key: &str) -> Option<i64> {
+pub(crate) fn uid_of(key: &str) -> Option<i64> {
     key.split(':').nth(1).and_then(|x| x.parse::<i64>().ok())
 }
 
