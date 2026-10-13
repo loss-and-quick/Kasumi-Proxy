@@ -13,6 +13,7 @@ import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
 import { copyText } from "../profiles/clipboard";
+import { IdentityNotice } from "./IdentityNotice";
 import { SubCard, WarningsSheet } from "./SubCard";
 import { SubEditSheet } from "./SubEditSheet";
 
@@ -93,6 +94,7 @@ export default function Subscriptions({
       interval: s.interval,
       allowInsecure: s.allowInsecure,
       userAgent: s.userAgent,
+      request: s.request,
       filter: s.filter,
       updateMode: s.updateMode,
       manualTitle: s.manualTitle,
@@ -131,6 +133,7 @@ export default function Subscriptions({
       />
 
       <div className="scroll">
+        <IdentityNotice />
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {subs.map((s) => (
             <SubCard

@@ -26,6 +26,7 @@ import { DiagnosticsSection } from "./sections/DiagnosticsSection";
 import { DnsSection } from "./sections/DnsSection";
 import { LocalPortsSection } from "./sections/LocalPortsSection";
 import { RoutingSection } from "./sections/RoutingSection";
+import { SubscriptionRequestsSection } from "./sections/SubscriptionRequestsSection";
 import { SystemSection } from "./sections/SystemSection";
 import { TunEngineSection } from "./sections/TunEngineSection";
 
@@ -230,6 +231,7 @@ export default function Settings({
             <DnsSection settings={settings} set={set} />
             <ConnectionSection settings={settings} set={set} />
             <LocalPortsSection settings={settings} set={set} />
+            <SubscriptionRequestsSection settings={settings} set={set} />
           </>
         );
       case "resources":

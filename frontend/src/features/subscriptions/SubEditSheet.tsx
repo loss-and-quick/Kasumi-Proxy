@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Btn,
+  Disclosure,
   Field,
   GroupPicker,
   Icon,
@@ -15,6 +16,7 @@ import type { Subscription } from "../../lib/bridge";
 import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady, hostOf } from "../../lib/groups";
 import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
+import { SubIdentitySection } from "./SubIdentitySection";
 
 export function SubEditSheet({
   open,
@@ -29,6 +31,7 @@ export function SubEditSheet({
 }) {
   const t = useT();
   const groups = useAppStore((s) => s.groups);
+  const identityDefaults = useAppStore((s) => s.settings.requestIdentity);
   const [d, setD] = useState<Subscription | null>(null);
   const [group, setGroup] = useState<GroupChoice>({ newName: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -156,14 +159,7 @@ export function SubEditSheet({
           {errors.group}
         </div>
       )}
-      <div className="input-row" style={{ marginBottom: 14, marginTop: 14 }}>
-        <Field
-          label={t("subs.edit.userAgent")}
-          value={d.userAgent}
-          mono={false}
-          placeholder={t("subs.edit.userAgentPh")}
-          onChange={(v) => set("userAgent", v)}
-        />
+      <div style={{ marginBottom: 14, marginTop: 14 }}>
         <Field
           label={t("subs.edit.filter")}
           value={d.filter}
@@ -220,6 +216,21 @@ export function SubEditSheet({
           )}
         </SettingGroup>
       )}
+      <Disclosure
+        label={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="fingerprint" style={{ fontSize: 18 }} />
+            {t("subs.identity.title")}
+          </span>
+        }
+      >
+        <SubIdentitySection
+          sub={d}
+          saved={!!sub}
+          defaults={identityDefaults}
+          onChange={(patch) => setD((s) => (s ? { ...s, ...patch } : s))}
+        />
+      </Disclosure>
       <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
         <Btn variant="text" onClick={onClose}>
           {t("subs.confirmDel.cancel")}
