@@ -449,7 +449,9 @@ export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: nev
  *  One connectivity check through the running core, on demand; replies with
  *  its round trip (`Ping`). Stateful: it updates the Service's verdict.
  */
-({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
+({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+/**  Open a provider link (support, web page, renewal) in the system browser. */
+({ cmd: "openUrl"; url: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never };
 
 /**  One client request. The tag `cmd` selects the variant; fields are its inputs. */
 export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
@@ -477,10 +479,14 @@ export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never
  *  One connectivity check through the running core, on demand; replies with
  *  its round trip (`Ping`). Stateful: it updates the Service's verdict.
  */
-({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
+({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+/**  Open a provider link (support, web page, renewal) in the system browser. */
+({ cmd: "openUrl"; url: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never };
 
 /**  TUIC / QUIC congestion control. */
 export type CongestionControl = "bbr" | "cubic" | "new_reno";
+
+export type ContentHint = "yaml" | "html" | "unknown";
 
 /**  An actual proxy core. Wire values: `"xray"`, `"sing-box"`. */
 export type CoreEngine = "xray" | "sing-box";
@@ -824,8 +830,12 @@ export type Naive = {
 	insecureConcurrency?: number,
 };
 
+export type NoticeColor = "red" | "blue" | "green" | "default";
+
 /**  VLESS/VMess UDP packet encoding. `""` means unset. */
 export type PacketEncoding = string;
+
+export type PayloadKind = "xrayJson" | "jsonArray" | "singBoxJson";
 
 /**  A proxy profile — the persisted unit, tagged by `protocol`. */
 export type Profile = {
@@ -858,6 +868,52 @@ export type Profile = {
 
 /**  The set of supported protocols (the union's discriminant values). */
 export type Protocol = "vless" | "vmess" | "trojan" | "shadowsocks" | "socks" | "http" | "wireguard" | "hysteria2" | "tuic" | "anytls" | "naive" | "shadowtls" | "custom";
+
+/**  What the provider says about a subscription (the auto-applied Display keys). */
+export type ProviderInfo = ProviderInfo_Serialize | ProviderInfo_Deserialize;
+
+/**  What the provider says about a subscription (the auto-applied Display keys). */
+export type ProviderInfo_Deserialize = {
+	title?: string | null,
+	announce?: string | null,
+	supportUrl?: string | null,
+	webPageUrl?: string | null,
+	traffic?: TrafficInfo_Deserialize | null,
+	notice?: ProviderNotice_Deserialize | null,
+	expired?: boolean,
+	renewUrl?: string | null,
+};
+
+/**  What the provider says about a subscription (the auto-applied Display keys). */
+export type ProviderInfo_Serialize = {
+	title?: string | null,
+	announce?: string | null,
+	supportUrl?: string | null,
+	webPageUrl?: string | null,
+	traffic?: TrafficInfo_Serialize | null,
+	notice?: ProviderNotice_Serialize | null,
+	expired: boolean,
+	renewUrl?: string | null,
+};
+
+/**  The `sub-info-*` banner. */
+export type ProviderNotice = ProviderNotice_Serialize | ProviderNotice_Deserialize;
+
+/**  The `sub-info-*` banner. */
+export type ProviderNotice_Deserialize = {
+	text: string,
+	color: NoticeColor,
+	buttonText?: string | null,
+	buttonUrl?: string | null,
+};
+
+/**  The `sub-info-*` banner. */
+export type ProviderNotice_Serialize = {
+	text: string,
+	color: NoticeColor,
+	buttonText?: string | null,
+	buttonUrl?: string | null,
+};
 
 /**
  *  How the data path captures traffic. `tun` (default) brings up a system-wide
@@ -1154,6 +1210,14 @@ export type SubAppliedEvent = {
 	count: number,
 };
 
+/**  Why the last update failed, so the UI can explain it in the user's language. */
+export type SubErrorKind = { kind: "network" } | { kind: "http"; status: number } | { kind: "decrypt"; keyId: string | null } | { kind: "emptyBody" } | { kind: "unknownContent"; hint: ContentHint } | { kind: "unsupportedPayload"; payload: PayloadKind } | { kind: "noProfiles" } | { kind: "limit" } | 
+/**  A malformed envelope (server JSON, routing or deeplink). */
+{ kind: "invalid" };
+
+/**  Something skipped while ingesting; the rest of the body was used. */
+export type SubWarning = { kind: "skippedLines"; count: number; sample: string } | { kind: "unsupportedLinks"; count: number } | { kind: "invalidRouting"; message: string } | { kind: "invalidFragment" } | { kind: "legacyParser" };
+
 /**  A subscription source (`SubscriptionSchema`). */
 export type Subscription = Subscription_Serialize | Subscription_Deserialize;
 
@@ -1178,6 +1242,19 @@ export type Subscription_Deserialize = {
 	lastError?: string | null,
 	prevProfile?: string | null,
 	nextProfile?: string | null,
+	/**  What the provider says about this subscription (auto-applied Display keys). */
+	provider?: ProviderInfo_Deserialize | null,
+	/**  The user typed `remarks`; a provider title no longer renames it. */
+	manualTitle?: boolean,
+	/**  `profile-update-interval`, already clamped by happ-sub to 1..=730 hours. */
+	providerIntervalHours?: number | null,
+	/**  The user's own `interval` (minutes) wins over the provider's. */
+	intervalOverride?: boolean,
+	/**  `subscription-request-timeout`, clamped to 5..=15 s. */
+	requestTimeoutSecs?: number | null,
+	bodyEncrypted?: boolean,
+	warnings?: SubWarning[],
+	lastErrorKind?: SubErrorKind | null,
 };
 
 /**  A subscription source (`SubscriptionSchema`). */
@@ -1198,6 +1275,19 @@ export type Subscription_Serialize = {
 	lastError?: string | null,
 	prevProfile?: string | null,
 	nextProfile?: string | null,
+	/**  What the provider says about this subscription (auto-applied Display keys). */
+	provider?: ProviderInfo_Serialize | null,
+	/**  The user typed `remarks`; a provider title no longer renames it. */
+	manualTitle: boolean,
+	/**  `profile-update-interval`, already clamped by happ-sub to 1..=730 hours. */
+	providerIntervalHours?: number | null,
+	/**  The user's own `interval` (minutes) wins over the provider's. */
+	intervalOverride: boolean,
+	/**  `subscription-request-timeout`, clamped to 5..=15 s. */
+	requestTimeoutSecs?: number | null,
+	bodyEncrypted: boolean,
+	warnings?: SubWarning[],
+	lastErrorKind?: SubErrorKind | null,
 };
 
 /**  Plain TCP, optionally wearing the HTTP fake-header obfuscation. */
@@ -1232,6 +1322,27 @@ export type Tls = {
 	vcn?: string,
 	pcs?: string,
 	pqv?: string,
+};
+
+/**  `subscription-userinfo`, in bytes and unix seconds. */
+export type TrafficInfo = TrafficInfo_Serialize | TrafficInfo_Deserialize;
+
+/**  `subscription-userinfo`, in bytes and unix seconds. */
+export type TrafficInfo_Deserialize = {
+	upload: number,
+	download: number,
+	/**  0 = unmetered. */
+	total: number,
+	expire?: number | null,
+};
+
+/**  `subscription-userinfo`, in bytes and unix seconds. */
+export type TrafficInfo_Serialize = {
+	upload: number,
+	download: number,
+	/**  0 = unmetered. */
+	total: number,
+	expire?: number | null,
 };
 
 /**

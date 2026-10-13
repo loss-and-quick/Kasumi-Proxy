@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use fancy_regex::Regex;
 
+use crate::enums::Security;
 use crate::profile::Profile;
 use crate::state::{BASE_GROUP_ID, Subscription};
 
@@ -286,11 +287,13 @@ pub fn apply_subscription_profiles(
     fresh_mapped: &[Profile],
     fetched_at: &str,
 ) -> SubApplyResult {
-    let active_affected = profiles
+    let old_active = profiles
         .iter()
         .find(|p| Some(p.meta().id.as_str()) == active_id)
-        .map(|p| p.meta().sub_id.as_deref() == Some(sub.id.as_str()))
-        .unwrap_or(false);
+        .filter(|p| p.meta().sub_id.as_deref() == Some(sub.id.as_str()));
+    let active_affected = old_active.is_some();
+    let next_active =
+        next_active_id_after_subscription_update(profiles, active_id, &sub.id, fresh_mapped);
 
     // A share link carries no chain, so a refreshed profile keeps the `via` the
     // user gave its previous copy; then every `via` into this subscription follows
@@ -301,6 +304,11 @@ pub fn apply_subscription_profiles(
             p.meta().sub_id.as_deref() == Some(sub.id.as_str()) && same_profile_identity(p, f)
         }) {
             f.meta_mut().via = old.meta().via.clone();
+        }
+        if let Some(old) = old_active
+            && next_active.as_deref() == Some(f.meta().id.as_str())
+        {
+            keep_reality_pick(old, f);
         }
     }
     let mut new_profiles = remove_profiles_by_sub_id(profiles, &sub.id, sub.group_id.as_deref());
@@ -319,6 +327,7 @@ pub fn apply_subscription_profiles(
                 x.last_updated = fetched_at.to_string();
                 x.count = fresh_mapped.len() as i64;
                 x.last_error = None;
+                x.last_error_kind = None;
                 x
             } else {
                 x.clone()
@@ -329,13 +338,30 @@ pub fn apply_subscription_profiles(
     SubApplyResult {
         profiles: new_profiles,
         subscriptions: new_subs,
-        active_id: next_active_id_after_subscription_update(
-            profiles,
-            active_id,
-            &sub.id,
-            fresh_mapped,
-        ),
+        active_id: next_active,
         active_affected,
+    }
+}
+
+/// Providers hand out a REALITY `sni` and `sid` from a pool on every request. The
+/// active profile keeps the pair it runs with when nothing else changed, so a
+/// refresh does not restart the core over a value that was equally valid before.
+fn keep_reality_pick(old: &Profile, fresh: &mut Profile) {
+    let (Some(o), Some(f)) = (old.tls(), fresh.tls()) else {
+        return;
+    };
+    if o.security != Security::Reality || f.security != Security::Reality {
+        return;
+    }
+    let mut kept = fresh.clone();
+    if let Some(t) = kept.tls_mut() {
+        t.sni.clone_from(&o.sni);
+        t.short_id.clone_from(&o.short_id);
+    }
+    kept.meta_mut().id.clone_from(&old.meta().id);
+    if kept == *old {
+        kept.meta_mut().id.clone_from(&fresh.meta().id);
+        *fresh = kept;
     }
 }
 
@@ -498,6 +524,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         };
         // fresh batch: same name, different port (endpoint changed)
         let fresh = vec![p("vless://u@ex.com:8443?type=tcp#Server")];
@@ -600,6 +627,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         }
     }
 
@@ -676,5 +704,83 @@ mod tests {
         other.meta_mut().sub_id = Some("s2".into());
         let keep = next_active_id_after_subscription_update(&[other], Some("active"), "s1", &fresh);
         assert_eq!(keep.as_deref(), Some("active"));
+    }
+
+    /// The live fixture's profiles, as a fresh fetch maps them for `s1`.
+    fn fixture_batch(s: &Subscription) -> Vec<Profile> {
+        let (headers, body) = crate::sub_ingest::tests::http_fixture("01-happ-full");
+        let ing = crate::sub_ingest::ingest(&crate::sub_ingest::IngestInput {
+            url: "https://sub.example.org/s",
+            headers: &headers,
+            body: &body,
+            stored: None,
+            merge: happ_sub::MergeMode::Full,
+        })
+        .unwrap();
+        map_fetched_subscription_profiles(&ing.profiles, s, &profile_filter_regex(""))
+    }
+
+    fn refresh_active(edit: impl Fn(&mut Profile)) -> (Profile, Profile) {
+        let s = sub("s1", Some("g-main"));
+        let first = fixture_batch(&s);
+        let active = first[0].clone();
+        let mut second = fixture_batch(&s);
+        edit(&mut second[0]);
+        let r = apply_subscription_profiles(
+            &first,
+            std::slice::from_ref(&s),
+            Some(&active.meta().id),
+            &s,
+            &second,
+            "later",
+        );
+        let id = r.active_id.expect("the selection follows the refresh");
+        let next = r.profiles.into_iter().find(|p| p.meta().id == id).unwrap();
+        (active, next)
+    }
+
+    fn without_id(mut p: Profile) -> Profile {
+        p.meta_mut().id.clear();
+        p
+    }
+
+    #[test]
+    fn active_profile_keeps_its_reality_pick() {
+        let (active, next) = refresh_active(|p| {
+            let tls = p.tls_mut().unwrap();
+            tls.sni = "q1w2e3r4t5.sni.example.com".into();
+            tls.short_id = "0123456789abcdef".into();
+        });
+        assert_eq!(without_id(next), without_id(active));
+    }
+
+    #[test]
+    fn other_changes_to_the_active_profile_still_apply() {
+        let (active, next) = refresh_active(|p| {
+            p.tls_mut().unwrap().sni = "q1w2e3r4t5.sni.example.com".into();
+            p.tls_mut().unwrap().fingerprint = crate::enums::Fingerprint::Chrome;
+        });
+        assert_eq!(next.tls().unwrap().sni, "q1w2e3r4t5.sni.example.com");
+        assert_ne!(without_id(next), without_id(active));
+    }
+
+    #[test]
+    fn inactive_profiles_take_the_fresh_reality_pick() {
+        let s = sub("s1", Some("g-main"));
+        let first = fixture_batch(&s);
+        let mut second = fixture_batch(&s);
+        second[1].tls_mut().unwrap().sni = "q1w2e3r4t5.sni.example.com".into();
+        let r = apply_subscription_profiles(
+            &first,
+            std::slice::from_ref(&s),
+            Some(&first[0].meta().id),
+            &s,
+            &second,
+            "later",
+        );
+        assert!(r.profiles.iter().any(|p| {
+            p.tls()
+                .is_some_and(|t| t.sni == "q1w2e3r4t5.sni.example.com")
+        }));
     }
 }

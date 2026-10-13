@@ -19,6 +19,7 @@
 //! - [`route`] — rule blocks and the route each profile runs with
 //! - [`share`] — share-link parse/build
 //! - [`sub_ingest`] — subscription responses to profiles and provider meta
+//! - [`sub_policy`] — which provider meta is applied to a subscription, and how
 //! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
 
 pub mod app_process;
@@ -43,6 +44,8 @@ pub mod singbox_config;
 pub mod state;
 pub mod sub_apply;
 pub mod sub_ingest;
+pub mod sub_meta_types;
+pub mod sub_policy;
 pub mod tun;
 pub mod tun2socks_config;
 pub mod uid;

@@ -673,6 +673,28 @@ impl Platform for AndroidPlatform {
         })
     }
 
+    async fn open_url(&self, url: &str) -> anyhow::Result<()> {
+        // The KSU WebUI cannot leave its WebView, so the daemon asks the activity
+        // manager for a browser. An argv, never a shell string: the URL is provider
+        // data.
+        let (code, out) = run_out(&[
+            "am",
+            "start",
+            "--user",
+            "0",
+            "-a",
+            "android.intent.action.VIEW",
+            "-d",
+            url,
+        ])
+        .await;
+        // `am` reports a failed resolution on stdout with a zero exit code.
+        if code != 0 || out.contains("Error:") {
+            anyhow::bail!("could not open the link: {}", out.trim());
+        }
+        Ok(())
+    }
+
     // No convert_asset: a downloaded geoip/geosite.dat is converted to .srs lazily
     // on the next sing-box start (sync_geo_asset regenerates on the .dat change),
     // only for the categories the config uses.

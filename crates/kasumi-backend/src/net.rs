@@ -61,6 +61,18 @@ impl std::fmt::Display for HttpStatusError {
 
 impl std::error::Error for HttpStatusError {}
 
+/// The body passed `max_body_bytes`.
+#[derive(Debug)]
+pub struct BodyTooLarge(pub usize);
+
+impl std::fmt::Display for BodyTooLarge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "body exceeds {} bytes", self.0)
+    }
+}
+
+impl std::error::Error for BodyTooLarge {}
+
 fn socks_url(port: u16) -> String {
     format!("socks5h://127.0.0.1:{port}")
 }
@@ -108,7 +120,7 @@ async fn fetch_once(
         if let Some(max) = opts.max_body_bytes
             && body.len() > max
         {
-            anyhow::bail!("body exceeds {max} bytes");
+            return Err(BodyTooLarge(max).into());
         }
     }
     Ok(FetchResponse {

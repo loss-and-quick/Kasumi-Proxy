@@ -402,6 +402,23 @@ impl Profile {
         }
     }
 
+    /// Mutable access to the TLS/Reality settings.
+    pub fn tls_mut(&mut self) -> Option<&mut Tls> {
+        match self {
+            Profile::Vless(p) => Some(&mut p.tls),
+            Profile::Vmess(p) => Some(&mut p.tls),
+            Profile::Trojan(p) => Some(&mut p.tls),
+            Profile::Shadowsocks(p) => Some(&mut p.tls),
+            Profile::Http(p) => Some(&mut p.tls),
+            Profile::Hysteria2(p) => Some(&mut p.tls),
+            Profile::Tuic(p) => Some(&mut p.tls),
+            Profile::Anytls(p) => Some(&mut p.tls),
+            Profile::Naive(p) => Some(&mut p.tls),
+            Profile::Shadowtls(p) => Some(&mut p.tls),
+            _ => None,
+        }
+    }
+
     /// The server endpoint, for the protocols that carry one (all but custom).
     pub fn endpoint(&self) -> Option<&Endpoint> {
         match self {

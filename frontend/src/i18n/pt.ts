@@ -671,6 +671,62 @@ const pt = {
   "subs.toggleUrl": "Alternar URL",
   "subs.editAction": "Editar",
   "subs.deleteAction": "Excluir",
+  // provider meta on subscription cards
+  "subs.provider.traffic": "{used} de {total}",
+  "subs.provider.trafficUnlimited": "{used} usados · sem limite",
+  "subs.provider.expires": "Expira em {date}",
+  "subs.provider.expiresSoon": plural("days", {
+    one: "Expira em # dia",
+    other: "Expira em # dias",
+  }),
+  "subs.provider.expired": "Expirada",
+  "subs.provider.expiredBanner": "Esta assinatura expirou.",
+  "subs.provider.renew": "Renovar",
+  "subs.provider.support": "Suporte",
+  "subs.provider.webPage": "Site do provedor",
+  "subs.provider.open": "Abrir",
+  "subs.provider.showMore": "Mostrar mais",
+  "subs.provider.showLess": "Mostrar menos",
+  "subs.provider.encrypted": "Criptografada",
+  "subs.interval.provider": plural("hours", {
+    one: "A cada # h · definido pelo provedor",
+    other: "A cada # h · definido pelo provedor",
+  }),
+  "subs.interval.useOwn": "Usar meu próprio intervalo",
+  "subs.interval.useOwnSub": "Ignorar a programação do provedor",
+  "subs.edit.titleFromProvider": "Nome do provedor: {title}",
+  "subs.warnings.title": "Avisos da importação",
+  "subs.warnings.chip": plural("count", {
+    one: "# aviso",
+    other: "# avisos",
+  }),
+  "subs.warnings.skippedLines": plural("count", {
+    one: "# linha não foi reconhecida e foi ignorada",
+    other: "# linhas não foram reconhecidas e foram ignoradas",
+  }),
+  "subs.warnings.unsupportedLinks": plural("count", {
+    one: "# servidor usa um formato que o Kasumi não suporta",
+    other: "# servidores usam um formato que o Kasumi não suporta",
+  }),
+  "subs.warnings.invalidRouting": "O perfil de roteamento do provedor é inválido e foi ignorado.",
+  "subs.warnings.invalidFragment": "Parte das configurações após o # na URL não pôde ser lida.",
+  "subs.warnings.legacyParser":
+    "A resposta não está em um formato padrão; os servidores foram encontrados procurando no texto.",
+  "subs.error.network": "Não foi possível contatar o provedor: {detail}",
+  "subs.error.http": "O provedor respondeu HTTP {status}.",
+  "subs.error.decrypt":
+    "Não foi possível descriptografar a resposta do provedor{key}. Os servidores anteriores foram mantidos.",
+  "subs.error.empty":
+    "O provedor enviou uma resposta vazia. Os servidores anteriores foram mantidos.",
+  "subs.error.yaml": "O provedor enviou uma configuração Clash em YAML. Escolha outro User-Agent.",
+  "subs.error.html": "A URL retornou uma página da web, não uma assinatura.",
+  "subs.error.unknown": "A resposta não está em um formato de assinatura que o Kasumi consiga ler.",
+  "subs.error.unsupportedJson": "Assinaturas em JSON ainda não são suportadas.",
+  "subs.error.noProfiles":
+    "Nenhum servidor compatível na resposta. Os servidores anteriores foram mantidos.",
+  "subs.error.limit": "A resposta do provedor é grande demais.",
+  "subs.error.invalid": "A resposta do provedor está malformada.",
+  "subs.openLinkFailed": "Não foi possível abrir o link",
   // routing rule sheet
   "routingSheet.newTitle": "Nova regra de roteamento",
   "routingSheet.editTitle": "Editar regra de roteamento",

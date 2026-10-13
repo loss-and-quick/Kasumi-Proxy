@@ -50,6 +50,8 @@ strum = { version = "0.26", features = ["derive"] }
 kasumi-core = { path = "../crates/kasumi-core" }
 base64 = "0.22"
 kasumi-backend = { path = "../crates/kasumi-backend" }
+# Opens provider links in the default browser (desktop/platform.rs `open_url`).
+open = "5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"

@@ -49,6 +49,10 @@ export const GROUPS_SEED = [
   { id: "g-priv", name: "Private" },
 ];
 
+// Expiry dates relative to now, so the dev seed shows each expiry state.
+const inDays = (days: number) => Math.floor(Date.now() / 1000) + days * 86_400;
+const GB = 1024 ** 3;
+
 export const SUBS_SEED: Subscription[] = [
   {
     id: "s-aurora",
@@ -64,6 +68,19 @@ export const SUBS_SEED: Subscription[] = [
     filter: "",
     allowInsecure: false,
     updateMode: "auto",
+    manualTitle: false,
+    providerIntervalHours: 1,
+    intervalOverride: false,
+    bodyEncrypted: true,
+    provider: {
+      title: "Aurora Net",
+      announce:
+        "🎉 New Frankfurt and Amsterdam nodes are live.\nIf a node is slow, refresh the subscription: addresses rotate every night.\nSupport answers within an hour, 09:00–23:00 UTC.\nPayments by card and crypto are accepted on the website.\nThank you for staying with us!",
+      supportUrl: "https://t.me/aurora_support_bot",
+      webPageUrl: "https://aurora.example.net/account",
+      traffic: { upload: 3.1 * GB, download: 39.6 * GB, total: 200 * GB, expire: inDays(25) },
+      expired: false,
+    },
   },
   {
     id: "s-nodes",
@@ -79,13 +96,31 @@ export const SUBS_SEED: Subscription[] = [
     filter: "(?i)premium",
     allowInsecure: false,
     updateMode: "proxy",
+    manualTitle: true,
+    intervalOverride: false,
+    bodyEncrypted: false,
+    warnings: [
+      { kind: "skippedLines", count: 3, sample: "Remaining traffic: unlimited | Next reset: 1st" },
+      { kind: "unsupportedLinks", count: 2 },
+    ],
+    provider: {
+      title: "NodeHub",
+      notice: {
+        text: "Maintenance tonight 02:00–04:00 UTC. Expect short disconnects.",
+        color: "blue",
+        buttonText: "Status page",
+        buttonUrl: "https://status.nodehub.example.io",
+      },
+      traffic: { upload: 0.4 * GB, download: 12.3 * GB, total: 0, expire: inDays(2) },
+      expired: false,
+    },
   },
   {
     id: "s-relay",
     remarks: "Relay Backup",
     url: "https://relay.example.org/u/backup.txt",
     groupId: "g-priv",
-    enabled: false,
+    enabled: true,
     autoUpdate: false,
     interval: 180,
     lastUpdated: "2026-05-28 11:02",
@@ -94,6 +129,16 @@ export const SUBS_SEED: Subscription[] = [
     filter: "",
     allowInsecure: true,
     updateMode: "direct",
+    manualTitle: true,
+    intervalOverride: false,
+    bodyEncrypted: true,
+    lastError: "subscription body could not be decrypted with key02",
+    lastErrorKind: { kind: "decrypt", keyId: "key02" },
+    provider: {
+      traffic: { upload: 9 * GB, download: 87 * GB, total: 100 * GB, expire: inDays(-3) },
+      expired: true,
+      renewUrl: "https://relay.example.org/renew",
+    },
   },
 ];
 

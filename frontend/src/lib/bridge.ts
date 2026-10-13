@@ -131,6 +131,10 @@ export interface Bridge {
   // tells the UI to reload the persisted state. Returns an unsubscribe.
   onSubApplied(cb: (info: SubAppliedEvent) => void): () => void;
 
+  // Open a provider link (support, website, renewal) in the system browser. The
+  // backend checks it first; the Android WebUI cannot open one by itself.
+  openUrl(url: string): Promise<void>;
+
   // Same, for the headless geo-asset refresh: it stamps each asset's `lastUpdated`
   // (and may restart the core), so the UI reloads. Returns an unsubscribe.
   onAssetsUpdated(cb: (info: AssetsUpdatedEvent) => void): () => void;

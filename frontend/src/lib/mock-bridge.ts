@@ -320,6 +320,10 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return this.readState();
   },
 
+  async openUrl(url: string): Promise<void> {
+    window.open(url, "_blank", "noopener,noreferrer");
+  },
+
   // No backend daemon in dev, so headless sub-applies / asset refreshes never happen.
   onSubApplied() {
     return () => {};

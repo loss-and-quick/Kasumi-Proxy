@@ -87,6 +87,9 @@ function makeSub(overrides: Partial<Subscription> = {}): Subscription {
     lastError: overrides.lastError ?? null,
     prevProfile: overrides.prevProfile ?? null,
     nextProfile: overrides.nextProfile ?? null,
+    manualTitle: overrides.manualTitle ?? false,
+    intervalOverride: overrides.intervalOverride ?? false,
+    bodyEncrypted: overrides.bodyEncrypted ?? false,
   };
 }
 
@@ -154,6 +157,7 @@ function createBridgeMock(): BridgeMock {
       async (_url: string, _opts?: { userAgent?: string; allowInsecure?: boolean }) => [],
     ),
     applySubscription: vi.fn(async (_subId: string) => makeState()),
+    openUrl: vi.fn(async (_url: string) => {}),
     onSubApplied: vi.fn((_cb: (info: SubAppliedEvent) => void) => () => {}),
     onAssetsUpdated: vi.fn((_cb: (info: AssetsUpdatedEvent) => void) => () => {}),
     downloadAsset: vi.fn(

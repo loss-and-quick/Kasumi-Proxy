@@ -13,23 +13,27 @@ use tokio::sync::Mutex;
 
 use kasumi_core::contract::SubAppliedEvent;
 use kasumi_core::core_config::{active_config_changed, build_core_config};
+use kasumi_core::mutate::rename_owned_group;
 use kasumi_core::profile::Profile;
 use kasumi_core::route::{repoint_profile_ids, resolve_route};
-use kasumi_core::state::{AppState, Subscription};
+use kasumi_core::state::{AppState, SubErrorKind, SubWarning, Subscription};
 use kasumi_core::sub_apply::{
     ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
     map_fetched_subscription_profiles, profile_filter_regex, refreshed_id,
 };
 use kasumi_core::sub_ingest::{
-    IngestInput, StoredSubMeta, SubWarning, ingest, limits, record_after, stored_for_url,
+    IngestInput, StoredSubMeta, ingest, limits, record_after, stored_for_url,
 };
+use kasumi_core::sub_policy::{apply_auto, effective_interval_minutes};
 
-use crate::net::{FetchUrlOptions, fetch};
+use crate::net::{BodyTooLarge, FetchUrlOptions, HttpStatusError, fetch};
 use crate::platform::Platform;
 use crate::state::read_app_state;
 use crate::sub_meta;
 use crate::updater::{self, LifecycleControl, now_ms};
 
+/// Used unless the provider sends `subscription-request-timeout`. Longer than
+/// Happ's 7 s: a fetch through the proxy can be slow.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn now_iso() -> String {
@@ -47,8 +51,14 @@ fn is_due(sub: &Subscription, last_attempt: Option<i64>, now: i64) -> bool {
         parse_iso_ms(&sub.last_updated),
         last_attempt,
         now,
-        sub.interval.saturating_mul(60_000),
+        effective_interval_minutes(sub).saturating_mul(60_000),
     )
+}
+
+fn fetch_timeout(sub: &Subscription) -> Duration {
+    sub.request_timeout_secs
+        .map(|s| Duration::from_secs(s.into()))
+        .unwrap_or(FETCH_TIMEOUT)
 }
 
 /// One pass: fetch and apply every due subscription. `last_attempt` is the caller's
@@ -89,29 +99,34 @@ pub async fn tick(
                 let _g = serialize.lock().await;
                 // Headless: a user toggling the subscription off mid-fetch must
                 // abort the apply, so re-check `enabled` against the live state.
-                if apply(
+                if let Some(next) = apply(
                     platform,
                     lifecycle,
                     &sub,
                     fetched.mapped,
-                    Some(fetched.record),
+                    Some(fetched.outcome),
                     true,
                 )
                 .await
-                .is_some()
                 {
                     log::info!("sub-update {}: applied {count} profiles", sub.remarks);
+                    // The provider may have renamed it.
+                    let remarks = next
+                        .subscriptions
+                        .iter()
+                        .find(|x| x.id == sub.id)
+                        .map_or_else(|| sub.remarks.clone(), |x| x.remarks.clone());
                     on_applied(SubAppliedEvent {
                         sub_id: sub.id.clone(),
-                        remarks: sub.remarks.clone(),
+                        remarks,
                         count,
                     });
                 }
             }
-            Err(message) => {
-                log::warn!("sub-update {}: failed: {message}", sub.remarks);
+            Err(e) => {
+                log::warn!("sub-update {}: failed: {}", sub.remarks, e.message);
                 let _g = serialize.lock().await;
-                record_error(platform, &sub.id, &message).await;
+                record_error(platform, &sub.id, &e.message, e.kind).await;
             }
         }
     }
@@ -138,12 +153,13 @@ pub async fn update_subscription(
     };
 
     if sub.url.trim().is_empty() {
-        return record_and_reload(platform, serialize, sub_id, "subscription URL is required")
-            .await;
+        let e = SubFetchError::plain("subscription URL is required");
+        return record_and_reload(platform, serialize, sub_id, e).await;
     }
     let filter = profile_filter_regex(&sub.filter);
     if !sub.filter.trim().is_empty() && filter.is_unfiltered() {
-        return record_and_reload(platform, serialize, sub_id, "invalid profile filter").await;
+        let e = SubFetchError::plain("invalid profile filter");
+        return record_and_reload(platform, serialize, sub_id, e).await;
     }
 
     match fetch_and_map(platform, &sub, &filter, MergeMode::Full).await {
@@ -155,7 +171,7 @@ pub async fn update_subscription(
                 lifecycle,
                 &sub,
                 fetched.mapped,
-                Some(fetched.record),
+                Some(fetched.outcome),
                 false,
             )
             .await;
@@ -167,7 +183,7 @@ pub async fn update_subscription(
                     .ok_or_else(|| "state unavailable after apply".into()),
             }
         }
-        Err(message) => record_and_reload(platform, serialize, sub_id, &message).await,
+        Err(e) => record_and_reload(platform, serialize, sub_id, e).await,
     }
 }
 
@@ -176,15 +192,28 @@ async fn record_and_reload(
     platform: &dyn Platform,
     serialize: &Mutex<()>,
     sub_id: &str,
-    message: &str,
+    e: SubFetchError,
 ) -> Result<AppState, String> {
     {
         let _g = serialize.lock().await;
-        record_error(platform, sub_id, message).await;
+        record_error(platform, sub_id, &e.message, e.kind).await;
     }
-    read_app_state(platform)
-        .await
-        .ok_or_else(|| message.to_string())
+    read_app_state(platform).await.ok_or(e.message)
+}
+
+/// A failed update: the message for the log, the kind for the UI to translate.
+struct SubFetchError {
+    message: String,
+    kind: Option<SubErrorKind>,
+}
+
+impl SubFetchError {
+    fn plain(message: &str) -> Self {
+        Self {
+            message: message.to_owned(),
+            kind: None,
+        }
+    }
 }
 
 /// A fetch error trimmed for the UI. reqwest's outer wrapper repeats the URL
@@ -201,9 +230,27 @@ fn display_fetch_error(e: &anyhow::Error) -> String {
     }
 }
 
+fn fetch_error_kind(e: &anyhow::Error) -> SubErrorKind {
+    if let Some(HttpStatusError(status)) = e.downcast_ref() {
+        SubErrorKind::Http { status: *status }
+    } else if e.downcast_ref::<BodyTooLarge>().is_some() {
+        SubErrorKind::Limit
+    } else {
+        SubErrorKind::Network
+    }
+}
+
 struct Fetched {
     mapped: Vec<Profile>,
+    outcome: Outcome,
+}
+
+/// What a successful fetch carries besides its profiles.
+struct Outcome {
     record: StoredSubMeta,
+    warnings: Vec<SubWarning>,
+    /// No stored meta matched: this fetch read the URL fragment.
+    imported: bool,
 }
 
 /// Fetch and ingest a subscription. Any error leaves its profiles and sub-meta as
@@ -214,8 +261,11 @@ async fn fetch_and_map(
     sub: &Subscription,
     filter: &ProfileFilter,
     merge: MergeMode,
-) -> Result<Fetched, String> {
-    let proxy = platform.proxy_status().await.map_err(|e| e.to_string())?;
+) -> Result<Fetched, SubFetchError> {
+    let proxy = platform
+        .proxy_status()
+        .await
+        .map_err(|e| SubFetchError::plain(&e.to_string()))?;
     // The fragment carries provider directives for the import and never goes on
     // the wire.
     let res = match fetch(
@@ -225,7 +275,7 @@ async fn fetch_and_map(
             proxy: Some(proxy),
             user_agent: (!sub.user_agent.is_empty()).then(|| sub.user_agent.clone()),
             allow_insecure: sub.allow_insecure,
-            timeout: Some(FETCH_TIMEOUT),
+            timeout: Some(fetch_timeout(sub)),
             max_body_bytes: Some(limits().max_body_bytes),
             ..Default::default()
         },
@@ -237,25 +287,36 @@ async fn fetch_and_map(
             // Full cause chain (with the URL) to the log — the manual "update now"
             // path logs nowhere else; the UI gets just the cause.
             log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
-            return Err(display_fetch_error(&e));
+            return Err(SubFetchError {
+                message: display_fetch_error(&e),
+                kind: Some(fetch_error_kind(&e)),
+            });
         }
     };
     let stored = sub_meta::read_all(platform).await;
+    let stored = stored_for_url(stored.get(&sub.id), &sub.url);
     let ingested = ingest(&IngestInput {
         url: &sub.url,
         headers: &res.headers,
         body: &res.body,
-        stored: stored_for_url(stored.get(&sub.id), &sub.url),
+        stored,
         merge,
     })
     .map_err(|e| {
         log::warn!("subscription {}: {e}", sub.remarks);
-        e.to_string()
+        SubFetchError {
+            message: e.to_string(),
+            kind: Some(e.kind()),
+        }
     })?;
     log_warnings(sub, &ingested.warnings);
     Ok(Fetched {
         mapped: map_fetched_subscription_profiles(&ingested.profiles, sub, filter),
-        record: record_after(&sub.url, &ingested),
+        outcome: Outcome {
+            record: record_after(&sub.url, &ingested),
+            warnings: ingested.warnings,
+            imported: stored.is_none(),
+        },
     })
 }
 
@@ -270,13 +331,13 @@ fn log_warnings(sub: &Subscription, warnings: &[SubWarning]) {
 /// data-path. Returns the new persisted state (`None` if the subscription vanished, or
 /// was disabled mid-fetch while `require_enabled`). Runs inside the serializer: the
 /// fetch took seconds, so re-read the state the UI may have rewritten meanwhile.
-/// `record` replaces the subscription's sub-meta entry once the state is persisted.
+/// `outcome` carries the provider meta to apply and the sub-meta entry to store.
 async fn apply(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
     sub: &Subscription,
     mapped: Vec<Profile>,
-    record: Option<StoredSubMeta>,
+    outcome: Option<Outcome>,
     require_enabled: bool,
 ) -> Option<AppState> {
     let current = read_app_state(platform).await?;
@@ -311,6 +372,20 @@ async fn apply(
     next.profiles = res.profiles;
     next.subscriptions = res.subscriptions;
     next.active_id = res.active_id.clone();
+    if let Some(o) = &outcome
+        && let Some(i) = next.subscriptions.iter().position(|x| x.id == sub.id)
+    {
+        let mut updated = next.subscriptions[i].clone();
+        // Only a subscription's very first fetch may switch auto-update on, not
+        // the first one after an upgrade or a lost sub-meta.json.
+        let first_import = o.imported && cur_sub.last_updated.is_empty();
+        let disposition = o.record.content_disposition.as_deref();
+        apply_auto(&mut updated, &o.record.meta, disposition, first_import);
+        updated.warnings.clone_from(&o.warnings);
+        updated.body_encrypted = o.record.encrypted;
+        rename_owned_group(&mut next, &updated);
+        next.subscriptions[i] = updated;
+    }
     if current.settings.dedup_on_update {
         let (kept, _) = deduplicate_profiles_scoped(
             &next.profiles,
@@ -322,7 +397,7 @@ async fn apply(
     // Same write tail as the intent path: run the write-side chain (invariants) then
     // persist. Keeps the chain the single enforcement point across save and fetch.
     let _ = crate::commands::persist_with_chain(platform, &current, &mut next).await;
-    if let Some(record) = record {
+    if let Some(Outcome { record, .. }) = outcome {
         let live: Vec<&str> = next.subscriptions.iter().map(|s| s.id.as_str()).collect();
         if let Err(e) = sub_meta::write_entry(platform, &sub.id, Some(record), &live).await {
             log::warn!("subscription {}: writing sub-meta failed: {e}", sub.remarks);
@@ -369,7 +444,12 @@ fn config_changed(prev: &AppState, old_active: Option<&Profile>, next: &AppState
     }
 }
 
-async fn record_error(platform: &dyn Platform, sub_id: &str, message: &str) {
+async fn record_error(
+    platform: &dyn Platform,
+    sub_id: &str,
+    message: &str,
+    kind: Option<SubErrorKind>,
+) {
     let Some(prev) = read_app_state(platform).await else {
         return;
     };
@@ -380,6 +460,7 @@ async fn record_error(platform: &dyn Platform, sub_id: &str, message: &str) {
     for x in next.subscriptions.iter_mut() {
         if x.id == sub_id {
             x.last_error = Some(message.to_owned());
+            x.last_error_kind.clone_from(&kind);
         }
     }
     let _ = crate::commands::persist_with_chain(platform, &prev, &mut next).await;
@@ -411,6 +492,7 @@ mod tests {
             last_error: None,
             prev_profile: None,
             next_profile: None,
+            ..Default::default()
         }
     }
 
@@ -755,5 +837,194 @@ mod tests {
         update(&p).await;
         let all = sub_meta::read_all(&p).await;
         assert_eq!(all.keys().collect::<Vec<_>>(), ["s1"]);
+    }
+
+    async fn sub_after(p: &TestPlatform) -> Subscription {
+        read_app_state(p).await.unwrap().subscriptions.remove(0)
+    }
+
+    #[tokio::test]
+    async fn live_fixture_fills_provider_info() {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![crate::testutil::fixture_response("01-happ-full")]).await;
+        let mut state = default_app_state();
+        let mut s = sub("s1", &format!("{base}/s"));
+        s.auto_update = false;
+        state.subscriptions = vec![s];
+        write_app_state(&p, &state).await.unwrap();
+        update(&p).await;
+
+        let s = sub_after(&p).await;
+        assert_eq!(s.remarks, "Example VPN 🗽");
+        assert_eq!(s.provider_interval_hours, Some(1));
+        assert!(s.auto_update, "first import with a provider interval");
+        let info = s.provider.unwrap();
+        assert_eq!(info.traffic.unwrap().expire, Some(1_796_256_000));
+        assert!(info.announce.is_some() && info.support_url.is_some());
+    }
+
+    #[tokio::test]
+    async fn apply_renames_owned_group_on_provider_title() {
+        let titled = || http_response(200, &[("profile-title", "Provider")], LINK);
+        for manual in [false, true] {
+            let (p, _d) = TestPlatform::new();
+            let (base, _) = serve(vec![titled()]).await;
+            let mut state = default_app_state();
+            let mut s = sub("s1", &format!("{base}/s"));
+            s.group_id = Some("g-s1".into());
+            s.manual_title = manual;
+            state.subscriptions = vec![s];
+            state.groups.push(kasumi_core::state::Group {
+                id: "g-s1".into(),
+                name: "sub-s1".into(),
+                sub_id: Some("s1".into()),
+            });
+            write_app_state(&p, &state).await.unwrap();
+            let next = update(&p).await;
+
+            let expect = if manual { "sub-s1" } else { "Provider" };
+            assert_eq!(next.subscriptions[0].remarks, expect);
+            let group = next.groups.iter().find(|g| g.id == "g-s1").unwrap();
+            assert_eq!(group.name, expect);
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_does_not_switch_auto_update_back_on() {
+        let headers = [("profile-update-interval", "6")];
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![
+            http_response(200, &headers, LINK),
+            http_response(200, &headers, LINK),
+        ])
+        .await;
+        let mut state = default_app_state();
+        let mut s = sub("s1", &format!("{base}/s"));
+        // Fetched before sub-meta.json existed, as after an upgrade.
+        s.last_updated = "2026-01-01T00:00:00.000Z".into();
+        s.auto_update = false;
+        state.subscriptions = vec![s];
+        write_app_state(&p, &state).await.unwrap();
+        update(&p).await;
+        assert!(!sub_after(&p).await.auto_update);
+        update(&p).await;
+        let s = sub_after(&p).await;
+        assert!(!s.auto_update);
+        assert_eq!(s.provider_interval_hours, Some(6));
+    }
+
+    #[test]
+    fn tick_uses_provider_interval() {
+        let mut s = sub("s", "u");
+        s.interval = 60;
+        s.provider_interval_hours = Some(24);
+        let now = 3 * 3_600_000;
+        s.last_updated = now_iso_at(0);
+        assert!(!is_due(&s, None, now), "the provider asks for a day");
+        s.interval_override = true;
+        assert!(is_due(&s, None, now), "the user's hour wins");
+    }
+
+    #[tokio::test]
+    async fn request_timeout_from_provider() {
+        let mut s = sub("s", "u");
+        assert_eq!(fetch_timeout(&s), FETCH_TIMEOUT);
+        s.request_timeout_secs = Some(7);
+        assert_eq!(fetch_timeout(&s), Duration::from_secs(7));
+
+        let (p, _d) = TestPlatform::new();
+        let headers = [("subscription-request-timeout", "60")];
+        let (base, _) = serve(vec![http_response(200, &headers, LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        assert_eq!(sub_after(&p).await.request_timeout_secs, Some(15));
+    }
+
+    #[tokio::test]
+    async fn error_kind_recorded_for_http_and_decrypt() {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![http_response(403, &[], b"no")]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        let s = sub_after(&p).await;
+        assert_eq!(s.last_error_kind, Some(SubErrorKind::Http { status: 403 }));
+        assert_eq!(s.last_error.as_deref(), Some("HTTP 403"));
+
+        let (p, _d) = TestPlatform::new();
+        let tag = [("Encrypt-Tag", "AAAAAAAAAAAAAAAAAAAAAA==")];
+        let (base, _) = serve(vec![
+            http_response(200, &tag, LINK),
+            http_response(200, &[], LINK),
+        ])
+        .await;
+        with_old_profile(&p, &format!("{base}/s?key=key02")).await;
+        update(&p).await;
+        assert_eq!(
+            sub_after(&p).await.last_error_kind,
+            Some(SubErrorKind::Decrypt {
+                key_id: Some("key02".into())
+            })
+        );
+        // A later success clears both.
+        update(&p).await;
+        let s = sub_after(&p).await;
+        assert_eq!((s.last_error, s.last_error_kind), (None, None));
+    }
+
+    #[tokio::test]
+    async fn plain_errors_have_no_kind() {
+        let (p, _d) = TestPlatform::new();
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", "   ")];
+        write_app_state(&p, &state).await.unwrap();
+        let returned = update(&p).await;
+        assert_eq!(returned.subscriptions[0].last_error_kind, None);
+    }
+
+    fn reality(sni: &str, sid: &str, port: u16) -> Vec<u8> {
+        let link = format!(
+            "vless://11111111-1111-1111-1111-111111111111@r.example.org:{port}?type=tcp\
+             &security=reality&pbk=PK&fp=firefox&sni={sni}&sid={sid}#Node\n"
+        );
+        http_response(200, &[], link.as_bytes())
+    }
+
+    /// Fetch `first`, make its profile active, then fetch `second` and report the
+    /// lifecycle calls the second apply made.
+    async fn refresh_calls(first: Vec<u8>, second: Vec<u8>) -> Vec<String> {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![first, second]).await;
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", &format!("{base}/s"))];
+        write_app_state(&p, &state).await.unwrap();
+        let mut state = update(&p).await;
+        state.active_id = Some(state.profiles[0].meta().id.clone());
+        write_app_state(&p, &state).await.unwrap();
+
+        let lc = lifecycle();
+        update_subscription(&p, &lc, &Mutex::new(()), "s1")
+            .await
+            .unwrap();
+        lc.calls.lock().unwrap().clone()
+    }
+
+    #[tokio::test]
+    async fn reality_sni_and_sid_rotation_does_not_restart() {
+        let calls = refresh_calls(
+            reality("a1.sni.example.com", "aaaa", 443),
+            reality("b2.sni.example.com", "bbbb", 443),
+        )
+        .await;
+        assert_eq!(calls, Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn a_port_change_still_restarts() {
+        let calls = refresh_calls(
+            reality("a1.sni.example.com", "aaaa", 443),
+            reality("b2.sni.example.com", "bbbb", 8443),
+        )
+        .await;
+        assert!(calls.iter().any(|c| c.starts_with("restart")), "{calls:?}");
     }
 }

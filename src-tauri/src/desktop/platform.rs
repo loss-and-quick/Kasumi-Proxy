@@ -640,6 +640,12 @@ impl Platform for DesktopPlatform {
         Some(self)
     }
 
+    async fn open_url(&self, url: &str) -> anyhow::Result<()> {
+        // This runs in the GUI process, inside the user's session.
+        open::that_detached(url)?;
+        Ok(())
+    }
+
     fn tune_config(&self, engine: Engine, config: &mut Value) {
         if engine != CoreEngine::SingBox {
             return;

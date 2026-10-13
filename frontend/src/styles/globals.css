@@ -14,6 +14,7 @@
   --running:            oklch(0.80 0.14 155);
   --on-running:         oklch(0.27 0.07 155);
   --running-container:  oklch(0.36 0.07 155);
+  --on-running-container: oklch(0.92 0.05 155);
   --running-accent:     oklch(0.40 0.10 155 / 0.55);
   --warn:               oklch(0.83 0.13 85);
   --warn-container:     oklch(0.36 0.07 85);
@@ -22,6 +23,7 @@
   --error:              oklch(0.77 0.13 25);
   --on-error:           oklch(0.28 0.10 25);
   --error-container:    oklch(0.36 0.10 25);
+  --on-error-container: oklch(0.92 0.04 25);
 
   --bg:                 oklch(0.18 0.008 260);
   --surface-dim:        oklch(0.18 0.008 260);

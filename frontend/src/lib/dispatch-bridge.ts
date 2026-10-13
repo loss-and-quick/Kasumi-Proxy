@@ -252,6 +252,9 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       lastState = next;
       return next;
     },
+    async openUrl(url) {
+      await dispatch({ cmd: "openUrl", url });
+    },
     onSubApplied(cb) {
       return push.subscribeSubApplied((raw) => {
         const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;

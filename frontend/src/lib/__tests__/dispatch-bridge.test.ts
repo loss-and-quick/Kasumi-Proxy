@@ -192,3 +192,20 @@ describe("dispatch-bridge status stream", () => {
     expect((await bridge.status()).pendingRestart).toBe(false);
   });
 });
+
+describe("dispatch-bridge provider links", () => {
+  it("openUrl sends the link to the backend", async () => {
+    const dispatch: Dispatch = vi.fn(async () => ({ kind: "ok" }) as Response_Serialize);
+    const bridge = createBridge(dispatch, noPush);
+    await bridge.openUrl("https://example.org/renew");
+    expect(dispatch).toHaveBeenCalledWith({ cmd: "openUrl", url: "https://example.org/renew" });
+  });
+
+  it("openUrl rejects when the backend refuses", async () => {
+    const dispatch: Dispatch = vi.fn(async () => {
+      throw new Error("refusing to open this link");
+    });
+    const bridge = createBridge(dispatch, noPush);
+    await expect(bridge.openUrl("javascript:alert(1)")).rejects.toThrow("refusing");
+  });
+});

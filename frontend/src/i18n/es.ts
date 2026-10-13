@@ -673,6 +673,63 @@ const es = {
   "subs.toggleUrl": "Mostrar/ocultar URL",
   "subs.editAction": "Editar",
   "subs.deleteAction": "Eliminar",
+  // provider meta on subscription cards
+  "subs.provider.traffic": "{used} de {total}",
+  "subs.provider.trafficUnlimited": "{used} usados · sin límite",
+  "subs.provider.expires": "Vence el {date}",
+  "subs.provider.expiresSoon": plural("days", {
+    one: "Vence en # día",
+    other: "Vence en # días",
+  }),
+  "subs.provider.expired": "Vencida",
+  "subs.provider.expiredBanner": "Esta suscripción ha vencido.",
+  "subs.provider.renew": "Renovar",
+  "subs.provider.support": "Soporte",
+  "subs.provider.webPage": "Sitio del proveedor",
+  "subs.provider.open": "Abrir",
+  "subs.provider.showMore": "Ver más",
+  "subs.provider.showLess": "Ver menos",
+  "subs.provider.encrypted": "Cifrada",
+  "subs.interval.provider": plural("hours", {
+    one: "Cada # h · lo fija el proveedor",
+    other: "Cada # h · lo fija el proveedor",
+  }),
+  "subs.interval.useOwn": "Usar mi propio intervalo",
+  "subs.interval.useOwnSub": "Ignorar la programación del proveedor",
+  "subs.edit.titleFromProvider": "Nombre del proveedor: {title}",
+  "subs.warnings.title": "Avisos de la importación",
+  "subs.warnings.chip": plural("count", {
+    one: "# aviso",
+    other: "# avisos",
+  }),
+  "subs.warnings.skippedLines": plural("count", {
+    one: "# línea no se reconoció y se omitió",
+    other: "# líneas no se reconocieron y se omitieron",
+  }),
+  "subs.warnings.unsupportedLinks": plural("count", {
+    one: "# servidor usa un formato que Kasumi no admite",
+    other: "# servidores usan un formato que Kasumi no admite",
+  }),
+  "subs.warnings.invalidRouting":
+    "El perfil de enrutamiento del proveedor no es válido y se ignoró.",
+  "subs.warnings.invalidFragment": "No se pudo leer parte de los ajustes tras el # de la URL.",
+  "subs.warnings.legacyParser":
+    "La respuesta no tiene un formato estándar; los servidores se encontraron buscando en el texto.",
+  "subs.error.network": "No se pudo contactar con el proveedor: {detail}",
+  "subs.error.http": "El proveedor respondió HTTP {status}.",
+  "subs.error.decrypt":
+    "No se pudo descifrar la respuesta del proveedor{key}. Se conservaron los servidores anteriores.",
+  "subs.error.empty":
+    "El proveedor envió una respuesta vacía. Se conservaron los servidores anteriores.",
+  "subs.error.yaml": "El proveedor envió una configuración Clash en YAML. Elige otro User-Agent.",
+  "subs.error.html": "La URL devolvió una página web, no una suscripción.",
+  "subs.error.unknown": "La respuesta no está en un formato de suscripción que Kasumi pueda leer.",
+  "subs.error.unsupportedJson": "Las suscripciones JSON aún no son compatibles.",
+  "subs.error.noProfiles":
+    "La respuesta no contiene servidores compatibles. Se conservaron los servidores anteriores.",
+  "subs.error.limit": "La respuesta del proveedor es demasiado grande.",
+  "subs.error.invalid": "La respuesta del proveedor está mal formada.",
+  "subs.openLinkFailed": "No se pudo abrir el enlace",
   // routing rule sheet
   "routingSheet.newTitle": "Nueva regla de enrutamiento",
   "routingSheet.editTitle": "Editar regla de enrutamiento",

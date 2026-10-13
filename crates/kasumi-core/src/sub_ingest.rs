@@ -4,6 +4,7 @@
 
 use std::collections::HashSet;
 
+use happ_sub::meta::{normalize_untrusted_text, single_line};
 use happ_sub::{
     BodyEncryption, Error as EnvelopeError, MergeMode, MetaMap, Payload, RoutingAction,
 };
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::profile::Profile;
 use crate::share::{parse_share_link, parse_share_links};
+pub use crate::sub_meta_types::{ContentHint, PayloadKind, SubErrorKind, SubWarning};
 
 /// Merge state a subscription carries between fetches. Persisted by the backend in
 /// `sub-meta.json`, never in `AppState`: it is the raw provider map.
@@ -24,6 +26,10 @@ pub struct StoredSubMeta {
     /// response is decrypted even without `?key=`.
     pub encrypted: bool,
     pub meta: MetaMap,
+    /// The raw `Content-Disposition` header, a title source when `profile-title` is
+    /// absent. Kept apart from `meta`: it is not a Happ key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_disposition: Option<String>,
 }
 
 pub struct IngestInput<'a> {
@@ -45,30 +51,7 @@ pub struct Ingested {
     pub encrypted: bool,
     pub warnings: Vec<SubWarning>,
     pub used_legacy_parser: bool,
-}
-
-/// Something skipped while ingesting; the rest of the body was used.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SubWarning {
-    UnsupportedLinks { count: usize },
-    SkippedLines { count: usize, sample: String },
-    InvalidRouting { message: String },
-    InvalidFragment { segment: String },
-    LegacyParser,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ContentHint {
-    Yaml,
-    Html,
-    Unknown,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PayloadKind {
-    XrayJson,
-    JsonArray,
-    SingBoxJson,
+    pub content_disposition: Option<String>,
 }
 
 /// Why a response yields no profiles. Every case keeps the previous profiles.
@@ -122,6 +105,24 @@ impl std::fmt::Display for IngestError {
 
 impl std::error::Error for IngestError {}
 
+impl IngestError {
+    pub fn kind(&self) -> SubErrorKind {
+        match self {
+            IngestError::Decrypt { key_id } => SubErrorKind::Decrypt {
+                key_id: key_id.clone(),
+            },
+            IngestError::EmptyBody => SubErrorKind::EmptyBody,
+            IngestError::UnknownContent { hint } => SubErrorKind::UnknownContent { hint: *hint },
+            IngestError::UnsupportedPayload(payload) => {
+                SubErrorKind::UnsupportedPayload { payload: *payload }
+            }
+            IngestError::NoProfiles => SubErrorKind::NoProfiles,
+            IngestError::Limit(_) => SubErrorKind::Limit,
+            IngestError::Invalid(_) => SubErrorKind::Invalid,
+        }
+    }
+}
+
 /// The one place to tune the envelope bounds.
 pub fn limits() -> happ_sub::Limits {
     happ_sub::Limits::default()
@@ -140,10 +141,34 @@ pub fn record_after(url: &str, ing: &Ingested) -> StoredSubMeta {
         source_url: url.to_owned(),
         encrypted: ing.encrypted,
         meta: ing.meta.clone(),
+        content_disposition: ing.content_disposition.clone(),
     }
 }
 
 pub fn ingest(input: &IngestInput) -> Result<Ingested, IngestError> {
+    let mut ing = ingest_body(input)?;
+    ing.content_disposition = header(input.headers, "content-disposition")
+        .map(str::to_owned)
+        .or_else(|| {
+            // A background update keeps what a response omits, as it does meta keys.
+            let partial = input.merge == MergeMode::Partial;
+            input
+                .stored
+                .filter(|_| partial)
+                .and_then(|s| s.content_disposition.clone())
+        });
+    Ok(ing)
+}
+
+fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    headers
+        .iter()
+        .find(|(k, _)| k.trim().eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.trim())
+        .filter(|v| !v.is_empty())
+}
+
+fn ingest_body(input: &IngestInput) -> Result<Ingested, IngestError> {
     let stored_encrypted = input.stored.is_some_and(|s| s.encrypted);
     let parsed = happ_sub::parse(&happ_sub::Input {
         url: input.url,
@@ -193,7 +218,7 @@ pub fn ingest(input: &IngestInput) -> Result<Ingested, IngestError> {
     };
 
     let mut seen = HashSet::new();
-    let mut unsupported = 0;
+    let mut unsupported = 0u32;
     let mut profiles = Vec::new();
     for link in links.iter().filter(|l| seen.insert(l.as_str())) {
         match parse_share_link(link, None).filter(|_| !is_web_page_link(link)) {
@@ -220,6 +245,7 @@ pub fn ingest(input: &IngestInput) -> Result<Ingested, IngestError> {
         encrypted,
         warnings,
         used_legacy_parser: false,
+        content_disposition: None,
     })
 }
 
@@ -290,15 +316,13 @@ fn legacy_fallback(
         encrypted,
         warnings: vec![SubWarning::LegacyParser],
         used_legacy_parser: true,
+        content_disposition: None,
     })
 }
 
 fn content_hint(input: &IngestInput) -> ContentHint {
-    let content_type = input
-        .headers
-        .iter()
-        .find(|(k, _)| k.trim().eq_ignore_ascii_case("content-type"))
-        .map(|(_, v)| v.to_ascii_lowercase())
+    let content_type = header(input.headers, "content-type")
+        .map(str::to_ascii_lowercase)
         .unwrap_or_default();
     let body = String::from_utf8_lossy(&input.body[..input.body.len().min(64)]);
     let body = body.trim_start();
@@ -318,20 +342,24 @@ const SAMPLE_CHARS: usize = 80;
 
 fn map_warnings(warnings: &[happ_sub::Warning]) -> Vec<SubWarning> {
     let mut out = Vec::new();
-    let mut skipped = 0;
+    let mut skipped = 0u32;
     let mut sample = None;
     for w in warnings {
         match w {
             happ_sub::Warning::SkippedLine(line) => {
                 skipped += 1;
-                sample.get_or_insert_with(|| line.chars().take(SAMPLE_CHARS).collect());
+                // Shown to the user, so it gets the same cleaning as provider text.
+                sample.get_or_insert_with(|| {
+                    single_line(&normalize_untrusted_text(line))
+                        .chars()
+                        .take(SAMPLE_CHARS)
+                        .collect()
+                });
             }
             happ_sub::Warning::InvalidRouting(message) => out.push(SubWarning::InvalidRouting {
                 message: message.clone(),
             }),
-            happ_sub::Warning::InvalidFragment(segment) => out.push(SubWarning::InvalidFragment {
-                segment: segment.clone(),
-            }),
+            happ_sub::Warning::InvalidFragment(_) => out.push(SubWarning::InvalidFragment),
             _ => {}
         }
     }
@@ -348,7 +376,7 @@ fn map_warnings(warnings: &[happ_sub::Warning]) -> Vec<SubWarning> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use happ_sub::body_crypt::encrypt_with_table;
     use happ_sub::keys::DEFAULT_TABLE;
@@ -356,7 +384,7 @@ mod tests {
     const URL: &str = "https://sub.example.org/s/abc";
 
     /// A captured response: headers up to the first blank line, then the body.
-    fn http_fixture(name: &str) -> (Vec<(String, String)>, Vec<u8>) {
+    pub(crate) fn http_fixture(name: &str) -> (Vec<(String, String)>, Vec<u8>) {
         let path = format!(
             "{}/tests/fixtures/happ/{name}.http",
             env!("CARGO_MANIFEST_DIR")
@@ -491,7 +519,7 @@ mod tests {
         let stored = StoredSubMeta {
             source_url: URL.into(),
             encrypted: true,
-            meta: MetaMap::new(),
+            ..Default::default()
         };
         let err = ingest(&IngestInput {
             stored: Some(&stored),
@@ -548,5 +576,42 @@ mod tests {
         })
         .unwrap();
         assert_eq!(again.meta.profile_title(), Some("New"));
+    }
+
+    #[test]
+    fn content_disposition_kept_by_background_update_only() {
+        let cd = "attachment; filename=\"Panel.txt\"";
+        let headers = [("Content-Disposition".to_owned(), cd.to_owned())];
+        let body = b"vless://a@h.example:1#x\n";
+        let first = ingest(&input(URL, &headers, body)).unwrap();
+        assert_eq!(first.content_disposition.as_deref(), Some(cd));
+        let stored = record_after(URL, &first);
+
+        let refresh = |merge| {
+            ingest(&IngestInput {
+                stored: Some(&stored),
+                merge,
+                ..input(URL, &[], body)
+            })
+            .unwrap()
+            .content_disposition
+        };
+        assert_eq!(refresh(MergeMode::Partial).as_deref(), Some(cd));
+        assert_eq!(refresh(MergeMode::Full), None);
+    }
+
+    #[test]
+    fn errors_map_to_their_kind() {
+        assert_eq!(
+            IngestError::UnsupportedPayload(PayloadKind::XrayJson).kind(),
+            SubErrorKind::UnsupportedPayload {
+                payload: PayloadKind::XrayJson
+            }
+        );
+        assert_eq!(IngestError::Limit("x".into()).kind(), SubErrorKind::Limit);
+        assert_eq!(
+            IngestError::Invalid("x".into()).kind(),
+            SubErrorKind::Invalid
+        );
     }
 }
