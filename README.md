@@ -39,7 +39,8 @@ Both run the same Rust backend and the same React UI.
   with no UI open.
 - **Happ-compatible subscriptions.** The provider's title, traffic and expiry, announcements and
   update interval are read from subscription headers and `#key:` directives, decoded by
-  [happ-sub](https://github.com/loss-and-quick/happ-sub).
+  [happ-sub](https://github.com/loss-and-quick/happ-sub). Updates identify like Happ (User-Agent,
+  HWID and device headers); every value can be changed per subscription or in Settings.
 - **Honest status.** An end-to-end probe tells *connected* apart from *no internet* and *failed*.
 - **Diagnostics.** TCP ping, real ping and a speed test for each profile.
 - **Per-app routing** on Android, plus a choice of TUN engine: tun2socks, hev-socks5-tunnel or
