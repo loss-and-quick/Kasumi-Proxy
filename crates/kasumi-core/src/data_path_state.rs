@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contract::RunState;
+use crate::core::owns_native_tun;
 use crate::enums::{CoreEngine, TunEngine};
 
 /// The TUN a running data-path uses. `NoTun` (proxy-only/system/pac modes) is a first
@@ -72,8 +73,7 @@ impl DataPathState {
         match self.tun {
             TunSelection::NoTun => None,
             TunSelection::Engine(tun) => {
-                let native =
-                    self.engine == Some(CoreEngine::SingBox) && tun == TunEngine::SingboxTun;
+                let native = self.engine.is_some_and(|e| owns_native_tun(e, tun));
                 (!native).then_some(tun)
             }
         }
