@@ -23,6 +23,7 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
+use kasumi_core::core::owns_native_tun;
 use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::profile::Protocol;
@@ -410,6 +411,13 @@ fn start_retry_delay(native_singbox: bool, attempt: u32, log: &str) -> Option<Du
         .then(|| XTABLES_BACKOFF * 2u32.pow(attempt))
 }
 
+/// Whether a start fronts the core with an external tun helper: every pair but the
+/// sing-box core on its own tun, so `SingboxTun` under xray is a sidecar sing-box.
+/// Must agree with [`DataPathState::external_tun`], which the watchdog reads back.
+fn uses_external_tun(engine: CoreEngine, tun: TunEngine) -> bool {
+    !owns_native_tun(engine, tun)
+}
+
 async fn fail(reason: &str) -> anyhow::Result<()> {
     set_failed(reason).await;
     anyhow::bail!("{reason}")
@@ -431,9 +439,7 @@ async fn start_inner(
         return fail("config missing").await;
     }
 
-    // SingboxTun = sing-box owns its native tun; any other engine fronts a
-    // socks-only core with an external userspace tun.
-    let external = tun != TunEngine::SingboxTun;
+    let external = uses_external_tun(engine, tun);
 
     if engine == CoreEngine::SingBox {
         // Generate/keep only the .srs this config references (needed even when
@@ -942,6 +948,33 @@ mod tests {
             "FATAL[0000] decode config: outbounds[0].server: unknown field"
         ));
         assert!(!lost_xtables_race(""));
+    }
+
+    #[test]
+    fn start_brings_up_the_helper_the_watchdog_expects() {
+        // The watchdog tears down a data-path whose expected helper is missing, so a
+        // start that skipped it would be killed on the next tick.
+        let engines = [CoreEngine::Xray, CoreEngine::SingBox];
+        let tuns = [TunEngine::SingboxTun, TunEngine::Tun2socks, TunEngine::Hev];
+        for engine in engines {
+            for tun in tuns {
+                let doc = DataPathState {
+                    engine: Some(engine),
+                    tun: TunSelection::Engine(tun),
+                    ..Default::default()
+                };
+                assert_eq!(
+                    uses_external_tun(engine, tun),
+                    doc.external_tun().is_some(),
+                    "{engine:?} + {tun:?}"
+                );
+            }
+        }
+        assert!(uses_external_tun(CoreEngine::Xray, TunEngine::SingboxTun));
+        assert!(!uses_external_tun(
+            CoreEngine::SingBox,
+            TunEngine::SingboxTun
+        ));
     }
 
     #[test]
