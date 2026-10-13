@@ -13,10 +13,10 @@ use tokio_tungstenite::tungstenite::Message;
 use kasumi_backend::Service;
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
-    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
-    StopDataPath,
+    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StopDataPath,
 };
 use kasumi_core::contract::{RunState, ServiceState, WsInfo};
+use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
 
 struct StubPlatform {
     paths: BackendPaths,
@@ -51,7 +51,14 @@ impl Platform for StubPlatform {
     fn paths(&self) -> &BackendPaths {
         &self.paths
     }
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+    fn host_traits(&self) -> HostTraits {
+        HostTraits {
+            proxy_modes: false,
+            app_routing: AppRouting::PerUid,
+            pinned_singbox_stack: None,
+        }
+    }
+    async fn start_data_path(&self, _plan: &DataPathPlan) -> anyhow::Result<()> {
         Ok(())
     }
     async fn stop_data_path(&self, _opts: StopDataPath) -> anyhow::Result<()> {

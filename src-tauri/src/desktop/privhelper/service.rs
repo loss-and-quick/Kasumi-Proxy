@@ -474,10 +474,9 @@ mod tests {
 
     use async_trait::async_trait;
     use kasumi_backend::net::ProxyStatus;
-    use kasumi_backend::platform::{
-        BackendPaths, Engine, PlatformCapabilities, StartDataPath, StopDataPath,
-    };
+    use kasumi_backend::platform::{BackendPaths, Engine, PlatformCapabilities, StopDataPath};
     use kasumi_core::contract::ServiceState as DataPathState;
+    use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
 
     use super::super::client::Client;
     use super::super::proto::{PROTOCOL_VERSION, PrivReply, PrivRequest};
@@ -494,7 +493,10 @@ mod tests {
         fn paths(&self) -> &BackendPaths {
             unimplemented!()
         }
-        async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        fn host_traits(&self) -> HostTraits {
+            unimplemented!()
+        }
+        async fn start_data_path(&self, _plan: &DataPathPlan) -> anyhow::Result<()> {
             Ok(())
         }
         async fn stop_data_path(&self, _opts: StopDataPath) -> anyhow::Result<()> {

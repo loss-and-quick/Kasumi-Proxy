@@ -10,13 +10,11 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
-use kasumi_core::core::default_tun_for;
-use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits, TunPlan};
-use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
+use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
-use kasumi_core::state::{AdvancedSettings, ProxyMode};
-use kasumi_core::tun::TunOptions;
+use kasumi_core::state::ProxyMode;
 
 use crate::lifecycle::spawn_core;
 use crate::net::ProxyStatus;
@@ -157,45 +155,6 @@ pub struct AppInfo {
     pub icon: Option<String>,
 }
 
-/// Options for [`Platform::start_data_path`].
-#[derive(Debug, Clone)]
-pub struct StartDataPath {
-    pub engine: Engine,
-    /// The resolved TUN engine. `SingboxTun` uses the core's own tun (native for
-    /// sing-box); `Tun2socks`/`Hev` front a socks-only core with an external tun.
-    /// Ignored when `mode` runs no tun.
-    pub tun: TunEngine,
-    /// External-engine tuning (mtu, buffers, timeouts, …), resolved once from the
-    /// settings so the data-path owner (incl. the desktop root helper, across the
-    /// privilege boundary) needn't re-read the settings schema.
-    pub tun_opts: TunOptions,
-    pub socks_port: u16,
-    /// How to capture traffic: `tun` brings up the tun device + routing; the other
-    /// modes run the core on its local socks/http inbound alone. Already
-    /// normalized to `Tun` for platforms without proxy-mode support.
-    pub mode: ProxyMode,
-}
-
-impl StartDataPath {
-    pub fn from_plan(plan: &DataPathPlan) -> Self {
-        let (tun, tun_opts) = match &plan.tun {
-            TunPlan::External(ext) => (ext.engine, ext.opts.clone()),
-            // Neither is read without an external engine.
-            TunPlan::Native { .. } | TunPlan::None => (
-                default_tun_for(plan.engine),
-                AdvancedSettings::default().tun_options(),
-            ),
-        };
-        Self {
-            engine: plan.engine,
-            tun,
-            tun_opts,
-            socks_port: plan.ports.socks,
-            mode: plan.mode,
-        }
-    }
-}
-
 /// Options for [`Platform::stop_data_path`].
 #[derive(Debug, Clone, Default)]
 pub struct StopDataPath {
@@ -223,28 +182,15 @@ pub trait Platform: Send + Sync {
         Ok(())
     }
 
-    /// Whether this platform honours the non-tun proxy modes (proxy-only / system /
-    /// pac). Where it doesn't (the Android root module), config build and start
-    /// normalize `proxyMode` to `tun` — so e.g. a restored desktop backup carrying
-    /// a non-tun mode can't strip the tun inbound out from under the data path.
-    fn supports_proxy_modes(&self) -> bool {
-        false
-    }
+    /// The host facts a data-path plan is resolved against.
+    fn host_traits(&self) -> HostTraits;
 
-    /// The host facts a data-path plan is resolved against. The default derives them
-    /// from [`Platform::supports_proxy_modes`]: a proxy-mode host routes apps by
-    /// program, any other by uid.
-    fn host_traits(&self) -> HostTraits {
-        let proxy_modes = self.supports_proxy_modes();
-        HostTraits {
-            proxy_modes,
-            app_routing: if proxy_modes {
-                AppRouting::PerProcess
-            } else {
-                AppRouting::PerUid
-            },
-            pinned_singbox_stack: None,
-        }
+    /// Whether this platform honours the non-tun proxy modes (proxy-only / system /
+    /// pac). Where it doesn't (the Android root module), the plan normalizes
+    /// `proxyMode` to `tun` — so e.g. a restored desktop backup carrying a non-tun
+    /// mode can't strip the tun inbound out from under the data path.
+    fn supports_proxy_modes(&self) -> bool {
+        self.host_traits().proxy_modes
     }
 
     /// Protocols this host's cores can't run. The UI hides them, imports and
@@ -254,15 +200,9 @@ pub trait Platform: Send + Sync {
         &[]
     }
 
-    /// Spawn the core for `engine` from the on-disk config and route traffic through
-    /// it. Resolves once the core is confirmed up, or errors with a reason.
-    async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()>;
-
-    /// Bring up the data path `plan` describes. The default hands a platform that
-    /// still takes loose options their [`StartDataPath`] form.
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
-        self.start_data_path(StartDataPath::from_plan(plan)).await
-    }
+    /// Spawn the core from the on-disk config and bring up the data path `plan`
+    /// describes. Resolves once the core is confirmed up, or errors with a reason.
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()>;
 
     /// Stop the core/helpers and remove all routing. Idempotent.
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()>;
@@ -428,7 +368,14 @@ mod tests {
         fn paths(&self) -> &BackendPaths {
             &self.0
         }
-        async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        fn host_traits(&self) -> HostTraits {
+            HostTraits {
+                proxy_modes: false,
+                app_routing: kasumi_core::data_path_plan::AppRouting::PerUid,
+                pinned_singbox_stack: None,
+            }
+        }
+        async fn start_data_path(&self, _plan: &DataPathPlan) -> anyhow::Result<()> {
             Ok(())
         }
         async fn stop_data_path(&self, _opts: StopDataPath) -> anyhow::Result<()> {

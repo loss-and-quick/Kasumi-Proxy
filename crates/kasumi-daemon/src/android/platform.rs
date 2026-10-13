@@ -19,7 +19,7 @@ use kasumi_backend::lifecycle::{
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     AppFilterCapability, AppInfo, BackendPaths, Engine, InstalledCores, Platform,
-    PlatformCapabilities, StartDataPath, StopDataPath,
+    PlatformCapabilities, StopDataPath,
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
@@ -603,11 +603,7 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the daemon starts the data path from its plan")
-    }
-
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         // Record the bring-up (no started_at yet) so teardown and the watchdog know
         // what runs before the core is even up.
         write_state(&plan.state(RunState::Connecting)).await;

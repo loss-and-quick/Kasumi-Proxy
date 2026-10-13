@@ -95,8 +95,7 @@ mod tests {
 
     use kasumi_backend::net::ProxyStatus;
     use kasumi_backend::platform::{
-        BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
-        StopDataPath,
+        BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StopDataPath,
     };
     use kasumi_core::contract::{RunState, ServiceState};
     use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
@@ -121,13 +120,13 @@ mod tests {
         fn paths(&self) -> &BackendPaths {
             unimplemented!("pure method must stay GUI-side, never dispatched")
         }
+        fn host_traits(&self) -> HostTraits {
+            unimplemented!("pure method must stay GUI-side, never dispatched")
+        }
         async fn boot_init(&self) -> anyhow::Result<()> {
             Ok(())
         }
-        async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-            unimplemented!("the helper starts from a plan")
-        }
-        async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
             self.started.lock().unwrap().push(plan.clone());
             Ok(())
         }

@@ -58,7 +58,7 @@ impl Service {
                 let (built, profile_id) = resolve_and_write_config(&*self.platform, id.as_deref())
                     .await
                     .map_err(|e| e.0)?;
-                if let Err(e) = self.platform.start_planned(&built.plan).await {
+                if let Err(e) = self.platform.start_data_path(&built.plan).await {
                     // A failed bring-up must not leave a previously-set OS proxy
                     // pointing at a dead port.
                     self.platform.clear_os_proxy().await;
@@ -108,7 +108,7 @@ impl Service {
                     let (built, profile_id) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
-                    match self.platform.start_planned(&built.plan).await {
+                    match self.platform.start_data_path(&built.plan).await {
                         Ok(()) => {
                             self.note_data_path_started(built, profile_id);
                             self.settle_pending_restart().await;

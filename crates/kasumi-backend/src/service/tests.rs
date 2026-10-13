@@ -1,11 +1,9 @@
 use super::*;
 use crate::fs::read_text;
-use crate::platform::{
-    BackendPaths, Engine, InstalledCores, PlatformCapabilities, StartDataPath, StopDataPath,
-};
+use crate::platform::{BackendPaths, Engine, InstalledCores, PlatformCapabilities, StopDataPath};
 use crate::testutil::sample_vless;
 use kasumi_core::contract::{ConnectionProbe, RunState, ServiceState};
-use kasumi_core::data_path_plan::DataPathPlan;
+use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{ProxyMode, default_app_state};
 use std::path::PathBuf;
@@ -72,16 +70,17 @@ impl Platform for RecordingPlatform {
     fn paths(&self) -> &BackendPaths {
         &self.paths
     }
-    fn supports_proxy_modes(&self) -> bool {
-        true
+    fn host_traits(&self) -> HostTraits {
+        HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: None,
+        }
     }
     async fn set_os_proxy(&self, mode: ProxyMode, _plan: &DataPathPlan) {
         self.log(&format!("os_proxy:{mode:?}"));
     }
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the service starts from a plan")
-    }
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         self.log(&format!("start:{:?}", plan.engine));
         *self.started.lock().unwrap() = Some(plan.clone());
         if self.hold_start.load(Ordering::SeqCst) {

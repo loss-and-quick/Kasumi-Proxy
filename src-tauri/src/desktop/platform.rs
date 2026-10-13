@@ -23,7 +23,7 @@ use kasumi_backend::lifecycle::{
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     AppFilterCapability, AppInfo, BackendPaths, Engine, InstalledCores, Platform,
-    PlatformCapabilities, StartDataPath, StopDataPath, TestCore, spawn_local_test_core,
+    PlatformCapabilities, StopDataPath, TestCore, spawn_local_test_core,
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
@@ -432,10 +432,6 @@ impl Platform for DesktopPlatform {
         &self.p.backend
     }
 
-    fn supports_proxy_modes(&self) -> bool {
-        true
-    }
-
     fn host_traits(&self) -> HostTraits {
         HostTraits {
             proxy_modes: true,
@@ -473,11 +469,7 @@ impl Platform for DesktopPlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the desktop starts the data path from its plan")
-    }
-
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         let engine = plan.engine;
         log::info!(
             "starting data-path: engine={engine:?} tun={:?} ports={:?} mode={:?}",
