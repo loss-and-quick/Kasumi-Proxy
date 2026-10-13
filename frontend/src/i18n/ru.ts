@@ -112,7 +112,7 @@ const ru = {
   "profiles.pingAll": "Пинговать все",
   "profiles.pingSheet.title": "Тест и очистка",
   "profiles.pingSheet.tcping": "TCPing все",
-  "profiles.pingSheet.tcpingSub": "TCP-подключение к host:port",
+  "profiles.pingSheet.tcpingSub": "TCP-подключение к host:port (для цепочки — к её первому узлу)",
   "profiles.pingSheet.realping": "RealPing все",
   "profiles.pingSheet.realpingSub": "HTTP через прокси-ядро",
   "profiles.pingSheet.speedtest": "Тест скорости всех",

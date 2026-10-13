@@ -99,7 +99,7 @@ const vi = {
   "profiles.pingAll": "Ping tất cả",
   "profiles.pingSheet.title": "Kiểm tra & dọn dẹp",
   "profiles.pingSheet.tcping": "TCPing tất cả",
-  "profiles.pingSheet.tcpingSub": "Kết nối TCP tới host:port",
+  "profiles.pingSheet.tcpingSub": "Kết nối TCP tới host:port (với chuỗi: tới chặng đầu tiên)",
   "profiles.pingSheet.realping": "RealPing tất cả",
   "profiles.pingSheet.realpingSub": "HTTP qua lõi proxy",
   "profiles.pingSheet.speedtest": "Kiểm tra tốc độ tất cả",
