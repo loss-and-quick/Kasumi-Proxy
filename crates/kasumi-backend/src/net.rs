@@ -3,10 +3,12 @@
 
 use std::collections::HashSet;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use kasumi_core::contract::FetchMode;
+use reqwest::cookie::{CookieStore, Jar};
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use tokio::net::TcpStream;
 
 use crate::fs::read_text;
@@ -38,6 +40,13 @@ pub struct FetchUrlOptions {
     pub headers: Vec<(String, String)>,
     /// Stop reading once the body exceeds this; `None` = unbounded.
     pub max_body_bytes: Option<usize>,
+    /// Cookies kept across fetches, keyed by host. A jar holding cookies for the URL
+    /// replaces a `Cookie` in `headers`, as OkHttp's jar does for Happ.
+    pub cookie_jar: Option<Arc<Jar>>,
+    /// Resolve the host to IPv4 addresses only.
+    pub ipv4_only: bool,
+    /// Offer only gzip, as OkHttp does, instead of every supported encoding.
+    pub gzip_only: bool,
 }
 
 #[derive(Debug)]
@@ -73,6 +82,24 @@ impl std::fmt::Display for BodyTooLarge {
 
 impl std::error::Error for BodyTooLarge {}
 
+/// A resolver that drops every IPv6 address.
+struct Ipv4Only;
+
+impl Resolve for Ipv4Only {
+    fn resolve(&self, name: Name) -> Resolving {
+        Box::pin(async move {
+            let v4: Vec<SocketAddr> = tokio::net::lookup_host((name.as_str(), 0))
+                .await?
+                .filter(SocketAddr::is_ipv4)
+                .collect();
+            if v4.is_empty() {
+                return Err(format!("{} has no IPv4 address", name.as_str()).into());
+            }
+            Ok(Box::new(v4.into_iter()) as Addrs)
+        })
+    }
+}
+
 fn socks_url(port: u16) -> String {
     format!("socks5h://127.0.0.1:{port}")
 }
@@ -93,9 +120,27 @@ async fn fetch_once(
     if let Some(ua) = &opts.user_agent {
         builder = builder.user_agent(ua);
     }
+    if opts.gzip_only {
+        builder = builder.no_brotli().no_deflate();
+    }
+    if opts.ipv4_only {
+        builder = builder.dns_resolver(Arc::new(Ipv4Only));
+    }
+    // reqwest keeps a manual `Cookie` and skips the jar; OkHttp, which Happ uses, sends
+    // the jar's cookies instead whenever it has some for the URL.
+    let jar_has_cookies = match (&opts.cookie_jar, reqwest::Url::parse(url)) {
+        (Some(jar), Ok(u)) => jar.cookies(&u).is_some(),
+        _ => false,
+    };
+    if let Some(jar) = &opts.cookie_jar {
+        builder = builder.cookie_provider(jar.clone());
+    }
     let client = builder.build()?;
     let mut req = client.get(url);
     for (name, value) in &opts.headers {
+        if jar_has_cookies && name.eq_ignore_ascii_case("cookie") {
+            continue;
+        }
         req = req.header(name, value);
     }
     let mut res = req.send().await?;
@@ -385,6 +430,96 @@ mod tests {
             Some(403)
         );
         assert_eq!(err.to_string(), "HTTP 403");
+    }
+
+    /// Header lines of a raw request head, lower-cased names, in wire order.
+    fn header_lines(head: &str) -> Vec<(String, String)> {
+        head.lines()
+            .skip(1)
+            .filter_map(|l| l.split_once(": "))
+            .map(|(n, v)| (n.to_ascii_lowercase(), v.to_owned()))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn identity_headers_on_wire() {
+        let (base, requests) = serve(vec![http_response(200, &[], b"ok")]).await;
+        let headers: Vec<(String, String)> = [
+            ("Connection", "close"),
+            ("User-agent", "Happ/test"),
+            ("X-Device-Locale", "ru"),
+            ("X-HWID", "0123456789abcdef"),
+            ("X-Device-OS", "Android"),
+        ]
+        .map(|(n, v)| (n.into(), v.into()))
+        .into();
+        let opts = FetchUrlOptions {
+            headers: headers.clone(),
+            gzip_only: true,
+            ..direct()
+        };
+        fetch(&base, opts).await.unwrap();
+        let sent = header_lines(&requests.lock().unwrap()[0]);
+        let ours: Vec<(String, String)> = sent
+            .iter()
+            .filter(|(n, _)| headers.iter().any(|(h, _)| h.eq_ignore_ascii_case(n)))
+            .cloned()
+            .collect();
+        let want: Vec<(String, String)> = headers
+            .iter()
+            .map(|(n, v)| (n.to_ascii_lowercase(), v.clone()))
+            .collect();
+        assert_eq!(ours, want, "same headers, same order");
+        let enc = sent.iter().find(|(n, _)| n == "accept-encoding").unwrap();
+        assert_eq!(enc.1, "gzip");
+    }
+
+    #[tokio::test]
+    async fn jar_cookies_replace_a_manual_cookie() {
+        let set = http_response(200, &[("set-cookie", "session=abc; Path=/")], b"ok");
+        let (base, requests) = serve(vec![
+            http_response(200, &[], b"ok"),
+            set,
+            http_response(200, &[], b"ok"),
+        ])
+        .await;
+        let jar = Arc::new(Jar::default());
+        let opts = FetchUrlOptions {
+            headers: vec![("Cookie".into(), "0123456789abcdef".into())],
+            cookie_jar: Some(jar),
+            ..direct()
+        };
+        for _ in 0..3 {
+            fetch(&base, opts.clone()).await.unwrap();
+        }
+        let cookies: Vec<String> = requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|head| {
+                header_lines(head)
+                    .into_iter()
+                    .find(|(n, _)| n == "cookie")
+                    .map(|(_, v)| v)
+                    .unwrap_or_default()
+            })
+            .collect();
+        assert_eq!(
+            cookies,
+            ["0123456789abcdef", "0123456789abcdef", "session=abc"]
+        );
+    }
+
+    #[tokio::test]
+    async fn ipv4_only_resolves_to_ipv4() {
+        let (base, _) = serve(vec![http_response(200, &[], b"ok")]).await;
+        let port = base.rsplit(':').next().unwrap();
+        let opts = FetchUrlOptions {
+            ipv4_only: true,
+            ..direct()
+        };
+        let res = fetch(&format!("http://localhost:{port}/"), opts).await;
+        assert_eq!(res.unwrap().body, b"ok");
     }
 
     #[tokio::test]

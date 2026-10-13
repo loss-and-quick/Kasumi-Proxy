@@ -11,6 +11,7 @@ use tempfile::TempDir;
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Profile;
+use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::share::parse_share_link;
 
 use crate::net::ProxyStatus;
@@ -29,6 +30,17 @@ pub struct TestPlatform {
     converted: Mutex<Vec<String>>,
     /// When set, `convert_asset` errors — for the asset-update rollback path.
     convert_fails: AtomicBool,
+    identity: Mutex<IdentityFixture>,
+}
+
+/// What the identity hooks of [`TestPlatform`] return, and the calls they saw.
+#[derive(Default)]
+pub struct IdentityFixture {
+    pub facts: DeviceFacts,
+    pub stored_ssaid: Option<String>,
+    pub user_key: Option<String>,
+    pub machine_id: Option<String>,
+    pub calls: Vec<String>,
 }
 
 impl TestPlatform {
@@ -41,6 +53,16 @@ impl TestPlatform {
     /// Filenames `convert_asset` was called with, in order.
     pub fn converted(&self) -> Vec<String> {
         self.converted.lock().unwrap().clone()
+    }
+
+    /// Set what the identity hooks return.
+    pub fn identity(&self, f: impl FnOnce(&mut IdentityFixture)) {
+        f(&mut self.identity.lock().unwrap());
+    }
+
+    /// The identity hooks called, in order.
+    pub fn identity_calls(&self) -> Vec<String> {
+        self.identity.lock().unwrap().calls.clone()
     }
 
     pub fn new() -> (Self, TempDir) {
@@ -68,6 +90,7 @@ impl TestPlatform {
                 bin_dir,
                 converted: Mutex::new(Vec::new()),
                 convert_fails: AtomicBool::new(false),
+                identity: Mutex::new(IdentityFixture::default()),
             },
             dir,
         )
@@ -128,6 +151,22 @@ impl Platform for TestPlatform {
             force_port: 1082,
         })
     }
+    async fn device_facts(&self) -> DeviceFacts {
+        self.identity.lock().unwrap().facts.clone()
+    }
+    async fn stored_ssaid(&self, user: u32, package: &str) -> Option<String> {
+        let mut i = self.identity.lock().unwrap();
+        i.calls.push(format!("stored:{user}:{package}"));
+        i.stored_ssaid.clone()
+    }
+    async fn ssaid_user_key(&self, user: u32) -> Option<String> {
+        let mut i = self.identity.lock().unwrap();
+        i.calls.push(format!("userkey:{user}"));
+        i.user_key.clone()
+    }
+    async fn machine_id(&self) -> Option<String> {
+        self.identity.lock().unwrap().machine_id.clone()
+    }
 }
 
 /// A representative xray profile (vless/tcp/tls).
@@ -149,6 +188,9 @@ pub fn vless_at(port: u16) -> Profile {
     )
     .unwrap()
 }
+
+/// A [`serve`] response that resets the connection instead of answering.
+pub const RESET: &[u8] = b"\0reset";
 
 /// Raw request heads [`serve`] received, in arrival order.
 pub type Requests = std::sync::Arc<Mutex<Vec<String>>>;
@@ -180,6 +222,12 @@ pub async fn serve(responses: Vec<Vec<u8>>) -> (String, Requests) {
                 .unwrap()
                 .push(String::from_utf8_lossy(&head).into_owned());
             let res = &responses[i.min(responses.len() - 1)];
+            if res.as_slice() == RESET {
+                // SO_LINGER 0 turns the close into a TCP reset.
+                let _ = sock.set_zero_linger();
+                drop(sock);
+                continue;
+            }
             let _ = sock.write_all(res).await;
             let _ = sock.shutdown().await;
         }

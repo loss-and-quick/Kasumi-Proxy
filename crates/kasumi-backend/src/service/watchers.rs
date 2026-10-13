@@ -165,6 +165,7 @@ impl Service {
                     &*this.platform,
                     this.as_ref(),
                     &this.serialize,
+                    &this.sub_cookies,
                     &mut attempts,
                     &on_applied,
                 )

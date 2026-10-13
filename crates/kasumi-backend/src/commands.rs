@@ -23,9 +23,11 @@ use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::mutate::{MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
+use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
+use kasumi_core::sub_ingest::stored_for_url;
 use kasumi_core::sub_policy::safe_provider_link;
 
 use crate::fs::{read_text, write_text};
@@ -181,6 +183,15 @@ pub enum Command {
     OpenUrl {
         url: String,
     },
+    /// The request identity a subscription fetch sends. `input` previews unsaved
+    /// settings; without it the stored ones are used. No `subId` = Settings alone.
+    #[serde(rename_all = "camelCase")]
+    ResolveRequestIdentity {
+        #[serde(default)]
+        sub_id: Option<String>,
+        #[serde(default)]
+        input: Option<Box<IdentityInput>>,
+    },
 }
 
 /// One reply. The tag `kind` selects the payload shape under `value`.
@@ -206,6 +217,7 @@ pub enum Response {
     Speed(Option<i64>),
     /// A bare acknowledgement (`{ok: true}` / no body in the old protocol).
     Ok,
+    RequestIdentity(Box<ResolvedIdentity>),
 }
 
 /// Reject path traversal / quoting tricks in asset filenames.
@@ -456,6 +468,28 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             Ok(Response::Ok)
         }
 
+        Command::ResolveRequestIdentity { sub_id, input } => {
+            let state = crate::state::read_app_state(platform)
+                .await
+                .unwrap_or_else(default_app_state);
+            let sub = sub_id
+                .as_deref()
+                .and_then(|id| state.subscriptions.iter().find(|s| s.id == id));
+            let input = input
+                .map(|i| *i)
+                .unwrap_or_else(|| IdentityInput::stored(&state.settings.request_identity, sub));
+            // The keys the next fetch of this subscription would be built with.
+            let stored = match sub {
+                Some(s) => crate::sub_meta::read_all(platform).await.remove(&s.id),
+                None => None,
+            };
+            let meta = sub
+                .and_then(|s| stored_for_url(stored.as_ref(), &s.url))
+                .map(|s| &s.meta);
+            let resolved = crate::identity::resolve_request(platform, &input, meta).await;
+            Ok(Response::RequestIdentity(Box::new(resolved.view)))
+        }
+
         Command::ChainCandidates { profile } => {
             let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
             Ok(Response::ProfileIds(chain_candidates(&profile, &profiles)))
@@ -640,6 +674,67 @@ mod tests {
         // browser in tests.
         let e = open("https://example.org/renew").await.unwrap_err();
         assert!(e.0.contains("not supported"), "{e}");
+    }
+
+    #[tokio::test]
+    async fn resolve_request_identity_previews_with_the_provider_keys() {
+        use kasumi_core::request_identity::{HwidSource, IdentityInput};
+        use kasumi_core::state::Subscription;
+        use kasumi_core::sub_ingest::StoredSubMeta;
+
+        let (p, _d) = TestPlatform::new();
+        let mut state = default_app_state();
+        state.subscriptions = vec![Subscription {
+            id: "s1".into(),
+            url: "https://sub.example.org/s".into(),
+            ..Default::default()
+        }];
+        crate::state::write_app_state(&p, &state).await.unwrap();
+        let mut meta = happ_sub::MetaMap::new();
+        meta.insert("subscription-send-hwid-enabled", "false");
+        let stored = StoredSubMeta {
+            source_url: "https://sub.example.org/s".into(),
+            meta,
+            ..Default::default()
+        };
+        crate::sub_meta::write_entry(&p, "s1", Some(stored), &["s1"])
+            .await
+            .unwrap();
+        let resolve = |sub_id: Option<&str>, input: Option<Box<IdentityInput>>| {
+            dispatch(
+                &p,
+                Command::ResolveRequestIdentity {
+                    sub_id: sub_id.map(str::to_owned),
+                    input,
+                },
+            )
+        };
+        let view = |r: Response| match r {
+            Response::RequestIdentity(v) => *v,
+            other => panic!("{other:?}"),
+        };
+        let names = |v: &ResolvedIdentity| -> Vec<String> {
+            v.headers.iter().map(|h| h.name.clone()).collect()
+        };
+
+        let v = view(resolve(Some("s1"), None).await.unwrap());
+        assert!(v.provider_hides_device);
+        assert_eq!(names(&v), ["Connection", "User-agent", "X-Device-Locale"]);
+        assert_eq!(v.hwid_source, HwidSource::DeviceId);
+
+        let mut input = IdentityInput::stored(&state.settings.request_identity, None);
+        input.request.send_hwid = Some(true);
+        input.request.hwid = Some("typed-hwid".into());
+        let v = view(resolve(Some("s1"), Some(Box::new(input))).await.unwrap());
+        assert!(names(&v).contains(&"X-HWID".to_owned()));
+        assert_eq!(
+            (v.hwid.as_str(), v.hwid_source),
+            ("typed-hwid", HwidSource::Subscription)
+        );
+
+        let v = view(resolve(None, None).await.unwrap());
+        assert!(!v.provider_hides_device);
+        assert_eq!(v.headers.len(), 7);
     }
 
     #[tokio::test]

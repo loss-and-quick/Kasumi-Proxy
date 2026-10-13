@@ -1078,6 +1078,14 @@ export const LogTargetSchema = z.union([z.literal("daemon"), z.literal("singbox"
 export type LogTarget = z.infer<typeof LogTargetSchema>;
 
 
+export const IdentityInput_SerializeSchema = z.object({
+	defaults: RequestIdentityDefaults_SerializeSchema,
+	request: SubRequestOverrides_SerializeSchema,
+	userAgent: z.string(),
+});
+export type IdentityInput_Serialize = z.infer<typeof IdentityInput_SerializeSchema>;
+
+
 export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("applySubscription"),
 	subId: z.string(),
@@ -1143,6 +1151,10 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("resolveCores"),
 	profiles: z.array(ProfileSchema),
+}), z.object({
+	cmd: z.literal("resolveRequestIdentity"),
+	subId: z.string().nullable(),
+	input: IdentityInput_SerializeSchema.nullable(),
 }), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable(),
@@ -1271,6 +1283,14 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 export type MutationIntent_Deserialize = z.infer<typeof MutationIntent_DeserializeSchema>;
 
 
+export const IdentityInput_DeserializeSchema = z.object({
+	defaults: RequestIdentityDefaults_DeserializeSchema,
+	request: SubRequestOverrides_DeserializeSchema.optional(),
+	userAgent: z.string().optional(),
+});
+export type IdentityInput_Deserialize = z.infer<typeof IdentityInput_DeserializeSchema>;
+
+
 export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("applySubscription"),
 	subId: z.string(),
@@ -1337,6 +1357,10 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("resolveCores"),
 	profiles: z.array(ProfileSchema),
 }), z.object({
+	cmd: z.literal("resolveRequestIdentity"),
+	subId: z.string().nullable().optional(),
+	input: IdentityInput_DeserializeSchema.nullable().optional(),
+}), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable().optional(),
 }), z.object({
@@ -1374,8 +1398,32 @@ export const CoreResolutionSchema = z.object({
 export type CoreResolution = z.infer<typeof CoreResolutionSchema>;
 
 
+export const DeviceFactsSchema = z.object({
+	os: z.string(),
+	osVersion: z.string(),
+	model: z.string(),
+	locale: z.string(),
+});
+export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
+
+
 export const GroupSchema = z.union([Group_DeserializeSchema, Group_SerializeSchema]);
 export type Group = z.infer<typeof GroupSchema>;
+
+
+export const HeaderPreviewSchema = z.object({
+	name: z.string(),
+	value: z.string(),
+});
+export type HeaderPreview = z.infer<typeof HeaderPreviewSchema>;
+
+
+export const HwidSourceSchema = z.union([z.literal("deviceId"), z.literal("happComputed"), z.literal("happStored"), z.literal("machineId"), z.literal("settings"), z.literal("subscription")]);
+export type HwidSource = z.infer<typeof HwidSourceSchema>;
+
+
+export const IdentityInputSchema = z.union([IdentityInput_DeserializeSchema, IdentityInput_SerializeSchema]);
+export type IdentityInput = z.infer<typeof IdentityInputSchema>;
 
 
 export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, MutationIntent_SerializeSchema]);
@@ -1386,12 +1434,35 @@ export const ProviderInfoSchema = z.union([ProviderInfo_DeserializeSchema, Provi
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
 
 
+export const ProviderLocksSchema = z.object({
+	userAgent: z.boolean(),
+	sendHwid: z.boolean(),
+	hwidInCookie: z.boolean(),
+});
+export type ProviderLocks = z.infer<typeof ProviderLocksSchema>;
+
+
 export const ProviderNoticeSchema = z.union([ProviderNotice_DeserializeSchema, ProviderNotice_SerializeSchema]);
 export type ProviderNotice = z.infer<typeof ProviderNoticeSchema>;
 
 
 export const RequestIdentityDefaultsSchema = z.union([RequestIdentityDefaults_DeserializeSchema, RequestIdentityDefaults_SerializeSchema]);
 export type RequestIdentityDefaults = z.infer<typeof RequestIdentityDefaultsSchema>;
+
+
+export const ResolvedIdentitySchema = z.object({
+	hwid: z.string(),
+	hwidSource: HwidSourceSchema,
+	autoHwid: z.string(),
+	autoHwidSource: HwidSourceSchema,
+	facts: DeviceFactsSchema,
+	headers: z.array(HeaderPreviewSchema),
+	cookieJar: z.boolean(),
+	locks: ProviderLocksSchema,
+	providerHidesDevice: z.boolean(),
+	providerHwidCookie: z.boolean(),
+});
+export type ResolvedIdentity = z.infer<typeof ResolvedIdentitySchema>;
 
 
 export const WsInfoSchema = z.object({
@@ -1442,6 +1513,9 @@ export const Response_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
+}), z.object({
+	kind: z.literal("requestIdentity"),
+	value: ResolvedIdentitySchema,
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),
@@ -1498,6 +1572,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
+}), z.object({
+	kind: z.literal("requestIdentity"),
+	value: ResolvedIdentitySchema,
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),

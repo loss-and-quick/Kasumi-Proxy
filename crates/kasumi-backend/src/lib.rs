@@ -11,6 +11,7 @@ pub mod asset_update;
 pub mod commands;
 pub mod fs;
 pub mod fsjson;
+pub mod identity;
 pub mod jobs;
 pub mod lifecycle;
 pub mod net;
