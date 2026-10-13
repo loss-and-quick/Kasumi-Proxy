@@ -312,6 +312,13 @@ jobs:
           : > src-tauri/binaries/libcronet.dll
           : > src-tauri/binaries/msys-2.0.dll
 
+      # The Linux `rust` job lints only what compiles for Linux; the cfg(windows)
+      # modules (privhelper service, wintun routing, process handling) are linted
+      # here. rust-toolchain.toml pins the same toolchain and clippy as that job.
+      # kasumi-daemon is the Android binary and Unix-only; the `rust` job lints it.
+      - name: Clippy (Windows target)
+        run: cargo clippy --workspace --exclude kasumi-daemon --all-targets -- -D warnings
+
       - name: Compile the Tauri app (no bundle)
         run: cargo build -p kasumi-desktop
 
