@@ -6,10 +6,11 @@ use crate::platform::{
 use crate::testutil::sample_vless;
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
-use kasumi_core::state::default_app_state;
+use kasumi_core::state::{ProxyMode, default_app_state};
 use std::path::PathBuf;
 use std::sync::Mutex as StdMutex;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::time::Duration;
 use tempfile::TempDir;
 
 /// Records lifecycle calls and reports a running state on demand.
@@ -22,6 +23,9 @@ struct RecordingPlatform {
     hold_start: AtomicBool,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
+    /// The running core's `force-in` port the connectivity probe goes through;
+    /// 0 = no proxy to probe.
+    core_socks: AtomicU16,
 }
 
 impl RecordingPlatform {
@@ -49,6 +53,7 @@ impl RecordingPlatform {
                 hold_start: AtomicBool::new(false),
                 entered: tokio::sync::Notify::new(),
                 release: tokio::sync::Notify::new(),
+                core_socks: AtomicU16::new(0),
             }),
             dir,
         )
@@ -114,11 +119,12 @@ impl Platform for RecordingPlatform {
         PathBuf::new()
     }
     async fn proxy_status(&self) -> anyhow::Result<crate::net::ProxyStatus> {
+        let port = self.core_socks.load(Ordering::SeqCst);
         Ok(crate::net::ProxyStatus {
-            running: false,
-            socks_port: 0,
+            running: port != 0 && self.running.load(Ordering::SeqCst),
+            socks_port: port,
             http_port: 0,
-            force_port: 0,
+            force_port: port,
         })
     }
 }
@@ -371,19 +377,35 @@ async fn stateless_command_still_works_through_service() {
     assert_eq!(c.xray_version, "Xray 1.0");
 }
 
-#[tokio::test]
-async fn profile_switch_restart_never_shows_pending_restart() {
-    use kasumi_core::mutate::MutationIntent;
-    let (platform, _d) = RecordingPlatform::new();
+/// Save two profiles, the first active and the second with id `b`.
+async fn seed_two(platform: &RecordingPlatform) {
     let a = sample_vless();
     let mut b = crate::testutil::vless_at(8443);
     b.meta_mut().id = "b".into();
     let mut state = default_app_state();
     state.active_id = Some(a.meta().id.clone());
     state.profiles = vec![a, b];
-    crate::state::write_app_state(&*platform, &state)
+    crate::state::write_app_state(platform, &state)
         .await
         .unwrap();
+}
+
+/// Save `id` as the active profile without restarting — the first half of a
+/// UI profile switch.
+async fn save_active(svc: &Service, id: &str) {
+    svc.dispatch(Command::Mutate {
+        intent: Box::new(kasumi_core::mutate::MutationIntent::SetActive {
+            id: Some(id.into()),
+        }),
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn profile_switch_restart_never_shows_pending_restart() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_two(&platform).await;
     let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
     svc.dispatch(Command::Start { profile_id: None })
         .await
@@ -391,13 +413,7 @@ async fn profile_switch_restart_never_shows_pending_restart() {
 
     // The UI switches by saving the new active id, then starting it. On its own
     // the saved switch is stale against what runs.
-    svc.dispatch(Command::Mutate {
-        intent: Box::new(MutationIntent::SetActive {
-            id: Some("b".into()),
-        }),
-    })
-    .await
-    .unwrap();
+    save_active(&svc, "b").await;
     assert!(pending_restart(&svc).await);
 
     // Once the switching start is under way nothing is pending — not even for
@@ -433,17 +449,12 @@ async fn profile_switch_restart_never_shows_pending_restart() {
 
 #[tokio::test]
 async fn reachable_verdict_carries_latency_until_restart() {
-    let (platform, _d) = RecordingPlatform::new();
-    seed_active(&platform).await;
-    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
-    svc.dispatch(Command::Start { profile_id: None })
-        .await
-        .unwrap();
+    let (_d, svc, _core) = running_first_of_two().await;
 
-    *svc.connectivity.lock().unwrap() = Connectivity::Reachable { latency_ms: 87 };
+    svc.dispatch(Command::ProbeConnection).await.unwrap();
     let status = svc.current_status().await.unwrap();
     assert_eq!(status.service.state, RunState::Connected);
-    assert_eq!(status.latency_ms, Some(87));
+    assert!(status.latency_ms.is_some());
 
     // A restart replaces the core: the old verdict and its latency are dropped.
     svc.dispatch(Command::Restart { profile_id: None })
@@ -452,6 +463,151 @@ async fn reachable_verdict_carries_latency_until_restart() {
     let status = svc.current_status().await.unwrap();
     assert_eq!(status.service.state, RunState::Connecting);
     assert_eq!(status.latency_ms, None);
+}
+
+/// Stands in for the running core's SOCKS5 inbound: every CONNECT succeeds and
+/// the tunnelled HTTP request gets a 204. With `hold` set, the reply waits for
+/// `release` so a test can act while a probe is in flight.
+struct FakeCoreSocks {
+    port: u16,
+    hold: AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+}
+
+impl FakeCoreSocks {
+    /// Listen on a free port and point `platform`'s proxy status at it.
+    async fn attach(platform: &RecordingPlatform) -> Arc<Self> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let this = Arc::new(Self {
+            port: listener.local_addr().unwrap().port(),
+            hold: AtomicBool::new(false),
+            entered: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+        });
+        platform.core_socks.store(this.port, Ordering::SeqCst);
+        let server = Arc::clone(&this);
+        tokio::spawn(async move {
+            while let Ok((mut conn, _)) = listener.accept().await {
+                let server = Arc::clone(&server);
+                tokio::spawn(async move {
+                    let _ = server.serve(&mut conn).await;
+                });
+            }
+        });
+        this
+    }
+
+    async fn serve(&self, s: &mut tokio::net::TcpStream) -> std::io::Result<()> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        // Greeting: VER NMETHODS METHODS… → no auth.
+        let mut head = [0u8; 2];
+        s.read_exact(&mut head).await?;
+        s.read_exact(&mut vec![0u8; head[1].into()]).await?;
+        s.write_all(&[5, 0]).await?;
+        // Request: VER CMD RSV ATYP ADDR PORT → succeeded.
+        let mut req = [0u8; 4];
+        s.read_exact(&mut req).await?;
+        let addr_len = match req[3] {
+            1 => 4,
+            4 => 16,
+            _ => usize::from(s.read_u8().await?),
+        };
+        s.read_exact(&mut vec![0u8; addr_len + 2]).await?;
+        s.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+        let mut http = Vec::new();
+        while !http.ends_with(b"\r\n\r\n") {
+            http.push(s.read_u8().await?);
+        }
+        if self.hold.load(Ordering::SeqCst) {
+            self.entered.notify_one();
+            self.release.notified().await;
+        }
+        s.write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await
+    }
+}
+
+/// Two saved profiles with the first one running behind a [`FakeCoreSocks`].
+async fn running_first_of_two() -> (TempDir, Arc<Service>, Arc<FakeCoreSocks>) {
+    let (platform, dir) = RecordingPlatform::new();
+    seed_two(&platform).await;
+    let core = FakeCoreSocks::attach(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    set_settings(&svc, |s| {
+        s.delay_test_url = Some("http://probe.example/generate_204".into())
+    })
+    .await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    (dir, svc, core)
+}
+
+#[tokio::test]
+async fn saved_switch_does_not_inherit_the_running_profiles_ping() {
+    let (_d, svc, _core) = running_first_of_two().await;
+    let mut rx = svc.subscribe();
+
+    assert!(matches!(
+        svc.dispatch(Command::ProbeConnection).await.unwrap(),
+        Response::Ping(Some(_))
+    ));
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.service.state, RunState::Connected);
+    assert!(status.latency_ms.is_some());
+
+    // The switch is saved, the old profile's core still runs: nothing measured
+    // the new one yet — not in the frame the save pushes, nor after re-probing
+    // the old core.
+    save_active(&svc, "b").await;
+    let pushed = loop {
+        if let PushFrame::Status { value } = rx.recv().await.unwrap()
+            && value.active_id.as_deref() == Some("b")
+        {
+            break value;
+        }
+    };
+    assert_eq!(pushed.latency_ms, None);
+    assert_eq!(pushed.service.state, RunState::Connecting);
+    svc.dispatch(Command::ProbeConnection).await.unwrap();
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.active_id.as_deref(), Some("b"));
+    assert_eq!(status.latency_ms, None);
+    assert_eq!(status.service.state, RunState::Connecting);
+
+    // Once the new profile runs, its own probe is reported.
+    svc.dispatch(Command::Start {
+        profile_id: Some("b".into()),
+    })
+    .await
+    .unwrap();
+    svc.dispatch(Command::ProbeConnection).await.unwrap();
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.service.state, RunState::Connected);
+    assert!(status.latency_ms.is_some());
+}
+
+#[tokio::test]
+async fn probe_in_flight_across_a_saved_switch_is_not_reported_for_the_new_profile() {
+    let (_d, svc, core) = running_first_of_two().await;
+
+    core.hold.store(true, Ordering::SeqCst);
+    let probing = tokio::spawn({
+        let svc = Arc::clone(&svc);
+        async move { svc.dispatch(Command::ProbeConnection).await }
+    });
+    tokio::time::timeout(Duration::from_secs(5), core.entered.notified())
+        .await
+        .expect("probe reached the core");
+    save_active(&svc, "b").await;
+    core.release.notify_one();
+    probing.await.unwrap().unwrap();
+
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.active_id.as_deref(), Some("b"));
+    assert_eq!(status.latency_ms, None);
+    assert_eq!(status.service.state, RunState::Connecting);
 }
 
 #[tokio::test]

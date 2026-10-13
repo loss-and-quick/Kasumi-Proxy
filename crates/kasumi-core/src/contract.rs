@@ -103,7 +103,8 @@ pub struct ServiceStatus {
     #[serde(default)]
     pub pending_restart: bool,
     /// Round trip of the latest successful connectivity probe through the running
-    /// core, in ms; `null` until one lands, or while the check is off.
+    /// core of `active_id`, in ms; `null` until one lands, while the check is off,
+    /// or while a saved switch to `active_id` is not running yet.
     #[serde(default)]
     pub latency_ms: Option<u64>,
 }

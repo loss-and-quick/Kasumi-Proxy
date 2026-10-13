@@ -25,6 +25,14 @@ pub(super) enum LifecycleCmd {
     ReloadAppFilter,
 }
 
+/// What a running data path was started from.
+#[derive(Debug, Clone)]
+pub(super) struct RunningPath {
+    pub config: CoreConfig,
+    pub mode: ProxyMode,
+    pub profile_id: String,
+}
+
 impl Service {
     /// Run a lifecycle command under the serializer, then emit the new status.
     pub(super) async fn serialized(&self, lc: LifecycleCmd) -> Result<Response, CommandError> {
@@ -50,9 +58,10 @@ impl Service {
                 // an edit made just before (a profile switch) or during this start
                 // must not raise "restart to apply" over the restart itself.
                 self.note_data_path_stopped();
-                let (opts, built) = resolve_and_write_config(&*self.platform, id.as_deref())
-                    .await
-                    .map_err(|e| e.0)?;
+                let (opts, built, profile_id) =
+                    resolve_and_write_config(&*self.platform, id.as_deref())
+                        .await
+                        .map_err(|e| e.0)?;
                 let (mode, engine, socks_port) = (opts.mode, opts.engine, opts.socks_port);
                 if let Err(e) = self.platform.start_data_path(opts).await {
                     // A failed bring-up must not leave a previously-set OS proxy
@@ -64,7 +73,7 @@ impl Service {
                 // With the data-path up, align the OS proxy with the mode (set for
                 // system/pac, cleared otherwise — covers mode switches).
                 self.platform.set_os_proxy(mode, engine, socks_port).await;
-                self.note_data_path_started(built, mode);
+                self.note_data_path_started(built, mode, profile_id);
                 self.settle_pending_restart().await;
                 Ok(())
             }
@@ -92,13 +101,13 @@ impl Service {
                         .await
                         .map_err(|e| e.to_string())?;
                     self.note_data_path_stopped();
-                    let (opts, built) = resolve_and_write_config(&*self.platform, None)
+                    let (opts, built, profile_id) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
                     let mode = opts.mode;
                     match self.platform.start_data_path(opts).await {
                         Ok(()) => {
-                            self.note_data_path_started(built, mode);
+                            self.note_data_path_started(built, mode, profile_id);
                             self.settle_pending_restart().await;
                             Ok(())
                         }
@@ -116,10 +125,15 @@ impl Service {
         }
     }
 
-    /// Record a successful data-path start: the given build + mode become the
-    /// baseline mutations are diffed against, and nothing is pending anymore.
-    fn note_data_path_started(&self, built: CoreConfig, mode: ProxyMode) {
-        *self.running_config.lock().unwrap() = Some((built, mode));
+    /// Record a successful data-path start: the given build, mode and profile
+    /// become the baseline mutations are diffed against, and nothing is pending
+    /// anymore.
+    fn note_data_path_started(&self, config: CoreConfig, mode: ProxyMode, profile_id: String) {
+        *self.running_config.lock().unwrap() = Some(RunningPath {
+            config,
+            mode,
+            profile_id,
+        });
         self.pending_restart.store(false, Ordering::SeqCst);
     }
 
@@ -149,7 +163,7 @@ impl Service {
     /// clients react immediately instead of waiting for the next push tick.
     pub(super) async fn refresh_pending_restart(&self, state: &AppState) {
         // Clone the baseline out so no std lock is held across the build below.
-        let Some((running_cfg, running_mode)) = self.running_config.lock().unwrap().clone() else {
+        let Some(running) = self.running_config.lock().unwrap().clone() else {
             return;
         };
         let Some(active_id) = state.active_id.as_deref() else {
@@ -166,7 +180,7 @@ impl Service {
         } else {
             ProxyMode::Tun
         };
-        match mutation_effect(&running_cfg, running_mode, &next_cfg, next_mode) {
+        match mutation_effect(&running.config, running.mode, &next_cfg, next_mode) {
             MutationEffect::LiveModeSwitch(mode) => {
                 let socks_port = state
                     .settings
@@ -176,7 +190,7 @@ impl Service {
                     .set_os_proxy(mode, next_cfg.engine, socks_port)
                     .await;
                 if let Some(running) = self.running_config.lock().unwrap().as_mut() {
-                    running.1 = mode;
+                    running.mode = mode;
                 }
             }
             MutationEffect::SetPending(pending) => {

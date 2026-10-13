@@ -1458,7 +1458,8 @@ export type ServiceStatus_Deserialize = {
 	pendingRestart?: boolean,
 	/**
 	 *  Round trip of the latest successful connectivity probe through the running
-	 *  core, in ms; `null` until one lands, or while the check is off.
+	 *  core of `active_id`, in ms; `null` until one lands, while the check is off,
+	 *  or while a saved switch to `active_id` is not running yet.
 	 */
 	latencyMs?: number | null,
 } & ServiceState_Deserialize;
@@ -1475,7 +1476,8 @@ export type ServiceStatus_Serialize = {
 	pendingRestart: boolean,
 	/**
 	 *  Round trip of the latest successful connectivity probe through the running
-	 *  core, in ms; `null` until one lands, or while the check is off.
+	 *  core of `active_id`, in ms; `null` until one lands, while the check is off,
+	 *  or while a saved switch to `active_id` is not running yet.
 	 */
 	latencyMs: number | null,
 } & ServiceState_Serialize;

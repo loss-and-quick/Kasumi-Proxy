@@ -61,11 +61,12 @@ pub fn random_tun_iface() -> String {
 /// engine marker, and return the resolved [`StartDataPath`] (engine, TUN engine,
 /// external-engine tuning, SOCKS port, proxy mode) together with the exact
 /// [`CoreConfig`] that was written — the in-memory baseline a running data path
-/// is later diffed against (the on-disk file may be tuned further after start).
+/// is later diffed against (the on-disk file may be tuned further after start) —
+/// and the id of the profile it was built from.
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
-) -> Result<(StartDataPath, CoreConfig), CommandError> {
+) -> Result<(StartDataPath, CoreConfig, String), CommandError> {
     let paths = platform.paths();
     let state = read_json::<AppState>(&paths.app_state).await;
     let id = profile_id
@@ -109,6 +110,7 @@ pub async fn resolve_and_write_config(
             mode,
         },
         built,
+        id,
     ))
 }
 
@@ -514,7 +516,8 @@ mod tests {
             .unwrap();
 
         // No explicit id → uses active_id.
-        let (opts, built) = resolve_and_write_config(&p, None).await.unwrap();
+        let (opts, built, built_id) = resolve_and_write_config(&p, None).await.unwrap();
+        assert_eq!(built_id, id);
         assert_eq!(opts.engine, CoreEngine::Xray);
         assert_eq!(opts.tun, TunEngine::Tun2socks);
         assert_eq!(opts.socks_port, 11080);
