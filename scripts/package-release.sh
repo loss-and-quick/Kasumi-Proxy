@@ -38,7 +38,10 @@ echo "→ [3/4] Building the web UI → webroot/…"
 bash "$ROOT/scripts/build-webroot.sh"
 
 echo "→ [4/4] Packaging module zip…"
+# The zip step runs from inside module/, so a relative output path would resolve
+# against the wrong directory.
 mkdir -p "$(dirname "$OUT")"
+OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 rm -f "$OUT"
 
 # Zip from inside module/ so its contents land at the archive root (where
