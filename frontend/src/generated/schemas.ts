@@ -1354,6 +1354,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("chainCandidates"),
 	profile: ProfileSchema,
 }), z.object({
+	cmd: z.literal("checkLocalPorts"),
+	settings: AdvancedSettings_SerializeSchema,
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1589,6 +1592,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("chainCandidates"),
 	profile: ProfileSchema,
 }), z.object({
+	cmd: z.literal("checkLocalPorts"),
+	settings: AdvancedSettings_DeserializeSchema,
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1729,6 +1735,10 @@ export const IdentityInputSchema = z.union([IdentityInput_DeserializeSchema, Ide
 export type IdentityInput = z.infer<typeof IdentityInputSchema>;
 
 
+export const LocalPortSchema = z.union([z.literal("force"), z.literal("http"), z.literal("pac"), z.literal("socks")]);
+export type LocalPort = z.infer<typeof LocalPortSchema>;
+
+
 export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, MutationIntent_SerializeSchema]);
 export type MutationIntent = z.infer<typeof MutationIntentSchema>;
 
@@ -1755,6 +1765,14 @@ export type PackageBlock = z.infer<typeof PackageBlockSchema>;
 
 export const PendingChangeSchema = z.union([PendingChange_DeserializeSchema, PendingChange_SerializeSchema]);
 export type PendingChange = z.infer<typeof PendingChangeSchema>;
+
+
+export const PortCollisionSchema = z.object({
+	port: z.number(),
+	first: LocalPortSchema,
+	second: LocalPortSchema,
+});
+export type PortCollision = z.infer<typeof PortCollisionSchema>;
 
 
 export const ProviderInfoSchema = z.union([ProviderInfo_DeserializeSchema, ProviderInfo_SerializeSchema]);
@@ -1911,6 +1929,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("ping"),
 	value: z.number().nullable(),
 }), z.object({
+	kind: z.literal("portCollision"),
+	value: PortCollisionSchema.nullable(),
+}), z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
 }), z.object({
@@ -1979,6 +2000,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("ping"),
 	value: z.number().nullable(),
+}), z.object({
+	kind: z.literal("portCollision"),
+	value: PortCollisionSchema.nullable(),
 }), z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
