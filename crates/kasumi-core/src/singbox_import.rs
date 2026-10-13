@@ -27,10 +27,14 @@ use crate::share::{apply_ss_plugin, as_cc, as_fingerprint, as_flow, as_ss_method
 #[derive(Debug, Default)]
 pub struct SingboxImport {
     pub profiles: Vec<Profile>,
-    /// Entries that are not servers Kasumi can use: groups, `direct`, `block`,
-    /// `dns`, unknown types and unreadable outbounds.
+    /// Entries Kasumi can't import: unknown or unsupported types and unreadable
+    /// servers. Routing outbounds such as `direct` or `selector` are not counted.
     pub skipped: u32,
 }
+
+/// Outbounds that route or group traffic instead of reaching a server. Nearly
+/// every sing-box config has some, so leaving them out is not worth a warning.
+const ROUTING_TYPES: [&str; 5] = ["direct", "block", "dns", "selector", "urltest"];
 
 /// Map the server outbounds and WireGuard endpoints of a sing-box config to profiles.
 pub fn import_singbox(config: &Value) -> SingboxImport {
@@ -43,7 +47,9 @@ pub fn import_singbox(config: &Value) -> SingboxImport {
     let mut detours = Vec::new();
     for entry in entries {
         let Some(profile) = server(entry) else {
-            out.skipped += 1;
+            if !ROUTING_TYPES.contains(&text(entry, "type").as_str()) {
+                out.skipped += 1;
+            }
             continue;
         };
         let tag = text(entry, "tag");
@@ -643,7 +649,7 @@ mod tests {
     }
 
     #[test]
-    fn singbox_unknown_types_counted() {
+    fn only_servers_kasumi_cannot_import_are_counted() {
         let imported = import_singbox(&json!({
             "inbounds": [{ "type": "mixed", "listen": "0.0.0.0", "listen_port": 1080 }],
             "route": { "final": "direct" },
@@ -667,7 +673,8 @@ mod tests {
         }));
         assert_eq!(imported.profiles.len(), 1);
         assert_eq!(imported.profiles[0].meta().remarks, "ok");
-        assert_eq!(imported.skipped, 9);
+        // ssh, the xhttp server, the one without its id, and tailscale.
+        assert_eq!(imported.skipped, 4);
     }
 
     #[test]
