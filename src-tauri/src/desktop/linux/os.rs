@@ -7,6 +7,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 
 use kasumi_backend::fs::{exists, read_text};
+use kasumi_core::request_identity::DeviceFacts;
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::platform::DesktopOs;
@@ -81,11 +82,72 @@ impl DesktopOs for LinuxOs {
     fn singbox_stack(&self) -> &'static str {
         "gvisor"
     }
+
+    async fn machine_id(&self) -> Option<String> {
+        for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
+            if let Some(id) = read_text(path).await.map(|s| s.trim().to_owned())
+                && !id.is_empty()
+            {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    async fn device_facts(&self) -> DeviceFacts {
+        let os_release = read_text("/etc/os-release").await.unwrap_or_default();
+        let env = |k: &str| std::env::var(k).ok();
+        DeviceFacts {
+            os: "Linux".into(),
+            os_version: os_release_version(&os_release),
+            // Generic on purpose: a DMI product name is a fingerprint of its own.
+            model: "PC".into(),
+            locale: posix_locale([env("LC_ALL"), env("LC_MESSAGES"), env("LANG")]),
+        }
+    }
+}
+
+/// `VERSION_ID` of an os-release file, unquoted.
+fn os_release_version(os_release: &str) -> String {
+    os_release
+        .lines()
+        .find_map(|l| l.strip_prefix("VERSION_ID="))
+        .map(|v| v.trim().trim_matches(['"', '\'']).to_owned())
+        .unwrap_or_default()
+}
+
+/// The first set locale variable, as POSIX resolves them; `C`/`POSIX` mean English.
+fn posix_locale(vars: [Option<String>; 3]) -> String {
+    vars.into_iter()
+        .flatten()
+        .map(|v| v.trim().to_owned())
+        .find(|v| !v.is_empty())
+        .filter(|v| v != "C" && v != "POSIX" && !v.starts_with("C."))
+        .unwrap_or_else(|| "en".into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn os_release_version_unquotes() {
+        let nixos = "NAME=NixOS\nVERSION_ID=\"26.05\"\nPRETTY_NAME=\"NixOS 26.05\"\n";
+        assert_eq!(os_release_version(nixos), "26.05");
+        assert_eq!(os_release_version("ID=arch\nBUILD_ID=rolling\n"), "");
+    }
+
+    #[test]
+    fn posix_locale_follows_precedence() {
+        let s = |v: &str| Some(v.to_owned());
+        assert_eq!(posix_locale([None, s(""), s("ru_RU.UTF-8")]), "ru_RU.UTF-8");
+        assert_eq!(
+            posix_locale([s("de_DE.UTF-8"), None, s("ru_RU.UTF-8")]),
+            "de_DE.UTF-8"
+        );
+        assert_eq!(posix_locale([None, None, s("C.UTF-8")]), "en");
+        assert_eq!(posix_locale([None, None, None]), "en");
+    }
 
     #[tokio::test]
     async fn iface_traffic_handles_absent_iface() {

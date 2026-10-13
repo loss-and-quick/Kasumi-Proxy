@@ -29,6 +29,7 @@ use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, re
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
 use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
     AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
     force_socks_port,
@@ -68,6 +69,12 @@ pub(crate) trait DesktopOs: Send + Sync {
     /// The sing-box tun stack to pin: `"gvisor"` for the Linux root-binary path,
     /// `"system"` for Windows (wintun + kernel stack).
     fn singbox_stack(&self) -> &'static str;
+
+    /// The host id: `/etc/machine-id` on Linux, `MachineGuid` on Windows.
+    async fn machine_id(&self) -> Option<String>;
+
+    /// OS name and release, a generic model and the UI locale.
+    async fn device_facts(&self) -> DeviceFacts;
 }
 
 pub struct DesktopPlatform {
@@ -644,6 +651,14 @@ impl Platform for DesktopPlatform {
         // This runs in the GUI process, inside the user's session.
         open::that_detached(url)?;
         Ok(())
+    }
+
+    async fn device_facts(&self) -> DeviceFacts {
+        self.os.device_facts().await
+    }
+
+    async fn machine_id(&self) -> Option<String> {
+        self.os.machine_id().await
     }
 
     fn tune_config(&self, engine: Engine, config: &mut Value) {
