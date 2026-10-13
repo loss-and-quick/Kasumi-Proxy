@@ -30,9 +30,7 @@ use kasumi_core::data_path_state::{DataPathState, HelperSlot, TunSlot};
 use kasumi_core::enums::{CoreEngine, TunEngine, wire_value};
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
-use kasumi_core::state::{
-    AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
-};
+use kasumi_core::state::{AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
 use kasumi_core::tun::TunOptions;
 
 use super::network::run_watcher;
@@ -235,9 +233,8 @@ pub(super) async fn read_iface(file: &str) -> Option<String> {
 
 /// (Re)install the per-app guards for the running data path: its local proxy
 /// ports and the tun devices it brought up (see `routing::guard_rules`).
-async fn refresh_guards(socks_port: u16) {
-    let http = http_port().await;
-    let ports = [socks_port, http, force_socks_port(socks_port, http)];
+async fn refresh_guards(ports: &LocalPorts) {
+    let ports = [ports.socks, ports.http, ports.force];
     let tun = read_iface(TUN_IFACE_FILE).await;
     let tun2 = read_iface(TUN2_IFACE_FILE).await;
     let tuns: Vec<&str> = [tun.as_deref(), tun2.as_deref()]
@@ -496,7 +493,7 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
     // own iptables during startup and shells `iptables` without `-w`. Another holder
     // of the global xtables.lock (netd) can still fail that start; the loop above
     // retries it.
-    refresh_guards(plan.ports.socks).await;
+    refresh_guards(&plan.ports).await;
     // Hotspot / tethering clients, if the user asked for them (watches the setting
     // and the tethering interfaces for as long as the data path runs).
     start_tether_watcher(if native {
@@ -715,19 +712,15 @@ impl Platform for AndroidPlatform {
     }
 
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus> {
-        let port = read_state()
-            .await
-            .map(|d| d.socks_port)
-            .filter(|&p| p != 0)
-            .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+        let doc = read_state().await.unwrap_or_default();
+        let (socks_port, http_port, force_port) = doc.listening_ports(http_port().await);
         let pid = read_pidfile(PIDFILE).await;
         let running = pid > 0 && pid_matches_any(pid, &core_bins()).await;
-        let http = http_port().await;
         Ok(ProxyStatus {
             running,
-            socks_port: port,
-            http_port: http,
-            force_port: force_socks_port(port, http),
+            socks_port,
+            http_port,
+            force_port,
         })
     }
 

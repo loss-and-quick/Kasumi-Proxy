@@ -31,9 +31,7 @@ use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits, TunPlan}
 use kasumi_core::data_path_state::DataPathState;
 use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::request_identity::DeviceFacts;
-use kasumi_core::state::{
-    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, force_socks_port,
-};
+use kasumi_core::state::{DEFAULT_LOCAL_HTTP_PORT, ProxyMode, SingboxStack};
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
@@ -611,20 +609,15 @@ impl Platform for DesktopPlatform {
     }
 
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus> {
-        let port = self
-            .read_state()
-            .await
-            .map(|d| d.socks_port)
-            .filter(|&p| p != 0)
-            .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+        let doc = self.read_state().await.unwrap_or_default();
+        let (socks_port, http_port, force_port) = doc.listening_ports(self.http_port().await);
         let pid = read_pidfile(&self.p.pidfile).await;
         let running = pid > 0 && pid_matches_any(pid, &self.p.core_bins()).await;
-        let http_port = self.http_port().await;
         Ok(ProxyStatus {
             running,
-            socks_port: port,
+            socks_port,
             http_port,
-            force_port: force_socks_port(port, http_port),
+            force_port,
         })
     }
 

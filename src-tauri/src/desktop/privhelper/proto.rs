@@ -90,6 +90,9 @@ pub enum PrivReply {
         running: bool,
         socks_port: u16,
         http_port: u16,
+        /// Absent from a helper that derived it from the http port.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        force_port: Option<u16>,
     },
     Healthy {
         healthy: Option<bool>,
@@ -295,6 +298,7 @@ mod tests {
                 running: true,
                 socks_port: 10808,
                 http_port: 10809,
+                force_port: Some(10810),
             },
             PrivReply::Healthy {
                 healthy: Some(false),
