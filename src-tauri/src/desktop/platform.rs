@@ -270,11 +270,16 @@ impl DesktopPlatform {
                 // escape (the core's own egress rides the physical default route).
                 return self.spawn_core_verify(&core_bin, &cfg, &log).await;
             }
-            TunPlan::Native { .. } => {
+            TunPlan::Native { force_tun } => {
                 // Native sing-box tun: the core owns the tun; the server bypass is baked
                 // into the config (route_exclude_address) by prepare_singbox_config.
-                prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file)
-                    .await?;
+                prepare_singbox_config(
+                    &cfg,
+                    &self.p.tun_iface_file,
+                    &self.p.tun2_iface_file,
+                    *force_tun,
+                )
+                .await?;
 
                 // Defensive sweep before bring-up: if a previous core crashed (so
                 // stop_data_path never ran its teardown), its orphaned auto_route rules

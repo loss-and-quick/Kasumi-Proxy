@@ -254,11 +254,12 @@ pub async fn missing_rule_sets(cfg_text: &str) -> Vec<String> {
 
 /// Inject random `interface_name`s into the sing-box tun inbounds (stripping any a
 /// prior start added, so re-runs don't stack duplicates) and persist them. The
-/// second name is `None` when there is no force-proxy inbound.
+/// second name is `None` when the plan runs no force-proxy tun.
 pub async fn inject_singbox_ifaces(
     cfg_path: &Path,
     tun_iface_file: &Path,
     tun2_iface_file: &Path,
+    force_tun: bool,
 ) -> std::io::Result<(String, Option<String>)> {
     let raw = read_text(cfg_path).await.unwrap_or_default();
     let strip = Regex::new(r#", "interface_name": "[^"]*""#).unwrap();
@@ -276,7 +277,7 @@ pub async fn inject_singbox_ifaces(
         1,
     );
 
-    let tun2 = if text.contains(r#""tag": "tun-force""#) {
+    let tun2 = if force_tun {
         let t2 = read_text(tun2_iface_file)
             .await
             .map(|s| s.trim().to_owned())
@@ -510,7 +511,7 @@ mod tests {
             r#"{ "inbounds": [{ "type": "tun", "tag": "tun-in" }, { "type": "tun", "tag": "tun-force" }] }"#,
         )
         .unwrap();
-        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2, true).await.unwrap();
         assert!(tun2.is_some());
         let text = read_text(&cfg).await.unwrap();
         assert!(text.contains(&format!(r#""interface_name": "{tun}""#)));
@@ -518,7 +519,7 @@ mod tests {
         assert_eq!(read_text(&f1).await.as_deref(), Some(tun.as_str()));
 
         // Re-running reuses the persisted names and doesn't stack duplicates.
-        let (tun_again, _) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        let (tun_again, _) = inject_singbox_ifaces(&cfg, &f1, &f2, true).await.unwrap();
         assert_eq!(tun_again, tun);
         let text2 = read_text(&cfg).await.unwrap();
         assert_eq!(text2.matches(r#""interface_name""#).count(), 2);
@@ -531,14 +532,14 @@ mod tests {
         let f1 = dir.path().join("tun1");
         let f2 = dir.path().join("tun2");
         // A stale tun2 name from a prior force-proxy run must be cleared when the
-        // config no longer has a force-proxy inbound.
+        // plan no longer runs a force-proxy tun.
         std::fs::write(&f2, b"stale").unwrap();
         std::fs::write(
             &cfg,
             r#"{ "inbounds": [{ "type": "tun", "tag": "tun-in" }] }"#,
         )
         .unwrap();
-        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2, false).await.unwrap();
         assert!(tun2.is_none());
         assert!(!exists(&f2).await);
         let text = read_text(&cfg).await.unwrap();

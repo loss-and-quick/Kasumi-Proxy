@@ -449,11 +449,12 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
             return fail("missing rule_set assets").await;
         }
         // Only the native tun has tun inbounds to name; socks-only has none.
-        if native {
+        if let TunPlan::Native { force_tun } = plan.tun {
             inject_singbox_ifaces(
                 Path::new(cfg),
                 Path::new(TUN_IFACE_FILE),
                 Path::new(TUN2_IFACE_FILE),
+                force_tun,
             )
             .await?;
         }
