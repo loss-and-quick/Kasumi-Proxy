@@ -301,21 +301,25 @@ impl Drop for PortLease {
 /// TIME_WAIT port — still listed in `/proc` — won't be rebound under it.
 pub async fn lease_ports(start: u16, span: u16) -> PortLease {
     let used = used_ports().await;
-    let mut leased = leased_ports().lock().unwrap();
+    let base = reserve(&used, &mut leased_ports().lock().unwrap(), start, span);
+    PortLease { base, span }
+}
+
+/// Record in `leased` the first `span` consecutive ports from `start` that are in
+/// neither `used` nor `leased`, and return the first. With none free, `start`.
+fn reserve(used: &HashSet<u16>, leased: &mut HashSet<u16>, start: u16, span: u16) -> u16 {
     let mut port = start;
     while port <= 65000 {
         if (0..span).all(|i| !used.contains(&(port + i)) && !leased.contains(&(port + i))) {
-            for i in 0..span {
-                leased.insert(port + i);
-            }
-            return PortLease { base: port, span };
+            break;
         }
         port += 1;
     }
+    let base = if port <= 65000 { port } else { start };
     for i in 0..span {
-        leased.insert(start + i);
+        leased.insert(base + i);
     }
-    PortLease { base: start, span }
+    base
 }
 
 /// TCP-connect latency probe: round-trip ms to `host:port`, or `None` on
@@ -545,20 +549,27 @@ mod tests {
         assert_eq!(res.unwrap().body, b"ok");
     }
 
-    #[tokio::test]
-    async fn lease_ports_reserves_disjoint_ranges_and_releases_on_drop() {
-        let l1 = lease_ports(41000, 2).await;
-        let b1 = l1.base();
-        assert!(b1 >= 41000);
-        // A concurrent lease anchored on the same base skips the held pair.
-        let l2 = lease_ports(b1, 2).await;
-        assert!(l2.base() >= b1 + 2, "leases must not overlap");
-        // Dropping l1 frees its ports; a fresh lease reclaims the same base
-        // (l2 still holds its own range, so this isn't just landing anywhere).
-        drop(l1);
-        let l3 = lease_ports(b1, 2).await;
-        assert_eq!(l3.base(), b1);
-        drop(l2);
-        drop(l3);
+    #[test]
+    fn dropping_a_lease_releases_its_ports() {
+        // Far below any lease start, so no sibling test holds them.
+        leased_ports().lock().unwrap().extend([7, 8]);
+        drop(PortLease { base: 7, span: 2 });
+        let leased = leased_ports().lock().unwrap();
+        assert!(!leased.contains(&7) && !leased.contains(&8));
+    }
+
+    // The port scan and the process-wide lease set are left out here: other
+    // processes bind ports and sibling tests lease them while this runs.
+    #[test]
+    fn reserve_skips_used_and_leased_ports_and_reuses_released_ones() {
+        let used = HashSet::from([41001]);
+        let mut leased = HashSet::new();
+        assert_eq!(reserve(&used, &mut leased, 41000, 2), 41002);
+        // A second lease anchored on the same start skips the held pair.
+        assert_eq!(reserve(&used, &mut leased, 41000, 2), 41004);
+        // What dropping the first lease does: its base is free again.
+        leased.remove(&41002);
+        leased.remove(&41003);
+        assert_eq!(reserve(&used, &mut leased, 41000, 2), 41002);
     }
 }
