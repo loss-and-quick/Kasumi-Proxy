@@ -310,3 +310,202 @@ fn check(rc: u32) -> std::io::Result<()> {
         rc => Err(std::io::Error::from_raw_os_error(rc as i32)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use windows_sys::Win32::NetworkManagement::WindowsFilteringPlatform::{
+        FWPM_FILTER_FLAG_BOOTTIME, FWPM_FILTER_FLAG_PERSISTENT, FWPM_SUBLAYER_FLAG_PERSISTENT,
+        FwpmSubLayerGetByKey0,
+    };
+
+    use super::*;
+
+    const LUID: u64 = 0x0006_0000_0000_0007;
+    const CORE: &str = r"C:\Kasumi\xray.exe";
+    const TUN_DNS: Ipv4Addr = Ipv4Addr::new(198, 18, 0, 2);
+
+    fn test_plan() -> Plan {
+        plan(GUID::from_u128(1), LUID, TUN_DNS, CORE)
+    }
+
+    fn key_of(g: GUID) -> (u32, u16, u16, [u8; 8]) {
+        (g.data1, g.data2, g.data3, g.data4)
+    }
+
+    fn only_dns() -> Vec<Condition> {
+        vec![
+            Condition::RemotePort(53),
+            Condition::Protocol(17),
+            Condition::Protocol(6),
+        ]
+    }
+
+    #[test]
+    fn plan_blocks_dns_outside_the_tun_only() {
+        let p = test_plan();
+        for layer in [Layer::ConnectV4, Layer::ConnectV6] {
+            let on_layer: Vec<&Filter> = p.filters.iter().filter(|f| f.layer == layer).collect();
+            let blocks: Vec<&&Filter> = on_layer.iter().filter(|f| !f.permit).collect();
+            assert_eq!(blocks.len(), 1, "{layer:?}");
+            // Only DNS is ever blocked.
+            assert_eq!(blocks[0].conditions, only_dns());
+            let permit = |c: Condition| {
+                on_layer
+                    .iter()
+                    .find(|f| f.permit && f.conditions == [c.clone()])
+                    .map(|f| f.weight)
+                    .unwrap_or_else(|| panic!("no {c:?} permit on {layer:?}"))
+            };
+            assert!(permit(Condition::LocalInterface(LUID)) > blocks[0].weight);
+            assert!(permit(Condition::App(CORE.into())) > blocks[0].weight);
+        }
+        let to_resolver: Vec<&Filter> = p
+            .filters
+            .iter()
+            .filter(|f| f.conditions.contains(&Condition::RemoteAddr(TUN_DNS)))
+            .collect();
+        assert_eq!(to_resolver.len(), 1);
+        assert!(to_resolver[0].permit);
+        assert_eq!(to_resolver[0].layer, Layer::ConnectV4);
+        assert!(to_resolver[0].weight > 12);
+        assert!(p.filters.iter().all(|f| f.weight <= 15));
+    }
+
+    // Nothing may outlive the helper: the session is dynamic, and no object asks to
+    // persist or to apply at boot.
+    #[test]
+    fn guard_is_dynamic_and_persists_nothing() {
+        let mut name = wide(NAME);
+        assert_eq!(session(&mut name).flags, FWPM_SESSION_FLAG_DYNAMIC);
+        let sl = sublayer(GUID::from_u128(1), &mut name);
+        assert_eq!(sl.flags & FWPM_SUBLAYER_FLAG_PERSISTENT, 0);
+        assert_eq!(sl.weight, u16::MAX);
+        let p = test_plan();
+        for f in &p.filters {
+            let mut conditions: Vec<_> = f
+                .conditions
+                .iter()
+                .map(|c| raw_condition(c, null_mut()))
+                .collect();
+            let raw = raw_filter(f, p.sublayer, &mut name, &mut conditions);
+            assert_eq!(
+                raw.flags & (FWPM_FILTER_FLAG_PERSISTENT | FWPM_FILTER_FLAG_BOOTTIME),
+                0
+            );
+            assert_eq!(raw.numFilterConditions as usize, f.conditions.len());
+            assert_eq!(key_of(raw.subLayerKey), key_of(p.sublayer));
+            // SAFETY: the weight was written as uint8.
+            assert_eq!(unsafe { raw.weight.Anonymous.uint8 }, f.weight);
+            let action = if f.permit {
+                FWP_ACTION_PERMIT
+            } else {
+                FWP_ACTION_BLOCK
+            };
+            assert_eq!(raw.action.r#type, action);
+        }
+    }
+
+    #[test]
+    fn raw_conditions_carry_their_values() {
+        let mut blob = FWP_BYTE_BLOB {
+            size: 0,
+            data: null_mut(),
+        };
+        let blob: *mut FWP_BYTE_BLOB = &raw mut blob;
+        let luid = Condition::LocalInterface(LUID);
+        let cases = [
+            (
+                Condition::App(CORE.into()),
+                FWPM_CONDITION_ALE_APP_ID,
+                FWP_BYTE_BLOB_TYPE,
+            ),
+            (luid.clone(), FWPM_CONDITION_IP_LOCAL_INTERFACE, FWP_UINT64),
+            (
+                Condition::RemoteAddr(TUN_DNS),
+                FWPM_CONDITION_IP_REMOTE_ADDRESS,
+                FWP_UINT32,
+            ),
+            (
+                Condition::RemotePort(53),
+                FWPM_CONDITION_IP_REMOTE_PORT,
+                FWP_UINT16,
+            ),
+            (
+                Condition::Protocol(17),
+                FWPM_CONDITION_IP_PROTOCOL,
+                FWP_UINT8,
+            ),
+        ];
+        for (c, field, kind) in &cases {
+            let raw = raw_condition(c, blob);
+            assert_eq!(key_of(raw.fieldKey), key_of(*field), "{c:?}");
+            assert_eq!(raw.conditionValue.r#type, *kind, "{c:?}");
+            assert_eq!(raw.matchType, FWP_MATCH_EQUAL);
+        }
+        // SAFETY: each union member read is the one `raw_condition` wrote.
+        unsafe {
+            let v = |c: &Condition| raw_condition(c, blob).conditionValue.Anonymous;
+            assert_eq!(v(&cases[0].0).byteBlob, blob);
+            assert_eq!(*v(&luid).uint64, LUID);
+            // WFP takes IPv4 addresses as host-order integers.
+            assert_eq!(v(&cases[2].0).uint32, 0xC612_0002);
+            assert_eq!(v(&cases[3].0).uint16, 53);
+            assert_eq!(v(&cases[4].0).uint8, 17);
+        }
+    }
+
+    fn sublayer_exists(key: GUID) -> bool {
+        let mut engine: HANDLE = null_mut();
+        // SAFETY: plain WFP calls on a handle this function owns.
+        unsafe {
+            let mut session: FWPM_SESSION0 = std::mem::zeroed();
+            session.flags = FWPM_SESSION_FLAG_DYNAMIC;
+            check(FwpmEngineOpen0(
+                null(),
+                RPC_C_AUTHN_WINNT,
+                null(),
+                &session,
+                &mut engine,
+            ))
+            .unwrap();
+            let mut found = null_mut();
+            let rc = FwpmSubLayerGetByKey0(engine, &key, &mut found);
+            if rc == ERROR_SUCCESS {
+                FwpmFreeMemory0((&raw mut found).cast());
+            }
+            FwpmEngineClose0(engine);
+            rc == ERROR_SUCCESS
+        }
+    }
+
+    // Against the real base filtering engine: every filter of a plan is accepted,
+    // and closing the engine handle, which the kernel does when the process dies,
+    // removes them. The blocks are turned into permits, so nothing is filtered.
+    // Skipped without the rights to add filters, or without a filtering engine.
+    #[test]
+    fn closing_the_engine_removes_the_guard() {
+        use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
+        use windows_sys::Win32::System::Rpc::RPC_S_CANNOT_SUPPORT;
+
+        let exe = std::env::current_exe().unwrap();
+        let key = new_sublayer_key().unwrap();
+        let mut p = plan(key, LUID, TUN_DNS, &exe.to_string_lossy());
+        for f in &mut p.filters {
+            f.permit = true;
+        }
+        let guard = match install(&p) {
+            Ok(guard) => guard,
+            Err(e)
+                if [ERROR_ACCESS_DENIED as i32, RPC_S_CANNOT_SUPPORT]
+                    .contains(&e.raw_os_error().unwrap_or_default()) =>
+            {
+                eprintln!("skipped: {e}");
+                return;
+            }
+            Err(e) => panic!("install: {e}"),
+        };
+        assert!(sublayer_exists(key));
+        drop(guard);
+        assert!(!sublayer_exists(key));
+    }
+}

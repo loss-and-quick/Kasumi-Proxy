@@ -485,6 +485,26 @@ mod tests {
         assert!(metric.contains(&"metric=1".to_string()));
     }
 
+    // DNS capture leaves nothing for a later start to undo: its adapter settings go
+    // with the tun and its filters with this process, so only routes are recorded.
+    #[test]
+    fn route_state_records_only_routes() {
+        let state = RouteState {
+            tun: "kasumi0".into(),
+            tun_ifindex: 42,
+            bypass: vec!["1.2.3.4/32".into()],
+        };
+        let json = serde_json::to_value(&state).unwrap();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["bypass", "tun", "tun_ifindex"]);
+    }
+
     #[test]
     fn splits_cidr_family() {
         assert_eq!(split_cidr("1.2.3.4/32"), ("1.2.3.4", true));
