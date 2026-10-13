@@ -521,7 +521,7 @@ pub(crate) mod tests {
         assert_eq!(ing.meta.profile_title(), Some("Example VPN 🗽"));
         assert_eq!(ing.routing.len(), 1);
         assert!(!ing.encrypted && !ing.used_legacy_parser);
-        assert_eq!(ing.warnings, []);
+        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
     }
 
     #[test]
@@ -560,9 +560,24 @@ pub(crate) mod tests {
         assert_eq!(ing.profiles.len(), 29);
         assert_eq!(count(&ing.profiles, "vless"), 25);
         assert_eq!(count(&ing.profiles, "hysteria2"), 4);
-        // The selector, the urltest group and `direct`.
-        assert_eq!(ing.warnings, [SubWarning::SkippedOutbounds { count: 3 }]);
+        // Its selector, urltest group and `direct` are no reason to warn.
+        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
         assert_eq!(ing.meta.profile_title(), Some("Example VPN 🗽"));
+    }
+
+    #[test]
+    fn singbox_server_of_an_unknown_type_is_a_warning() {
+        let body = serde_json::json!({ "outbounds": [
+            { "type": "selector", "tag": "proxy", "outbounds": ["ok", "new"] },
+            { "type": "vless", "tag": "ok", "server": "ok.example", "server_port": 443,
+              "uuid": "b831381d-6324-4d53-ad4f-8cda48b30811" },
+            { "type": "brand-new", "tag": "new", "server": "new.example", "server_port": 443 },
+            { "type": "direct", "tag": "direct" },
+        ]});
+        let body = serde_json::to_vec(&body).unwrap();
+        let ing = ingest(&input(URL, &[], &body)).unwrap();
+        assert_eq!(ing.profiles.len(), 1);
+        assert_eq!(ing.warnings, [SubWarning::SkippedOutbounds { count: 1 }]);
     }
 
     fn encrypted(key_id: &str, plaintext: &[u8]) -> (Vec<(String, String)>, Vec<u8>) {
@@ -725,7 +740,7 @@ pub(crate) mod tests {
         ])
         .to_string();
         let ing = ingest(&allowed(body.as_bytes())).unwrap();
-        assert_eq!(ing.warnings, []);
+        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
         let names: Vec<&str> = ing
             .profiles
             .iter()

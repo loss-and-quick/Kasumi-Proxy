@@ -1620,8 +1620,8 @@ export type SubWarning = { kind: "skippedLines"; count: number; sample: string }
 /**  Provider Xray configs the sanitiser could not use. */
 { kind: "rejectedConfigs"; count: number } | 
 /**
- *  sing-box outbounds that are not servers Kasumi can import (groups, `direct`,
- *  `block`, unknown types).
+ *  sing-box outbounds Kasumi can't import: an unknown or unsupported type, or a
+ *  server it can't read. Routing outbounds (`direct`, groups) are not counted.
  */
 { kind: "skippedOutbounds"; count: number };
 
