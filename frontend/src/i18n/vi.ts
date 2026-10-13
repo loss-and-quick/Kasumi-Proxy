@@ -805,9 +805,9 @@ const vi = {
     other: "# cấu hình Xray từ nhà cung cấp không dùng được và đã bị bỏ qua",
   }),
   "subs.warnings.skippedOutbounds": plural("count", {
-    one: "# outbound sing-box không phải máy chủ mà Kasumi có thể nhập (nhóm, direct, block hoặc loại không rõ) và đã bị bỏ qua",
+    one: "# máy chủ sing-box dùng giao thức hoặc cài đặt mà Kasumi không thể nhập và đã bị bỏ qua",
     other:
-      "# outbound sing-box không phải máy chủ mà Kasumi có thể nhập (nhóm, direct, block hoặc loại không rõ) và đã bị bỏ qua",
+      "# máy chủ sing-box dùng giao thức hoặc cài đặt mà Kasumi không thể nhập và đã bị bỏ qua",
   }),
   "subs.menu.more": "Thêm",
   "subs.menu.history": "Thay đổi từ nhà cung cấp",

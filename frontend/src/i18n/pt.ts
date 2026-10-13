@@ -827,9 +827,9 @@ const pt = {
     other: "# configurações do Xray do provedor não puderam ser usadas e foram ignoradas",
   }),
   "subs.warnings.skippedOutbounds": plural("count", {
-    one: "# outbound do sing-box não é um servidor que o Kasumi possa importar (um grupo, direct, block ou um tipo desconhecido) e foi ignorado",
+    one: "# servidor do sing-box usa um protocolo ou configurações que o Kasumi não consegue importar e foi ignorado",
     other:
-      "# outbounds do sing-box não são servidores que o Kasumi possa importar (grupos, direct, block ou tipos desconhecidos) e foram ignorados",
+      "# servidores do sing-box usam protocolos ou configurações que o Kasumi não consegue importar e foram ignorados",
   }),
   "subs.menu.more": "Mais",
   "subs.menu.history": "Mudanças do provedor",

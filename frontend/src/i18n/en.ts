@@ -821,9 +821,8 @@ const en = {
     other: "# Xray configs from the provider couldn't be used and were skipped",
   }),
   "subs.warnings.skippedOutbounds": plural("count", {
-    one: "# sing-box outbound isn't a server Kasumi can import (a group, direct, block or an unknown type) and was skipped",
-    other:
-      "# sing-box outbounds aren't servers Kasumi can import (groups, direct, block or unknown types) and were skipped",
+    one: "# sing-box server uses a protocol or settings Kasumi can't import and was skipped",
+    other: "# sing-box servers use protocols or settings Kasumi can't import and were skipped",
   }),
   "subs.menu.more": "More",
   "subs.menu.history": "Provider changes",

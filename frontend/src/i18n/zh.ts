@@ -780,8 +780,8 @@ const zh = {
     other: "提供商的 # 个 Xray 配置无法使用，已跳过",
   }),
   "subs.warnings.skippedOutbounds": plural("count", {
-    one: "# 个 sing-box 出站不是 Kasumi 可导入的服务器（分组、direct、block 或未知类型），已跳过",
-    other: "# 个 sing-box 出站不是 Kasumi 可导入的服务器（分组、direct、block 或未知类型），已跳过",
+    one: "# 个 sing-box 服务器使用了 Kasumi 无法导入的协议或设置，已跳过",
+    other: "# 个 sing-box 服务器使用了 Kasumi 无法导入的协议或设置，已跳过",
   }),
   "subs.menu.more": "更多",
   "subs.menu.history": "服务商的更改",
