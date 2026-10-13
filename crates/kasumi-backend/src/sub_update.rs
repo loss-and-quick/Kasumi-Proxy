@@ -328,6 +328,8 @@ async fn fetch_and_map(
         max_body_bytes: Some(limits().max_body_bytes),
         cookie_jar: (identity.cookie_jar && request.use_cookie_jar).then(|| cookies.clone()),
         gzip_only: true,
+        // Offer HTTP/2 as Happ's OkHttp does; downloads and probes keep HTTP/1.1.
+        http2: true,
         ..Default::default()
     };
     // The fragment carries provider directives for the import and never goes on
@@ -627,7 +629,7 @@ async fn record_error(platform: &dyn Platform, sub_id: &str, e: &SubFetchError) 
 mod tests {
     use super::*;
     use crate::state::write_app_state;
-    use crate::testutil::{TestPlatform, http_response, sample_vless, serve};
+    use crate::testutil::{TestPlatform, http_response, sample_vless, serve, serve_tls};
     use kasumi_core::state::default_app_state;
     use std::sync::Mutex as StdMutex;
 
@@ -923,6 +925,27 @@ mod tests {
             sent_header(&requests, 0, "accept-encoding").as_deref(),
             Some("gzip")
         );
+    }
+
+    #[tokio::test]
+    async fn subscription_fetch_agrees_http2_over_tls() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve_tls(LINK).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        // The test server's certificate is self-signed.
+        state.subscriptions[0].allow_insecure = true;
+        write_app_state(&p, &state).await.unwrap();
+        let state = update(&p).await;
+
+        let seen = requests.lock().unwrap()[0].clone();
+        assert_eq!(seen.alpn.as_deref(), Some("h2"));
+        assert_eq!(seen.version, "HTTP/2");
+        assert!(
+            seen.headers.contains(&"x-device-locale".to_string()),
+            "{seen:?}"
+        );
+        assert_eq!(state.subscriptions[0].last_error, None);
     }
 
     #[tokio::test]

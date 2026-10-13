@@ -2023,6 +2023,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef8e5e5a340588f4452631496976cf8636d4a7ecf600239fdc27615d2530bc16"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http",
+ "indexmap 2.14.0",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2176,6 +2195,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "httparse",
@@ -2626,9 +2646,12 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "bytes",
  "chrono",
+ "h2",
  "happ-sub",
  "hmac",
+ "http",
  "kasumi-core",
  "libc",
  "log",
@@ -2641,6 +2664,7 @@ dependencies = [
  "specta",
  "tempfile",
  "tokio",
+ "tokio-rustls",
  "uuid",
  "windows-sys 0.59.0",
 ]
@@ -4044,6 +4068,7 @@ dependencies = [
  "cookie",
  "cookie_store",
  "futures-core",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
