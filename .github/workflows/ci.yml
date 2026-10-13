@@ -52,8 +52,8 @@ jobs:
           match() { printf '%s\n' "$files" | grep -Eq "$1"; }
           fe=false; rs=false; dk=false; nx=false
           match '^(frontend/|package\.json|bun\.lock|biome\.json)' && fe=true
-          match '^(crates/|src-tauri/|Cargo\.(toml|lock)|flake\.(nix|lock))' && rs=true
-          match '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock))' && dk=true
+          match '^(crates/|\.github/actions/setup-rust/|src-tauri/|Cargo\.(toml|lock)|rust-toolchain\.toml|flake\.(nix|lock))' && rs=true
+          match '^(crates/|src-tauri/|frontend/|Cargo\.(toml|lock)|rust-toolchain\.toml|\.github/actions/setup-rust/)' && dk=true
           match '^(nix/|flake\.(nix|lock))' && nx=true
           {
             echo "frontend=$fe"
