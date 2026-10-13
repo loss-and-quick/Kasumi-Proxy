@@ -119,7 +119,13 @@ async fn run_cli(platform: Arc<dyn Platform>, args: &[String]) {
         print_error(&format!("unknown command: {verb}"));
         std::process::exit(1);
     };
-    match dispatch(&*platform, cmd).await {
+    let result = if matches!(cmd, Command::Status) {
+        // The connectivity verdict lives in the daemon, so ask it first.
+        crate::cli::status(&*platform, crate::cli::DAEMON_TIMEOUT).await
+    } else {
+        dispatch(&*platform, cmd).await
+    };
+    match result {
         Ok(resp) => print_response(resp),
         Err(e) => {
             print_error(&e.0);
