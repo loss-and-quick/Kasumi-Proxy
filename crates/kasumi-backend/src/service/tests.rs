@@ -75,7 +75,7 @@ impl Platform for RecordingPlatform {
     fn supports_proxy_modes(&self) -> bool {
         true
     }
-    async fn set_os_proxy(&self, mode: ProxyMode, _engine: Engine, _socks_port: u16) {
+    async fn set_os_proxy(&self, mode: ProxyMode, _plan: &DataPathPlan) {
         self.log(&format!("os_proxy:{mode:?}"));
     }
     async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {

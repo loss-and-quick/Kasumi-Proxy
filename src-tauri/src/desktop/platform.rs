@@ -27,14 +27,13 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
-use kasumi_core::data_path_state::{DataPathState, TunSelection};
-use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits, TunPlan};
+use kasumi_core::data_path_state::DataPathState;
+use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
-    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
-    force_socks_port,
+    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, force_socks_port,
 };
-use kasumi_core::tun::TunOptions;
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
@@ -66,9 +65,9 @@ pub(crate) trait DesktopOs: Send + Sync {
     /// start).
     async fn tun_capable(&self) -> bool;
 
-    /// The sing-box tun stack to pin: `"gvisor"` for the Linux root-binary path,
-    /// `"system"` for Windows (wintun + kernel stack).
-    fn singbox_stack(&self) -> &'static str;
+    /// The sing-box tun stack to pin: gvisor for the Linux root-binary path, system
+    /// for Windows (wintun + kernel stack).
+    fn singbox_stack(&self) -> SingboxStack;
 
     /// The host id: `/etc/machine-id` on Linux, `MachineGuid` on Windows.
     async fn machine_id(&self) -> Option<String>;
@@ -152,13 +151,6 @@ impl DesktopPlatform {
             .unwrap_or(DEFAULT_LOCAL_HTTP_PORT)
     }
 
-    async fn pac_port(&self) -> u16 {
-        kasumi_backend::state::read_state_shell(&self.p.backend.app_state)
-            .await
-            .and_then(|s| s.settings.local_pac_port)
-            .unwrap_or(DEFAULT_LOCAL_PAC_PORT)
-    }
-
     /// The user's TUN-exclude CIDRs (e.g. docker bridge networks) from the saved
     /// settings, parsed into a list. Empty when unset — the proxy-server bypass
     /// still applies on its own.
@@ -202,11 +194,11 @@ impl DesktopPlatform {
     /// The external tun helper binary the *running* data-path expects, or `None` when
     /// the core owns its tun natively (or no document is recorded — nothing is up).
     /// The tun/engine → helper decision is a lookup on the recorded document
-    /// ([`DataPathState::external_tun`]); this shell only maps the resolved engine to
+    /// ([`DataPathState::helpers`]); this shell only maps the resolved engine to
     /// its binary via [`tun_engine`]. Used by the watchdog and teardown.
     async fn expected_helper_bin(&self) -> Option<String> {
-        let tun = self.read_state().await?.external_tun()?;
-        tun_engine::helper_bin(tun, &self.p).map(str::to_owned)
+        let state = self.read_state().await?;
+        expected_helper(&state, &self.p).map(str::to_owned)
     }
 
     /// Keep sing-box's geo `.srs` rule-sets in step with their `.dat` sources and
@@ -240,20 +232,13 @@ impl DesktopPlatform {
         Ok(())
     }
 
-    /// Bring up the data-path for a `(core, tun engine, proxy mode)` triple. The
-    /// shared steps (binary/config checks, geo prep, core spawn) live here; the
-    /// genuinely different shapes are the native sing-box tun (the core owns it),
-    /// an external userspace tun (a helper fronts a socks-only core), and the
-    /// no-tun modes (the core's local inbound is the whole data path).
+    /// Bring up the data-path a plan describes. The shared steps (binary/config
+    /// checks, geo prep, core spawn) live here; the genuinely different shapes are
+    /// the plan's tun: none (the core's local inbound is the whole data path), native
+    /// (the sing-box core owns it), or external (a helper fronts a socks-only core).
     /// Engine-specific spawn details live solely in [`super::tun_engine`].
-    async fn start_proxy(
-        &self,
-        engine: CoreEngine,
-        tun: TunEngine,
-        tun_opts: &TunOptions,
-        socks_port: u16,
-        mode: ProxyMode,
-    ) -> anyhow::Result<()> {
+    async fn start_proxy(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        let engine = plan.engine;
         let is_singbox = engine == CoreEngine::SingBox;
         let core_bin = self.core_bin(engine).to_owned();
         let cfg = if is_singbox {
@@ -278,34 +263,36 @@ impl DesktopPlatform {
             self.singbox_geo_prep(&cfg_text).await?;
         }
 
-        if mode != ProxyMode::Tun {
-            // proxy-only/system/pac: the core's local socks/http inbound is the
-            // whole data path — no tun device, no routing rewrite, and nothing to
-            // escape (the core's own egress rides the physical default route).
-            self.spawn_core_verify(&core_bin, &cfg, &log).await?;
-            return Ok(());
-        }
+        let ext = match &plan.tun {
+            TunPlan::None => {
+                // proxy-only/system/pac: the core's local socks/http inbound is the
+                // whole data path — no tun device, no routing rewrite, and nothing to
+                // escape (the core's own egress rides the physical default route).
+                return self.spawn_core_verify(&core_bin, &cfg, &log).await;
+            }
+            TunPlan::Native { .. } => {
+                // Native sing-box tun: the core owns the tun; the server bypass is baked
+                // into the config (route_exclude_address) by prepare_singbox_config.
+                prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file)
+                    .await?;
 
-        if kasumi_core::core::owns_native_tun(engine, tun) {
-            // Native sing-box tun: the core owns the tun; the server bypass is baked
-            // into the config (route_exclude_address) by prepare_singbox_config.
-            prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file).await?;
+                // Defensive sweep before bring-up: if a previous core crashed (so
+                // stop_data_path never ran its teardown), its orphaned auto_route rules
+                // would otherwise survive and black-hole the fresh tun. Idempotent —
+                // clears nothing on a clean start.
+                routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file)
+                    .await;
 
-            // Defensive sweep before bring-up: if a previous core crashed (so
-            // stop_data_path never ran its teardown), its orphaned auto_route rules
-            // would otherwise survive and black-hole the fresh tun. Idempotent —
-            // clears nothing on a clean start.
-            routing::clear_singbox_autoroute(&self.p.tun_iface_file, &self.p.tun2_iface_file).await;
+                // The escape rule must exist before the core dials anything: its very
+                // first connections (DNS bring-up, the server uplink) already carry the
+                // egress mark. Everything unmarked — any uid, root included — stays
+                // captured by the tun.
+                routing::apply_singbox_escape_rule().await;
 
-            // The escape rule must exist before the core dials anything: its very
-            // first connections (DNS bring-up, the server uplink) already carry the
-            // egress mark. Everything unmarked — any uid, root included — stays
-            // captured by the tun.
-            routing::apply_singbox_escape_rule().await;
-
-            self.spawn_core_verify(&core_bin, &cfg, &log).await?;
-            return Ok(());
-        }
+                return self.spawn_core_verify(&core_bin, &cfg, &log).await;
+            }
+            TunPlan::External(ext) => ext,
+        };
 
         // External userspace tun in front of a socks-only core.
         self.os.precheck_external_tun(&self.p).await?;
@@ -351,14 +338,14 @@ impl DesktopPlatform {
         // core's SOCKS) and never hits routing anyway. (Android still marks it; that
         // param is load-bearing there, not here.)
         let helper = tun_engine::spawn(
-            tun,
+            ext.engine,
             &self.p,
             &iface,
-            socks_port,
+            plan.ports.socks,
             &helper_log,
             None,
-            self.os.singbox_stack(),
-            tun_opts,
+            &wire_value(&ext.stack),
+            &ext.opts,
         )
         .await?;
         let _ = write_text(
@@ -412,6 +399,12 @@ fn can_bind_uplink() -> bool {
     }
 }
 
+/// The helper binary a recorded data path runs, if any.
+fn expected_helper<'a>(state: &DataPathState, p: &'a DesktopPaths) -> Option<&'a str> {
+    let helper = state.helpers().into_iter().next()?;
+    tun_engine::helper_bin(helper.engine, p)
+}
+
 fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -443,15 +436,18 @@ impl Platform for DesktopPlatform {
         true
     }
 
-    async fn set_os_proxy(&self, mode: ProxyMode, engine: CoreEngine, socks_port: u16) {
-        // sing-box's mixed inbound serves http on the socks port; xray has a
-        // separate http inbound on the configured http port.
-        let http = if engine == CoreEngine::SingBox {
-            socks_port
-        } else {
-            self.http_port().await
-        };
-        crate::desktop::apply_os_proxy(mode, socks_port, http, self.pac_port().await).await;
+    fn host_traits(&self) -> HostTraits {
+        HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: Some(self.os.singbox_stack()),
+        }
+    }
+
+    async fn set_os_proxy(&self, mode: ProxyMode, plan: &DataPathPlan) {
+        let ports = &plan.ports;
+        crate::desktop::apply_os_proxy(mode, ports.socks, plan.os_proxy_http_port(), ports.pac)
+            .await;
     }
 
     async fn clear_os_proxy(&self) {
@@ -477,23 +473,24 @@ impl Platform for DesktopPlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-        let StartDataPath {
-            engine,
-            tun,
-            tun_opts,
-            socks_port,
-            mode,
-        } = opts;
+    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        anyhow::bail!("the desktop starts the data path from its plan")
+    }
+
+    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        let engine = plan.engine;
         log::info!(
-            "starting data-path: engine={engine:?} tun={tun:?} socks_port={socks_port} mode={mode:?}"
+            "starting data-path: engine={engine:?} tun={:?} ports={:?} mode={:?}",
+            plan.tun,
+            plan.ports,
+            plan.mode
         );
         // A helper-less in-process session can't bring up a tun; refuse the switch with
         // an actionable reason before any bring-up, so the UI shows a `failed:<reason>`
         // rather than a cryptic tun-creation error. Only the tun direction needs this —
         // the reverse (a helper-backed session running a non-tun mode) works fine, since
-        // the mode rides `StartDataPath` and the privileged path serves every mode.
-        if self.gated_unprivileged && mode == ProxyMode::Tun {
+        // the mode rides the plan and the privileged path serves every mode.
+        if self.gated_unprivileged && plan.mode == ProxyMode::Tun {
             return self
                 .fail("tun mode needs an app restart (the privileged helper is not running)")
                 .await;
@@ -501,22 +498,8 @@ impl Platform for DesktopPlatform {
         // Record the bring-up (no started_at yet) so teardown/status know the engine +
         // tun before the core is even up. A no-tun mode records `NoTun`, so no helper
         // is ever expected.
-        let tun_sel = if mode == ProxyMode::Tun {
-            TunSelection::Engine(tun)
-        } else {
-            TunSelection::NoTun
-        };
-        self.write_state(&DataPathState {
-            run: RunState::Connecting,
-            engine: Some(engine),
-            tun: tun_sel,
-            socks_port,
-            ..Default::default()
-        })
-        .await;
-        let result = self
-            .start_proxy(engine, tun, &tun_opts, socks_port, mode)
-            .await;
+        self.write_state(&plan.state(RunState::Connecting)).await;
+        let result = self.start_proxy(plan).await;
         match result {
             Ok(()) => {
                 let mut state = self.read_state().await.unwrap_or_default();
@@ -677,11 +660,11 @@ impl Platform for DesktopPlatform {
         // Pin the sing-box tun stack so a config built for another platform can't
         // leave a stack we don't support here (gvisor for the Linux root-binary path
         // terminating from the tun fd; system/wintun on Windows).
-        let stack = self.os.singbox_stack();
+        let stack = wire_value(&self.os.singbox_stack());
         if let Some(inbounds) = config.get_mut("inbounds").and_then(Value::as_array_mut) {
             for ib in inbounds {
                 if ib.get("type").and_then(Value::as_str) == Some("tun") {
-                    ib["stack"] = Value::String(stack.into());
+                    ib["stack"] = Value::String(stack.clone());
                 }
             }
         }
@@ -813,5 +796,41 @@ mod tests {
     #[test]
     fn now_secs_is_nonzero() {
         assert!(now_secs() > 0);
+    }
+
+    #[test]
+    fn start_and_watchdog_expect_the_same_helper() {
+        use kasumi_core::enums::TunEngine;
+        use kasumi_core::state::AdvancedSettings;
+        use strum::IntoEnumIterator;
+
+        let p = DesktopPaths::from_bases("data".into(), "run".into(), "bin", false, None);
+        let host = HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: Some(SingboxStack::Gvisor),
+        };
+        for engine in CoreEngine::iter() {
+            for tun in TunEngine::iter() {
+                for mode in [ProxyMode::Tun, ProxyMode::System] {
+                    let mut s = AdvancedSettings {
+                        proxy_mode: mode,
+                        ..Default::default()
+                    };
+                    s.tun_by_core.insert(engine, tun);
+                    let plan = DataPathPlan::resolve(engine, &s, host);
+                    let spawned = plan
+                        .external()
+                        .and_then(|e| tun_engine::helper_bin(e.engine, &p));
+                    let doc = plan.state(RunState::Connecting).to_json();
+                    let recorded = DataPathState::from_json(doc.as_bytes()).unwrap();
+                    assert_eq!(
+                        expected_helper(&recorded, &p),
+                        spawned,
+                        "{engine:?} + {tun:?}, {mode:?}"
+                    );
+                }
+            }
+        }
     }
 }

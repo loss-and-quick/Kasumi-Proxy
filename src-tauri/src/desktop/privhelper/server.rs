@@ -16,7 +16,7 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex as AsyncMutex;
 
-use kasumi_backend::platform::{Platform, StartDataPath, StopDataPath, TestCore};
+use kasumi_backend::platform::{Platform, StopDataPath, TestCore};
 
 use super::proto::{PROTOCOL_VERSION, PrivReply, PrivRequest};
 use super::transport::{BoxRead, BoxWrite};
@@ -69,23 +69,9 @@ impl Server {
                 protocol: Some(PROTOCOL_VERSION),
             },
             PrivRequest::BootInit => to_reply(self.platform.boot_init().await),
-            PrivRequest::StartDataPath {
-                engine,
-                tun,
-                tun_opts,
-                socks_port,
-                mode,
-            } => to_reply(
-                self.platform
-                    .start_data_path(StartDataPath {
-                        engine,
-                        tun,
-                        tun_opts,
-                        socks_port,
-                        mode,
-                    })
-                    .await,
-            ),
+            PrivRequest::StartDataPath { plan } => {
+                to_reply(self.platform.start_planned(&plan).await)
+            }
             PrivRequest::StopDataPath { keep_service_state } => to_reply(
                 self.platform
                     .stop_data_path(StopDataPath { keep_service_state })

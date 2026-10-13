@@ -4,7 +4,7 @@
 use std::sync::atomic::Ordering;
 
 use kasumi_core::core_config::{CoreConfig, MutationEffect, mutation_effect};
-use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
+use kasumi_core::state::AppState;
 
 use crate::commands::{self, CommandError, Response};
 use crate::lifecycle::resolve_and_write_config;
@@ -67,9 +67,8 @@ impl Service {
                 }
                 // With the data-path up, align the OS proxy with the mode (set for
                 // system/pac, cleared otherwise — covers mode switches).
-                let plan = &built.plan;
                 self.platform
-                    .set_os_proxy(plan.mode, plan.engine, plan.ports.socks)
+                    .set_os_proxy(built.plan.mode, &built.plan)
                     .await;
                 self.note_data_path_started(built, profile_id);
                 self.settle_pending_restart().await;
@@ -183,13 +182,7 @@ impl Service {
         };
         match mutation_effect(&running.config, &next_cfg) {
             MutationEffect::LiveModeSwitch(mode) => {
-                let socks_port = state
-                    .settings
-                    .local_socks_port
-                    .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-                self.platform
-                    .set_os_proxy(mode, next_cfg.engine(), socks_port)
-                    .await;
+                self.platform.set_os_proxy(mode, &next_cfg.plan).await;
                 if let Some(running) = self.running_config.lock().unwrap().as_mut() {
                     running.config.plan.mode = mode;
                 }

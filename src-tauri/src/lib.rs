@@ -821,9 +821,9 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[tokio::test]
     async fn gated_platform_refuses_tun_but_admits_non_tun() {
-        use kasumi_backend::platform::StartDataPath;
         use kasumi_core::contract::RunState;
-        use kasumi_core::enums::{CoreEngine, TunEngine};
+        use kasumi_core::data_path_plan::DataPathPlan;
+        use kasumi_core::enums::CoreEngine;
         use kasumi_core::state::{AdvancedSettings, ProxyMode};
 
         const RESTART: &str =
@@ -833,18 +833,18 @@ mod tests {
         let platform = DesktopPlatform::with_paths(tempdir_paths(dir.path()), true).unwrap();
         platform.boot_init().await.unwrap();
 
-        let start = |mode| StartDataPath {
-            engine: CoreEngine::Xray,
-            tun: TunEngine::Tun2socks,
-            tun_opts: AdvancedSettings::default().tun_options(),
-            socks_port: 10800,
-            mode,
+        let start = |mode| {
+            let s = AdvancedSettings {
+                proxy_mode: mode,
+                ..Default::default()
+            };
+            DataPathPlan::resolve(CoreEngine::Xray, &s, platform.host_traits())
         };
 
         // Tun is refused at the gate with the restart-required reason, and the failure
         // is recorded in the service state.
         let err = platform
-            .start_data_path(start(ProxyMode::Tun))
+            .start_planned(&start(ProxyMode::Tun))
             .await
             .unwrap_err();
         assert_eq!(err.to_string(), RESTART);
@@ -855,7 +855,7 @@ mod tests {
         // A non-tun mode passes the gate; with no core binary installed it fails later
         // with a different reason, proving the gate is mode-selective.
         let err = platform
-            .start_data_path(start(ProxyMode::ProxyOnly))
+            .start_planned(&start(ProxyMode::ProxyOnly))
             .await
             .unwrap_err();
         assert_ne!(err.to_string(), RESTART);

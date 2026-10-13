@@ -21,6 +21,7 @@ use kasumi_backend::platform::{
     StopDataPath, TestCore,
 };
 use kasumi_core::contract::ServiceState;
+use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
 
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};
@@ -63,13 +64,8 @@ impl Platform for RemotePlatform {
     // Deliberately answered by the local half, NOT forwarded: the OS proxy lives in
     // the logged-in user's session (gsettings/D-Bus/HKCU) — the GUI's, not the
     // helper's root/LocalSystem one.
-    async fn set_os_proxy(
-        &self,
-        mode: kasumi_core::state::ProxyMode,
-        engine: Engine,
-        socks_port: u16,
-    ) {
-        self.local.set_os_proxy(mode, engine, socks_port).await;
+    async fn set_os_proxy(&self, mode: kasumi_core::state::ProxyMode, plan: &DataPathPlan) {
+        self.local.set_os_proxy(mode, plan).await;
     }
 
     async fn clear_os_proxy(&self) {
@@ -85,16 +81,18 @@ impl Platform for RemotePlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-        self.call(PrivRequest::StartDataPath {
-            engine: opts.engine,
-            tun: opts.tun,
-            tun_opts: opts.tun_opts,
-            socks_port: opts.socks_port,
-            mode: opts.mode,
-        })
-        .await?;
+    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        anyhow::bail!("the helper starts the data path from its plan")
+    }
+
+    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        self.call(PrivRequest::StartDataPath { plan: plan.clone() })
+            .await?;
         Ok(())
+    }
+
+    fn host_traits(&self) -> HostTraits {
+        self.local.host_traits()
     }
 
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {

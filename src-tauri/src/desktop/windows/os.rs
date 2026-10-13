@@ -9,6 +9,7 @@ use async_trait::async_trait;
 
 use kasumi_backend::fs::exists;
 use kasumi_core::request_identity::DeviceFacts;
+use kasumi_core::state::SingboxStack;
 use windows_sys::Win32::Foundation::ERROR_SUCCESS;
 use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW,
@@ -61,8 +62,8 @@ impl DesktopOs for WindowsOs {
         true
     }
 
-    fn singbox_stack(&self) -> &'static str {
-        "system"
+    fn singbox_stack(&self) -> SingboxStack {
+        SingboxStack::System
     }
 
     async fn machine_id(&self) -> Option<String> {

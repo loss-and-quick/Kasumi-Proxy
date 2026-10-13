@@ -269,14 +269,14 @@ pub trait Platform: Send + Sync {
 
     /// Align the OS-level proxy with `mode` after a successful data-path start:
     /// point the OS at the core's local inbound where the mode asks for it
-    /// (`system`/`pac`), clear any previously-set one otherwise — so a mode switch
-    /// can't leave a stale OS proxy behind. Runs in the client process (GUI /
-    /// daemon), never the privileged helper: the OS proxy lives in the logged-in
-    /// user's session (gsettings / D-Bus / HKCU), which the helper's isn't.
+    /// (`system`/`pac`, at the ports in `plan`), clear any previously-set one
+    /// otherwise — so a mode switch can't leave a stale OS proxy behind. Runs in the
+    /// client process (GUI / daemon), never the privileged helper: the OS proxy lives
+    /// in the logged-in user's session (gsettings / D-Bus / HKCU), which the helper's isn't.
     /// The first apply records the pre-existing OS proxy so [`Platform::clear_os_proxy`]
     /// can restore it rather than blank a proxy the user configured by hand.
     /// Default: no-op for platforms without an OS-proxy integration.
-    async fn set_os_proxy(&self, _mode: ProxyMode, _engine: Engine, _socks_port: u16) {}
+    async fn set_os_proxy(&self, _mode: ProxyMode, _plan: &DataPathPlan) {}
 
     /// Undo [`Platform::set_os_proxy`]: restore the OS proxy from the record it wrote,
     /// or leave the OS proxy untouched when there is no record (it isn't ours).
