@@ -35,7 +35,27 @@ pub fn render() -> String {
         .bigint(BigIntExportBehavior::Number)
         .export(&wire_types(), specta_serde::PhasesFormat)
         .expect("zod export");
-    topo_sort(&raw)
+    partial_enum_records(&topo_sort(&raw))
+}
+
+/// zod 4 requires every key of an enum-keyed `z.record`, but a Rust map holds any
+/// subset (an empty `coreByProtocol` is the default), and `bindings.ts` types those
+/// maps `Partial`. Emit them as `z.partialRecord`; string-keyed records stay.
+fn partial_enum_records(src: &str) -> String {
+    const RECORD: &str = "z.record(";
+    let mut out = String::with_capacity(src.len());
+    let mut rest = src;
+    while let Some(i) = rest.find(RECORD) {
+        out.push_str(&rest[..i]);
+        rest = &rest[i + RECORD.len()..];
+        out.push_str(if rest.starts_with("z.string()") {
+            RECORD
+        } else {
+            "z.partialRecord("
+        });
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Every maximal `…Schema` identifier in `s` (the references a block depends on).
@@ -180,4 +200,20 @@ fn topo_sort(src: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enum_keyed_records_become_partial() {
+        let src = "a: z.record(ProtocolSchema, CoreEngineSchema),\n\
+                   b: z.record(z.string(), AppFilterModeSchema),\n";
+        assert_eq!(
+            partial_enum_records(src),
+            "a: z.partialRecord(ProtocolSchema, CoreEngineSchema),\n\
+             b: z.record(z.string(), AppFilterModeSchema),\n"
+        );
+    }
 }
