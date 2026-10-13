@@ -59,6 +59,7 @@ export function RoutesCard() {
   const sensors = useSortableSensors();
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
+  const catchAllRules = useAppStore((s) => s.catchAllRules);
   const profiles = useOrderedProfiles();
   const groups = useAppStore((s) => s.groups);
   const saveRoute = useAppStore((s) => s.saveRoute);
@@ -78,7 +79,7 @@ export function RoutesCard() {
   const active = profiles.find((p) => p.meta.id === activeId);
   const activeRoute = routeFor(routes, active);
   const refs = routeBlocks(route);
-  const deadFrom = catchAllBlockIndex(route, ruleBlocks);
+  const deadFrom = catchAllBlockIndex(route, catchAllRules);
   const finalReachable = deadFrom < 0;
 
   const update = (patch: Partial<Route>) => void saveRoute({ ...route, ...patch });

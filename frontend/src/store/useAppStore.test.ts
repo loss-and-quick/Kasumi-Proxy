@@ -194,6 +194,11 @@ function createBridgeMock(): BridgeMock {
     ),
     chainCandidates: vi.fn(async (_profile: Profile) => []),
     checkLocalPorts: vi.fn(async () => null),
+    // Stands in for the backend's rule builder: the tests' only catch-all is a
+    // full port range.
+    catchAllRules: vi.fn(async (rules: RoutingRule[]) =>
+      rules.map((r) => r.enabled && r.port === "1-65535"),
+    ),
     parseShareLinks: vi.fn(async (_text: string) => []),
     resolveImportInput: vi.fn(async (_text: string) => ({
       subscriptions: [],
@@ -697,6 +702,17 @@ describe("useAppStore", () => {
     expect(routes[0].blocks?.map((b) => b.blockId)).toEqual(["b1", added?.id]);
   });
 
+  it("keeps the backend's catch-all answer per block", async () => {
+    // A commented-out domain list is no condition once built; only the backend
+    // knows that, so its answer is what the store keeps.
+    const ads = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block", domain: ["x"] };
+    const commented = { ...ads, id: "r2", domain: ["# x"], port: "0-65535" };
+    bridge.catchAllRules.mockResolvedValueOnce([false, true]);
+    useAppStore.setState({ ...withBlock([ads, commented]), catchAllRules: {} });
+    await vi.waitFor(() => expect(useAppStore.getState().catchAllRules).toEqual({ b1: ["r2"] }));
+    expect(bridge.catchAllRules).toHaveBeenLastCalledWith([ads, commented]);
+  });
+
   it("a new rule goes above a rule that catches everything", async () => {
     const ads = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block", domain: ["x"] };
     const all = {
@@ -706,7 +722,7 @@ describe("useAppStore", () => {
       outboundTag: "direct",
       port: "1-65535",
     };
-    useAppStore.setState({ ...withBlock([ads, all]), toasts: [] });
+    useAppStore.setState({ ...withBlock([ads, all]), catchAllRules: { b1: ["r2"] }, toasts: [] });
     await useAppStore.getState().addRoutingRule("b1", {
       id: "r3",
       remarks: "QUIC",

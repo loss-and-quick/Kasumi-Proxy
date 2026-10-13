@@ -3,10 +3,7 @@ import type { CoreEngine, Protocol, RoutingRule } from "../../generated/bindings
 import { DEFAULT_CORE_BY_PROTOCOL, PROTOCOL_OPTS } from "../../generated/defaults";
 import { RoutingRule_DeserializeSchema, RoutingRuleSchema } from "../../generated/schemas";
 import type { DictKey, I18nFormatters, Translate } from "../../i18n";
-import { isCatchAllRule } from "../../lib/routing-rules";
 import { uid } from "../../lib/utils";
-
-export { isCatchAllRule };
 
 const PROTOCOL_LABEL_KEYS: Record<Protocol, DictKey> = {
   anytls: "settings.protocol.anytls",

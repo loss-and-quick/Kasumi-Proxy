@@ -35,8 +35,14 @@ import { isServiceUp } from "../lib/bridge";
 import { bridge } from "../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupNamed } from "../lib/groups";
 import { showNativeToast } from "../lib/ksu-webui";
-import { newRoute, type RoutePackage, routeBlocks, routeFor, sameBlock } from "../lib/routes";
-import { isCatchAllRule } from "../lib/routing-rules";
+import {
+  type CatchAllRules,
+  newRoute,
+  type RoutePackage,
+  routeBlocks,
+  routeFor,
+  sameBlock,
+} from "../lib/routes";
 import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
 import { ActivityService } from "./activity";
@@ -76,6 +82,9 @@ interface Store extends AppState {
   // keyed by profile id. Refreshed whenever profiles/settings change; the UI reads
   // it instead of re-implementing the resolution matrix.
   coreResolutions: Record<string, CoreResolution>;
+  // Which rules match every connection, per block: the backend's answer
+  // (`catchAllRules`), refreshed whenever the rule blocks change.
+  catchAllRules: CatchAllRules;
   toasts: ToastItem[];
   recentActivity: ActivityEvent[];
   recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
@@ -527,6 +536,7 @@ export const useAppStore = create<Store>((set, get) => {
     speedTesting: new Set<string>(),
     testResults: {},
     coreResolutions: {},
+    catchAllRules: {},
     toasts: [],
     recentActivity: [],
     recentProfileIds: [],
@@ -1011,11 +1021,14 @@ export const useAppStore = create<Store>((set, get) => {
     async addRoutingRule(blockId, rule) {
       const before = blockOf(blockId)?.rules ?? [];
       const isNew = !before.some((r) => r.id === rule.id);
-      const catchAll = before.findIndex(isCatchAllRule);
+      const caught = get().catchAllRules[blockId] ?? [];
+      const catchAll = before.findIndex((r) => caught.includes(r.id));
       await mutate({ kind: "upsertRoutingRule", blockId, rule });
       // Appended below a rule that matches everything, a new rule would never
       // match; it goes just above that rule instead.
-      if (!isNew || catchAll < 0 || isCatchAllRule(rule)) return;
+      if (!isNew || catchAll < 0) return;
+      const [itself] = await bridge.catchAllRules([rule]).catch(() => [false]);
+      if (itself) return;
       const at = blockOf(blockId)?.rules.findIndex((r) => r.id === rule.id) ?? -1;
       if (at <= catchAll) return;
       await mutate({ kind: "reorderRoutingRules", blockId, from: at, to: catchAll });
@@ -1210,6 +1223,24 @@ export const useAppStore = create<Store>((set, get) => {
       );
     },
   };
+});
+
+// Every path that replaces the rule blocks (a mutation, hydrate, a subscription
+// refresh) re-asks the backend which rules catch everything.
+useAppStore.subscribe((state, prev) => {
+  if (state.ruleBlocks === prev.ruleBlocks) return;
+  const blocks = state.ruleBlocks;
+  bridge
+    .catchAllRules(blocks.flatMap((b) => b.rules))
+    .then((flags) => {
+      if (useAppStore.getState().ruleBlocks !== blocks) return;
+      let i = 0;
+      const catchAllRules = Object.fromEntries(
+        blocks.map((b) => [b.id, b.rules.filter(() => flags[i++]).map((r) => r.id)]),
+      );
+      useAppStore.setState({ catchAllRules });
+    })
+    .catch(() => {});
 });
 
 export type StoreProfile = Profile & { subId: string | null };

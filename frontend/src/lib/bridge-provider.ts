@@ -167,6 +167,9 @@ export const bridge: Bridge = {
   async checkLocalPorts(settings) {
     return (await loadBridge()).checkLocalPorts(settings);
   },
+  async catchAllRules(rules) {
+    return (await loadBridge()).catchAllRules(rules);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

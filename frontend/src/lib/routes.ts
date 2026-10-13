@@ -14,7 +14,6 @@ import type {
   RoutingRule,
 } from "../generated/bindings";
 import { DEFAULT_ROUTE_ID } from "../generated/defaults";
-import { isCatchAllRule } from "./routing-rules";
 
 export { DEFAULT_ROUTE_ID };
 
@@ -78,15 +77,23 @@ export const routesUsing = (routes: Route[], blockId: string) =>
   routes.filter((r) => routeBlocks(r).some((b) => b.blockId === blockId));
 
 /**
+ * Per block id, the ids of its rules that match every connection: the backend's
+ * answer (`catchAllRules`), since only the rule builder knows which entries a
+ * rule really keeps.
+ */
+export type CatchAllRules = Record<string, readonly string[]>;
+
+export const isCatchAll = (catchAll: CatchAllRules, blockId: string, ruleId: string) =>
+  catchAll[blockId]?.includes(ruleId) ?? false;
+
+/**
  * Where a route stops being reachable: the index of the block holding the first
  * enabled catch-all rule (every later block and the final outbound never see
  * traffic), or -1 when the end of the route is reached.
  */
-export function catchAllBlockIndex(route: Route, blocks: RuleBlock[]): number {
+export function catchAllBlockIndex(route: Route, catchAll: CatchAllRules): number {
   return routeBlocks(route).findIndex(
-    (ref) =>
-      refEnabled(ref) &&
-      (blocks.find((b) => b.id === ref.blockId)?.rules.some(isCatchAllRule) ?? false),
+    (ref) => refEnabled(ref) && (catchAll[ref.blockId]?.length ?? 0) > 0,
   );
 }
 

@@ -92,6 +92,7 @@ export function RouteGraphSheet({
   const isWide = useIsWide();
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
+  const catchAllRules = useAppStore((s) => s.catchAllRules);
   const profiles = useAppStore((s) => s.profiles);
   const activeId = useAppStore((s) => s.activeId);
   const groups = useAppStore((s) => s.groups);
@@ -103,7 +104,7 @@ export function RouteGraphSheet({
 
   const graph = useMemo(() => {
     const colorOf = (routeId: string) => routeColor(routes.findIndex((r) => r.id === routeId));
-    const graph = buildRouteGraph(routes, ruleBlocks);
+    const graph = buildRouteGraph(routes, ruleBlocks, catchAllRules);
     const proxyId = outNodeId(PROXY_OUTBOUND);
     const hasProxy = graph.nodes.some((n) => n.id === proxyId);
     if (activeId && activeId !== PROXY_OUTBOUND && hasProxy) {
@@ -211,7 +212,19 @@ export function RouteGraphSheet({
       };
     });
     return { nodes, edges };
-  }, [routes, ruleBlocks, profiles, groups, selectedId, isWide, t, formatters, activeId, refs]);
+  }, [
+    routes,
+    ruleBlocks,
+    catchAllRules,
+    profiles,
+    groups,
+    selectedId,
+    isWide,
+    t,
+    formatters,
+    activeId,
+    refs,
+  ]);
 
   // The flow keeps its own copy (measured sizes, the selected link to delete);
   // it follows the store whenever routes change.

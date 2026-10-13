@@ -546,6 +546,12 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return null;
   },
 
+  // Dev stub: flags nothing (the real answer lives behind the backend's
+  // `catchAllRules`).
+  async catchAllRules(rules) {
+    return rules.map(() => false);
+  },
+
   // Dev stub: one nested placeholder profile per line that holds a share link.
   async parseShareLinks(text: string): Promise<Profile[]> {
     await new Promise((r) => setTimeout(r, 150));

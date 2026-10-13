@@ -47,17 +47,15 @@ describe("routes", () => {
   });
 
   it("finds the block after which nothing is reached", () => {
-    const blocks: RuleBlock[] = [
-      { id: "a", name: "A", rules: [rule("x")] },
-      { id: "all", name: "All", rules: [rule("rest", { domain: undefined, port: "1-65535" })] },
-    ];
-    expect(catchAllBlockIndex(route("r", ["a", "all"]), blocks)).toBe(1);
+    // The backend's answer: "rest" in block "all" matches everything.
+    const catchAll = { all: ["rest"] };
+    expect(catchAllBlockIndex(route("r", ["a", "all"]), catchAll)).toBe(1);
     const off = route("r", ["a", "all"]);
     off.blocks = [
       { blockId: "a", enabled: true },
       { blockId: "all", enabled: false },
     ];
-    expect(catchAllBlockIndex(off, blocks)).toBe(-1);
+    expect(catchAllBlockIndex(off, catchAll)).toBe(-1);
   });
 
   it("normalizing folds a flat rule list into the default route and drops what is gone", () => {
@@ -126,6 +124,7 @@ describe("routes", () => {
     const graph = buildRouteGraph(
       [route(DEFAULT_ROUTE_ID, ["ads"]), route("w", ["work", "ads"], { finalOutbound: "direct" })],
       blocks,
+      {},
     );
     expect(graph.nodes.filter((n) => n.id === "block:ads")).toHaveLength(1);
     const into = graph.edges.filter((e) => e.target === "block:ads" && !e.ruleOut);
