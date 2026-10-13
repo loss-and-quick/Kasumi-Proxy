@@ -330,6 +330,8 @@ const es = {
   "subs.edit.revealedHint": "El enlace sigue cifrado a menos que cambies la dirección.",
   "subs.edit.replacesEncrypted": "La nueva dirección sustituye al enlace cifrado.",
   "subs.edit.validationUrl": "La URL de la suscripción es obligatoria",
+  "subs.edit.routingLink":
+    "Es un perfil de enrutamiento de Happ, no una suscripción. Añádelo con el botón «Añadir».",
   "subs.edit.validationInterval": "El intervalo debe ser mayor que 0",
   "subs.edit.validationFilter": "Regex no válida",
   "editor.validation.remarks": "Falta el nombre",

@@ -17,12 +17,16 @@ import {
   Sheet,
   SheetAction,
 } from "../../components";
-import { type DictKey, useT } from "../../i18n";
+import { useT } from "../../i18n";
 import {
   type AddInput,
   addInputFrom,
+  appendScanned,
   EMPTY_ADD_INPUT,
   parseSubscriptionDump,
+  resolveAddText,
+  UNSUPPORTED_TEXT,
+  withClipboard,
 } from "../../lib/add-input";
 import type { ResolvedImport } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
@@ -42,14 +46,6 @@ export type AddResult = {
   profiles: number;
   profileGroup: string | null;
   routes: number;
-};
-
-const UNSUPPORTED_TEXT: Record<ResolvedImport["unsupported"][number]["kind"], DictKey> = {
-  control: "add.unsupported.control",
-  sendToDevice: "add.unsupported.sendToDevice",
-  routingOff: "add.unsupported.routingOff",
-  urlDecrypt: "add.unsupported.urlDecrypt",
-  invalid: "add.unsupported.invalid",
 };
 
 type RouteChoice = { groupId: string; activate: boolean };
@@ -98,8 +94,6 @@ export function AddSheet({
   const [profileCount, setProfileCount] = useState(0);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
-  const textRef = useRef(text);
-  textRef.current = text;
   // Read when the sheet opens, not on every render that hands in a new object.
   const openDefaults = useRef({ defaultGroup, inGroup, scanOnOpen });
   openDefaults.current = { defaultGroup, inGroup, scanOnOpen };
@@ -111,10 +105,7 @@ export function AddSheet({
     setGroup(openDefaults.current.defaultGroup);
     setGroupEach(!openDefaults.current.inGroup);
     setScanning(openDefaults.current.scanOnOpen);
-    readText().then((clip) => {
-      const v = clip?.trim();
-      if (v && !textRef.current.trim()) setText(v);
-    });
+    readText().then((clip) => setText((cur) => withClipboard(cur, clip)));
   }, [open]);
 
   const dump = useMemo(
@@ -147,22 +138,10 @@ export function AddSheet({
     }
     let alive = true;
     const timer = window.setTimeout(async () => {
-      try {
-        const value = await bridge.resolveImportInput(text);
-        const count = value.shareText.trim()
-          ? (await bridge.parseShareLinks(value.shareText)).length
-          : 0;
-        if (!alive) return;
-        setResolved({ text, value });
-        setProfileCount(count);
-      } catch {
-        if (!alive) return;
-        setResolved({
-          text,
-          value: { subscriptions: [], routing: [], unsupported: [], shareText: text },
-        });
-        setProfileCount(0);
-      }
+      const { value, profileCount } = await resolveAddText(text, bridge);
+      if (!alive) return;
+      setResolved({ text, value });
+      setProfileCount(profileCount);
     }, 250);
     return () => {
       alive = false;
@@ -396,7 +375,7 @@ export function AddSheet({
             title={t("qr.scan.title")}
             onClose={() => setScanning(false)}
             onResult={(scanned) => {
-              setText((cur) => (cur.trim() ? `${cur.trim()}\n${scanned}` : scanned));
+              setText((cur) => appendScanned(cur, scanned));
               setScanning(false);
               return true;
             }}

@@ -5,11 +5,23 @@
 // read here.
 // ============================================================
 
-import type { ResolvedImport, Subscription } from "./bridge";
+import type { DictKey } from "../i18n";
+import type { Bridge, ResolvedImport, Subscription } from "./bridge";
 import { hostOf } from "./groups";
 import { uid } from "./utils";
 
 export type SubDefaults = { autoUpdate: boolean; interval: number };
+
+type UnsupportedKind = ResolvedImport["unsupported"][number]["kind"];
+
+/** Why each kind of `happ://` link is skipped. */
+export const UNSUPPORTED_TEXT: Record<UnsupportedKind, DictKey> = {
+  control: "add.unsupported.control",
+  sendToDevice: "add.unsupported.sendToDevice",
+  routingOff: "add.unsupported.routingOff",
+  urlDecrypt: "add.unsupported.urlDecrypt",
+  invalid: "add.unsupported.invalid",
+};
 
 /** What a paste holds: subscriptions to add, the rest of the text for the backend's
  *  share-link parser, routing profiles and the links Kasumi can't use. */
@@ -99,4 +111,61 @@ export function addInputFrom(
     routing: resolved.routing,
     unsupported: resolved.unsupported,
   };
+}
+
+/** The backend's sorting of pasted or scanned text, and how many profile links the
+ *  rest holds. When the backend can't answer, all of it is left as share-link text. */
+export async function resolveAddText(
+  text: string,
+  b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
+): Promise<{ value: ResolvedImport; profileCount: number }> {
+  try {
+    const value = await b.resolveImportInput(text);
+    const profileCount = value.shareText.trim()
+      ? (await b.parseShareLinks(value.shareText)).length
+      : 0;
+    return { value, profileCount };
+  } catch {
+    return {
+      value: { subscriptions: [], routing: [], unsupported: [], shareText: text },
+      profileCount: 0,
+    };
+  }
+}
+
+/** A scanned QR code goes on a line of its own after what the field holds. */
+export function appendScanned(current: string, scanned: string): string {
+  return current.trim() ? `${current.trim()}\n${scanned}` : scanned;
+}
+
+/** The add sheet opens on the clipboard's text unless something is already typed. */
+export function withClipboard(current: string, clip: string | null): string {
+  const v = clip?.trim();
+  return v && !current.trim() ? v : current;
+}
+
+/** What a typed subscription URL is: a link to store (`happ://add/` unwrapped, an
+ *  encrypted one kept), a `happ://` link that is no subscription, or anything else,
+ *  saved as typed. */
+export type SubscriptionUrlCheck =
+  | { kind: "url"; url: string; encrypted: boolean }
+  | { kind: "routing" }
+  | { kind: "unsupported"; reason: UnsupportedKind }
+  | { kind: "other" };
+
+export async function checkSubscriptionUrl(
+  url: string,
+  b: Pick<Bridge, "resolveImportInput">,
+): Promise<SubscriptionUrlCheck> {
+  let r: ResolvedImport;
+  try {
+    r = await b.resolveImportInput(url);
+  } catch {
+    return { kind: "other" };
+  }
+  if (r.unsupported.length) return { kind: "unsupported", reason: r.unsupported[0].kind };
+  if (r.routing.length) return { kind: "routing" };
+  if (r.subscriptions.length === 1 && !r.shareText.trim())
+    return { kind: "url", ...r.subscriptions[0] };
+  return { kind: "other" };
 }

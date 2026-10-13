@@ -349,6 +349,8 @@ const ru = {
   "subs.edit.revealedHint": "Ссылка останется зашифрованной, пока вы не измените адрес.",
   "subs.edit.replacesEncrypted": "Новый адрес заменит зашифрованную ссылку.",
   "subs.edit.validationUrl": "URL подписки обязателен",
+  "subs.edit.routingLink":
+    "Это профиль маршрутизации Happ, а не подписка. Добавьте его кнопкой «Добавить».",
   "subs.edit.validationInterval": "Интервал должен быть больше 0",
   "subs.edit.validationFilter": "Некорректный regex",
   "editor.validation.remarks": "Укажите название",

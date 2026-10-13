@@ -399,6 +399,7 @@ const ar = {
   "subs.edit.revealedHint": "يبقى الرابط مشفّرًا ما لم تغيّر العنوان.",
   "subs.edit.replacesEncrypted": "سيحل العنوان الجديد محل الرابط المشفّر.",
   "subs.edit.validationUrl": "رابط الاشتراك مطلوب",
+  "subs.edit.routingLink": "هذا ملف توجيه من Happ وليس اشتراكًا. أضِفه بزر «إضافة».",
   "subs.edit.validationInterval": "يجب أن يكون الفاصل أكبر من 0",
   "subs.edit.validationFilter": "regex غير صالح",
   "editor.validation.remarks": "الاسم مطلوب",

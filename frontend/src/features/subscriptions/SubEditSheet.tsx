@@ -12,6 +12,7 @@ import {
   UpdateModeControl,
 } from "../../components";
 import { useT } from "../../i18n";
+import { checkSubscriptionUrl, UNSUPPORTED_TEXT } from "../../lib/add-input";
 import type { Subscription } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady, hostOf } from "../../lib/groups";
@@ -109,7 +110,23 @@ export function SubEditSheet({
   const ownInterval = providerHours == null || d.intervalOverride;
   const submit = async () => {
     const nextErrors: Record<string, string> = {};
-    if (!d.url.trim()) nextErrors.url = t("subs.edit.validationUrl");
+    let url = d.url.trim();
+    let saveName = name;
+    // A new address is read the way the add sheet reads it.
+    if (url && url !== sub?.url.trim()) {
+      setSaving(true);
+      const checked = await checkSubscriptionUrl(url, bridge);
+      setSaving(false);
+      if (checked.kind === "routing") nextErrors.url = t("subs.edit.routingLink");
+      else if (checked.kind === "unsupported") nextErrors.url = t(UNSUPPORTED_TEXT[checked.reason]);
+      else if (checked.kind === "url") {
+        url = checked.url;
+        if (!d.remarks.trim())
+          saveName =
+            d.provider?.title || (checked.encrypted ? t("add.encryptedName") : hostOf(url));
+      }
+    }
+    if (!url) nextErrors.url = t("subs.edit.validationUrl");
     if (d.autoUpdate && ownInterval && (!Number.isFinite(d.interval) || d.interval <= 0))
       nextErrors.interval = t("subs.edit.validationInterval");
     if (d.filter.trim()) {
@@ -121,7 +138,7 @@ export function SubEditSheet({
         nextErrors.filter = t("subs.edit.validationFilter");
       }
     }
-    if (!groupChoiceReady(group, name)) nextErrors.group = t("groups.picker.needName");
+    if (!groupChoiceReady(group, saveName)) nextErrors.group = t("groups.picker.needName");
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
@@ -131,12 +148,12 @@ export function SubEditSheet({
       await onSave(
         {
           ...d,
-          url: d.url.trim(),
-          remarks: name,
+          url,
+          remarks: saveName,
           // A name the user typed survives the provider's title; the default does not.
           manualTitle: d.remarks.trim() !== "" && d.remarks.trim() !== defaultName,
           // An accepted provider `insecure` stays until the user turns it off below.
-          allowInsecure: d.insecureByProvider ? d.allowInsecure : isLocalOrPrivateHost(d.url),
+          allowInsecure: d.insecureByProvider ? d.allowInsecure : isLocalOrPrivateHost(url),
         },
         group,
       );

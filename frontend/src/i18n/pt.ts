@@ -329,6 +329,8 @@ const pt = {
   "subs.edit.revealedHint": "O link continua criptografado, a menos que você altere o endereço.",
   "subs.edit.replacesEncrypted": "O novo endereço substitui o link criptografado.",
   "subs.edit.validationUrl": "URL da assinatura obrigatória",
+  "subs.edit.routingLink":
+    "É um perfil de roteamento do Happ, não uma assinatura. Adicione-o pelo botão “Adicionar”.",
   "subs.edit.validationInterval": "O intervalo deve ser maior que 0",
   "subs.edit.validationFilter": "Regex inválida",
   "editor.validation.remarks": "Informe o nome",

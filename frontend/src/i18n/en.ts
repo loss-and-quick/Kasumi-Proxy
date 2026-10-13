@@ -335,6 +335,8 @@ const en = {
   "subs.edit.revealedHint": "The link stays encrypted unless you change the address.",
   "subs.edit.replacesEncrypted": "The new address replaces the encrypted link.",
   "subs.edit.validationUrl": "Subscription URL required",
+  "subs.edit.routingLink":
+    "A Happ routing profile, not a subscription. Add it with the Add button.",
   "subs.edit.validationInterval": "Interval must be greater than 0",
   "subs.edit.validationFilter": "Invalid regex",
   "editor.validation.remarks": "Name required",

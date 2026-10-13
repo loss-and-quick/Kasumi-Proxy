@@ -324,6 +324,8 @@ const vi = {
   "subs.edit.revealedHint": "Liên kết vẫn được mã hóa trừ khi bạn đổi địa chỉ.",
   "subs.edit.replacesEncrypted": "Địa chỉ mới sẽ thay cho liên kết mã hóa.",
   "subs.edit.validationUrl": "Bắt buộc nhập URL đăng ký",
+  "subs.edit.routingLink":
+    "Đây là hồ sơ định tuyến Happ, không phải gói đăng ký. Hãy thêm bằng nút “Thêm”.",
   "subs.edit.validationInterval": "Khoảng thời gian phải lớn hơn 0",
   "subs.edit.validationFilter": "Regex không hợp lệ",
   "editor.validation.remarks": "Cần nhập tên",
