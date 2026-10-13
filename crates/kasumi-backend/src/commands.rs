@@ -19,7 +19,7 @@ use kasumi_core::contract::{
     Capabilities, ConnectionProbe, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind,
     WsInfo,
 };
-use kasumi_core::core::{core_conflict, forced_core, resolve_core};
+use kasumi_core::core::{chain_forced_core, core_conflict, forced_core, preferred_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::import_input::{
@@ -617,14 +617,26 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                 .await
                 .map(|s| s.settings)
                 .unwrap_or_default();
+            // The given profiles may be unsaved drafts: they stand in for their
+            // stored copies while the chains are walked.
+            let mut all: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
+            all.retain(|s| !profiles.iter().any(|p| p.meta().id == s.meta().id));
+            all.extend(profiles.iter().cloned());
             Ok(Response::CoreResolutions(
                 profiles
                     .iter()
                     .map(|p| {
-                        let resolved = resolve_core(p, &settings);
+                        let (resolved, forced) = match chain_forced_core(p, &all) {
+                            Ok(Some((engine, _))) => (engine, Some(engine)),
+                            Ok(None) => (preferred_core(p, &settings), None),
+                            Err(_) => {
+                                let own = forced_core(p);
+                                (own.unwrap_or_else(|| preferred_core(p, &settings)), own)
+                            }
+                        };
                         CoreResolution {
                             resolved,
-                            forced: forced_core(p),
+                            forced,
                             conflict: core_conflict(p),
                             sees_processes: kasumi_core::app_process::sees_processes(
                                 resolved, &settings,

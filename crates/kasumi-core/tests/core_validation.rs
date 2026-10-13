@@ -1539,6 +1539,77 @@ fn link_corpus_validates_against_real_cores() {
     validate_all(cases);
 }
 
+/// An exit the user pinned to xray, dialing through a sing-box-only middle hop:
+/// the hop picks sing-box for the whole chain, whatever the exit's choice.
+fn mixed_chain_cases() -> Vec<Case> {
+    let with_id = |mut p: Profile, id: &str, via: Option<&str>| {
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    };
+    let entry = with_id(
+        make(Protocol::Vmess, Some(Network::Grpc), Security::Tls, "entry").unwrap(),
+        "entry",
+        None,
+    );
+    let mut cases = Vec::new();
+    for proto in [Protocol::Tuic, Protocol::Anytls, Protocol::Shadowtls] {
+        let mid = with_id(
+            make(proto, None, Security::Tls, "mid").unwrap(),
+            "mid",
+            Some("entry"),
+        );
+        let mut exit = with_id(
+            make(Protocol::Vless, Some(Network::Ws), Security::Tls, "exit").unwrap(),
+            "exit",
+            Some("mid"),
+        );
+        exit.meta_mut().core_type = Some(CoreEngine::Xray);
+        cases.push(Case {
+            name: format!("mixed-chain/{}", wire(&proto)),
+            profile: exit,
+            settings: AdvancedSettings::default(),
+            rules: vec![],
+            needs_geo: false,
+            others: vec![mid, entry.clone()],
+        });
+    }
+    cases
+}
+
+#[test]
+fn chain_with_a_singbox_only_hop_runs_on_singbox() {
+    let cases = mixed_chain_cases();
+    let srs_dir = tempfile::tempdir().unwrap();
+    for c in &cases {
+        let (_, engine) =
+            build_config(&c.profile, &c.others, &c.settings, &c.rules, srs_dir.path())
+                .unwrap_or_else(|| panic!("[{}] chain didn't build", c.name));
+        assert_eq!(engine, CoreEngine::SingBox, "[{}]", c.name);
+    }
+    validate_all(cases);
+}
+
+#[test]
+fn chain_needing_both_cores_is_refused_by_name() {
+    let mut exit = make(
+        Protocol::Vless,
+        Some(Network::Xhttp),
+        Security::Tls,
+        "xhttp-exit",
+    )
+    .unwrap();
+    exit.meta_mut().via = Some("mid".into());
+    let mut mid = make(Protocol::Tuic, None, Security::Tls, "tuic-mid").unwrap();
+    mid.meta_mut().id = "mid".into();
+    let profiles = vec![exit.clone(), mid];
+    let err =
+        build_core_config(&exit, &AdvancedSettings::default(), &[], &profiles, "").unwrap_err();
+    assert!(
+        err.contains("\"xhttp-exit\"") && err.contains("\"tuic-mid\""),
+        "{err}"
+    );
+}
 #[test]
 fn settings_matrix_validates_against_real_cores() {
     validate_all(settings_cases());
@@ -1907,7 +1978,7 @@ fn every_shadowsocks_cipher_validates_on_both_cores() {
             let profile = Profile::Shadowsocks(s);
             let settings = AdvancedSettings::default();
             assert_eq!(
-                kasumi_core::core::resolve_core(&profile, &settings),
+                kasumi_core::core::resolve_core(&profile, &settings, &[]).unwrap(),
                 engine,
                 "{name} runs on the pinned core"
             );

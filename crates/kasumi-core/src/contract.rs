@@ -40,12 +40,20 @@ pub struct CoreResolution {
 }
 
 /// Why no core can run a profile (`core::core_conflict`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CoreConflict {
     /// TLS without a certificate check or a pinned certificate, on a profile only
     /// xray runs: xray has dropped `allowInsecure`, so only a pin gets past its check.
     UnpinnedInsecureTls,
+    /// A proxy chain that no single core can build: every hop is an outbound of the
+    /// one config, and these two profiles of it each run on a different core only.
+    ChainCoreConflict {
+        /// Remarks of the profile that runs only on xray.
+        xray: String,
+        /// Remarks of the profile that runs only on sing-box.
+        sing_box: String,
+    },
 }
 
 impl std::fmt::Display for CoreConflict {
@@ -54,6 +62,10 @@ impl std::fmt::Display for CoreConflict {
             Self::UnpinnedInsecureTls => f.write_str(
                 "this profile runs only on xray, which no longer skips certificate checks: \
                  pin the server certificate (SHA-256) or turn off \"Allow insecure\"",
+            ),
+            Self::ChainCoreConflict { xray, sing_box } => write!(
+                f,
+                "proxy chain needs two cores: \"{xray}\" runs only on xray, \"{sing_box}\" only on sing-box",
             ),
         }
     }
