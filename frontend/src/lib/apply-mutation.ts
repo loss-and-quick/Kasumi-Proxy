@@ -100,10 +100,22 @@ function mergeRoutes(state: AppState, raw: AppState): Pick<AppState, "ruleBlocks
   };
 }
 
-/** Mirrors `keep_fetch_results`: fetch results and provider proposals stay as stored. */
-function keepFetchResults(next: Subscription, stored: Subscription): Subscription {
+/** Mirrors `merge_sub_edit`: fetch results and provider proposals stay as stored,
+ *  and with `original` so does every setting the edit left as it was. */
+function mergeSubEdit(
+  next: Subscription,
+  stored: Subscription,
+  original?: Subscription | null,
+): Subscription {
+  const edited: Subscription = { ...next };
+  if (original) {
+    for (const key of Object.keys(next) as (keyof Subscription)[]) {
+      if (JSON.stringify(next[key]) === JSON.stringify(original[key]))
+        Object.assign(edited, { [key]: stored[key] });
+    }
+  }
   return {
-    ...next,
+    ...edited,
     lastUpdated: stored.lastUpdated,
     count: stored.count,
     lastError: stored.lastError,
@@ -368,19 +380,22 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       // The intent drags the sub's profiles with its group (mirrors the Rust
       // UpsertSub arm): the sub still in state is the old one here.
       const old = state.subscriptions.find((s) => s.id === intent.subscription.id);
+      const sub = old
+        ? mergeSubEdit(intent.subscription, old, intent.original)
+        : intent.subscription;
       let profiles = state.profiles;
-      const newG = intent.subscription.groupId ?? null;
+      const newG = sub.groupId ?? null;
       if (old && newG != null) {
         const oldG = old.groupId ?? null;
         if (oldG != null && oldG !== newG) {
           profiles = profiles.map((p) =>
-            p.meta.subId === intent.subscription.id && p.meta.groupId === oldG
+            p.meta.subId === sub.id && p.meta.groupId === oldG
               ? { ...p, meta: { ...p.meta, groupId: newG } }
               : p,
           );
         } else if (oldG == null) {
           profiles = profiles.map((p) =>
-            p.meta.subId === intent.subscription.id && p.meta.groupId !== newG
+            p.meta.subId === sub.id && p.meta.groupId !== newG
               ? { ...p, meta: { ...p.meta, groupId: newG } }
               : p,
           );
@@ -388,10 +403,10 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       }
       // A group made for the sub follows its renames while it still has the old name.
       const groups =
-        old && old.remarks !== intent.subscription.remarks
+        old && old.remarks !== sub.remarks
           ? state.groups.map((g) =>
               g.id === newG && g.subId === old.id && g.name === old.remarks
-                ? { ...g, name: intent.subscription.remarks }
+                ? { ...g, name: sub.remarks }
                 : g,
             )
           : state.groups;
@@ -399,10 +414,7 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         ...state,
         groups,
         profiles,
-        subscriptions: upsertById(
-          state.subscriptions,
-          old ? keepFetchResults(intent.subscription, old) : intent.subscription,
-        ),
+        subscriptions: upsertById(state.subscriptions, sub),
       };
     }
     case "setSubError":

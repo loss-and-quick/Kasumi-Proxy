@@ -111,6 +111,10 @@ pub enum MutationIntent {
     /// stay as stored.
     UpsertSub {
         subscription: Box<Subscription>,
+        /// The copy the edit started from. With it, only the settings that differ
+        /// from it are applied, so a fetch that changed the others meanwhile stays.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        original: Option<Box<Subscription>>,
     },
     /// Show `message` as the subscription's last error, for a failure the UI
     /// detects itself (the backend wasn't reached, or the proxy isn't running).
@@ -397,7 +401,15 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             move_item_by_index(&mut state.groups, from, (*to as usize).max(pinned));
         }
 
-        MutationIntent::UpsertSub { subscription } => {
+        MutationIntent::UpsertSub {
+            subscription,
+            original,
+        } => {
+            let mut next = (**subscription).clone();
+            if let Some(stored) = state.subscriptions.iter().find(|s| s.id == next.id) {
+                merge_sub_edit(&mut next, stored, original.as_deref());
+            }
+            let subscription = &next;
             rename_owned_group(state, subscription);
             // A subscription drags its profiles with its group. The sub currently in
             // state is still the old one here, so compare groups and move the
@@ -433,10 +445,6 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                     }
                     _ => {}
                 }
-            }
-            let mut next = (**subscription).clone();
-            if let Some(stored) = state.subscriptions.iter().find(|s| s.id == next.id) {
-                keep_fetch_results(&mut next, stored);
             }
             upsert_by_id(&mut state.subscriptions, next);
         }
@@ -652,11 +660,13 @@ pub fn rename_owned_group(state: &mut AppState, next: &Subscription) {
     }
 }
 
-/// Copy onto `next`, the UI's copy of a subscription, the fetch results and the
-/// provider proposals with their answers from `stored`: a fetch can land while the
-/// edit sheet is open, and saving the older copy must not undo it. The
-/// destructuring is exhaustive, so a new field has to be sorted to one side.
-fn keep_fetch_results(next: &mut Subscription, stored: &Subscription) {
+/// Merge `next`, the UI's copy of a subscription, with `stored`. A fetch can land
+/// while the edit sheet is open, and saving the older copy must not undo it: the
+/// fetch results and the provider proposals with their answers always stay as
+/// stored, and with `original`, the copy the edit started from, so does every
+/// setting the user left as it was. The destructuring is exhaustive, so a new
+/// field has to be sorted to one side.
+fn merge_sub_edit(next: &mut Subscription, stored: &Subscription, original: Option<&Subscription>) {
     let Subscription {
         last_updated,
         count,
@@ -676,22 +686,22 @@ fn keep_fetch_results(next: &mut Subscription, stored: &Subscription) {
         // (`fallback_url`, `insecure_by_provider`, `allow_provider_configs`)
         // is an edit too.
         id: _,
-        remarks: _,
-        url: _,
-        enabled: _,
-        group_id: _,
-        auto_update: _,
-        interval: _,
-        allow_insecure: _,
-        user_agent: _,
-        filter: _,
-        update_mode: _,
-        manual_title: _,
-        interval_override: _,
-        request: _,
-        fallback_url: _,
-        insecure_by_provider: _,
-        allow_provider_configs: _,
+        remarks,
+        url,
+        enabled,
+        group_id,
+        auto_update,
+        interval,
+        allow_insecure,
+        user_agent,
+        filter,
+        update_mode,
+        manual_title,
+        interval_override,
+        request,
+        fallback_url,
+        insecure_by_provider,
+        allow_provider_configs,
     } = stored.clone();
     next.last_updated = last_updated;
     next.count = count;
@@ -707,6 +717,34 @@ fn keep_fetch_results(next: &mut Subscription, stored: &Subscription) {
     next.pending_changes = pending_changes;
     next.decisions = decisions;
     next.audit = audit;
+    let Some(original) = original else {
+        return;
+    };
+    macro_rules! keep_unedited {
+        ($($field:ident),* $(,)?) => {$(
+            if next.$field == original.$field {
+                next.$field = $field;
+            }
+        )*};
+    }
+    keep_unedited!(
+        remarks,
+        url,
+        enabled,
+        group_id,
+        auto_update,
+        interval,
+        allow_insecure,
+        user_agent,
+        filter,
+        update_mode,
+        manual_title,
+        interval_override,
+        request,
+        fallback_url,
+        insecure_by_provider,
+        allow_provider_configs,
+    );
 }
 
 /// Add `profile` at the front, or replace the existing one with the same `meta.id`.
@@ -1077,6 +1115,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g2"))),
+                original: None,
             },
         );
         let group_of = |id: &str| {
@@ -1106,6 +1145,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g2"))),
+                original: None,
             },
         );
         assert!(s.profiles.iter().all(|p| p.meta().group_id == "g2"));
@@ -1120,6 +1160,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g2"))),
+                original: None,
             },
         );
         assert_eq!(s.profiles[0].meta().group_id, "g-main");
@@ -1197,6 +1238,7 @@ mod tests {
                 &mut s,
                 &MutationIntent::UpsertSub {
                     subscription: Box::new(edited_copy()),
+                    original: None,
                 },
             );
             let mut want = edited_copy();
@@ -1216,6 +1258,7 @@ mod tests {
                 &mut s,
                 &MutationIntent::UpsertSub {
                     subscription: Box::new(stale),
+                    original: None,
                 },
             );
             assert_eq!(s.subscriptions[0], edited_copy(), "{field}");
@@ -1235,9 +1278,73 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(mksub("s1", Some("g-main"))),
+                original: None,
             },
         );
         assert_eq!(s.subscriptions[0], mksub("s1", Some("g-main")));
+    }
+
+    /// The sheet opened on `opened`; then a fetch renamed the subscription (and
+    /// the group made for it) and switched auto-update on.
+    fn fetched_while_editing() -> (AppState, Subscription) {
+        let mut s = base();
+        let mut opened = mksub("s1", Some("gs"));
+        opened.remarks = "Old Title".into();
+        let mut fetched = opened.clone();
+        fetched.remarks = "New Title".into();
+        fetched.auto_update = true;
+        fetched.provider_interval_hours = Some(12);
+        owned_group(&mut s, "gs", "New Title", "s1");
+        s.subscriptions = vec![fetched];
+        (s, opened)
+    }
+
+    fn save_edit(s: &mut AppState, edited: Subscription, opened: &Subscription) {
+        apply_mutation(
+            s,
+            &MutationIntent::UpsertSub {
+                subscription: Box::new(edited),
+                original: Some(Box::new(opened.clone())),
+            },
+        );
+    }
+
+    #[test]
+    fn an_edit_keeps_the_settings_a_fetch_changed_meanwhile() {
+        let (mut s, opened) = fetched_while_editing();
+        let mut edited = opened.clone();
+        edited.filter = "DE".into();
+        save_edit(&mut s, edited, &opened);
+        let sub = &s.subscriptions[0];
+        assert_eq!(sub.filter, "DE");
+        assert_eq!(sub.remarks, "New Title");
+        assert!(sub.auto_update);
+        assert_eq!(sub.provider_interval_hours, Some(12));
+        assert_eq!(
+            s.groups.iter().find(|g| g.id == "gs").unwrap().name,
+            "New Title"
+        );
+    }
+
+    #[test]
+    fn an_edit_applies_what_the_user_changed() {
+        let (mut s, opened) = fetched_while_editing();
+        s.groups.push(Group {
+            id: "g3".into(),
+            name: "Three".into(),
+            sub_id: None,
+        });
+        s.profiles = vec![owned("trojan://pw@a.com:443#A", "a", "gs", "s1")];
+        let mut edited = opened.clone();
+        edited.remarks = "Mine".into();
+        edited.manual_title = true;
+        edited.group_id = Some("g3".into());
+        save_edit(&mut s, edited, &opened);
+        let sub = &s.subscriptions[0];
+        assert_eq!(sub.remarks, "Mine");
+        assert!(sub.manual_title);
+        assert_eq!(sub.group_id.as_deref(), Some("g3"));
+        assert_eq!(s.profiles[0].meta().group_id, "g3");
     }
 
     #[test]
@@ -1763,6 +1870,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(next.clone()),
+                original: None,
             },
         );
         assert_eq!(
@@ -1783,6 +1891,7 @@ mod tests {
             &mut s,
             &MutationIntent::UpsertSub {
                 subscription: Box::new(next),
+                original: None,
             },
         );
         assert_eq!(s.groups.iter().find(|g| g.id == "gs").unwrap().name, "Mine");
