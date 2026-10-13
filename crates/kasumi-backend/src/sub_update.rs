@@ -1612,7 +1612,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn live_fixture_offers_routing_and_applies_none() {
+    async fn live_fixture_with_an_empty_routing_offers_none() {
         let (p, _d) = TestPlatform::new();
         let (base, _) = serve(vec![crate::testutil::fixture_response("01-happ-full")]).await;
         let mut state = default_app_state();
@@ -1621,20 +1621,10 @@ mod tests {
         let next = update(&p).await;
 
         let s = &next.subscriptions[0];
-        assert_eq!(s.pending_changes.len(), 1);
-        let change = &s.pending_changes[0];
-        assert_eq!(
-            (change.key.as_str(), change.value.as_str()),
-            ("routing", "EXAMPLE-ROUTING")
-        );
-        assert!(matches!(
-            change.action,
-            kasumi_core::state::ChangeAction::ImportRouting { .. }
-        ));
+        assert!(s.pending_changes.is_empty());
         assert_eq!(next.routes, state.routes, "no routing applied");
         assert_eq!(next.rule_blocks, state.rule_blocks);
-        assert_eq!(s.audit.len(), 1);
-        assert_eq!(s.audit[0].outcome, AuditOutcome::Offered);
+        assert!(s.audit.is_empty());
     }
 
     #[tokio::test]

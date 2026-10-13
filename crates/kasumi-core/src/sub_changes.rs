@@ -427,6 +427,8 @@ fn current_setting(s: &AdvancedSettings, setting: &TunnelSetting) -> Option<Stri
 }
 
 /// The last routing profile the fetch delivered, from the body or the stored header.
+/// A profile with no rules and no `GlobalProxy` verdict changes nothing in Kasumi,
+/// and a group route would still shadow the user's default route, so it is not offered.
 fn routing_offer(routing: &[RoutingAction], meta: &MetaMap) -> Option<RoutingImport> {
     let from_meta = meta
         .routing()
@@ -437,6 +439,7 @@ fn routing_offer(routing: &[RoutingAction], meta: &MetaMap) -> Option<RoutingImp
         .rev()
         .find_map(RoutingAction::profile)
         .map(routing_import)
+        .filter(RoutingImport::has_effect)
 }
 
 /// Map a Happ routing profile onto Kasumi's rule lists. DNS, geo-file URLs, the
@@ -739,15 +742,20 @@ fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport
         source_sub_id,
     } = target;
     let rules = routing_rules(&block_id, r);
-    let block = RuleBlock {
-        id: block_id.clone(),
-        name: r.name.clone(),
-        rules,
-        source_sub_id: source_sub_id.clone(),
-    };
-    match state.rule_blocks.iter_mut().find(|b| b.id == block_id) {
-        Some(slot) => *slot = block,
-        None => state.rule_blocks.push(block),
+    let has_rules = !rules.is_empty();
+    if has_rules {
+        let block = RuleBlock {
+            id: block_id.clone(),
+            name: r.name.clone(),
+            rules,
+            source_sub_id: source_sub_id.clone(),
+        };
+        match state.rule_blocks.iter_mut().find(|b| b.id == block_id) {
+            Some(slot) => *slot = block,
+            None => state.rule_blocks.push(block),
+        }
+    } else {
+        state.rule_blocks.retain(|b| b.id != block_id);
     }
     // Another route listing the group loses it: a group runs with one route.
     upsert_route(
@@ -758,10 +766,14 @@ fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport
             enabled,
             profiles: Vec::new(),
             groups: vec![group],
-            blocks: vec![RouteBlockRef {
-                block_id,
-                enabled: true,
-            }],
+            blocks: if has_rules {
+                vec![RouteBlockRef {
+                    block_id,
+                    enabled: true,
+                }]
+            } else {
+                Vec::new()
+            },
             final_outbound: routing_final(r),
             source_sub_id,
         },
@@ -1102,6 +1114,68 @@ mod tests {
             r.ignored_fields,
             ["DomainStrategy", "RemoteDnsType", "Geoipurl"]
         );
+    }
+
+    fn empty_profile() -> RoutingProfile {
+        RoutingProfile {
+            name: "EXAMPLE-ROUTING".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn empty_routing_profile_is_not_offered() {
+        let st = state();
+        for action in [
+            RoutingAction::OnAdd(empty_profile()),
+            RoutingAction::Add(empty_profile()),
+        ] {
+            let o = offers(&st, &MetaMap::new(), &[action]);
+            assert!(o.pending.is_empty());
+        }
+        let link = "happ://routing/onadd/eyJOYW1lIjoiRVhBTVBMRS1ST1VUSU5HIiwiRGlyZWN0U2l0ZXMiOltdLCJEaXJlY3RJcCI6W119";
+        let m = meta(&[("routing", link)]);
+        assert!(offers(&st, &m, &[]).pending.is_empty());
+        assert_eq!(st.routes.len(), 1);
+        assert!(st.rule_blocks.iter().all(|b| b.source_sub_id.is_none()));
+    }
+
+    #[test]
+    fn routing_verdict_without_rules_is_offered_without_a_block() {
+        let mut st = state();
+        let blocks = st.rule_blocks.len();
+        let p = RoutingProfile {
+            global_proxy: Some(true),
+            ..empty_profile()
+        };
+        let o = offers(&st, &MetaMap::new(), &[RoutingAction::OnAdd(p)]);
+        assert_eq!(o.pending.len(), 1);
+        st.subscriptions[0].pending_changes = o.pending;
+        answer(&mut st, "routing", true);
+        assert_eq!(st.rule_blocks.len(), blocks);
+        let route = st
+            .routes
+            .iter()
+            .find(|r| r.source_sub_id.is_some())
+            .unwrap();
+        assert!(route.blocks.is_empty());
+        assert_eq!(route.final_outbound, "proxy");
+    }
+
+    #[test]
+    fn refresh_does_not_reoffer_a_routing_after_acceptance() {
+        let mut st = state();
+        let p = RoutingProfile {
+            global_proxy: Some(true),
+            ..empty_profile()
+        };
+        let a = [RoutingAction::OnAdd(p)];
+        let o = offers(&st, &MetaMap::new(), &a);
+        st.subscriptions[0].pending_changes = o.pending;
+        answer(&mut st, "routing", true);
+        assert!(offers(&st, &MetaMap::new(), &a).pending.is_empty());
+        let empty = [RoutingAction::OnAdd(empty_profile())];
+        assert!(offers(&st, &MetaMap::new(), &empty).pending.is_empty());
     }
 
     #[test]
@@ -1604,7 +1678,7 @@ mod tests {
     }
 
     #[test]
-    fn live_fixture_offers_one_routing_import() {
+    fn live_fixture_with_an_empty_routing_offers_nothing() {
         let (headers, body) = crate::sub_ingest::tests::http_fixture("01-happ-full");
         let ing = crate::sub_ingest::ingest(&crate::sub_ingest::IngestInput {
             url: "https://sub.example.org/s",
@@ -1625,11 +1699,6 @@ mod tests {
             &ing.routing,
             NOW,
         );
-        assert_eq!(o.pending.len(), 1);
-        let ChangeAction::ImportRouting { routing, activate } = &o.pending[0].action else {
-            panic!("{:?}", o.pending[0].action);
-        };
-        assert_eq!(routing.name, "EXAMPLE-ROUTING");
-        assert!(*activate);
+        assert!(o.pending.is_empty());
     }
 }
