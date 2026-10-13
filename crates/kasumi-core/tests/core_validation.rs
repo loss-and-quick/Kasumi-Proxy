@@ -179,15 +179,17 @@ fn generate() -> Vec<(String, Profile)> {
         }
     }
 
-    // 3. Shadowsocks × every cipher (TCP).
+    // 3. Shadowsocks × every cipher (TCP), plain and with v2ray-plugin TLS.
     for method in SsMethod::iter() {
-        let name = format!("ss/{}", wire(&method));
-        if let Some(Profile::Shadowsocks(mut s)) =
-            make(Protocol::Shadowsocks, None, Security::Tls, &name)
-        {
-            s.method = method;
-            s.password = ss_key(method).to_string();
-            cases.push((name, Profile::Shadowsocks(s)));
+        for (kind, security) in [("ss", Security::None), ("ss-tls", Security::Tls)] {
+            let name = format!("{kind}/{}", wire(&method));
+            if let Some(Profile::Shadowsocks(mut s)) =
+                make(Protocol::Shadowsocks, None, security, &name)
+            {
+                s.method = method;
+                s.password = ss_key(method).to_string();
+                cases.push((name, Profile::Shadowsocks(s)));
+            }
         }
     }
 
@@ -349,9 +351,21 @@ fn generate() -> Vec<(String, Profile)> {
         }
     }
 
+    // 15b. A plain Shadowsocks link on both cores: a cipher both implement is
+    //      selectable, so pin each engine explicitly.
+    for engine in CoreEngine::iter() {
+        let name = format!("ss-link/plain-{}", wire(&engine));
+        if let Some(mut p) =
+            kasumi_core::share::parse_share_link("ss://YWVzLTI1Ni1nY206cHc=@e.example:8388#x", None)
+        {
+            p.meta_mut().core_type = Some(engine);
+            cases.push((name, p));
+        }
+    }
+
     // 16. Shadowsocks plugin code paths. SS+WS triggers the v2ray-plugin
     //     websocket branch; SS+TCP+http-header triggers obfs-local. Neither
-    //     is reached by the SS cipher sweep (which uses TCP+TLS).
+    //     is reached by the SS cipher sweep (plain TCP).
     {
         let name = "ss-plugin/ws".to_string();
         if let Some(Profile::Shadowsocks(mut s)) = make(

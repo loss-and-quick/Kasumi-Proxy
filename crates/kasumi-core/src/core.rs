@@ -62,8 +62,8 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
         }
         Profile::Shadowsocks(ss) => {
             // Ciphers only Xray implements — sing-box has the `-ietf-` chacha variant
-            // only and no `plain`, so these must run on Xray even though the default
-            // TLS would otherwise route shadowsocks to sing-box below.
+            // only and no `plain`, so these must run on Xray even when a v2ray-plugin
+            // transport would otherwise route shadowsocks to sing-box below.
             if matches!(
                 ss.method,
                 SsMethod::Plain | SsMethod::Chacha20Poly1305 | SsMethod::Xchacha20Poly1305
@@ -306,7 +306,7 @@ mod tests {
     fn shadowsocks_method_routing_splits_by_core() {
         use CoreEngine::{SingBox, Xray};
         // Ciphers only Xray implements (sing-box has no `plain` and only the IETF
-        // chacha variant) — must route to Xray despite shadowsocks' default TLS.
+        // chacha variant) — must route to Xray.
         for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
             assert_eq!(
                 forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
@@ -436,5 +436,20 @@ mod tests {
         s2.core_by_protocol
             .insert(Protocol::Vless, CoreEngine::SingBox);
         assert_eq!(resolve_core(&prof, &s2), CoreEngine::SingBox);
+    }
+
+    #[test]
+    fn plain_shadowsocks_with_a_shared_cipher_stays_selectable() {
+        // aes-256-gcm runs on both cores; only a v2ray-plugin transport pins sing-box.
+        assert_eq!(
+            forced_core(&p("ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388#plain")),
+            None
+        );
+        assert_eq!(
+            forced_core(&p(
+                "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket%3Btls#ws"
+            )),
+            Some(CoreEngine::SingBox)
+        );
     }
 }

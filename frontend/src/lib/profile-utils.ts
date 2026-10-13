@@ -186,6 +186,37 @@ export function emptyProfile(protocol: Protocol, groupId = "g-main"): Profile {
   return base;
 }
 
+/**
+ * The draft after switching its protocol: a fresh per-protocol skeleton that
+ * carries over the identity, the endpoint/tls/transport sub-objects, and any
+ * overlapping root credential field. A protocol whose template starts without
+ * TLS (Shadowsocks, where TLS is a v2ray-plugin option) keeps that off.
+ */
+export function switchProtocol(cur: Profile, proto: Protocol): Profile {
+  const next = emptyProfile(proto, cur.meta.groupId);
+  next.meta = {
+    ...next.meta,
+    id: cur.meta.id,
+    remarks: cur.meta.remarks,
+    subId: cur.meta.subId,
+    coreType: cur.meta.coreType,
+    via: cur.meta.via,
+  };
+  if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
+  if ("tls" in next && next.tls && "tls" in cur && cur.tls) {
+    const optIn = next.tls.security === "none";
+    next.tls = optIn ? { ...cur.tls, security: "none" } : { ...cur.tls };
+  }
+  if ("transport" in next && "transport" in cur && cur.transport) next.transport = cur.transport;
+  const skip = new Set(["meta", "endpoint", "tls", "transport", "protocol"]);
+  const from = cur as Record<string, unknown>;
+  const into = next as Record<string, unknown>;
+  for (const key of Object.keys(into)) {
+    if (!skip.has(key) && from[key] !== undefined) into[key] = from[key];
+  }
+  return next;
+}
+
 /** A custom profile whose raw config came from a subscription, not the user. */
 export const isProviderCustom = (p: Profile): boolean =>
   p.protocol === "custom" && p.origin === "provider";

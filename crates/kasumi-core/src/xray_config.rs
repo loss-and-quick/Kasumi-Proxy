@@ -1624,4 +1624,15 @@ mod tests {
         let err = build_xray_config(&bad, &AdvancedSettings::default(), &[], &[]).unwrap_err();
         assert!(err.contains("no proxy outbound"), "{err}");
     }
+
+    #[test]
+    fn plain_shadowsocks_outbound_has_no_tls_stream() {
+        let p =
+            crate::share::parse_share_link("ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388#plain", None)
+                .unwrap();
+        let out = build_outbound(&p, &AdvancedSettings::default()).unwrap();
+        assert_eq!(out["protocol"], "shadowsocks");
+        assert_eq!(out["streamSettings"]["security"], "none", "{out}");
+        assert!(out["streamSettings"].get("tlsSettings").is_none(), "{out}");
+    }
 }

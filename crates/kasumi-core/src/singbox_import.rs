@@ -131,7 +131,7 @@ fn server(o: &Value) -> Option<Profile> {
                 meta: m,
                 endpoint: endpoint(address, port()?)?,
                 transport: Transport::default(),
-                tls: Tls::default(),
+                tls: Tls::off(),
                 password: text(o, "password"),
                 method: as_ss_method(&text(o, "method")),
                 mux_enabled,
@@ -676,5 +676,41 @@ mod tests {
         assert_eq!(seconds("1m"), "60");
         assert_eq!(seconds(""), "");
         assert_eq!(seconds("10ms"), "");
+    }
+
+    #[test]
+    fn shadowsocks_outbound_gets_tls_only_from_v2ray_plugin_opts() {
+        let import = |outbound: Value| {
+            let imported = import_singbox(&json!({ "outbounds": [outbound] }));
+            match &imported.profiles[..] {
+                [Profile::Shadowsocks(ss)] => ss.clone(),
+                other => panic!("{other:?}"),
+            }
+        };
+        let plain = import(
+            json!({ "type": "shadowsocks", "tag": "SS", "server": "ss.example",
+            "server_port": 8388, "method": "aes-256-gcm", "password": "pw" }),
+        );
+        assert_eq!(plain.tls.security, Security::None);
+        let link = Profile::Shadowsocks(plain.clone());
+        assert_eq!(
+            link,
+            link_profile("ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388#SS", &link)
+        );
+
+        let ws_tls = import(
+            json!({ "type": "shadowsocks", "tag": "SS", "server": "ss.example",
+            "server_port": 8388, "method": "aes-256-gcm", "password": "pw",
+            "plugin": "v2ray-plugin", "plugin_opts": "mode=websocket;host=cdn.example;path=/ws;tls" }),
+        );
+        assert_eq!(ws_tls.tls.security, Security::Tls);
+        assert_eq!(ws_tls.tls.sni, "cdn.example");
+
+        let ws = import(
+            json!({ "type": "shadowsocks", "tag": "SS", "server": "ss.example",
+            "server_port": 8388, "method": "aes-256-gcm", "password": "pw",
+            "plugin": "v2ray-plugin", "plugin_opts": "mode=websocket;host=cdn.example;path=/ws" }),
+        );
+        assert_eq!(ws.tls.security, Security::None);
     }
 }

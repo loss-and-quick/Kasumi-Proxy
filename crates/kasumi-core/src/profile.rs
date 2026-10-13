@@ -156,7 +156,9 @@ pub struct Shadowsocks {
     pub endpoint: Endpoint,
     #[serde(default)]
     pub transport: Transport,
-    #[serde(default)]
+    /// Shadowsocks has no TLS of its own: this is v2ray-plugin's `tls` option,
+    /// so it stays off unless the plugin asks for it.
+    #[serde(default = "Tls::off")]
     pub tls: Tls,
     pub password: String,
     #[serde(default = "ss_method_default")]
@@ -598,5 +600,15 @@ mod tests {
         let Profile::Wireguard(wg) = &w else { panic!() };
         assert_eq!(wg.local_address, "172.16.0.2/32");
         assert_eq!(wg.mtu, 1420);
+    }
+
+    #[test]
+    fn blank_shadowsocks_profile_starts_without_tls() {
+        // Shadowsocks TLS only exists as v2ray-plugin's `tls` option, so a new
+        // profile must not opt into it.
+        let Profile::Shadowsocks(ss) = empty_profile(Protocol::Shadowsocks, "g-main") else {
+            panic!("not shadowsocks")
+        };
+        assert_eq!(ss.tls.security, Security::None);
     }
 }
