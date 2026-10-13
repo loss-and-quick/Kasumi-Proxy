@@ -167,6 +167,12 @@ export const bridge: Bridge = {
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },
+  async resolveImportInput(text) {
+    return (await loadBridge()).resolveImportInput(text);
+  },
+  async revealSubscriptionUrl(url) {
+    return (await loadBridge()).revealSubscriptionUrl(url);
+  },
   async buildShareLink(profile) {
     return (await loadBridge()).buildShareLink(profile);
   },

@@ -1,33 +1,58 @@
 // ============================================================
 // features/add/AddSheet.tsx
 // One place to add things: paste or scan whatever you have — subscription
-// URLs, share links, an exported subscription list — and it's sorted out here.
+// URLs, happ:// links, share links, an exported subscription list — and it's
+// sorted out here.
 // ============================================================
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   Btn,
   Field,
   GroupPicker,
+  Icon,
   IntervalField,
   RowToggle,
+  Select,
   SettingGroup,
   Sheet,
   SheetAction,
 } from "../../components";
-import { useT } from "../../i18n";
-import { classifyAddInput } from "../../lib/add-input";
+import { type DictKey, useT } from "../../i18n";
+import {
+  type AddInput,
+  addInputFrom,
+  EMPTY_ADD_INPUT,
+  parseSubscriptionDump,
+} from "../../lib/add-input";
+import type { ResolvedImport } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
-import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
+import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { readText } from "../profiles/clipboard";
+import { RoutingImportCard } from "../subscriptions/RoutingImportCard";
 
 const QrScannerSheet = lazy(() =>
   import("../../components/QrScannerSheet").then((module) => ({ default: module.QrScannerSheet })),
 );
 
 /** What was added, so the screen can show it. */
-export type AddResult = { subs: number; profiles: number; profileGroup: string | null };
+export type AddResult = {
+  subs: number;
+  profiles: number;
+  profileGroup: string | null;
+  routes: number;
+};
+
+const UNSUPPORTED_TEXT: Record<ResolvedImport["unsupported"][number]["kind"], DictKey> = {
+  control: "add.unsupported.control",
+  sendToDevice: "add.unsupported.sendToDevice",
+  routingOff: "add.unsupported.routingOff",
+  urlDecrypt: "add.unsupported.urlDecrypt",
+  invalid: "add.unsupported.invalid",
+};
+
+type RouteChoice = { groupId: string; activate: boolean };
 
 export function AddSheet({
   open,
@@ -60,12 +85,16 @@ export function AddSheet({
   const resolveGroup = useAppStore((s) => s.resolveGroup);
   const addProfiles = useAppStore((s) => s.addProfiles);
   const updateSub = useAppStore((s) => s.updateSub);
+  const importRoutingLink = useAppStore((s) => s.importRoutingLink);
 
   const [text, setText] = useState("");
   const [groupEach, setGroupEach] = useState(true);
   const [group, setGroup] = useState<GroupChoice>(defaultGroup);
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [interval, setIntervalMinutes] = useState(360); // minutes (06:00)
+  // The backend's sorting of `text`, kept until the next one arrives.
+  const [resolved, setResolved] = useState<{ text: string; value: ResolvedImport } | null>(null);
+  const [routeChoices, setRouteChoices] = useState<RouteChoice[]>([]);
   const [profileCount, setProfileCount] = useState(0);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -88,10 +117,20 @@ export function AddSheet({
     });
   }, [open]);
 
-  const { subs, profileText } = useMemo(
-    () => classifyAddInput(text, { autoUpdate, interval }),
+  const dump = useMemo(
+    () => parseSubscriptionDump(text, { autoUpdate, interval }),
     [text, autoUpdate, interval],
   );
+  const isDump = dump !== null;
+  const encryptedName = t("add.encryptedName");
+  const input: AddInput = useMemo(() => {
+    if (dump) return { ...EMPTY_ADD_INPUT, subs: dump };
+    if (!resolved) return EMPTY_ADD_INPUT;
+    return addInputFrom(resolved.value, { autoUpdate, interval }, encryptedName);
+  }, [dump, resolved, autoUpdate, interval, encryptedName]);
+  const { subs, routing, unsupported } = input;
+  // Typing ran ahead of the last answer: nothing is added until it catches up.
+  const stale = !isDump && text.trim() !== "" && resolved?.text !== text;
   // A URL that's already a subscription (or repeats in the paste) is skipped.
   const { fresh, known } = useMemo(() => {
     const seen = new Set(existingSubs.map((s) => s.url.trim()));
@@ -99,31 +138,56 @@ export function AddSheet({
     return { fresh, known: subs.length - fresh.length };
   }, [subs, existingSubs]);
 
-  // Count the profile links the backend recognises, once typing settles.
+  // Once typing settles, the backend sorts the text and counts the profile links in it.
   useEffect(() => {
-    if (!profileText.trim()) {
+    if (!text.trim() || isDump) {
+      setResolved(null);
       setProfileCount(0);
       return;
     }
     let alive = true;
-    const timer = window.setTimeout(() => {
-      bridge
-        .parseShareLinks(profileText)
-        .then((parsed) => alive && setProfileCount(parsed.length))
-        .catch(() => alive && setProfileCount(0));
+    const timer = window.setTimeout(async () => {
+      try {
+        const value = await bridge.resolveImportInput(text);
+        const count = value.shareText.trim()
+          ? (await bridge.parseShareLinks(value.shareText)).length
+          : 0;
+        if (!alive) return;
+        setResolved({ text, value });
+        setProfileCount(count);
+      } catch {
+        if (!alive) return;
+        setResolved({
+          text,
+          value: { subscriptions: [], routing: [], unsupported: [], shareText: text },
+        });
+        setProfileCount(0);
+      }
     }, 250);
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [profileText]);
+  }, [text, isDump]);
+
+  // Each routing profile goes to the group the sheet was opened for, or the base one.
+  useEffect(() => {
+    const start = openDefaults.current.defaultGroup;
+    const groupId = "id" in start ? start.id : BASE_GROUP_ID;
+    setRouteChoices(routing.map((r) => ({ groupId, activate: r.activate })));
+  }, [routing]);
 
   const hasSubs = fresh.length > 0;
   const hasProfiles = profileCount > 0;
+  const hasRouting = routing.length > 0 && routeChoices.length === routing.length;
+  const encryptedUrls = new Set(
+    resolved?.value.subscriptions.filter((s) => s.encrypted).map((s) => s.url) ?? [],
+  );
+  const encryptedCount = fresh.filter((s) => encryptedUrls.has(s.url)).length;
   // The picker files the profiles, and the subscriptions too unless each gets its own.
   const showPicker = hasProfiles || (hasSubs && !groupEach);
   const singleSubName = fresh.length === 1 ? fresh[0].remarks : undefined;
-  const nothing = !hasSubs && !hasProfiles;
+  const nothing = stale || (!hasSubs && !hasProfiles && !hasRouting);
 
   const submit = async () => {
     if (showPicker && !groupChoiceReady(group, groupEach ? "" : (singleSubName ?? ""))) {
@@ -141,14 +205,18 @@ export function AddSheet({
         const choice: GroupChoice = !groupEach ? group : kept ? { id: kept.id } : { newName: "" };
         await saveSubscription(sub, choice);
       }
-      if (profileText.trim()) {
-        const parsed = await bridge.parseShareLinks(profileText);
+      if (input.profileText.trim()) {
+        const parsed = await bridge.parseShareLinks(input.profileText);
         if (parsed.length) {
           const groupId = await resolveGroup(group, "");
           await addProfiles(parsed.map((p) => ({ ...p, meta: { ...p.meta, groupId } })));
           profileGroup = groupId;
           added = parsed.length;
         }
+      }
+      for (const [i, link] of routing.entries()) {
+        const choice = routeChoices[i];
+        await importRoutingLink(link.routing, choice.groupId, choice.activate);
       }
     } catch (e) {
       if (!wasReported(e))
@@ -158,14 +226,19 @@ export function AddSheet({
     }
     setSaving(false);
     onClose();
-    onDone({ subs: fresh.length, profiles: added, profileGroup });
+    onDone({ subs: fresh.length, profiles: added, profileGroup, routes: routing.length });
     for (const sub of fresh) if (sub.enabled) await updateSub(sub.id);
   };
+
+  const setRouteChoice = (i: number, patch: Partial<RouteChoice>) =>
+    setRouteChoices((all) => all.map((c, j) => (j === i ? { ...c, ...patch } : c)));
 
   const summary = [
     hasSubs ? t("add.foundSubs", { count: fresh.length }) : null,
     hasProfiles ? t("add.foundProfiles", { count: profileCount }) : null,
+    hasRouting ? t("add.foundRouting", { count: routing.length }) : null,
     known ? t("add.alreadyAdded", { count: known }) : null,
+    unsupported.length ? t("add.foundUnsupported", { count: unsupported.length }) : null,
   ].filter((x): x is string => !!x);
 
   return (
@@ -186,6 +259,33 @@ export function AddSheet({
               : t("add.inputHint")
           }
         />
+
+        {encryptedCount > 0 && (
+          <Note
+            icon="lock"
+            color="var(--primary)"
+            title={t("add.encrypted.title", { count: encryptedCount })}
+          >
+            {t("add.encrypted.body")}
+          </Note>
+        )}
+        {unsupported.map((u, i) => (
+          <Note
+            // biome-ignore lint/suspicious/noArrayIndexKey: the same link may be pasted twice.
+            key={i}
+            icon="block"
+            color={
+              u.kind === "urlDecrypt" || u.kind === "invalid"
+                ? "var(--warn)"
+                : "var(--on-surface-variant)"
+            }
+            title={t(UNSUPPORTED_TEXT[u.kind])}
+          >
+            <span className="mono truncate" dir="ltr" style={{ display: "block", fontSize: 11.5 }}>
+              {u.text}
+            </span>
+          </Note>
+        ))}
 
         {hasSubs && (
           <>
@@ -229,6 +329,25 @@ export function AddSheet({
             style={{ marginTop: 10 }}
           />
         )}
+
+        {hasRouting &&
+          routing.map((link, i) => (
+            <RoutingImportCard
+              // biome-ignore lint/suspicious/noArrayIndexKey: the same profile may be pasted twice.
+              key={i}
+              groupId={routeChoices[i].groupId}
+              routing={link.routing}
+              activate={routeChoices[i].activate}
+              onActivate={(activate) => setRouteChoice(i, { activate })}
+            >
+              <Select
+                label={t("add.routingGroup")}
+                value={routeChoices[i].groupId}
+                options={groups.map((g) => ({ value: g.id, label: g.name }))}
+                onChange={(groupId) => setRouteChoice(i, { groupId })}
+              />
+            </RoutingImportCard>
+          ))}
 
         <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
           <Btn variant="outline" icon="qr_code_scanner" onClick={() => setScanning(true)}>
@@ -285,5 +404,41 @@ export function AddSheet({
         </Suspense>
       )}
     </>
+  );
+}
+
+/** A card under the input: what an encrypted link means, or why a link is skipped. */
+function Note({
+  icon,
+  color,
+  title,
+  children,
+}: {
+  icon: string;
+  color: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="note"
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start",
+        marginTop: 10,
+        padding: "10px 12px",
+        background: "var(--sc-high)",
+        borderRadius: 12,
+        fontSize: 13,
+        lineHeight: 1.45,
+      }}
+    >
+      <Icon name={icon} style={{ fontSize: 20, color, flexShrink: 0 }} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontWeight: 500 }}>{title}</div>
+        <div style={{ color: "var(--on-surface-variant)", marginTop: 2 }}>{children}</div>
+      </div>
+    </div>
   );
 }

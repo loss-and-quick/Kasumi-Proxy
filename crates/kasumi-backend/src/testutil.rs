@@ -269,3 +269,21 @@ pub fn fixture_response(name: &str) -> Vec<u8> {
         .collect();
     http_response(200, &headers, &raw[split + 4..])
 }
+
+/// A `happ://crypt/` link to `url`, made with the public half of happ-sub's built-in
+/// `crypt` key, so a test can point an encrypted link at a local server.
+pub fn crypt1_link(url: &str) -> String {
+    use base64::Engine;
+    use happ_sub::url_crypt::{Keyring, builtin_keyring};
+    use rsa::Pkcs1v15Encrypt;
+
+    let key = builtin_keyring()
+        .get_ordinal_key(0)
+        .unwrap()
+        .to_public_key();
+    let cipher = key
+        .encrypt(&mut rsa::rand_core::OsRng, Pkcs1v15Encrypt, url.as_bytes())
+        .unwrap();
+    let payload = base64::engine::general_purpose::STANDARD.encode(cipher);
+    format!("happ://crypt/{payload}")
+}

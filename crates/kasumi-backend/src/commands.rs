@@ -21,6 +21,9 @@ use kasumi_core::contract::{
 use kasumi_core::core::{forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::enums::CoreEngine;
+use kasumi_core::import_input::{
+    ResolvedImport, is_encrypted_url, resolve_import_text, subscription_fetch_url,
+};
 use kasumi_core::mutate::{MutationIntent, apply_mutation};
 use kasumi_core::profile::Profile;
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
@@ -118,6 +121,15 @@ pub enum Command {
     TestLog {
         profile_id: String,
         kind: TestKind,
+    },
+    /// Sort pasted or scanned text into subscriptions, `happ://` links and share
+    /// links (`import_input`), so the UI never re-implements the grammar.
+    ResolveImportInput {
+        text: String,
+    },
+    /// The URL an encrypted `happ://crypt` link leads to, for an explicit reveal.
+    RevealSubscriptionUrl {
+        url: String,
     },
     #[serde(rename_all = "camelCase")]
     ParseShareLinks {
@@ -219,6 +231,7 @@ pub enum Response {
     /// A bare acknowledgement (`{ok: true}` / no body in the old protocol).
     Ok,
     RequestIdentity(Box<ResolvedIdentity>),
+    ImportInput(Box<ResolvedImport>),
 }
 
 /// Reject path traversal / quoting tricks in asset filenames.
@@ -456,6 +469,18 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             &text,
             group_id.as_deref(),
         ))),
+
+        Command::ResolveImportInput { text } => {
+            Ok(Response::ImportInput(Box::new(resolve_import_text(&text))))
+        }
+
+        Command::RevealSubscriptionUrl { url } => {
+            if !is_encrypted_url(&url) {
+                return Err(err("not an encrypted link"));
+            }
+            let plain = subscription_fetch_url(&url).map_err(|e| err(e.to_string()))?;
+            Ok(Response::Text(plain.into_owned()))
+        }
 
         Command::BuildShareLink { profile } => Ok(Response::Text(build_share_link(&profile))),
 
@@ -909,6 +934,44 @@ mod tests {
         .await
         .unwrap_err();
         assert!(e.0.contains("profile not found"));
+    }
+
+    #[tokio::test]
+    async fn resolve_import_input_and_reveal_an_encrypted_link() {
+        let (p, _d) = TestPlatform::new();
+        let link = crate::testutil::crypt1_link("https://sub.example.com/s?t=1");
+        let text = format!("{link}\nhapp://add/https://a.example/s\nhapp://toggle\nvless://x");
+        let Response::ImportInput(r) = dispatch(&p, Command::ResolveImportInput { text })
+            .await
+            .unwrap()
+        else {
+            panic!()
+        };
+        let subs: Vec<(&str, bool)> = r
+            .subscriptions
+            .iter()
+            .map(|s| (s.url.as_str(), s.encrypted))
+            .collect();
+        assert_eq!(
+            subs,
+            [(link.as_str(), true), ("https://a.example/s", false)]
+        );
+        assert_eq!(r.unsupported.len(), 1);
+        assert_eq!(r.share_text, "vless://x");
+
+        let Response::Text(url) = dispatch(&p, Command::RevealSubscriptionUrl { url: link })
+            .await
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(url, "https://sub.example.com/s?t=1");
+        let plain = "https://sub.example.com/s".to_owned();
+        assert!(
+            dispatch(&p, Command::RevealSubscriptionUrl { url: plain })
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]

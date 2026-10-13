@@ -328,6 +328,12 @@ const en = {
   "subs.interval": "Interval (hh:mm)",
   "subs.edit.urlInsecureHint":
     "Unencrypted HTTP — this subscription could be tampered with in transit.",
+  "subs.edit.encrypted": "Encrypted link",
+  "subs.edit.encryptedSub": "The provider hides the address. Kasumi decrypts it on each update.",
+  "subs.edit.reveal": "Reveal",
+  "subs.edit.revealedLabel": "Address behind the link",
+  "subs.edit.revealedHint": "The link stays encrypted unless you change the address.",
+  "subs.edit.replacesEncrypted": "The new address replaces the encrypted link.",
   "subs.edit.validationUrl": "Subscription URL required",
   "subs.edit.validationInterval": "Interval must be greater than 0",
   "subs.edit.validationFilter": "Invalid regex",
@@ -377,7 +383,7 @@ const en = {
   "add.inputLabel": "Links, subscriptions or a QR code",
   "add.inputPh": "https://… · vless://… · ss://…",
   "add.inputHint":
-    "Subscription URLs, share links, a subscription body or an exported list — each is recognised",
+    "Subscription URLs, happ:// links, share links, a subscription body or an exported list — each is recognised",
   "add.nothingFound": "Nothing recognised yet",
   "add.submit": "Add",
   "add.profilesGroup": "Group for the profiles",
@@ -390,6 +396,27 @@ const en = {
     one: "Its own group",
     other: "A group for each subscription",
   }),
+  "add.foundRouting": plural("count", { one: "# routing profile", other: "# routing profiles" }),
+  "add.foundUnsupported": plural("count", {
+    one: "# link not supported",
+    other: "# links not supported",
+  }),
+  "add.encryptedName": "Encrypted subscription",
+  "add.encrypted.title": plural("count", { one: "Encrypted link", other: "# encrypted links" }),
+  "add.encrypted.body":
+    "The provider hides the address. Kasumi keeps the link as it is and decrypts it on each update.",
+  "add.routingGroup": "Group",
+  "add.routingImported": plural("count", {
+    one: "Routing profile imported",
+    other: "# routing profiles imported",
+  }),
+  "add.unsupported.control":
+    "Commands for the Happ app (connect, toggle, open) do nothing in Kasumi.",
+  "add.unsupported.sendToDevice": "A Happ device-sync link; only Happ can read it.",
+  "add.unsupported.routingOff":
+    "Turns a provider's routing off. Switch routes off in Settings → Routing instead.",
+  "add.unsupported.urlDecrypt": "Kasumi has no key for this encrypted link.",
+  "add.unsupported.invalid": "Not a valid Happ link.",
   "groups.picker.new": "New group…",
   "groups.picker.newNamed": "New group “{name}”",
   "groups.picker.nameLabel": "New group name",
@@ -727,6 +754,8 @@ const en = {
   "subs.error.network": "Couldn't reach the provider: {detail}",
   "subs.error.http": "The provider answered HTTP {status}.",
   "subs.error.decrypt": "Couldn't decrypt the provider's response{key}. Kept the previous servers.",
+  "subs.error.urlDecrypt":
+    "Kasumi has no key for this encrypted link. Kept the previous servers; ask the provider for a regular link.",
   "subs.error.empty": "The provider sent an empty response. Kept the previous servers.",
   "subs.error.yaml": "The provider sent a Clash YAML config. Choose another User-Agent.",
   "subs.error.html": "The URL returned a web page, not a subscription.",

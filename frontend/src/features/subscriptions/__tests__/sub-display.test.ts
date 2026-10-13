@@ -106,6 +106,7 @@ describe("errorKey", () => {
     { kind: "network" },
     { kind: "http", status: 403 },
     { kind: "decrypt", keyId: "key02" },
+    { kind: "urlDecrypt" },
     { kind: "emptyBody" },
     { kind: "unknownContent", hint: "yaml" },
     { kind: "unknownContent", hint: "html" },

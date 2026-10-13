@@ -317,6 +317,28 @@ export const SUBS_SEED: Subscription[] = [
     ],
     audit: [{ at: daysAgo(0), key: "provider-configs", outcome: "offered", summary: "Xray JSON" }],
   },
+  {
+    id: "s-veil",
+    remarks: "Veil",
+    // An encrypted happ://crypt5 link, kept as added and decrypted on each fetch.
+    url: "happ://crypt5/fzvd3yxN4D1czBH9VMsYU9US92O71xw1QspMpXf3a9PkZfJ9aJynfWtHwlg94qZEycNqqYapciRebqs0hZyxJTJF3fezsc8jMtCB7E0e6OH/FQRnMcxgkcEP/d=nek5FSQ384dOxZuK+f23OxuD1q8ettHs5hAIyw1aIbQ",
+    groupId: "g-main",
+    enabled: true,
+    autoUpdate: true,
+    interval: 360,
+    lastUpdated: "2026-06-06 11:02",
+    count: 0,
+    userAgent: "",
+    filter: "",
+    allowInsecure: false,
+    updateMode: "auto",
+    manualTitle: false,
+    intervalOverride: false,
+    bodyEncrypted: false,
+    insecureByProvider: false,
+    allowProviderConfigs: false,
+    warnings: [],
+  },
 ];
 
 // What the sanitiser keeps of a provider's Xray config: outbounds and routing.

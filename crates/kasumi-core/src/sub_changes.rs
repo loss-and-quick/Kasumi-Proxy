@@ -9,6 +9,7 @@ use happ_sub::meta::{changes, classify_key, single_line, validate_url_safety};
 use happ_sub::{MetaMap, RiskClass, RoutingAction, RoutingProfile};
 use sha2::{Digest, Sha256};
 
+use crate::import_input::is_encrypted_url;
 use crate::route::{Route, RouteBlockRef, RuleBlock, upsert_route};
 use crate::state::{
     AdvancedSettings, AppState, AuditEntry, AuditOutcome, BASE_GROUP_ID, ChangeAction,
@@ -212,6 +213,10 @@ fn map_key(state: &AppState, sub: &Subscription, key: &str, value: &str) -> Mapp
                 }
             }
         },
+        // The domain of an encrypted link is the provider's secret.
+        "new-domain" if is_encrypted_url(&sub.url) => {
+            Mapped::Ignore("the subscription link is encrypted".into())
+        }
         "new-domain" => match replace_authority(&sub.url, value) {
             Err(e) => Mapped::Ignore(e),
             Ok(url) if url == sub.url => Mapped::NoOp,
@@ -314,10 +319,11 @@ fn same_url(a: &str, b: &str) -> bool {
     wire(a.trim()) == wire(b.trim())
 }
 
-/// The host of `url`, or empty.
+/// The host of an http(s) `url`, or empty.
 pub fn host_of(url: &str) -> String {
     url::Url::parse(url)
         .ok()
+        .filter(|u| matches!(u.scheme(), "http" | "https"))
         .and_then(|u| {
             u.host_str()
                 .map(|h| h.trim_end_matches('.').to_ascii_lowercase())
@@ -633,8 +639,15 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
             routing,
             activate: offered,
         } => {
-            let sub = sub.clone();
-            import_routing(state, &sub, routing, activate.unwrap_or(*offered));
+            let target = RoutingTarget {
+                ids: provider_ids(&sub.id),
+                group: sub
+                    .group_id
+                    .clone()
+                    .unwrap_or_else(|| BASE_GROUP_ID.to_owned()),
+                source_sub_id: Some(sub.id.clone()),
+            };
+            import_routing(state, target, routing, activate.unwrap_or(*offered));
         }
         ChangeAction::TunnelSetting { setting } => {
             let s = &mut state.settings;
@@ -654,10 +667,39 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
     }
 }
 
-/// One block and one route for the subscription's group, replacing an earlier
-/// import. Rules run block, direct, proxy: Happ's default `BLOCK_DIRECT_PROXY` order.
-fn import_routing(state: &mut AppState, sub: &Subscription, r: &RoutingImport, enabled: bool) {
-    let (block_id, route_id) = provider_ids(&sub.id);
+/// Block and route ids, the routed group and the subscription that sent the profile.
+struct RoutingTarget {
+    ids: (String, String),
+    group: String,
+    source_sub_id: Option<String>,
+}
+
+/// A pasted `happ://routing` profile as `group_id`'s route; a re-import replaces it.
+pub fn import_routing_link(
+    state: &mut AppState,
+    group_id: &str,
+    routing: &RoutingImport,
+    enabled: bool,
+) {
+    let target = RoutingTarget {
+        ids: (
+            format!("link-block-{group_id}"),
+            format!("link-route-{group_id}"),
+        ),
+        group: group_id.to_owned(),
+        source_sub_id: None,
+    };
+    import_routing(state, target, routing, enabled);
+}
+
+/// One block and one route for the target's group, replacing an earlier import.
+/// Rules run block, direct, proxy: Happ's default `BLOCK_DIRECT_PROXY` order.
+fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport, enabled: bool) {
+    let RoutingTarget {
+        ids: (block_id, route_id),
+        group,
+        source_sub_id,
+    } = target;
     let lists: [(&str, &str, &[String], bool); 6] = [
         ("BlockSites", "block", &r.block_sites, true),
         ("BlockIp", "block", &r.block_ip, false),
@@ -688,16 +730,12 @@ fn import_routing(state: &mut AppState, sub: &Subscription, r: &RoutingImport, e
         id: block_id.clone(),
         name: r.name.clone(),
         rules,
-        source_sub_id: Some(sub.id.clone()),
+        source_sub_id: source_sub_id.clone(),
     };
     match state.rule_blocks.iter_mut().find(|b| b.id == block_id) {
         Some(slot) => *slot = block,
         None => state.rule_blocks.push(block),
     }
-    let group = sub
-        .group_id
-        .clone()
-        .unwrap_or_else(|| BASE_GROUP_ID.to_owned());
     // Another route listing the group loses it: a group runs with one route.
     upsert_route(
         state,
@@ -716,7 +754,7 @@ fn import_routing(state: &mut AppState, sub: &Subscription, r: &RoutingImport, e
             } else {
                 "proxy".into()
             },
-            source_sub_id: Some(sub.id.clone()),
+            source_sub_id,
         },
     );
 }
@@ -1067,6 +1105,48 @@ mod tests {
                 .unwrap()
                 .enabled
         );
+    }
+
+    #[test]
+    fn routing_link_becomes_the_group_route_and_a_reimport_replaces_it() {
+        let mut st = state();
+        let mut routing = routing_import(&routing_profile());
+        import_routing_link(&mut st, "g-main", &routing, false);
+        routing.name = "Second".into();
+        import_routing_link(&mut st, "g-main", &routing, true);
+
+        let route = st
+            .routes
+            .iter()
+            .find(|r| r.id == "link-route-g-main")
+            .unwrap();
+        assert_eq!(route.groups, ["g-main"]);
+        assert_eq!(route.name, "Second");
+        assert!(route.enabled);
+        assert_eq!(route.source_sub_id, None);
+        assert_eq!(st.routes.len(), 2, "the default route and one import");
+        let block = st
+            .rule_blocks
+            .iter()
+            .find(|b| b.id == "link-block-g-main")
+            .unwrap();
+        assert_eq!(block.source_sub_id, None);
+        assert_eq!(block.rules.len(), 4);
+    }
+
+    #[test]
+    fn encrypted_link_hides_its_host_from_url_changes() {
+        let mut st = state();
+        st.subscriptions[0].url = "happ://crypt5/abcdef".into();
+        let o = offers(&st, &meta(&[("new-domain", "mirror.example.com")]), &[]);
+        assert!(o.pending.is_empty());
+        assert_eq!(o.audit[0].outcome, AuditOutcome::Ignored);
+
+        let o = offers(&st, &meta(&[("new-url", "https://new.example.com/s")]), &[]);
+        let ChangeAction::ReplaceUrl { from_host, .. } = &o.pending[0].action else {
+            panic!("{:?}", o.pending[0].action);
+        };
+        assert_eq!(from_host, "");
     }
 
     #[test]

@@ -34,17 +34,20 @@ Both run the same Rust backend and the same React UI.
 
 - **Two cores.** Xray-core and sing-box, picked per profile. Supported protocols are VLESS, VMess,
   Trojan, Shadowsocks, SOCKS, HTTP, WireGuard, Hysteria2, TUIC, AnyTLS, Naive and ShadowTLS.
-- **Import.** Subscription URLs, share links, mixed text and QR codes.
+- **Import.** Subscription URLs, share links, mixed text and QR codes, plus Happ's `happ://add`,
+  `happ://routing` and encrypted `happ://crypt` … `crypt5` links, pasted or scanned. An encrypted
+  link is kept as given and decrypted on each update.
 - **Subscriptions.** Groups of servers that can be updated in one tap, or in the background
   with no UI open.
-- **Happ-compatible subscriptions.** The provider's title, traffic and expiry, announcements and
-  update interval are read from subscription headers and `#key:` directives, decoded by
-  [happ-sub](https://github.com/loss-and-quick/happ-sub). Updates identify like Happ (User-Agent,
-  HWID and device headers); every value can be changed per subscription or in Settings.
-  Changes the provider proposes (a new URL or domain, a fallback URL, routing profiles, tunnel
-  tweaks) apply only after you review and accept them. JSON bodies work too: full Xray configs,
-  once you allow them, keep only their outbounds and routing, and sing-box configs become regular
-  profiles.
+- **Happ-compatible subscriptions**, decoded by [happ-sub](https://github.com/loss-and-quick/happ-sub):
+  - the provider's title, traffic and expiry, announcements and update interval, from headers and
+    `#key:` directives;
+  - requests that identify like Happ (User-Agent, HWID, device headers), editable per subscription
+    or in Settings;
+  - changes the provider proposes (a new URL or domain, a fallback URL, routing profiles, tunnel
+    tweaks) apply only after you review and accept them;
+  - JSON bodies: full Xray configs, once you allow them, keep only their outbounds and routing;
+    sing-box configs become regular profiles.
 - **Honest status.** An end-to-end probe tells *connected* apart from *no internet* and *failed*.
 - **Diagnostics.** TCP ping, real ping and a speed test for each profile.
 - **Per-app routing** on Android, plus a choice of TUN engine: tun2socks, hev-socks5-tunnel or

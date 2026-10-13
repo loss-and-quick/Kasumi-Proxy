@@ -118,6 +118,8 @@ pub enum SubErrorKind {
     Decrypt {
         key_id: Option<String>,
     },
+    /// The `happ://crypt` link no built-in key opens.
+    UrlDecrypt,
     EmptyBody,
     UnknownContent {
         hint: ContentHint,

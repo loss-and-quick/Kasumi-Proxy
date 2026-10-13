@@ -13,6 +13,7 @@ import type {
   Meta,
   Profile,
   Protocol,
+  ResolvedImport_Serialize as ResolvedImport,
   Tls,
   Transport,
 } from "../generated/bindings";
@@ -100,6 +101,78 @@ function simFetchSub(url: string): Profile[] {
       root: { password: uid(), method: "aes-256-gcm" },
     }),
   ];
+}
+
+/** Dev stand-in for the backend's `import_input`: the same sorting, roughly, without
+ *  decrypting (any `happ://crypt` link passes) and with a lenient routing decode. */
+function simResolveToken(token: string): MockInput {
+  const lower = token.toLowerCase();
+  const plainUrl = (s: string) => /^https?:\/\/[^@/]+(\/|$)/i.test(s);
+  if (!lower.startsWith("happ://"))
+    return plainUrl(token) ? { sub: token, encrypted: false } : null;
+  const rest = token.slice("happ://".length);
+  if (/^crypt[2-5]?\//i.test(rest)) return { sub: token, encrypted: true };
+  if (/^add\//i.test(rest)) {
+    const inner = decodeURIComponent(rest.slice(4));
+    if (/^happ:\/\/crypt[2-5]?\//i.test(inner)) return { sub: inner, encrypted: true };
+    return plainUrl(inner) ? { sub: inner, encrypted: false } : { unsupported: "invalid" };
+  }
+  if (/^routing\/off\/?$/i.test(rest)) return { unsupported: "routingOff" };
+  const routing = /^routing\/(on)?add\/(.+)$/i.exec(rest);
+  if (routing) {
+    try {
+      const p = JSON.parse(atob(routing[2])) as Record<string, unknown>;
+      const list = (k: string) => (Array.isArray(p[k]) ? (p[k] as string[]) : []);
+      return {
+        routing: {
+          name: typeof p.Name === "string" && p.Name ? p.Name : "Routing",
+          directSites: list("DirectSites"),
+          directIp: list("DirectIp"),
+          proxySites: list("ProxySites"),
+          proxyIp: list("ProxyIp"),
+          blockSites: list("BlockSites"),
+          blockIp: list("BlockIp"),
+          globalProxy: typeof p.GlobalProxy === "boolean" ? p.GlobalProxy : null,
+          ignoredFields: Object.keys(p).filter((k) => /Dns|geo|DomainStrategy/i.test(k)),
+        },
+        activate: !!routing[1],
+      };
+    } catch {
+      return { unsupported: "invalid" };
+    }
+  }
+  if (/^send_to_device\//i.test(rest)) return { unsupported: "sendToDevice" };
+  if (/^(toggle|connect|disconnect|open|close)(_without_ui)?\/?$/i.test(rest))
+    return { unsupported: "control" };
+  return { unsupported: "invalid" };
+}
+
+type MockInput =
+  | { sub: string; encrypted: boolean }
+  | { routing: ResolvedImport["routing"][number]["routing"]; activate: boolean }
+  | { unsupported: ResolvedImport["unsupported"][number]["kind"] }
+  | null;
+
+function simResolveImport(text: string): ResolvedImport {
+  const out: ResolvedImport = { subscriptions: [], routing: [], unsupported: [], shareText: "" };
+  const rest: string[] = [];
+  for (const line of text.trim().split(/\r?\n/)) {
+    const tokens = line.trim().split(/\s+/).filter(Boolean);
+    if (!tokens.length) continue;
+    const inputs = tokens.map(simResolveToken);
+    if (inputs.some((x) => x === null)) {
+      rest.push(line);
+      continue;
+    }
+    inputs.forEach((x, i) => {
+      if (!x) return;
+      if ("sub" in x) out.subscriptions.push({ url: x.sub, encrypted: x.encrypted });
+      else if ("routing" in x) out.routing.push({ routing: x.routing, activate: x.activate });
+      else out.unsupported.push({ text: tokens[i], kind: x.unsupported });
+    });
+  }
+  out.shareText = rest.join("\n");
+  return out;
 }
 
 export const mockBridge: Bridge = {
@@ -450,6 +523,17 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
           root: { uuid: uid() },
         }),
       );
+  },
+
+  async resolveImportInput(text: string): Promise<ResolvedImport> {
+    await new Promise((r) => setTimeout(r, 120));
+    return simResolveImport(text);
+  },
+
+  // Dev stub: a fixed address stands in for the decrypted one.
+  async revealSubscriptionUrl(url: string): Promise<string> {
+    if (!/^happ:\/\/crypt/i.test(url)) throw new Error("not an encrypted link");
+    return "https://sub.provider.example/api/v1/sub/9f2c7e41?token=a8d3";
   },
 
   // Dev stub: best-effort share string from the nested profile.

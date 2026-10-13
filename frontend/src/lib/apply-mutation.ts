@@ -116,15 +116,36 @@ function removeProviderRouting(state: AppState, subId: string): AppState {
   };
 }
 
-/** Mirrors `import_routing`: one block and one route per subscription. */
+type RoutingTarget = {
+  blockId: string;
+  routeId: string;
+  group: string;
+  sourceSubId: string | null;
+};
+
+/** Mirrors `provider_ids`. */
+const providerTarget = (sub: Subscription): RoutingTarget => ({
+  blockId: `sub-block-${sub.id}`,
+  routeId: `sub-route-${sub.id}`,
+  group: sub.groupId ?? BASE_GROUP_ID,
+  sourceSubId: sub.id,
+});
+
+/** Mirrors `import_routing_link`. */
+const linkTarget = (group: string): RoutingTarget => ({
+  blockId: `link-block-${group}`,
+  routeId: `link-route-${group}`,
+  group,
+  sourceSubId: null,
+});
+
+/** Mirrors `import_routing`: one block and one route per target. */
 function importRouting(
   state: AppState,
-  sub: Subscription,
+  { blockId, routeId, group, sourceSubId }: RoutingTarget,
   r: RoutingImport,
   enabled: boolean,
 ): AppState {
-  const blockId = `sub-block-${sub.id}`;
-  const routeId = `sub-route-${sub.id}`;
   const lists: [string, string, string[], boolean][] = [
     ["BlockSites", "block", r.blockSites, true],
     ["BlockIp", "block", r.blockIp, false],
@@ -143,16 +164,16 @@ function importRouting(
       domain: sites ? entries : null,
       ip: sites ? null : entries,
     }));
-  const block = { id: blockId, name: r.name, rules, sourceSubId: sub.id };
+  const block = { id: blockId, name: r.name, rules, sourceSubId };
   const route = {
     id: routeId,
     name: r.name,
     enabled,
     profiles: [],
-    groups: [sub.groupId ?? BASE_GROUP_ID],
+    groups: [group],
     blocks: [{ blockId, enabled: true }],
     finalOutbound: r.globalProxy === false ? "direct" : "proxy",
-    sourceSubId: sub.id,
+    sourceSubId,
   };
   return {
     ...state,
@@ -192,7 +213,7 @@ function applyChange(
         ),
       };
     case "importRouting":
-      return importRouting(state, sub, action.routing, activate ?? action.activate);
+      return importRouting(state, providerTarget(sub), action.routing, activate ?? action.activate);
     case "tunnelSetting": {
       const s = action.setting;
       const patch: Partial<AppState["settings"]> =
@@ -408,6 +429,8 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       return intent.id === DEFAULT_ROUTE_ID
         ? state
         : { ...state, routes: state.routes.filter((r) => r.id !== intent.id) };
+    case "importRoutingLink":
+      return importRouting(state, linkTarget(intent.groupId), intent.routing, intent.activate);
     case "setProfileRoute":
       return {
         ...state,

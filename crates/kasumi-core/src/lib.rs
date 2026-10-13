@@ -24,6 +24,7 @@
 //! - [`request_identity`] — the identity a subscription fetch sends, built by happ-sub
 //! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
 //! - [`singbox_import`] — provider sing-box JSON decomposed into typed profiles
+//! - [`import_input`] — pasted subscription URLs, `happ://` links and share links
 
 pub mod app_process;
 pub mod chain;
@@ -35,6 +36,7 @@ pub mod custom_sanitize;
 pub mod data_path_state;
 pub mod enums;
 pub mod hev_config;
+pub mod import_input;
 pub mod migrate;
 pub mod mixins;
 pub mod mutate;

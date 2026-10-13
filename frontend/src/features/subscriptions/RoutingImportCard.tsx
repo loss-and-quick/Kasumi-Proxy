@@ -1,7 +1,7 @@
+import type { ReactNode } from "react";
 import { Icon, RowToggle } from "../../components";
 import { useFormatters, useT } from "../../i18n";
-import type { RoutingImport, Subscription } from "../../lib/bridge";
-import { BASE_GROUP_ID } from "../../lib/groups";
+import type { RoutingImport } from "../../lib/bridge";
 import { useAppStore } from "../../store/useAppStore";
 import { currentGroupRoute, ROUTING_LISTS } from "./proposals";
 
@@ -14,28 +14,34 @@ const COUNT_KEY = {
   proxyIp: "subs.routing.counts.proxyIp",
 } as const;
 
-/** What importing a provider's routing profile would do, and the switch to turn it on. */
+/** What importing a routing profile would do, and the switch to turn it on. */
 export function RoutingImportCard({
-  sub,
+  groupId,
+  ownerSubId,
   routing,
   activate,
   onActivate,
+  children,
 }: {
-  sub: Subscription;
+  /** The group whose route it becomes. */
+  groupId: string;
+  /** The subscription that sent it: re-importing replaces its own route, no conflict. */
+  ownerSubId?: string;
   routing: RoutingImport;
   activate: boolean;
   onActivate: (on: boolean) => void;
+  /** Shown above the group line, such as a choice of group. */
+  children?: ReactNode;
 }) {
   const t = useT();
   const { formatList } = useFormatters();
   const groups = useAppStore((s) => s.groups);
   const routes = useAppStore((s) => s.routes);
   const routingMode = useAppStore((s) => s.settings.routingMode);
-  const groupId = sub.groupId ?? BASE_GROUP_ID;
   const groupName = groups.find((g) => g.id === groupId)?.name ?? groupId;
   const current = currentGroupRoute(routes, groupId);
   // Re-importing replaces this subscription's own route; that is no conflict.
-  const replaces = current && current.sourceSubId !== sub.id ? current : null;
+  const replaces = current && (!ownerSubId || current.sourceSubId !== ownerSubId) ? current : null;
   const counts = ROUTING_LISTS.filter((k) => routing[k].length > 0);
 
   return (
@@ -43,7 +49,7 @@ export function RoutingImportCard({
       style={{
         marginTop: 10,
         padding: "12px 14px",
-        background: "var(--sc-low)",
+        background: "var(--sc-high)",
         borderRadius: 12,
         display: "flex",
         flexDirection: "column",
@@ -72,6 +78,7 @@ export function RoutingImportCard({
           ? t("subs.routing.final.direct")
           : t("subs.routing.final.proxy")}
       </div>
+      {children}
       <div>{t("subs.routing.appliesTo", { group: groupName })}</div>
       {replaces && (
         <div style={{ display: "flex", gap: 8, color: "var(--warn)" }}>

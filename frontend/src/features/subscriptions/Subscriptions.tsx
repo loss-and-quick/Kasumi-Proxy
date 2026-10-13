@@ -194,8 +194,9 @@ export default function Subscriptions({
           setAddOpen(false);
           setEdit("new");
         }}
-        onDone={({ subs: added, profiles, profileGroup }) => {
+        onDone={({ subs: added, profiles, profileGroup, routes }) => {
           if (added) notify(t("subs.imported", { count: added }));
+          if (routes) notify(t("add.routingImported", { count: routes }));
           // Pasted profile links live on the Profiles screen; show them there.
           if (profiles && profileGroup) onOpenGroup(profileGroup);
         }}

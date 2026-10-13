@@ -388,8 +388,9 @@ export default function Profiles({
           // A profile made while looking at a group belongs to that group.
           onOpenEditor("new", groupFilter !== "all" ? groupFilter : undefined);
         }}
-        onDone={({ subs, profiles: added, profileGroup }) => {
+        onDone={({ subs, profiles: added, profileGroup, routes }) => {
           if (subs) notify(t("subs.imported", { count: subs }));
+          if (routes) notify(t("add.routingImported", { count: routes }));
           if (added && profileGroup) setGroupFilter(profileGroup);
         }}
       />

@@ -317,6 +317,12 @@ const vi = {
   "subs.autoUpdateSub": "Làm mới theo lịch",
   "subs.interval": "Khoảng thời gian (hh:mm)",
   "subs.edit.urlInsecureHint": "HTTP không mã hóa — đăng ký này có thể bị giả mạo khi truyền.",
+  "subs.edit.encrypted": "Liên kết mã hóa",
+  "subs.edit.encryptedSub": "Nhà cung cấp ẩn địa chỉ. Kasumi giải mã nó mỗi lần cập nhật.",
+  "subs.edit.reveal": "Hiện",
+  "subs.edit.revealedLabel": "Địa chỉ phía sau liên kết",
+  "subs.edit.revealedHint": "Liên kết vẫn được mã hóa trừ khi bạn đổi địa chỉ.",
+  "subs.edit.replacesEncrypted": "Địa chỉ mới sẽ thay cho liên kết mã hóa.",
   "subs.edit.validationUrl": "Bắt buộc nhập URL đăng ký",
   "subs.edit.validationInterval": "Khoảng thời gian phải lớn hơn 0",
   "subs.edit.validationFilter": "Regex không hợp lệ",
@@ -363,7 +369,7 @@ const vi = {
   "add.inputLabel": "Liên kết, gói đăng ký hoặc mã QR",
   "add.inputPh": "https://… · vless://… · ss://…",
   "add.inputHint":
-    "URL gói đăng ký, liên kết hồ sơ, nội dung gói đăng ký hoặc danh sách đã xuất — đều được nhận diện",
+    "URL gói đăng ký, liên kết happ://, liên kết hồ sơ, nội dung gói đăng ký hoặc danh sách đã xuất — đều được nhận diện",
   "add.nothingFound": "Chưa nhận diện được gì",
   "add.submit": "Thêm",
   "add.profilesGroup": "Nhóm cho các hồ sơ",
@@ -373,6 +379,27 @@ const vi = {
   "add.foundProfiles": plural("count", { one: "# hồ sơ", other: "# hồ sơ" }),
   "add.alreadyAdded": plural("count", { one: "# đã có", other: "# đã có" }),
   "add.groupEach": plural("count", { one: "Nhóm riêng", other: "Mỗi gói đăng ký một nhóm" }),
+  "add.foundRouting": plural("count", { one: "# hồ sơ định tuyến", other: "# hồ sơ định tuyến" }),
+  "add.foundUnsupported": plural("count", {
+    one: "# liên kết không được hỗ trợ",
+    other: "# liên kết không được hỗ trợ",
+  }),
+  "add.encryptedName": "Gói đăng ký mã hóa",
+  "add.encrypted.title": plural("count", { one: "Liên kết mã hóa", other: "# liên kết mã hóa" }),
+  "add.encrypted.body":
+    "Nhà cung cấp ẩn địa chỉ. Kasumi giữ nguyên liên kết và giải mã nó mỗi lần cập nhật.",
+  "add.routingGroup": "Nhóm",
+  "add.routingImported": plural("count", {
+    one: "Đã nhập hồ sơ định tuyến",
+    other: "Đã nhập # hồ sơ định tuyến",
+  }),
+  "add.unsupported.control":
+    "Lệnh cho ứng dụng Happ (kết nối, bật/tắt, mở) không có tác dụng trong Kasumi.",
+  "add.unsupported.sendToDevice": "Liên kết đồng bộ thiết bị của Happ; chỉ Happ đọc được.",
+  "add.unsupported.routingOff":
+    "Tắt định tuyến của nhà cung cấp. Hãy tắt tuyến trong Cài đặt → Định tuyến.",
+  "add.unsupported.urlDecrypt": "Kasumi không có khóa cho liên kết mã hóa này.",
+  "add.unsupported.invalid": "Không phải liên kết Happ hợp lệ.",
   "groups.picker.new": "Nhóm mới…",
   "groups.picker.newNamed": "Nhóm mới “{name}”",
   "groups.picker.nameLabel": "Tên nhóm mới",
@@ -711,6 +738,8 @@ const vi = {
   "subs.error.http": "Nhà cung cấp trả về HTTP {status}.",
   "subs.error.decrypt":
     "Không giải mã được phản hồi của nhà cung cấp{key}. Đã giữ các máy chủ trước đó.",
+  "subs.error.urlDecrypt":
+    "Kasumi không có khóa cho liên kết mã hóa này. Đã giữ các máy chủ trước đó; hãy xin nhà cung cấp một liên kết thường.",
   "subs.error.empty": "Nhà cung cấp gửi phản hồi trống. Đã giữ các máy chủ trước đó.",
   "subs.error.yaml": "Nhà cung cấp gửi cấu hình Clash YAML. Hãy chọn User-Agent khác.",
   "subs.error.html": "URL trả về một trang web, không phải đăng ký.",
