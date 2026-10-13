@@ -1,0 +1,80 @@
+name: Sync bun.nix comment
+
+# Companion to sync-bun-nix.yml for fork PRs. That workflow runs under
+# `pull_request`, so a fork gets a read-only token and cannot comment itself.
+# `workflow_run` executes this file from the default branch with the base repo's
+# token, and never checks out or runs anything from the fork — it only reads the
+# PR number and verdict the fork-side job produced, treating both as untrusted
+# input. See GitHub's "Keeping your GitHub Actions and workflows secure:
+# Preventing pwn requests".
+on:
+  workflow_run:
+    workflows: ['Sync bun.nix']
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      # Same-repo PRs never produce the artifact (the push job handles them).
+      - name: Download the verdict
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: bun-nix-drift
+          path: drift
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post or update the comment
+        if: steps.dl.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          marker='<!-- bun-nix-drift -->'
+          pr=$(head -c 16 drift/pr)
+          drifted=$(head -c 8 drift/drifted)
+          [[ $pr =~ ^[0-9]+$ ]] || { echo "bad PR number"; exit 1; }
+          [[ $drifted == true || $drifted == false ]] || { echo "bad verdict"; exit 1; }
+
+          # The artifact is fork-controlled: only act on a PR whose head is the
+          # commit this run tested, so it can't steer a comment onto another PR,
+          # and skip a run that a newer push already superseded.
+          head_sha=$(gh api "repos/$REPO/pulls/$pr" --jq .head.sha)
+          if [ "$head_sha" != "$RUN_HEAD_SHA" ]; then
+            echo "PR #$pr head moved on; skipping."
+            exit 0
+          fi
+
+          existing=$(gh api --paginate "repos/$REPO/issues/$pr/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | sed -n 1p)
+
+          if [ "$drifted" = true ]; then
+            body="$marker
+          \`bun.nix\` is out of sync with \`bun.lock\`, and this PR comes from a fork so CI cannot push the fix for you. The flake's frontend build reads \`bun.nix\`, so the nix build will fail until it is regenerated. Please run:
+
+          \`\`\`sh
+          bunx bun2nix@2.1.0 --output-file bun.nix
+          \`\`\`
+
+          then commit \`bun.nix\` to this branch."
+          else
+            body="$marker
+          \`bun.nix\` is in sync with \`bun.lock\` now."
+          fi
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$existing" -f body="$body" >/dev/null
+          elif [ "$drifted" = true ]; then
+            gh api "repos/$REPO/issues/$pr/comments" -f body="$body" >/dev/null
+          fi

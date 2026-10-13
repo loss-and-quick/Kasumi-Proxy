@@ -7,14 +7,17 @@ name: Sync bun.nix
 # build. This regenerates bun.nix whenever a PR touches bun.lock and — ONLY IF the
 # result actually differs from what's committed — pushes a single chore commit onto
 # the PR branch. No drift (e.g. the author already ran bun2nix) → no commit.
+#
+# Fork PRs get a read-only token and cannot be pushed to, so they only measure the
+# drift here (`report` job, no write access) and hand the verdict to
+# sync-bun-nix-comment.yml, which runs from the base repo and posts the comment.
 on:
   pull_request:
     paths:
       - 'bun.lock'
 
-# Needed to push the regenerated bun.nix back onto the PR branch.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: sync-bun-nix-${{ github.event.pull_request.number }}
@@ -23,9 +26,11 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    # GITHUB_TOKEN is read-only for fork PRs, so the push back would fail — skip
-    # those (the regular nix build still surfaces any drift as a failing check).
-    # Same-repo branches only.
+    # Needed to push the regenerated bun.nix back onto the PR branch.
+    permissions:
+      contents: write
+    # GITHUB_TOKEN is read-only for fork PRs, so the push back would fail; those
+    # are handled by `report` below. Same-repo branches only.
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       # Check out the PR branch itself (not the detached merge ref) so the commit
@@ -65,3 +70,44 @@ jobs:
           git commit -m 'chore(nix): sync bun.nix with bun.lock'
           # Pushes made with GITHUB_TOKEN don't trigger workflows, so this can't loop.
           git push origin "HEAD:${HEAD_REF}"
+
+  # Fork PR: same regeneration, but nothing is pushed and the token stays read-only.
+  # The fork controls bun.lock, so this job must never hold a write token or secrets
+  # (GitHub's "pwn request" rule: untrusted code + pull_request_target/write = takeover).
+  # Only a PR number and a boolean leave it, as an artifact the comment workflow
+  # treats as untrusted data.
+  report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - name: Checkout PR merge ref
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Regenerate bun.nix
+        run: bunx bun2nix@2.1.0 --output-file bun.nix
+
+      - name: Record the verdict
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir drift
+          echo "$PR_NUMBER" > drift/pr
+          if git diff --quiet -- bun.nix; then echo false; else echo true; fi > drift/drifted
+
+      - name: Upload the verdict
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bun-nix-drift
+          path: drift
