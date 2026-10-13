@@ -625,7 +625,7 @@ const en = {
     return `${pluralPart(Number(groups), { one: "# group", other: "# groups" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# subscription", other: "# subscriptions" }, runtime)}`;
   },
   "backup.mergeHint":
-    "Merge appends imported profiles/groups/subscriptions and overlays settings. Replace overwrites the current canonical state completely.",
+    "Merge adds the backup's profiles, groups and subscriptions you don't have yet and overlays settings. Replace overwrites the current canonical state completely.",
   "backup.invalidJson": "Invalid JSON",
   "backup.invalidStructure": "Invalid backup structure",
   "backup.copied": "Backup copied",

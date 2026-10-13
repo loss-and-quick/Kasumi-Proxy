@@ -626,7 +626,7 @@ const pt = {
     return `${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# assinatura", other: "# assinaturas" }, runtime)}`;
   },
   "backup.mergeHint":
-    "Mesclar adiciona perfis/grupos/assinaturas importados e sobrepõe as configurações. Substituir sobrescreve completamente o estado canônico atual.",
+    "Mesclar adiciona os perfis, grupos e assinaturas do backup que você ainda não tem e sobrepõe as configurações. Substituir sobrescreve completamente o estado canônico atual.",
   "backup.invalidJson": "JSON inválido",
   "backup.invalidStructure": "Estrutura de backup inválida",
   "backup.copied": "Backup copiado",

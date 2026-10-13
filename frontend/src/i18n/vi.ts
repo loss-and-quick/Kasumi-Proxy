@@ -608,7 +608,7 @@ const vi = {
     return `${pluralPart(Number(groups), { one: "# nhóm", other: "# nhóm" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# đăng ký", other: "# đăng ký" }, runtime)}`;
   },
   "backup.mergeHint":
-    "Chế độ gộp sẽ nối thêm hồ sơ/nhóm/đăng ký đã nhập và chồng đè cài đặt. Chế độ thay thế sẽ ghi đè hoàn toàn trạng thái hiện tại.",
+    "Chế độ gộp sẽ thêm các hồ sơ, nhóm và đăng ký trong bản sao lưu mà bạn chưa có, và chồng đè cài đặt. Chế độ thay thế sẽ ghi đè hoàn toàn trạng thái hiện tại.",
   "backup.invalidJson": "JSON không hợp lệ",
   "backup.invalidStructure": "Cấu trúc sao lưu không hợp lệ",
   "backup.copied": "Đã sao chép bản sao lưu",
