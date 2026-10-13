@@ -336,8 +336,9 @@ export const useAppStore = create<Store>((set, get) => {
     // backend can't tell a stopped proxy from an unreachable URL).
     if (sub.updateMode === "proxy" && !isServiceUp(service.state)) {
       await mutate({
-        kind: "upsertSub",
-        subscription: { ...sub, lastError: translateCurrent("common.proxyNotRunning") },
+        kind: "setSubError",
+        id,
+        message: translateCurrent("common.proxyNotRunning"),
       });
       get().notify(translateCurrent("common.proxyNotRunning"));
       return;
@@ -350,7 +351,7 @@ export const useAppStore = create<Store>((set, get) => {
       // active data-path when affected; we just reflect the result.
       next = await bridge.applySubscription(id);
     } catch (e: unknown) {
-      await mutate({ kind: "upsertSub", subscription: { ...sub, lastError: errorMessage(e) } });
+      await mutate({ kind: "setSubError", id, message: errorMessage(e) });
       get().notify(translateCurrent("store.sub.updateFailed", { name: sub.remarks }));
       return;
     }

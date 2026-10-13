@@ -110,6 +110,12 @@ pub enum MutationIntent {
     UpsertSub {
         subscription: Box<Subscription>,
     },
+    /// Show `message` as the subscription's last error, for a failure the UI
+    /// detects itself (the backend wasn't reached, or the proxy isn't running).
+    SetSubError {
+        id: String,
+        message: String,
+    },
     /// Remove a subscription and prune the profiles it still owns in its group.
     /// With `delete_group`, also remove the group made for it when nothing else
     /// is left in it.
@@ -427,6 +433,12 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 }
             }
             upsert_by_id(&mut state.subscriptions, (**subscription).clone());
+        }
+        MutationIntent::SetSubError { id, message } => {
+            if let Some(sub) = state.subscriptions.iter_mut().find(|s| s.id == *id) {
+                sub.last_error = Some(message.clone());
+                sub.last_error_kind = None;
+            }
         }
         MutationIntent::RemoveSub { id, delete_group } => {
             let group = state
@@ -1048,6 +1060,35 @@ mod tests {
             },
         );
         assert_eq!(s.profiles[0].meta().group_id, "g-main");
+        assert_eq!(s.subscriptions.len(), 1);
+    }
+
+    #[test]
+    fn set_sub_error_replaces_the_error_and_its_kind() {
+        let mut s = base();
+        let mut sub = mksub("s1", Some("g-main"));
+        sub.last_error = Some("HTTP 404".into());
+        sub.last_error_kind = Some(crate::state::SubErrorKind::Network);
+        s.subscriptions = vec![sub];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::SetSubError {
+                id: "s1".into(),
+                message: "proxy is not running".into(),
+            },
+        );
+        assert_eq!(
+            s.subscriptions[0].last_error.as_deref(),
+            Some("proxy is not running")
+        );
+        assert_eq!(s.subscriptions[0].last_error_kind, None);
+        apply_mutation(
+            &mut s,
+            &MutationIntent::SetSubError {
+                id: "gone".into(),
+                message: "x".into(),
+            },
+        );
         assert_eq!(s.subscriptions.len(), 1);
     }
 

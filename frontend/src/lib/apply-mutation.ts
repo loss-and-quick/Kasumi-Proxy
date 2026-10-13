@@ -381,6 +381,13 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         subscriptions: upsertById(state.subscriptions, intent.subscription),
       };
     }
+    case "setSubError":
+      return {
+        ...state,
+        subscriptions: state.subscriptions.map((s) =>
+          s.id === intent.id ? { ...s, lastError: intent.message, lastErrorKind: null } : s,
+        ),
+      };
     case "removeSub": {
       const sub = state.subscriptions.find((s) => s.id === intent.id);
       const group = sub?.groupId ?? null;

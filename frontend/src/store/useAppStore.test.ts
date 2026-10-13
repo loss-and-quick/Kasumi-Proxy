@@ -1343,4 +1343,26 @@ describe("useAppStore", () => {
     expect(written.subscriptions[0].allowProviderConfigs).toBe(true);
     await vi.waitFor(() => expect(bridge.applySubscription).toHaveBeenCalledWith("s1"));
   });
+
+  it("updateSub shows a failure the backend never saw as the subscription's error", async () => {
+    const sub = {
+      ...makeSub({ id: "s1", lastError: "HTTP 404" }),
+      lastErrorKind: { kind: "http" as const, status: 404 },
+    };
+    bridge.readState.mockResolvedValue(makeState({ subscriptions: [sub] }));
+    await useAppStore.getState().hydrate();
+    bridge.applySubscription.mockRejectedValue(new Error("socket closed"));
+
+    await useAppStore.getState().updateSub("s1");
+
+    expect(bridge.mutate).toHaveBeenCalledWith({
+      kind: "setSubError",
+      id: "s1",
+      message: "socket closed",
+    });
+    expect(useAppStore.getState().subscriptions[0]).toMatchObject({
+      lastError: "socket closed",
+      lastErrorKind: null,
+    });
+  });
 });
