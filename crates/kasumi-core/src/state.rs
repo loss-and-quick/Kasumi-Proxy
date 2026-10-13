@@ -419,6 +419,14 @@ pub enum AppFilterMode {
     Bypass,
 }
 
+/// The Android uid an `appFilter` key (`pkg:uid`) names; `None` for a key that names
+/// no uid, like a desktop `exe:` program.
+pub fn app_filter_uid(key: &str) -> Option<u32> {
+    let (_, uid) = key.rsplit_once(':')?;
+    let digits = !uid.is_empty() && uid.bytes().all(|b| b.is_ascii_digit());
+    digits.then(|| uid.parse().ok()).flatten()
+}
+
 /// Global advanced settings (`AdvancedSettingsSchema`). Optional fields omit when
 /// unset; the rest always serialize with their Zod defaults (see [`Default`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

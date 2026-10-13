@@ -13,7 +13,7 @@ use crate::profile::Profile;
 use crate::state::{
     AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
     DEFAULT_REMOTE_DNS, DomainStrategy, FAKEIP_INET4_RANGE, RoutingMode, RoutingRule,
-    SingboxFragment, force_socks_port,
+    SingboxFragment, app_filter_uid, force_socks_port,
 };
 
 /// iproute2 table + rule-priority indices that native sing-box `auto_route`
@@ -1162,10 +1162,6 @@ fn build_singbox_resolve_rule(s: &AdvancedSettings) -> Value {
 
 // ---------- tun inbounds ----------
 
-pub(crate) fn uid_of(key: &str) -> Option<i64> {
-    key.split(':').nth(1).and_then(|x| x.parse::<i64>().ok())
-}
-
 /// The base sing-box `tun` inbound shared by the native tun ([`build_singbox_tun_inbounds`])
 /// and the sidecar bridge ([`build_singbox_bridge_config`]): the common
 /// `type`/`address`/`mtu`/`stack` shape. `interface_name` is pinned only when the
@@ -1193,13 +1189,13 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings, force_tun: bool) -> Vec<Valu
         .app_filter
         .iter()
         .filter(|(_, m)| **m == AppFilterMode::ForceProxy)
-        .filter_map(|(k, _)| uid_of(k))
+        .filter_map(|(k, _)| app_filter_uid(k).map(i64::from))
         .collect();
     let bypass_uids: Vec<i64> = s
         .app_filter
         .iter()
         .filter(|(_, m)| **m == AppFilterMode::Bypass)
-        .filter_map(|(k, _)| uid_of(k))
+        .filter_map(|(k, _)| app_filter_uid(k).map(i64::from))
         .collect();
 
     let stack = wire(&s.singbox_stack);
@@ -1355,7 +1351,7 @@ fn build_singbox_route(
     let has_force = s
         .app_filter
         .iter()
-        .any(|(k, m)| *m == AppFilterMode::ForceProxy && uid_of(k).is_some());
+        .any(|(k, m)| *m == AppFilterMode::ForceProxy && app_filter_uid(k).is_some());
     if has_force {
         rules.insert(0, json!({ "inbound": ["tun-force"], "outbound": "proxy" }));
     }

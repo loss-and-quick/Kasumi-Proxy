@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use kasumi_core::state::{AppCaptureMode, AppFilterMode};
+use kasumi_core::state::{AppCaptureMode, AppFilterMode, app_filter_uid};
 use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_CIDR};
 
 use super::paths::{IP, IP6TABLES, IPTABLES};
@@ -41,13 +41,8 @@ pub struct RoutingState {
     pub http_port: u16,
 }
 
-pub fn has_force_proxy(f: &AppFilter) -> bool {
-    f.entries.values().any(|m| *m == AppFilterMode::ForceProxy)
-}
-
-fn uid_of(key: &str) -> Option<&str> {
-    let uid = key.rsplit(':').next()?;
-    (!uid.is_empty() && uid.bytes().all(|b| b.is_ascii_digit())).then_some(uid)
+fn uid_of(key: &str) -> Option<String> {
+    app_filter_uid(key).map(|u| u.to_string())
 }
 
 /// `ip [-6] <args>`.
@@ -174,7 +169,7 @@ async fn app_uid_rules(ipt: &str, filter: &AppFilter) {
                     "-m",
                     "owner",
                     "--uid-owner",
-                    uid,
+                    &uid,
                     "-j",
                     "RETURN",
                 ])
@@ -190,7 +185,7 @@ async fn app_uid_rules(ipt: &str, filter: &AppFilter) {
                     "-m",
                     "owner",
                     "--uid-owner",
-                    uid,
+                    &uid,
                     "-j",
                     "MARK",
                     "--set-xmark",
@@ -206,7 +201,7 @@ async fn app_uid_rules(ipt: &str, filter: &AppFilter) {
                     "-m",
                     "owner",
                     "--uid-owner",
-                    uid,
+                    &uid,
                     "-j",
                     "RETURN",
                 ])
@@ -261,7 +256,7 @@ const GUARD_CHAIN: &str = "KASUMI_PROXY_GUARD";
 ///   and root (the daemon). `--socket-exists` keeps packets with no owning socket
 ///   (a kernel reply for a closed connection) out of that catch-all.
 fn guard_rules(filter: &AppFilter, ports: &[u16], tuns: &[&str]) -> Vec<Vec<String>> {
-    let uids = |want: AppFilterMode| -> Vec<&str> {
+    let uids = |want: AppFilterMode| -> Vec<String> {
         filter
             .entries
             .iter()
@@ -310,7 +305,8 @@ fn guard_rules(filter: &AppFilter, ports: &[u16], tuns: &[&str]) -> Vec<Vec<Stri
                 }
             }
             AppCaptureMode::None => {
-                let allowed = std::iter::once("0").chain(uids(AppFilterMode::ForceProxy));
+                let force = uids(AppFilterMode::ForceProxy);
+                let allowed = std::iter::once("0").chain(force.iter().map(String::as_str));
                 for uid in allowed {
                     rules.push(rule(&[
                         "-o",
@@ -387,7 +383,7 @@ async fn clear_legacy_port_rules(filter: &AppFilter, socks_port: u16, http_port:
                     "-m",
                     "owner",
                     "--uid-owner",
-                    uid,
+                    &uid,
                     "-j",
                     "REJECT",
                     "--reject-with",
@@ -801,8 +797,8 @@ mod tests {
 
     #[test]
     fn uid_of_extracts_numeric_suffix() {
-        assert_eq!(uid_of("com.app:10123"), Some("10123"));
-        assert_eq!(uid_of("10123"), Some("10123"));
+        assert_eq!(uid_of("com.app:10123").as_deref(), Some("10123"));
+        assert_eq!(uid_of("exe:/usr/bin/curl"), None);
         assert_eq!(uid_of("com.app:abc"), None);
         assert_eq!(uid_of("com.app:"), None);
     }
@@ -858,24 +854,5 @@ mod tests {
         );
         // No tun (not up yet): nothing to guard there.
         assert!(guard_rules(&f, &[10808], &[]).is_empty());
-    }
-
-    #[test]
-    fn has_force_proxy_detects_mode() {
-        let mut entries = BTreeMap::new();
-        entries.insert("a:1".to_string(), AppFilterMode::Bypass);
-        let f = AppFilter {
-            capture_mode: AppCaptureMode::All,
-            entries: entries.clone(),
-            strict: false,
-        };
-        assert!(!has_force_proxy(&f));
-        entries.insert("b:2".to_string(), AppFilterMode::ForceProxy);
-        let f2 = AppFilter {
-            capture_mode: AppCaptureMode::All,
-            entries,
-            strict: false,
-        };
-        assert!(has_force_proxy(&f2));
     }
 }
