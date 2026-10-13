@@ -24,6 +24,7 @@ use std::process::Command;
 use serde_json::{Value, json};
 use strum::IntoEnumIterator;
 
+use happ_sub::MergeMode;
 use kasumi_core::core_config::build_core_config;
 use kasumi_core::enums::{
     CongestionControl, CoreEngine, Fingerprint, Flow, HeaderType, Hysteria2Obfs, Network,
@@ -36,6 +37,7 @@ use kasumi_core::state::{
     AdvancedSettings, DomainStrategy, LogLevel, MuxXudp443, RoutingMode, RoutingRule,
     SingboxFragment, SingboxStack,
 };
+use kasumi_core::sub_ingest::{IngestInput, ingest};
 
 // ── valid credential / crypto material (cores validate these) ──
 const UUID: &str = "11111111-1111-1111-1111-111111111111";
@@ -1521,4 +1523,61 @@ fn provider_custom_cases() -> Vec<Case> {
 #[test]
 fn provider_custom_validates_against_real_xray() {
     validate_all(provider_custom_cases());
+}
+
+/// A JSON-array subscription body as Happ-style panels serve it, taken through
+/// ingest: each element becomes a sanitised Custom profile that xray must accept.
+fn xray_array_body_cases() -> Vec<Case> {
+    let element = |remarks: &str, network: &str| {
+        json!({
+            "remarks": remarks,
+            "log": { "loglevel": "warning" },
+            "dns": { "servers": ["1.1.1.1"] },
+            "inbounds": [{ "tag": "socks", "protocol": "socks", "listen": "127.0.0.1", "port": 10808,
+                "settings": { "udp": true } }],
+            "outbounds": [
+                { "tag": "proxy", "protocol": "vless",
+                  "settings": { "vnext": [{ "address": "srv.example", "port": 443,
+                      "users": [{ "id": UUID, "encryption": "none" }] }] },
+                  "streamSettings": { "network": network, "security": "tls",
+                      "tlsSettings": { "serverName": "srv.example", "fingerprint": "chrome" },
+                      "wsSettings": { "path": "/ws" } },
+                  "mux": { "enabled": false } },
+                { "tag": "direct", "protocol": "freedom" },
+                { "tag": "block", "protocol": "blackhole" },
+            ],
+            "routing": { "domainStrategy": "IPIfNonMatch", "rules": [
+                { "type": "field", "inboundTag": ["socks"], "port": "53", "outboundTag": "direct" },
+                { "type": "field", "ip": ["geoip:private"], "outboundTag": "direct" },
+            ]},
+        })
+    };
+    let body = json!([element("DE", "ws"), element("NL", "tcp")]).to_string();
+    let ing = ingest(&IngestInput {
+        url: "https://sub.example.org/s",
+        headers: &[],
+        body: body.as_bytes(),
+        stored: None,
+        merge: MergeMode::Full,
+        allow_provider_configs: true,
+        title: "Sub",
+    })
+    .expect("array body imports");
+    assert_eq!(ing.profiles.len(), 2);
+    ing.profiles
+        .into_iter()
+        .map(|profile| Case {
+            name: format!("xray-array/{}", profile.meta().remarks),
+            profile,
+            settings: AdvancedSettings::default(),
+            rules: vec![],
+            needs_geo: true,
+            others: vec![],
+        })
+        .collect()
+}
+
+#[test]
+fn xray_array_body_validates_against_real_xray() {
+    validate_all(xray_array_body_cases());
 }

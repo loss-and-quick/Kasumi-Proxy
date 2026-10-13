@@ -215,7 +215,8 @@ fn as_flow(v: Option<&String>) -> Flow {
     }
 }
 
-fn meta(remarks: String, group_id: Option<&str>) -> Meta {
+/// A new profile's meta: a fresh id, in `group_id` or the base group.
+pub(crate) fn meta(remarks: String, group_id: Option<&str>) -> Meta {
     Meta {
         id: uid(),
         remarks,

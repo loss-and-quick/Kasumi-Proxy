@@ -316,6 +316,9 @@ export const SubWarningSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("legacyParser"),
 }), z.object({
+	kind: z.literal("rejectedConfigs"),
+	count: z.number(),
+}), z.object({
 	kind: z.literal("skippedLines"),
 	count: z.number(),
 	sample: z.string(),
@@ -451,6 +454,8 @@ export type RoutingImport_Serialize = z.infer<typeof RoutingImport_SerializeSche
 
 
 export const ChangeAction_SerializeSchema = z.union([z.object({
+	kind: z.literal("allowProviderConfigs"),
+}), z.object({
 	kind: z.literal("importRouting"),
 	routing: RoutingImport_SerializeSchema,
 	activate: z.boolean(),
@@ -556,6 +561,7 @@ export const Subscription_SerializeSchema = z.object({
 	audit: z.array(AuditEntrySchema).optional(),
 	fallbackUrl: z.string().nullable().optional(),
 	insecureByProvider: z.boolean(),
+	allowProviderConfigs: z.boolean(),
 });
 export type Subscription_Serialize = z.infer<typeof Subscription_SerializeSchema>;
 
@@ -1014,6 +1020,8 @@ export type RoutingImport_Deserialize = z.infer<typeof RoutingImport_Deserialize
 
 
 export const ChangeAction_DeserializeSchema = z.union([z.object({
+	kind: z.literal("allowProviderConfigs"),
+}), z.object({
 	kind: z.literal("importRouting"),
 	routing: RoutingImport_DeserializeSchema,
 	activate: z.boolean(),
@@ -1097,6 +1105,7 @@ export const Subscription_DeserializeSchema = z.object({
 	audit: z.array(AuditEntrySchema).optional(),
 	fallbackUrl: z.string().nullable().optional(),
 	insecureByProvider: z.boolean().optional(),
+	allowProviderConfigs: z.boolean().optional(),
 });
 export type Subscription_Deserialize = z.infer<typeof Subscription_DeserializeSchema>;
 

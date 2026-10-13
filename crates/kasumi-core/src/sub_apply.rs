@@ -776,6 +776,8 @@ mod tests {
             body: &body,
             stored: None,
             merge: happ_sub::MergeMode::Full,
+            allow_provider_configs: false,
+            title: "",
         })
         .unwrap();
         map_fetched_subscription_profiles(&ing.profiles, s, &profile_filter_regex(""))

@@ -9,9 +9,12 @@ use happ_sub::{
     BodyEncryption, Error as EnvelopeError, MergeMode, MetaMap, Payload, RoutingAction,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
-use crate::profile::Profile;
-use crate::share::{parse_share_link, parse_share_links};
+use crate::custom_sanitize::sanitize_provider_xray;
+use crate::profile::{Custom, CustomOrigin, Profile};
+use crate::share::{meta as share_meta, parse_share_link, parse_share_links};
+use crate::sub_changes::host_of;
 pub use crate::sub_meta_types::{ContentHint, PayloadKind, SubErrorKind, SubWarning};
 
 /// Merge state a subscription carries between fetches. Persisted by the backend in
@@ -40,6 +43,11 @@ pub struct IngestInput<'a> {
     /// Already filtered by [`stored_for_url`].
     pub stored: Option<&'a StoredSubMeta>,
     pub merge: MergeMode,
+    /// `Subscription.allow_provider_configs`: full Xray configs are imported only
+    /// after the user agreed.
+    pub allow_provider_configs: bool,
+    /// The subscription's name, which numbered configs without `remarks` take.
+    pub title: &'a str,
 }
 
 #[derive(Debug)]
@@ -94,7 +102,7 @@ impl std::fmt::Display for IngestError {
                     PayloadKind::JsonArray => "JSON array",
                     PayloadKind::SingBoxJson => "sing-box JSON",
                 };
-                write!(f, "{what} subscriptions are not supported yet")
+                write!(f, "{what} configs are not allowed for this subscription")
             }
             IngestError::NoProfiles => write!(f, "no profiles in subscription body"),
             IngestError::Limit(m) => write!(f, "subscription too large: {m}"),
@@ -206,37 +214,43 @@ fn ingest_body(input: &IngestInput) -> Result<Ingested, IngestError> {
     let encrypted = decrypted || stored_encrypted;
     let mut warnings = map_warnings(&parsed.warnings);
 
-    let links = match parsed.payload {
-        Payload::Links(links) => links,
-        Payload::XrayJson(_) => return Err(IngestError::UnsupportedPayload(PayloadKind::XrayJson)),
-        Payload::JsonArray(_) => {
-            return Err(IngestError::UnsupportedPayload(PayloadKind::JsonArray));
+    let profiles = match parsed.payload {
+        Payload::Links(links) => {
+            let mut seen = HashSet::new();
+            let mut unsupported = 0u32;
+            let mut profiles = Vec::new();
+            for link in links.iter().filter(|l| seen.insert(l.as_str())) {
+                match parse_share_link(link, None).filter(|_| !is_web_page_link(link)) {
+                    Some(p) => profiles.push(p),
+                    None => unsupported += 1,
+                }
+            }
+            if profiles.is_empty() {
+                if parsed.body_encryption == BodyEncryption::None
+                    && let Some(ing) =
+                        legacy_fallback(input, parsed.meta, parsed.routing, encrypted)
+                {
+                    return Ok(ing);
+                }
+                return Err(IngestError::NoProfiles);
+            }
+            if unsupported > 0 {
+                warnings.push(SubWarning::UnsupportedLinks { count: unsupported });
+            }
+            profiles
+        }
+        Payload::XrayJson(v) => {
+            let kind = PayloadKind::XrayJson;
+            xray_configs(input, &parsed.meta, &[v], kind, &mut warnings)?
+        }
+        Payload::JsonArray(a) => {
+            let kind = PayloadKind::JsonArray;
+            xray_configs(input, &parsed.meta, &a, kind, &mut warnings)?
         }
         Payload::SingBoxJson(_) => {
             return Err(IngestError::UnsupportedPayload(PayloadKind::SingBoxJson));
         }
     };
-
-    let mut seen = HashSet::new();
-    let mut unsupported = 0u32;
-    let mut profiles = Vec::new();
-    for link in links.iter().filter(|l| seen.insert(l.as_str())) {
-        match parse_share_link(link, None).filter(|_| !is_web_page_link(link)) {
-            Some(p) => profiles.push(p),
-            None => unsupported += 1,
-        }
-    }
-    if profiles.is_empty() {
-        if parsed.body_encryption == BodyEncryption::None
-            && let Some(ing) = legacy_fallback(input, parsed.meta, parsed.routing, encrypted)
-        {
-            return Ok(ing);
-        }
-        return Err(IngestError::NoProfiles);
-    }
-    if unsupported > 0 {
-        warnings.push(SubWarning::UnsupportedLinks { count: unsupported });
-    }
 
     Ok(Ingested {
         profiles,
@@ -247,6 +261,64 @@ fn ingest_body(input: &IngestInput) -> Result<Ingested, IngestError> {
         used_legacy_parser: false,
         content_disposition: None,
     })
+}
+
+/// Longest name a provider config gets from its `remarks`.
+const CONFIG_NAME_MAX: usize = 128;
+
+/// Each full Xray config, reduced by the sanitiser, as a provider Custom profile.
+/// Configs the sanitiser refuses are counted, not imported.
+fn xray_configs(
+    input: &IngestInput,
+    meta: &MetaMap,
+    configs: &[Value],
+    kind: PayloadKind,
+    warnings: &mut Vec<SubWarning>,
+) -> Result<Vec<Profile>, IngestError> {
+    if !input.allow_provider_configs {
+        return Err(IngestError::UnsupportedPayload(kind));
+    }
+    let title = [input.title, meta.profile_title().unwrap_or_default()]
+        .into_iter()
+        .map(|t| single_line(&normalize_untrusted_text(t)))
+        .find(|t| !t.is_empty())
+        .unwrap_or_else(|| host_of(input.url));
+    let mut rejected = 0u32;
+    let mut profiles = Vec::new();
+    for (i, config) in configs.iter().enumerate() {
+        let Ok(s) = sanitize_provider_xray(config) else {
+            rejected += 1;
+            continue;
+        };
+        let remarks = s
+            .remarks
+            .as_deref()
+            .map(|r| {
+                single_line(&normalize_untrusted_text(r))
+                    .chars()
+                    .take(CONFIG_NAME_MAX)
+                    .collect::<String>()
+            })
+            .filter(|r| !r.is_empty())
+            .unwrap_or_else(|| format!("{title} #{}", i + 1));
+        let mut raw = Map::new();
+        raw.insert("outbounds".into(), s.outbounds.into());
+        if let Some(routing) = s.routing {
+            raw.insert("routing".into(), routing);
+        }
+        profiles.push(Profile::Custom(Custom {
+            meta: share_meta(remarks, None),
+            raw: Value::Object(raw).to_string(),
+            origin: CustomOrigin::Provider,
+        }));
+    }
+    if rejected > 0 {
+        warnings.push(SubWarning::RejectedConfigs { count: rejected });
+    }
+    if profiles.is_empty() {
+        return Err(IngestError::NoProfiles);
+    }
+    Ok(profiles)
 }
 
 /// Happ tries to decrypt when `Encrypt-Tag` is set and the URL has `?key=` or the
@@ -411,6 +483,8 @@ pub(crate) mod tests {
             body,
             stored: None,
             merge: MergeMode::Full,
+            allow_provider_configs: false,
+            title: "Sub",
         }
     }
 
@@ -598,6 +672,122 @@ pub(crate) mod tests {
         };
         assert_eq!(refresh(MergeMode::Partial).as_deref(), Some(cd));
         assert_eq!(refresh(MergeMode::Full), None);
+    }
+
+    fn xray_config(remarks: Option<&str>, host: &str) -> serde_json::Value {
+        let mut c = serde_json::json!({
+            "log": { "loglevel": "debug", "access": "/data/adb/kasumi-proxy/a.log" },
+            "inbounds": [{ "protocol": "socks", "listen": "0.0.0.0", "port": 1080 }],
+            "outbounds": [
+                { "tag": "proxy", "protocol": "trojan",
+                  "settings": { "servers": [{ "address": host, "port": 443, "password": "pw" }] } },
+                { "tag": "direct", "protocol": "freedom" },
+            ],
+            "routing": { "rules": [{ "type": "field", "ip": ["geoip:private"], "outboundTag": "direct" }] },
+        });
+        if let Some(r) = remarks {
+            c["remarks"] = r.into();
+        }
+        c
+    }
+
+    fn allowed<'a>(body: &'a [u8]) -> IngestInput<'a> {
+        IngestInput {
+            allow_provider_configs: true,
+            ..input(URL, &[], body)
+        }
+    }
+
+    fn custom(p: &Profile) -> &crate::profile::Custom {
+        let Profile::Custom(c) = p else {
+            panic!("{p:?}")
+        };
+        c
+    }
+
+    #[test]
+    fn xray_array_imports_sanitised_customs() {
+        let body = serde_json::json!([
+            xray_config(Some("🇩🇪 Frankfurt\n\u{202e}fast"), "de.example"),
+            xray_config(None, "nl.example"),
+        ])
+        .to_string();
+        let ing = ingest(&allowed(body.as_bytes())).unwrap();
+        assert_eq!(ing.warnings, []);
+        let names: Vec<&str> = ing
+            .profiles
+            .iter()
+            .map(|p| p.meta().remarks.as_str())
+            .collect();
+        assert_eq!(names, ["🇩🇪 Frankfurt fast", "Sub #2"]);
+        for p in &ing.profiles {
+            let c = custom(p);
+            assert_eq!(c.origin, CustomOrigin::Provider);
+            let raw: Value = serde_json::from_str(&c.raw).unwrap();
+            assert_eq!(raw["outbounds"].as_array().unwrap().len(), 2);
+            assert!(raw["routing"]["rules"].is_array());
+            assert!(raw.get("log").is_none() && raw.get("inbounds").is_none());
+            assert!(!c.raw.contains("/data/adb"));
+        }
+    }
+
+    #[test]
+    fn xray_object_needs_consent_first() {
+        let body = xray_config(Some("A"), "a.example").to_string();
+        assert_eq!(
+            ingest(&input(URL, &[], body.as_bytes())).unwrap_err(),
+            IngestError::UnsupportedPayload(PayloadKind::XrayJson)
+        );
+        let array = format!("[{body}]");
+        assert_eq!(
+            ingest(&input(URL, &[], array.as_bytes())).unwrap_err(),
+            IngestError::UnsupportedPayload(PayloadKind::JsonArray)
+        );
+        let ing = ingest(&allowed(body.as_bytes())).unwrap();
+        assert_eq!(ing.profiles.len(), 1);
+        assert_eq!(ing.profiles[0].meta().remarks, "A");
+    }
+
+    #[test]
+    fn rejected_configs_warning() {
+        let only_direct = serde_json::json!({ "outbounds": [{ "protocol": "freedom" }] });
+        let body = serde_json::json!([xray_config(None, "a.example"), only_direct]).to_string();
+        let ing = ingest(&allowed(body.as_bytes())).unwrap();
+        assert_eq!(ing.profiles.len(), 1);
+        assert_eq!(ing.warnings, [SubWarning::RejectedConfigs { count: 1 }]);
+
+        // Nothing usable: the previous profiles stay.
+        let body = serde_json::json!([only_direct]).to_string();
+        assert_eq!(
+            ingest(&allowed(body.as_bytes())).unwrap_err(),
+            IngestError::NoProfiles
+        );
+    }
+
+    #[test]
+    fn unnamed_configs_take_the_provider_title_then_the_host() {
+        let body = format!(
+            "#profile-title: Panel\n[{}]",
+            xray_config(None, "a.example")
+        );
+        let titled = IngestInput {
+            title: "",
+            ..allowed(body.as_bytes())
+        };
+        assert_eq!(
+            ingest(&titled).unwrap().profiles[0].meta().remarks,
+            "Panel #1"
+        );
+
+        let body = format!("[{}]", xray_config(None, "a.example"));
+        let bare = IngestInput {
+            title: " ",
+            ..allowed(body.as_bytes())
+        };
+        assert_eq!(
+            ingest(&bare).unwrap().profiles[0].meta().remarks,
+            "sub.example.org #1"
+        );
     }
 
     #[test]

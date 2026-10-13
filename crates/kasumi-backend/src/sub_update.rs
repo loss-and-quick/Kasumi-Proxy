@@ -360,6 +360,8 @@ async fn fetch_and_map(
         body: &res.body,
         stored,
         merge,
+        allow_provider_configs: sub.allow_provider_configs,
+        title: &sub.remarks,
     })
     .map_err(|e| {
         log::warn!("subscription {}: {e}", sub.remarks);

@@ -137,6 +137,9 @@ pub struct Subscription {
     /// `allow_insecure` came from an accepted provider `insecure`, not from the URL.
     #[serde(default)]
     pub insecure_by_provider: bool,
+    /// The user agreed to import the full Xray configs this provider sends.
+    #[serde(default)]
+    pub allow_provider_configs: bool,
 }
 
 /// Transport scope of a routing rule.

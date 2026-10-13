@@ -79,6 +79,10 @@ pub enum SubWarning {
     UsedFallback {
         host: String,
     },
+    /// Provider Xray configs the sanitiser could not use.
+    RejectedConfigs {
+        count: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -210,6 +214,8 @@ pub enum ChangeAction {
     TunnelSetting {
         setting: TunnelSetting,
     },
+    /// Import the full Xray configs the provider sends, sanitised.
+    AllowProviderConfigs,
     /// Shown, but Kasumi has nothing to apply it to: it can only be dismissed.
     Unsupported,
 }

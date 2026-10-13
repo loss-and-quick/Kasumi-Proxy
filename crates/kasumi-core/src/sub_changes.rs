@@ -21,6 +21,9 @@ pub const AUDIT_MAX: usize = 50;
 pub const DECISIONS_MAX: usize = 100;
 /// Keys whose consent happ-sub reads while building the request.
 pub const CONSENT_KEYS: [&str; 2] = ["change-user-agent", "manual-block-user-agent"];
+/// The key of the [`ChangeAction::AllowProviderConfigs`] request.
+pub const PROVIDER_CONFIGS_KEY: &str = "provider-configs";
+const PROVIDER_CONFIGS_VALUE: &str = "Xray JSON";
 
 const SUMMARY_MAX: usize = 200;
 const ROUTING_NAME_MAX: usize = 64;
@@ -515,6 +518,34 @@ pub fn routing_off(state: &mut AppState, sub_id: &str) -> bool {
     changed
 }
 
+/// Ask, once, to import the full Xray configs `sub`'s provider sends; `false` when
+/// nothing changed. Not a provider key: Kasumi raises it when such a body arrives.
+pub fn offer_provider_configs(sub: &mut Subscription, now: &str) -> bool {
+    let d = digest(PROVIDER_CONFIGS_KEY, PROVIDER_CONFIGS_VALUE);
+    let asked = sub.decisions.iter().any(|x| x.digest == d)
+        || sub.pending_changes.iter().any(|p| p.digest == d);
+    if sub.allow_provider_configs || asked {
+        return false;
+    }
+    sub.pending_changes.push(PendingChange {
+        key: PROVIDER_CONFIGS_KEY.to_owned(),
+        value: PROVIDER_CONFIGS_VALUE.to_owned(),
+        previous: None,
+        risk: RiskClass::TrustBoundary.into(),
+        action: ChangeAction::AllowProviderConfigs,
+        digest: d,
+        seen_at: now.to_owned(),
+    });
+    let entry = audit(
+        now,
+        PROVIDER_CONFIGS_KEY,
+        AuditOutcome::Offered,
+        PROVIDER_CONFIGS_VALUE,
+    );
+    push_audit(sub, vec![entry]);
+    true
+}
+
 /// Prepend `entries` to `sub`'s audit, keeping [`AUDIT_MAX`].
 pub fn push_audit(sub: &mut Subscription, entries: Vec<AuditEntry>) {
     let mut next = entries;
@@ -618,6 +649,7 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
                 }
             }
         }
+        ChangeAction::AllowProviderConfigs => sub.allow_provider_configs = true,
         ChangeAction::Unsupported => {}
     }
 }
@@ -1267,6 +1299,51 @@ mod tests {
     }
 
     #[test]
+    fn consent_then_import() {
+        let body = serde_json::json!({ "outbounds": [
+            { "protocol": "trojan",
+              "settings": { "servers": [{ "address": "a.example", "port": 443, "password": "pw" }] } },
+        ]})
+        .to_string();
+        let fetch = |st: &AppState| {
+            let sub = &st.subscriptions[0];
+            crate::sub_ingest::ingest(&crate::sub_ingest::IngestInput {
+                url: &sub.url,
+                headers: &[],
+                body: body.as_bytes(),
+                stored: None,
+                merge: happ_sub::MergeMode::Full,
+                allow_provider_configs: sub.allow_provider_configs,
+                title: &sub.remarks,
+            })
+        };
+        let mut st = state();
+        assert!(fetch(&st).is_err());
+        assert!(offer_provider_configs(&mut st.subscriptions[0], NOW));
+        // Asked once: a second JSON response adds nothing.
+        assert!(!offer_provider_configs(&mut st.subscriptions[0], LATER));
+        let p = pending(&st, PROVIDER_CONFIGS_KEY);
+        assert_eq!(p.risk, MetaRisk::TrustBoundary);
+        assert_eq!(p.action, ChangeAction::AllowProviderConfigs);
+        assert_eq!(st.subscriptions[0].audit[0].outcome, AuditOutcome::Offered);
+
+        answer(&mut st, PROVIDER_CONFIGS_KEY, true);
+        assert!(st.subscriptions[0].allow_provider_configs);
+        assert_eq!(fetch(&st).unwrap().profiles.len(), 1);
+    }
+
+    #[test]
+    fn rejected_provider_configs_are_not_asked_again() {
+        let mut st = state();
+        offer_provider_configs(&mut st.subscriptions[0], NOW);
+        answer(&mut st, PROVIDER_CONFIGS_KEY, false);
+        let s = &mut st.subscriptions[0];
+        assert!(!s.allow_provider_configs);
+        assert!(!offer_provider_configs(s, LATER));
+        assert!(s.pending_changes.is_empty());
+    }
+
+    #[test]
     fn risk_mirror_is_exhaustive() {
         for (_, class) in happ_sub::meta::KNOWN_KEYS {
             let _: MetaRisk = (*class).into();
@@ -1287,6 +1364,8 @@ mod tests {
             body: &body,
             stored: None,
             merge: happ_sub::MergeMode::Full,
+            allow_provider_configs: false,
+            title: "",
         })
         .unwrap();
         let st = state();
