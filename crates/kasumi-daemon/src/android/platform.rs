@@ -41,7 +41,8 @@ use super::paths::{
     TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
+    AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards,
+    clear_orphaned_tun_rules, clear_routing_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
@@ -363,7 +364,7 @@ async fn bring_up_external_tun(plan: &DataPathPlan, ext: &ExternalTun) -> anyhow
             read_pidfile(force.pidfile).await,
             Some(force.bin),
             force.pidfile,
-            false,
+            true,
         )
         .await;
         remove_file(force.iface_file).await;
@@ -647,22 +648,26 @@ impl Platform for AndroidPlatform {
         remove_file(TUN_IFACE_FILE).await;
         remove_file(TUN2_IFACE_FILE).await;
         // Match the helper binary the running data-path actually used (from the
-        // recorded document) so an engine switch never orphans the old helper.
+        // recorded document) so an engine switch never orphans the old helper. Stop it
+        // gracefully too: a sidecar sing-box removes the ip rule it added for its tun
+        // only on a clean exit.
         let helper_bin = running_helper_bin().await;
         kill_if_running(
             read_pidfile(TUN2SOCKS_PIDFILE).await,
             Some(helper_bin),
             TUN2SOCKS_PIDFILE,
-            false,
+            true,
         )
         .await;
         kill_if_running(
             read_pidfile(TUN2SOCKS2_PIDFILE).await,
             Some(helper_bin),
             TUN2SOCKS2_PIDFILE,
-            false,
+            true,
         )
         .await;
+        // And sweep what a helper that died before it could clean up left behind.
+        clear_orphaned_tun_rules().await;
         // Drop the pre-document `tun-engine` marker if an old version left one.
         remove_file("/data/adb/kasumi-proxy/run/tun-engine").await;
         if !opts.keep_service_state {
