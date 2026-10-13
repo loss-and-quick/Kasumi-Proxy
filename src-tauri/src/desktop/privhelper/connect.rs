@@ -21,8 +21,9 @@ use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use crate::desktop::paths::{DesktopPaths, path_args};
 
 use super::client::Client;
-use super::proto::HelperOutdated;
-use super::service::{PIPE_NAME, SERVICE_NAME, wide};
+use super::proto::{HelperOutdated, PrivReply, PrivRequest, check_handshake};
+use super::service::{ARG_SESSION, PIPE_NAME, SERVICE_NAME, own_session, wide};
+use super::session::refusal_message;
 
 /// Path of the helper exe shipped beside the GUI (`KASUMI_HELPER_BIN` overrides for
 /// dev). It is both the service binary and the install/uninstall entry point.
@@ -57,12 +58,12 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
         Err(e) if e.is::<HelperOutdated>() => {
             log::warn!("{e:#}; restarting the data-path service");
             stop_service().context("stop the outdated data-path service")?;
-            start_with_paths(paths).context("restart the data-path service")?;
+            start_if_stopped(paths).context("restart the data-path service")?;
             return connect_with_retry(PIPE_NAME).await;
         }
+        Err(e) if e.is::<OtherSession>() => return Err(e),
         Err(_) => {}
     }
-
     if !is_installed() {
         // One-time elevated install (UAC). Registers + grants the user start rights.
         log::info!("data-path service not installed; requesting elevated install");
@@ -74,9 +75,28 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
             .context("service did not register (install declined?)")?;
     }
 
-    log::info!("demand-starting the data-path service");
-    start_with_paths(paths).context("start the data-path service")?;
-    connect_with_retry(PIPE_NAME).await
+    connect_installed(paths).await
+}
+
+/// Connect to the installed service, demand-starting it whenever it is stopped. The
+/// service exits once its GUI is gone, so a GUI started right after the previous one
+/// quit can find it still tearing down; it is started again once it has stopped.
+async fn connect_installed(paths: &DesktopPaths) -> anyhow::Result<Client> {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let mut last_err = match connect_and_ping(PIPE_NAME).await {
+            Ok(client) => return Ok(client),
+            Err(e) if e.is::<OtherSession>() => return Err(e),
+            Err(e) => format!("{e:#}"),
+        };
+        if let Err(e) = start_if_stopped(paths) {
+            last_err = format!("{e:#}");
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!("the data-path service did not answer on {PIPE_NAME}: {last_err}");
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
 }
 
 /// Portable path: spawn the helper elevated (one UAC) to serve a single session over
@@ -114,47 +134,36 @@ fn is_installed() -> bool {
         .is_ok()
 }
 
-/// Demand-start the service with the GUI's paths (granted to the user, no UAC),
-/// then wait for it to report running. A no-op if it is already up.
-fn start_with_paths(paths: &DesktopPaths) -> anyhow::Result<()> {
+/// Demand-start the stopped service with the GUI's paths and session (granted to
+/// the user, no UAC). Any other state is left to settle.
+fn start_if_stopped(paths: &DesktopPaths) -> anyhow::Result<()> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
         .context("open SCM")?;
     let service = manager
         .open_service(
             SERVICE_NAME,
-            ServiceAccess::QUERY_STATUS | ServiceAccess::START | ServiceAccess::STOP,
+            ServiceAccess::QUERY_STATUS | ServiceAccess::START,
         )
         .context("open service (user lacks start rights?)")?;
-
     let state = service
         .query_status()
         .context("query service")?
         .current_state;
-    if matches!(state, ServiceState::Stopped | ServiceState::StopPending) {
-        let args: Vec<OsString> = path_args(paths)
-            .into_iter()
-            .flat_map(|(flag, value)| [OsString::from(flag), OsString::from(value)])
-            .collect();
-        service.start(&args).context("start service")?;
+    if state != ServiceState::Stopped {
+        return Ok(());
     }
-
-    wait_for(
-        || {
-            service
-                .query_status()
-                .map(|s| s.current_state == ServiceState::Running)
-                .unwrap_or(false)
-        },
-        Duration::from_secs(30),
-    )
-    .context("service did not reach running")
-}
-
-/// Open `pipe` and confirm the helper with the handshake.
-async fn connect_and_ping(pipe: &str) -> anyhow::Result<Client> {
-    let client = Client::connect(pipe).await?;
-    client.handshake().await?;
-    Ok(client)
+    log::info!("demand-starting the data-path service");
+    let mut args: Vec<OsString> = path_args(paths)
+        .into_iter()
+        .flat_map(|(flag, value)| [OsString::from(flag), OsString::from(value)])
+        .collect();
+    if let Some(session) = own_session() {
+        args.extend([
+            OsString::from(ARG_SESSION),
+            OsString::from(session.to_string()),
+        ]);
+    }
+    service.start(&args).context("start service")
 }
 
 /// Stop the service and wait until the SCM reports it stopped.
@@ -180,6 +189,33 @@ fn stop_service() -> anyhow::Result<()> {
     .context("service did not stop")
 }
 
+/// The service holds the data-path for another GUI (see [`super::session`]).
+#[derive(Debug)]
+struct OtherSession(String);
+
+impl std::fmt::Display for OtherSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for OtherSession {}
+
+/// Open `pipe` and confirm the helper with a `Ping`.
+async fn connect_and_ping(pipe: &str) -> anyhow::Result<Client> {
+    let client = Client::connect(pipe).await?;
+    let reply = client.call_raw(PrivRequest::Ping).await?;
+    match reply {
+        PrivReply::OtherSession { owner } => {
+            Err(OtherSession(refusal_message(owner, own_session())).into())
+        }
+        _ => {
+            check_handshake(&reply)?;
+            Ok(client)
+        }
+    }
+}
+
 /// Retry the pipe connect briefly while the freshly-started helper binds `pipe`.
 async fn connect_with_retry(pipe: &str) -> anyhow::Result<Client> {
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -187,7 +223,7 @@ async fn connect_with_retry(pipe: &str) -> anyhow::Result<Client> {
     loop {
         match connect_and_ping(pipe).await {
             Ok(client) => return Ok(client),
-            Err(e) if e.is::<HelperOutdated>() => return Err(e),
+            Err(e) if e.is::<HelperOutdated>() || e.is::<OtherSession>() => return Err(e),
             Err(e) => {
                 let s = format!("{e:#}");
                 if s != last_err {

@@ -42,8 +42,11 @@ use crate::desktop::paths::{
 pub(crate) const SERVICE_NAME: &str = "KasumiProxyHelper";
 const SERVICE_DISPLAY: &str = "Kasumi Proxy Helper";
 /// The pipe the service binds and the GUI dials. Fixed name, locked by SD to the
-/// interactive user; multi-session (RDP) co-use is out of scope.
+/// interactive users; the service serves only the session that started it (see
+/// [`super::session`]).
 pub(crate) const PIPE_NAME: &str = r"\\.\pipe\kasumi-proxy-helper";
+/// Start argument carrying the Windows session of the GUI that starts the service.
+pub(crate) const ARG_SESSION: &str = "--session";
 
 /// `s` as a NUL-terminated UTF-16 buffer for the Win32 `*W` APIs. Shared with the
 /// GUI-side [`super::connect`].
@@ -135,6 +138,8 @@ fn apply_path_args(arguments: &[OsString]) {
 
 fn run_service(arguments: Vec<OsString>) -> anyhow::Result<()> {
     apply_path_args(&arguments);
+    let owner = arg_value(&arguments, ARG_SESSION)
+        .and_then(|s| s.to_str().and_then(|s| s.parse::<u32>().ok()));
 
     let shutdown = Arc::new(Notify::new());
     let on_control = {
@@ -170,7 +175,7 @@ fn run_service(arguments: Vec<OsString>) -> anyhow::Result<()> {
         log::info!("service starting");
         // The run dir holds the helper-owned data-path state; create it as SYSTEM.
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
-        serve_pipe(platform, shutdown).await
+        serve_pipe(platform, shutdown, owner).await
     });
     report(ServiceState::Stopped, ServiceControlAccept::empty())?;
     result
@@ -195,10 +200,28 @@ fn bind_pipe(
 /// Serve the GUI over the named pipe until the service is stopped. One client (the
 /// GUI's single held-open connection) at a time; when it disconnects the data-path
 /// is torn down, mirroring the Linux helper exiting with the GUI.
-async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyhow::Result<()> {
+///
+/// Pipe names are machine-wide, so a GUI in another Windows session reaches the same
+/// pipe. With `owner` (the session of the GUI that started the service and whose
+/// paths it runs with) only that session is served, any other client is told who
+/// owns the data-path, and the service exits once its GUI is gone, so the next GUI
+/// to start it, from any session, brings its own paths. Without `owner` (started by
+/// an older GUI) it serves any session, one at a time, and stays up, as before.
+async fn serve_pipe(
+    platform: Arc<dyn Platform>,
+    shutdown: Arc<Notify>,
+    owner: Option<u32>,
+) -> anyhow::Result<()> {
     let security = PipeSecurity::new()?;
     let srv = Server::new(platform.clone(), None);
     let mut first = true;
+    // The connection being served, and its session.
+    let mut active: Option<(tokio::task::JoinHandle<()>, Option<u32>)> = None;
+    // A GUI that started the service but died before connecting must not leave it
+    // owned forever.
+    let first_client = tokio::time::sleep(Duration::from_secs(60));
+    tokio::pin!(first_client);
+    let mut served_any = false;
     loop {
         let server = bind_pipe(PIPE_NAME, &security, first)?;
         first = false;
@@ -206,25 +229,83 @@ async fn serve_pipe(platform: Arc<dyn Platform>, shutdown: Arc<Notify>) -> anyho
         tokio::select! {
             res = server.connect() => res.context("await pipe client")?,
             _ = shutdown.notified() => break,
-        }
-
-        let (read, write) = tokio::io::split(server);
-        tokio::select! {
-            r = serve_conn(srv.clone(), Box::new(read), Box::new(write)) => {
-                if let Err(e) = r {
-                    log::warn!("connection ended: {e}");
-                }
-            }
-            _ = shutdown.notified() => {
+            _ = async { active.as_mut().map(|(task, _)| task).unwrap().await }, if active.is_some() => {
+                active = None;
+                // GUI gone → tear the data-path down so a crashed GUI can't leave it up.
                 teardown(&platform).await;
+                if owner.is_some() {
+                    break;
+                }
+                continue;
+            }
+            _ = &mut first_client, if owner.is_some() && !served_any => {
+                log::warn!("no GUI connected within 60s; exiting");
                 break;
             }
         }
-        // GUI gone → tear the data-path down so a crashed GUI can't leave it up.
-        teardown(&platform).await;
+
+        let client = client_session(&server);
+        let serving = active.as_ref().map(|(_, session)| *session);
+        match super::session::admit(owner, client, serving) {
+            super::session::Admission::Serve => {
+                served_any = true;
+                let (read, write) = tokio::io::split(server);
+                let task = tokio::spawn(serve_conn(srv.clone(), Box::new(read), Box::new(write)));
+                let task = tokio::spawn(async move {
+                    if let Ok(Err(e)) = task.await {
+                        log::warn!("connection ended: {e}");
+                    }
+                });
+                active = Some((task, client));
+            }
+            super::session::Admission::Refuse { owner } => {
+                log::warn!("refusing a GUI in session {client:?}: the data-path is held");
+                tokio::spawn(refuse(server, owner));
+            }
+        }
+    }
+    if let Some((task, _)) = active {
+        task.abort();
     }
     teardown(&platform).await;
     Ok(())
+}
+
+/// Windows session of the process at the other end of `pipe`.
+/// <https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getnamedpipeclientsessionid>
+fn client_session(pipe: &tokio::net::windows::named_pipe::NamedPipeServer) -> Option<u32> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::Pipes::GetNamedPipeClientSessionId;
+    let mut session = 0u32;
+    // SAFETY: the handle is a connected pipe instance owned by `pipe`.
+    let ok = unsafe { GetNamedPipeClientSessionId(pipe.as_raw_handle(), &mut session) };
+    (ok != 0).then_some(session)
+}
+
+/// The Windows session this process runs in.
+/// <https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-processidtosessionid>
+pub(crate) fn own_session() -> Option<u32> {
+    use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    let mut session = 0u32;
+    // SAFETY: plain out-parameter call.
+    let ok = unsafe { ProcessIdToSessionId(std::process::id(), &mut session) };
+    (ok != 0).then_some(session)
+}
+
+/// Answer the refused GUI's first request with who owns the data-path, then hang up.
+async fn refuse(pipe: tokio::net::windows::named_pipe::NamedPipeServer, owner: Option<u32>) {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let (read, mut write) = tokio::io::split(pipe);
+    let mut lines = BufReader::new(read).lines();
+    let Ok(Ok(Some(_))) = tokio::time::timeout(Duration::from_secs(5), lines.next_line()).await
+    else {
+        return;
+    };
+    if let Ok(mut line) = serde_json::to_vec(&super::proto::PrivReply::OtherSession { owner }) {
+        line.push(b'\n');
+        let _ = write.write_all(&line).await;
+        let _ = write.flush().await;
+    }
 }
 
 async fn teardown(platform: &Arc<dyn Platform>) {

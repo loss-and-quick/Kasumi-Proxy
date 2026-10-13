@@ -81,6 +81,8 @@ futures-util = "0.3"
 # Windows privilege separation: the LocalSystem data-path service (windows-service)
 # + the named-pipe security descriptor and the one-time install elevation
 # (ShellExecuteW runas) — see desktop/privhelper/{service,connect}.rs, elevate.rs.
+# Win32_System_Pipes + Win32_System_RemoteDesktop: the Windows session of the
+# GUI and of a pipe client, so the service serves only the session that started it.
 # Win32_System_Power: resume notification callback (desktop/windows/resume.rs).
 # Win32_System_Registry + Win32_Networking_WinInet: the system/pac proxy modes
 # (WinINET registry + refresh) — see desktop/sysproxy.rs.
@@ -101,8 +103,10 @@ windows-sys = { version = "0.59", features = [
   "Win32_Security",
   "Win32_Security_Authorization",
   "Win32_System_LibraryLoader",
+  "Win32_System_Pipes",
   "Win32_System_Power",
   "Win32_System_Registry",
+  "Win32_System_RemoteDesktop",
   "Win32_System_Rpc",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
