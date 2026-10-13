@@ -782,15 +782,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     .await;
 }
 
-/// Reload xray app-filter rules without a core restart (reload-app-filter).
-pub async fn reload_app_filter_rules(filter: &AppFilter) {
-    for ipt in [IPTABLES, IP6TABLES] {
-        silent(&[ipt, "-t", "mangle", "-F", MARK_CHAIN]).await;
-        app_uid_rules(ipt, filter).await;
-        capture_mark_rules(ipt, filter).await;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

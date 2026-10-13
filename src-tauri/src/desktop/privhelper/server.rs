@@ -88,6 +88,7 @@ impl Server {
                     running: p.running,
                     socks_port: p.socks_port,
                     http_port: p.http_port,
+                    force_port: Some(p.force_port),
                 },
                 Err(e) => PrivReply::Err {
                     message: e.to_string(),

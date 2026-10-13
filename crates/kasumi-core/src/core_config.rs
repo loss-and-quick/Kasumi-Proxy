@@ -351,6 +351,52 @@ mod tests {
     }
 
     #[test]
+    fn the_routing_in_front_of_a_helper_counts_as_change() {
+        use crate::data_path_plan::AppRouting;
+        use crate::state::{AppFilterMode, SingboxStack};
+
+        let android = HostTraits {
+            proxy_modes: false,
+            app_routing: AppRouting::PerUid,
+            pinned_singbox_stack: None,
+        };
+        let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
+        let build = |s: &AdvancedSettings, host| {
+            build_core_config(&p, s, &[], std::slice::from_ref(&p), "", host).unwrap()
+        };
+        let mut s = AdvancedSettings::default();
+        s.tun_by_core
+            .insert(CoreEngine::Xray, TunEngine::SingboxTun);
+        let base = build(&s, android);
+
+        // The xray config is identical, but the OS routing or the sidecar would change.
+        for edit in [
+            |s: &mut AdvancedSettings| {
+                s.app_filter
+                    .insert("org.game:10200".into(), AppFilterMode::ForceProxy);
+            },
+            |s: &mut AdvancedSettings| {
+                s.app_filter
+                    .insert("org.bank:10300".into(), AppFilterMode::Bypass);
+            },
+            |s: &mut AdvancedSettings| s.strict_route = true,
+            |s: &mut AdvancedSettings| s.singbox_stack = SingboxStack::System,
+        ] {
+            let mut s2 = s.clone();
+            edit(&mut s2);
+            let next = build(&s2, android);
+            assert_eq!(next.config, base.config);
+            assert!(active_config_changed(&base, &next));
+        }
+
+        // A host that routes apps in the core has no uid routing to rebuild.
+        let mut s2 = s.clone();
+        s2.app_filter
+            .insert("org.bank:10300".into(), AppFilterMode::Bypass);
+        assert!(!active_config_changed(&build(&s, HOST), &build(&s2, HOST)));
+    }
+
+    #[test]
     fn engine_switch_counts_as_change() {
         // A switch of resolved engine is a restart trigger on its own, regardless
         // of how the two cores' config JSON compare.

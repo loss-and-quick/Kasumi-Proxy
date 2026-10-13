@@ -151,6 +151,11 @@ fn plan_config_and_state_agree() {
             TunPlan::External(ext) => {
                 assert_eq!(ext.engine, c.tun, "{at}");
                 assert_eq!(ext.force_tun, force_tun, "{at}");
+                assert_eq!(
+                    ext.uid_filter.is_some(),
+                    c.host.app_routing == AppRouting::PerUid,
+                    "{at}"
+                );
             }
             TunPlan::None => {}
         }
@@ -172,6 +177,11 @@ fn plan_config_and_state_agree() {
             "{at}"
         );
         assert_eq!(read.socks_port, plan.ports.socks, "{at}");
+        assert_eq!(
+            read.listening_ports(0),
+            (plan.ports.socks, plan.ports.http, plan.ports.force),
+            "{at}"
+        );
 
         if c.host.app_routing == AppRouting::PerProcess && c.force_key == Some(EXE_KEY) {
             let mut filtered = built.config.clone();

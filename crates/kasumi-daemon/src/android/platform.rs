@@ -30,9 +30,7 @@ use kasumi_core::data_path_state::{DataPathState, HelperSlot, TunSlot};
 use kasumi_core::enums::{CoreEngine, TunEngine, wire_value};
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
-use kasumi_core::state::{
-    AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
-};
+use kasumi_core::state::{AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
 use kasumi_core::tun::TunOptions;
 
 use super::network::run_watcher;
@@ -44,7 +42,6 @@ use super::paths::{
 };
 use super::routing::{
     AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
-    reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
@@ -149,14 +146,10 @@ fn helper_target(slot: TunSlot, ports: &LocalPorts) -> u16 {
     }
 }
 
-/// The helpers the watchdog requires alive for a recorded data path.
+/// The helpers the watchdog requires alive for a recorded data path: every one the
+/// start brought up.
 fn watched_helpers(state: &DataPathState) -> Vec<HelperSpec> {
-    state
-        .helpers()
-        .into_iter()
-        .filter(|h| h.slot == TunSlot::Main)
-        .map(helper_spec)
-        .collect()
+    state.helpers().into_iter().map(helper_spec).collect()
 }
 
 /// Helper binary a teardown matches for the running data-path — tun2socks by
@@ -240,9 +233,8 @@ pub(super) async fn read_iface(file: &str) -> Option<String> {
 
 /// (Re)install the per-app guards for the running data path: its local proxy
 /// ports and the tun devices it brought up (see `routing::guard_rules`).
-async fn refresh_guards(socks_port: u16) {
-    let http = http_port().await;
-    let ports = [socks_port, http, force_socks_port(socks_port, http)];
+async fn refresh_guards(ports: &LocalPorts) {
+    let ports = [ports.socks, ports.http, ports.force];
     let tun = read_iface(TUN_IFACE_FILE).await;
     let tun2 = read_iface(TUN2_IFACE_FILE).await;
     let tuns: Vec<&str> = [tun.as_deref(), tun2.as_deref()]
@@ -386,10 +378,19 @@ async fn bring_up_external_tun(plan: &DataPathPlan, ext: &ExternalTun) -> anyhow
     if let Some(tun) = &tun_iface {
         lock_tun_iface(tun).await;
     }
+    // Route exactly the filter the plan was resolved with.
+    let filter = match &ext.uid_filter {
+        Some(f) => AppFilter {
+            capture_mode: f.capture_mode,
+            entries: f.entries.clone(),
+            strict: f.strict,
+        },
+        None => read_app_filter().await,
+    };
     let rs = RoutingState {
         tun_iface,
         tun2_iface: iface_of(TunSlot::Force),
-        filter: read_app_filter().await,
+        filter,
         socks_port: plan.ports.socks,
         http_port: plan.ports.http,
     };
@@ -492,7 +493,7 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
     // own iptables during startup and shells `iptables` without `-w`. Another holder
     // of the global xtables.lock (netd) can still fail that start; the loop above
     // retries it.
-    refresh_guards(plan.ports.socks).await;
+    refresh_guards(&plan.ports).await;
     // Hotspot / tethering clients, if the user asked for them (watches the setting
     // and the tethering interfaces for as long as the data path runs).
     start_tether_watcher(if native {
@@ -711,19 +712,15 @@ impl Platform for AndroidPlatform {
     }
 
     async fn proxy_status(&self) -> anyhow::Result<ProxyStatus> {
-        let port = read_state()
-            .await
-            .map(|d| d.socks_port)
-            .filter(|&p| p != 0)
-            .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+        let doc = read_state().await.unwrap_or_default();
+        let (socks_port, http_port, force_port) = doc.listening_ports(http_port().await);
         let pid = read_pidfile(PIDFILE).await;
         let running = pid > 0 && pid_matches_any(pid, &core_bins()).await;
-        let http = http_port().await;
         Ok(ProxyStatus {
             running,
-            socks_port: port,
-            http_port: http,
-            force_port: force_socks_port(port, http),
+            socks_port,
+            http_port,
+            force_port,
         })
     }
 
@@ -888,26 +885,6 @@ impl AppFilterCapability for AndroidPlatform {
         }
         Ok(apps)
     }
-
-    async fn reload_app_filter(&self) -> anyhow::Result<()> {
-        let pid = read_pidfile(PIDFILE).await;
-        if !(pid > 0 && pid_matches_any(pid, &core_bins()).await) {
-            return Ok(());
-        }
-        // sing-box bakes the filter into its config and needs a restart (the Service
-        // handles that); only xray reloads live here.
-        if read_state().await.and_then(|s| s.engine) == Some(CoreEngine::SingBox) {
-            return Ok(());
-        }
-        reload_app_filter_rules(&read_app_filter().await).await;
-        let socks_port = read_state()
-            .await
-            .map(|d| d.socks_port)
-            .filter(|&p| p != 0)
-            .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-        refresh_guards(socks_port).await;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -999,10 +976,8 @@ mod tests {
                         plan.helpers().into_iter().map(helper_spec).collect();
                     let doc = plan.state(RunState::Connecting).to_json();
                     let recorded = DataPathState::from_json(doc.as_bytes()).unwrap();
-                    let watched = watched_helpers(&recorded);
-                    assert_eq!(watched[..], started[..watched.len()], "{at}");
+                    assert_eq!(watched_helpers(&recorded), started, "{at}");
                     let external = !owns_native_tun(engine, tun);
-                    assert_eq!(watched.len(), usize::from(external), "{at}");
                     assert_eq!(
                         started.len(),
                         usize::from(external) * (1 + usize::from(force)),

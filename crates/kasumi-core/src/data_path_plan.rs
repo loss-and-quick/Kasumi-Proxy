@@ -2,6 +2,8 @@
 //! settings. The shells execute a plan, and the state they record for the watchdog
 //! and teardown is derived from it, so start and supervision read one decision.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::contract::RunState;
@@ -9,8 +11,9 @@ use crate::core::{owns_native_tun, resolve_tun};
 use crate::data_path_state::{DataPathState, HelperSlot, TunSelection};
 use crate::enums::{CoreEngine, TunEngine};
 use crate::state::{
-    AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT,
-    DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, app_filter_uid, force_socks_port,
+    AdvancedSettings, AppCaptureMode, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT,
+    DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, app_filter_uid,
+    force_socks_port,
 };
 use crate::tun::TunOptions;
 
@@ -63,6 +66,21 @@ pub struct ExternalTun {
     pub stack: SingboxStack,
     /// A second helper bridges the force-proxy tun.
     pub force_tun: bool,
+    /// The per-uid app filter the OS routing in front of the helper applies, on a
+    /// host that routes apps by uid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid_filter: Option<UidFilter>,
+}
+
+/// The per-uid app filter as the OS routing applies it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UidFilter {
+    pub capture_mode: AppCaptureMode,
+    /// `"pkg:uid"` → mode.
+    pub entries: BTreeMap<String, AppFilterMode>,
+    /// Kill-switch: capture every uid but root, not just system + apps.
+    pub strict: bool,
 }
 
 /// The tun a data path runs.
@@ -131,6 +149,11 @@ impl DataPathPlan {
                 opts: s.tun_options(),
                 stack: host.pinned_singbox_stack.unwrap_or(s.singbox_stack),
                 force_tun,
+                uid_filter: (host.app_routing == AppRouting::PerUid).then(|| UidFilter {
+                    capture_mode: s.app_capture_mode,
+                    entries: s.app_filter.clone(),
+                    strict: s.strict_route,
+                }),
             })
         };
         Self {
@@ -161,6 +184,8 @@ impl DataPathPlan {
             engine: Some(self.engine),
             tun,
             socks_port: self.ports.socks,
+            http_port: self.ports.http,
+            force_port: self.ports.force,
             force_tun: self.external().is_some_and(|e| e.force_tun),
             ..Default::default()
         }
@@ -186,15 +211,10 @@ impl DataPathPlan {
         self.external().is_none()
     }
 
-    /// Whether an app-filter edit applies to the running data path without a
-    /// restart: sing-box bakes the filter into its config, xray's is OS routing.
-    pub fn app_filter_live(&self) -> bool {
-        self.engine == CoreEngine::Xray
-    }
-
-    /// What of the plan, beyond the core config itself, needs a restart to change.
-    pub(crate) fn restart_key(&self) -> Option<&TunOptions> {
-        self.external().map(|e| &e.opts)
+    /// What of the plan, beyond the core config itself, needs a restart to change:
+    /// everything about an external helper and the OS routing in front of it.
+    pub(crate) fn restart_key(&self) -> Option<&ExternalTun> {
+        self.external()
     }
 }
 
