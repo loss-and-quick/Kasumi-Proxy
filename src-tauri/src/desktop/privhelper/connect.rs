@@ -21,7 +21,7 @@ use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use crate::desktop::paths::{DesktopPaths, path_args};
 
 use super::client::Client;
-use super::proto::{PrivReply, PrivRequest};
+use super::proto::HelperOutdated;
 use super::service::{PIPE_NAME, SERVICE_NAME, wide};
 
 /// Path of the helper exe shipped beside the GUI (`KASUMI_HELPER_BIN` overrides for
@@ -46,9 +46,21 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
     }
 
     // Fast path: a previous session left the service up — just connect.
-    if let Ok(client) = connect_and_ping(PIPE_NAME).await {
-        log::info!("reusing already-running data-path service");
-        return Ok(client);
+    match connect_and_ping(PIPE_NAME).await {
+        Ok(client) => {
+            log::info!("reusing already-running data-path service");
+            return Ok(client);
+        }
+        // A service still running the build from before an update. The user holds
+        // stop/start rights, so restart it once; a second mismatch means the
+        // installed binary itself is another build.
+        Err(e) if e.is::<HelperOutdated>() => {
+            log::warn!("{e:#}; restarting the data-path service");
+            stop_service().context("stop the outdated data-path service")?;
+            start_with_paths(paths).context("restart the data-path service")?;
+            return connect_with_retry(PIPE_NAME).await;
+        }
+        Err(_) => {}
     }
 
     if !is_installed() {
@@ -138,13 +150,34 @@ fn start_with_paths(paths: &DesktopPaths) -> anyhow::Result<()> {
     .context("service did not reach running")
 }
 
-/// Open `pipe` and confirm the helper with a `Ping`.
+/// Open `pipe` and confirm the helper with the handshake.
 async fn connect_and_ping(pipe: &str) -> anyhow::Result<Client> {
     let client = Client::connect(pipe).await?;
-    if matches!(client.call(PrivRequest::Ping).await, Ok(PrivReply::Pong)) {
-        return Ok(client);
-    }
-    anyhow::bail!("helper did not answer Ping")
+    client.handshake().await?;
+    Ok(client)
+}
+
+/// Stop the service and wait until the SCM reports it stopped.
+fn stop_service() -> anyhow::Result<()> {
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+        .context("open SCM")?;
+    let service = manager
+        .open_service(
+            SERVICE_NAME,
+            ServiceAccess::QUERY_STATUS | ServiceAccess::STOP,
+        )
+        .context("open service (user lacks stop rights?)")?;
+    let _ = service.stop();
+    wait_for(
+        || {
+            service
+                .query_status()
+                .map(|s| s.current_state == ServiceState::Stopped)
+                .unwrap_or(false)
+        },
+        Duration::from_secs(30),
+    )
+    .context("service did not stop")
 }
 
 /// Retry the pipe connect briefly while the freshly-started helper binds `pipe`.
@@ -154,6 +187,7 @@ async fn connect_with_retry(pipe: &str) -> anyhow::Result<Client> {
     loop {
         match connect_and_ping(pipe).await {
             Ok(client) => return Ok(client),
+            Err(e) if e.is::<HelperOutdated>() => return Err(e),
             Err(e) => {
                 let s = format!("{e:#}");
                 if s != last_err {

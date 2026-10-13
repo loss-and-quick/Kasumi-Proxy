@@ -10,7 +10,7 @@ use anyhow::Context;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
-use super::proto::{PrivReply, PrivRequest};
+use super::proto::{PrivReply, PrivRequest, check_handshake};
 use super::transport::{self, BoxRead, BoxWrite};
 
 /// A held-open connection to the privilege helper.
@@ -49,6 +49,13 @@ impl Client {
         Client::connect(&self.addr).await?.call(req).await
     }
 
+    /// Ping the helper and accept it only on this build's protocol. A mismatch is a
+    /// [`HelperOutdated`](super::proto::HelperOutdated) error, which retrying
+    /// won't fix.
+    pub async fn handshake(&self) -> anyhow::Result<()> {
+        check_handshake(&self.call_raw(PrivRequest::Ping).await?)
+    }
+
     /// Send one request and await its reply. A `PrivReply::Err` from the helper is
     /// surfaced as an `Err` so callers see failures as failures.
     pub async fn call(&self, req: PrivRequest) -> anyhow::Result<PrivReply> {
@@ -83,6 +90,8 @@ mod tests {
 
     use async_trait::async_trait;
     use serde_json::Value;
+
+    use super::super::proto::PROTOCOL_VERSION;
 
     use kasumi_backend::net::ProxyStatus;
     use kasumi_backend::platform::{
@@ -199,10 +208,7 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         };
 
-        assert_eq!(
-            client.call(PrivRequest::Ping).await.unwrap(),
-            PrivReply::Pong
-        );
+        client.handshake().await.unwrap();
         assert_eq!(
             client.call(PrivRequest::BootInit).await.unwrap(),
             PrivReply::Ok
@@ -270,7 +276,9 @@ mod tests {
         );
         assert_eq!(
             client.call(PrivRequest::Ping).await.unwrap(),
-            PrivReply::Pong
+            PrivReply::Pong {
+                protocol: Some(PROTOCOL_VERSION),
+            }
         );
         assert!(!slow.is_finished());
         slow.abort();

@@ -15,7 +15,7 @@ use anyhow::Context;
 use crate::desktop::paths::{DesktopPaths, path_args};
 
 use super::client::Client;
-use super::proto::{PrivReply, PrivRequest};
+use super::proto::HelperOutdated;
 
 /// Path of the helper binary shipped beside the GUI (`KASUMI_HELPER_BIN` overrides
 /// for dev). Under the Nix GApps wrapper `current_exe` is the real ELF in the
@@ -201,24 +201,45 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
         .arg(gui_pid.to_string());
     // Detach from the GUI's stdio; the helper logs to stderr inherited by the GUI.
     cmd.stdin(std::process::Stdio::null());
+    // A helper left from an earlier session may still answer on the old socket
+    // until the new one replaces it, so only a socket created after this spawn
+    // speaks for the helper just launched.
+    let stale_socket = socket_inode(&socket);
     cmd.spawn().context("spawn the privilege helper")?;
 
     // The elevator may show a prompt; wait (bounded) for the helper to bind + chown
-    // the socket, then confirm it with a Ping.
+    // the socket, then confirm it with the handshake.
     let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    let mut outdated = None;
     loop {
+        let fresh = socket_inode(&socket).is_some_and(|ino| Some(ino) != stale_socket);
         let err = match Client::connect(&socket).await {
-            Ok(client) => {
-                if matches!(client.call(PrivRequest::Ping).await, Ok(PrivReply::Pong)) {
-                    return Ok(client);
+            Ok(client) => match client.handshake().await {
+                Ok(()) => return Ok(client),
+                Err(e) if e.is::<HelperOutdated>() => {
+                    if fresh {
+                        return Err(e);
+                    }
+                    let msg = format!("{e:#}");
+                    outdated = Some(e);
+                    msg
                 }
-                "helper did not answer Ping".to_string()
-            }
+                Err(e) => format!("{e:#}"),
+            },
             Err(e) => format!("{e:#}"),
         };
         if std::time::Instant::now() >= deadline {
+            if let Some(e) = outdated {
+                return Err(e);
+            }
             anyhow::bail!("privilege helper did not become ready (elevation declined?): {err}");
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
+}
+
+/// Inode of the socket file, to tell a freshly bound socket from a stale one.
+fn socket_inode(socket: &str) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(socket).ok().map(|m| m.ino())
 }
