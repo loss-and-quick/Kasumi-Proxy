@@ -797,4 +797,40 @@ mod tests {
     fn now_secs_is_nonzero() {
         assert!(now_secs() > 0);
     }
+
+    #[test]
+    fn start_and_watchdog_expect_the_same_helper() {
+        use kasumi_core::enums::TunEngine;
+        use kasumi_core::state::AdvancedSettings;
+        use strum::IntoEnumIterator;
+
+        let p = DesktopPaths::from_bases("data".into(), "run".into(), "bin", false, None);
+        let host = HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: Some(SingboxStack::Gvisor),
+        };
+        for engine in CoreEngine::iter() {
+            for tun in TunEngine::iter() {
+                for mode in [ProxyMode::Tun, ProxyMode::System] {
+                    let mut s = AdvancedSettings {
+                        proxy_mode: mode,
+                        ..Default::default()
+                    };
+                    s.tun_by_core.insert(engine, tun);
+                    let plan = DataPathPlan::resolve(engine, &s, host);
+                    let spawned = plan
+                        .external()
+                        .and_then(|e| tun_engine::helper_bin(e.engine, &p));
+                    let doc = plan.state(RunState::Connecting).to_json();
+                    let recorded = DataPathState::from_json(doc.as_bytes()).unwrap();
+                    assert_eq!(
+                        expected_helper(&recorded, &p),
+                        spawned,
+                        "{engine:?} + {tun:?}, {mode:?}"
+                    );
+                }
+            }
+        }
+    }
 }
