@@ -2625,6 +2625,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "happ-sub",
  "hmac",
@@ -2633,6 +2634,7 @@ dependencies = [
  "log",
  "regex",
  "reqwest 0.12.28",
+ "rsa",
  "serde",
  "serde_json",
  "sha2",

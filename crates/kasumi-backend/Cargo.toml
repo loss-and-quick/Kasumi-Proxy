@@ -52,3 +52,6 @@ windows-sys = { version = "0.59", features = [
 
 [dev-dependencies]
 tempfile = "3"
+# Builds `happ://crypt` links to local test servers.
+rsa = "0.9"
+base64 = "0.22"

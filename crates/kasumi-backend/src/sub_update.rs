@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 
 use kasumi_core::contract::SubAppliedEvent;
 use kasumi_core::core_config::{active_config_changed, build_core_config};
+use kasumi_core::import_input::{is_encrypted_url, subscription_fetch_url};
 use kasumi_core::mutate::rename_owned_group;
 use kasumi_core::profile::Profile;
 use kasumi_core::request_identity::{IdentityInput, RequestIdentityDefaults};
@@ -294,6 +295,15 @@ async fn fetch_and_map(
     filter: &ProfileFilter,
     merge: MergeMode,
 ) -> Result<Fetched, SubFetchError> {
+    let url = subscription_fetch_url(&sub.url).map_err(|e| {
+        log::warn!("subscription {}: {e}", sub.remarks);
+        SubFetchError {
+            message: format!("the encrypted link could not be decrypted: {e}"),
+            kind: Some(SubErrorKind::UrlDecrypt),
+            needs_consent: false,
+        }
+    })?;
+    let encrypted = is_encrypted_url(&sub.url);
     let proxy = platform
         .proxy_status()
         .await
@@ -322,15 +332,21 @@ async fn fetch_and_map(
     };
     // The fragment carries provider directives for the import and never goes on
     // the wire.
-    let primary = fetch_like_happ(happ_sub::meta::fetch_url(&sub.url), opts.clone(), &request);
+    let primary = fetch_like_happ(happ_sub::meta::fetch_url(&url), opts.clone(), &request);
     let mut merge = merge;
     let mut used_fallback = None;
     let res = match primary.await {
         Ok(res) => res,
         Err(e) => {
             // Full cause chain (with the URL) to the log — the manual "update now"
-            // path logs nowhere else; the UI gets just the cause.
-            log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
+            // path logs nowhere else; the UI gets just the cause. A decrypted URL
+            // stays out of the log too.
+            if encrypted {
+                let cause = display_fetch_error(&e);
+                log::warn!("subscription {}: fetch failed: {cause}", sub.remarks);
+            } else {
+                log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
+            }
             let failed = SubFetchError {
                 message: display_fetch_error(&e),
                 kind: Some(fetch_error_kind(&e)),
@@ -360,8 +376,10 @@ async fn fetch_and_map(
             }
         }
     };
+    // The stored meta stays keyed by the link as saved; the fragment and `?key=`
+    // are read from the URL it leads to.
     let ingested = ingest(&IngestInput {
-        url: &sub.url,
+        url: &url,
         headers: &res.headers,
         body: &res.body,
         stored,
@@ -1032,6 +1050,37 @@ mod tests {
         with_old_profile(&p, &format!("{base}/s?key=key02")).await;
         update(&p).await;
         assert_kept(&p, "could not be decrypted").await;
+    }
+
+    #[tokio::test]
+    async fn stored_crypt_link_is_decrypted_at_fetch() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        let link = crate::testutil::crypt1_link(&format!("{base}/s?t=1#N?profile-title=Hidden"));
+        with_old_profile(&p, &link).await;
+        let after = update(&p).await;
+
+        assert!(requests.lock().unwrap()[0].starts_with("GET /s?t=1 HTTP/1.1"));
+        let s = &after.subscriptions[0];
+        assert_eq!(s.url, link, "the link stays encrypted");
+        assert_eq!(s.last_error, None);
+        assert_eq!(after.profiles[0].meta().remarks, "Fresh");
+        // The fragment of the decrypted URL is read; the meta is keyed by the link.
+        assert_eq!(s.remarks, "Hidden");
+        let stored = sub_meta::read_all(&p).await.remove("s1").unwrap();
+        assert_eq!(stored.source_url, link);
+    }
+
+    #[tokio::test]
+    async fn undecryptable_link_keeps_profiles() {
+        let (p, _d) = TestPlatform::new();
+        with_old_profile(&p, "happ://crypt5/zzzzAAAAAAAAAAAAAAAAAAAAAAAA").await;
+        update(&p).await;
+        assert_kept(&p, "could not be decrypted").await;
+        assert_eq!(
+            sub_after(&p).await.last_error_kind,
+            Some(SubErrorKind::UrlDecrypt)
+        );
     }
 
     #[tokio::test]
