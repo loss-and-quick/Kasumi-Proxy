@@ -829,10 +829,10 @@ const en = {
   "subs.identity.providerCookie": "The provider asked to send the device ID in a cookie.",
   "subs.identity.providerHeader": "The provider asked to send the device ID as a header.",
   "subs.identity.providerYouDecide": "Switches you set here still win.",
-  "subs.identity.compat": "Matches Happ {version}.",
+  "subs.identity.compat": "Compatible with the Happ protocol.",
   "subs.identity.privacy":
     "Providers use these headers to count your devices: the same device ID on several devices looks like one.",
-  "subs.identityNotice.title": "Subscriptions now identify like Happ {version}",
+  "subs.identityNotice.title": "Subscriptions now use the Happ protocol",
   "subs.identityNotice.body":
     "Updates send Happ's User-Agent, a device ID (X-HWID), the OS, model and language, as Happ does. Subscriptions with their own User-Agent keep it and send no device info. Change this per subscription under Edit → Request identity, or for all in Settings → DNS & connection.",
   "subs.identityNotice.settings": "Settings",

@@ -3,7 +3,6 @@
 // the headers a fetch sends (as the backend builds them).
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Field, Icon, IconBtn, Segmented, SettingRow, Switch } from "../../components";
-import { HAPP_VERSION } from "../../generated/defaults";
 import { type DictKey, useT } from "../../i18n";
 import type { HwidSource, IdentityInput, ResolvedIdentity } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
@@ -339,7 +338,7 @@ export function IdentityFootnote({ extra }: { extra?: ReactNode }) {
     >
       <Icon name="info" style={{ fontSize: 18, color: "var(--on-surface-faint)", flexShrink: 0 }} />
       <div>
-        {t("subs.identity.compat", { version: HAPP_VERSION })} {t("subs.identity.privacy")}
+        {t("subs.identity.compat")} {t("subs.identity.privacy")}
         {extra}
       </div>
     </div>

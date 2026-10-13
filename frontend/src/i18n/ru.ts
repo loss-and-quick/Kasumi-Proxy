@@ -907,10 +907,10 @@ const ru = {
   "subs.identity.providerCookie": "Провайдер просит отправлять ID устройства в cookie.",
   "subs.identity.providerHeader": "Провайдер просит отправлять ID устройства заголовком.",
   "subs.identity.providerYouDecide": "Переключатели, заданные здесь, всё равно главнее.",
-  "subs.identity.compat": "Как в Happ {version}.",
+  "subs.identity.compat": "Совместимо с протоколом Happ.",
   "subs.identity.privacy":
     "По этим заголовкам провайдеры считают ваши устройства: один и тот же ID на нескольких устройствах для них выглядит как одно.",
-  "subs.identityNotice.title": "Подписки теперь представляются как Happ {version}",
+  "subs.identityNotice.title": "Подписки теперь используют протокол Happ",
   "subs.identityNotice.body":
     "При обновлении отправляются User-Agent Happ, ID устройства (X-HWID), ОС, модель и язык — так же, как это делает Happ. Подписки со своим User-Agent сохраняют его и данные устройства не отправляют. Изменить это можно в подписке (Изменить → Как представляться провайдеру) или для всех сразу в Настройки → DNS и соединение.",
   "subs.identityNotice.settings": "Настройки",
