@@ -55,9 +55,6 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
                 return Some(SingBox);
             }
         }
-        Profile::Trojan(t) if t.flow != Flow::Empty => {
-            return Some(Xray);
-        }
         Profile::Shadowsocks(ss) => {
             // Xray dropped its QUIC transport, so v2ray-plugin's QUIC mode runs only
             // on sing-box, whatever the cipher.
@@ -275,10 +272,10 @@ mod tests {
             forced_core(&p("vless://u@e.x:443?type=xhttp&security=tls")),
             Some(CoreEngine::Xray)
         );
-        // trojan flow → xray
+        // A trojan flow pins nothing: xray rejects it and sing-box has none.
         assert_eq!(
             forced_core(&p("trojan://pw@e.x:443?security=tls&flow=xtls-rprx-vision")),
-            Some(CoreEngine::Xray)
+            None
         );
     }
 

@@ -56,10 +56,9 @@ fn build_outbound_base(p: &Profile) -> Option<Map<String, Value>> {
             })
         }
         Profile::Trojan(t) => {
-            let mut server = json!({ "address": t.endpoint.address, "port": t.endpoint.port, "password": t.password });
-            if t.flow != crate::enums::Flow::Empty {
-                server["flow"] = wire(&t.flow).into();
-            }
+            // Xray rejects any trojan `flow` ("Flow for Trojan" was removed), so a
+            // link that carries one connects without it.
+            let server = json!({ "address": t.endpoint.address, "port": t.endpoint.port, "password": t.password });
             json!({ "tag": "proxy", "protocol": "trojan", "settings": { "servers": [server] } })
         }
         Profile::Shadowsocks(ss) => json!({
@@ -1222,6 +1221,19 @@ mod tests {
         let server = &cfg["outbounds"][0]["settings"]["servers"][0];
         assert_eq!(server["method"], "2022-blake3-aes-128-gcm");
         assert!(server.get("uot").is_none(), "{server}");
+    }
+
+    #[test]
+    fn trojan_flow_is_left_out() {
+        let p = crate::share::parse_share_link(
+            "trojan://pw@t.ex:443?security=tls&sni=t.ex&flow=xtls-rprx-vision",
+            None,
+        )
+        .unwrap();
+        let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+        let server = &cfg["outbounds"][0]["settings"]["servers"][0];
+        assert_eq!(server["password"], "pw");
+        assert!(server.get("flow").is_none(), "{server}");
     }
 
     fn sample() -> Profile {
