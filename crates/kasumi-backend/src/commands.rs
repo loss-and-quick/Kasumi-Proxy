@@ -1,4 +1,4 @@
-//! The typed command surface both transports share. A [`Command`] carries its
+//! The tyed command surface both transports share. A [`Command`] carries its
 //! inputs as typed fields (no stringly `args`/`payload`); [`dispatch`] runs one
 //! against a [`Platform`] and returns a typed [`Response`]. The desktop Tauri layer
 //! and the Android daemon's WS both serialize this exact pair, so there is a single
@@ -732,7 +732,11 @@ pub(crate) async fn persist_with_chain(
     next: &mut AppState,
 ) -> std::io::Result<()> {
     crate::state_mw::default_chain().run(prev, next);
-    crate::state::write_app_state(platform, next).await
+    crate::state::write_app_state(platform, next).await?;
+    // Whichever path dropped a profile (UI delete, provider refresh, backup
+    // replace), its retained test logs go with it.
+    crate::jobs::remove_dropped_test_logs(platform, prev, next).await;
+    Ok(())
 }
 
 const LOG_TARGETS: [LogTarget; 4] = [

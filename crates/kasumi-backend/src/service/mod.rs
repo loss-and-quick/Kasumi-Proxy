@@ -166,6 +166,13 @@ impl Service {
     pub fn spawn_background(self: &Arc<Self>) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
+            if let Some(state) = crate::state::read_app_state(&*this.platform).await {
+                crate::jobs::sweep_orphan_test_logs(&*this.platform, &state).await;
+            }
+        });
+
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
             {
                 let _g = this.serialize.lock().await;
                 this.maybe_auto_start().await;

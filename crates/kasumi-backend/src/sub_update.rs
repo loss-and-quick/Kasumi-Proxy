@@ -762,6 +762,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn refresh_that_replaces_profiles_drops_their_test_logs() {
+        let (p, _d) = TestPlatform::new();
+        let mut old = sample_vless();
+        old.meta_mut().id = "old".into();
+        old.meta_mut().sub_id = Some("s1".into());
+        old.meta_mut().group_id = "g-main".into();
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", "u")];
+        state.profiles = vec![old];
+        write_app_state(&p, &state).await.unwrap();
+        let dir = p.paths().data_dir.clone();
+        let stale = dir.join("test-last-realping-old.log");
+        std::fs::write(&stale, "boom").unwrap();
+
+        let mut fresh = crate::testutil::vless_at(8443);
+        fresh.meta_mut().id = "fresh".into();
+        let lc = RecordingLifecycle {
+            calls: StdMutex::new(vec![]),
+        };
+        apply(&p, &lc, &state.subscriptions[0], vec![fresh], None, true)
+            .await
+            .expect("apply returns the new state");
+        assert!(!stale.exists());
+    }
+
+    #[tokio::test]
     async fn a_route_keeps_its_profile_through_a_refresh() {
         let (p, _d) = TestPlatform::new();
         let mut old = sample_vless();

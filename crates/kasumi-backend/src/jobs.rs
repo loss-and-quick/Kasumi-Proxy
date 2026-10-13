@@ -4,6 +4,7 @@
 //! probe through fetch means no `curl` and no Start/Status polling: one async call
 //! returns the result.
 
+use std::collections::HashSet;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -20,7 +21,7 @@ use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL};
 use kasumi_core::xray_config::build_xray_config;
 
-use crate::fs::{exists, read_text, remove_file};
+use crate::fs::{exists, list_names, read_text, remove_file};
 use crate::fsjson::write_text_atomic;
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
@@ -159,6 +160,47 @@ pub async fn remove_test_logs(platform: &dyn Platform, profile_id: &str) {
     let data_dir = &platform.paths().data_dir;
     for kind in [TestKind::TcpPing, TestKind::RealPing, TestKind::Speed] {
         remove_file(retained_test_log_path(data_dir, profile_id, kind)).await;
+    }
+}
+
+/// Drop the retained test logs of every profile present in `prev` but gone from
+/// `next`.
+pub(crate) async fn remove_dropped_test_logs(
+    platform: &dyn Platform,
+    prev: &AppState,
+    next: &AppState,
+) {
+    let kept: HashSet<&str> = next.profiles.iter().map(|p| p.meta().id.as_str()).collect();
+    for p in &prev.profiles {
+        if !kept.contains(p.meta().id.as_str()) {
+            remove_test_logs(platform, &p.meta().id).await;
+        }
+    }
+}
+
+/// Delete every retained test log whose profile isn't in `state`. Providers
+/// re-issue profile ids on each refresh, and logs written for ids dropped before
+/// the cleanup existed (or by an unclean exit mid-test) would otherwise pile up.
+pub async fn sweep_orphan_test_logs(platform: &dyn Platform, state: &AppState) {
+    let data_dir = &platform.paths().data_dir;
+    let live: HashSet<String> = state
+        .profiles
+        .iter()
+        .map(|p| safe_id(&p.meta().id))
+        .collect();
+    for name in list_names(data_dir).await {
+        let Some(rest) = name
+            .strip_prefix("test-last-")
+            .and_then(|r| r.strip_suffix(".log"))
+        else {
+            continue;
+        };
+        let id = [TestKind::TcpPing, TestKind::RealPing, TestKind::Speed]
+            .iter()
+            .find_map(|k| rest.strip_prefix(test_kind_slug(*k))?.strip_prefix('-'));
+        if id.is_some_and(|id| !live.contains(id)) {
+            remove_file(data_dir.join(&name)).await;
+        }
     }
 }
 
@@ -525,6 +567,33 @@ mod tests {
     fn safe_id_folds_unsafe_chars() {
         assert_eq!(safe_id("ab-12_3.x"), "ab-12_3.x");
         assert_eq!(safe_id("a/b c:d"), "a_b_c_d");
+    }
+
+    #[tokio::test]
+    async fn orphan_sweep_removes_stale_logs_and_keeps_live_ones() {
+        let (p, _d) = TestPlatform::new();
+        let mut live = crate::testutil::sample_vless();
+        live.meta_mut().id = "live/1".into();
+        let mut state = kasumi_core::state::default_app_state();
+        state.profiles = vec![live];
+        let dir = p.paths().data_dir.clone();
+        let kept = [
+            "test-last-realping-live_1.log",
+            "test-last-speed-live_1.log",
+            "app.log",
+            "test-last-notakind-gone.log",
+        ];
+        let gone = ["test-last-realping-gone.log", "test-last-speed-x-y.log"];
+        for n in kept.iter().chain(&gone) {
+            std::fs::write(dir.join(n), "x").unwrap();
+        }
+        sweep_orphan_test_logs(&p, &state).await;
+        for n in kept {
+            assert!(dir.join(n).exists(), "{n}");
+        }
+        for n in gone {
+            assert!(!dir.join(n).exists(), "{n}");
+        }
     }
 
     #[tokio::test]

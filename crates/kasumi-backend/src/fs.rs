@@ -30,6 +30,18 @@ pub async fn remove_file(path: impl AsRef<Path>) {
     let _ = fs::remove_file(path).await;
 }
 
+/// Names of the entries directly under `dir`; empty if it can't be read.
+pub async fn list_names(dir: impl AsRef<Path>) -> Vec<String> {
+    let Ok(mut rd) = fs::read_dir(dir).await else {
+        return Vec::new();
+    };
+    let mut names = Vec::new();
+    while let Ok(Some(e)) = rd.next_entry().await {
+        names.push(e.file_name().to_string_lossy().into_owned());
+    }
+    names
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
