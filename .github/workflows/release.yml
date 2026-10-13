@@ -187,9 +187,8 @@ jobs:
       #    pinned core rejects the configs we generate. Only runs when cores moved. ──
       - name: Setup Rust (core-compat gate)
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: stable
           targets: x86_64-unknown-linux-gnu
 
       - name: Verify the new cores accept our generated configs
@@ -319,9 +318,8 @@ jobs:
           ref: ${{ needs.prepare.outputs.version }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Setup Bun

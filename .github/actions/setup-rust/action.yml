@@ -1,0 +1,23 @@
+name: Setup Rust
+description: >
+  Install the toolchain pinned in rust-toolchain.toml (channel and components)
+  plus extra targets. dtolnay/rust-toolchain does not read that file, so the
+  version would otherwise be repeated in every workflow.
+
+inputs:
+  targets:
+    description: Space- or comma-separated target triples to add.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        TARGETS: ${{ inputs.targets }}
+      run: |
+        # With no argument, rustup installs what rust-toolchain.toml names.
+        rustup toolchain install
+        rustup show active-toolchain
+        for t in ${TARGETS//,/ }; do rustup target add "$t"; done
