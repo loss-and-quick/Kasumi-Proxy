@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{SecondsFormat, Utc};
-use happ_sub::MergeMode;
 use happ_sub::request::{RequestProfile, RetryCause};
+use happ_sub::{MergeMode, MetaMap, RoutingAction};
 use reqwest::cookie::Jar;
 use tokio::sync::Mutex;
 
@@ -20,12 +20,14 @@ use kasumi_core::mutate::rename_owned_group;
 use kasumi_core::profile::Profile;
 use kasumi_core::request_identity::{IdentityInput, RequestIdentityDefaults};
 use kasumi_core::route::{repoint_profile_ids, resolve_route};
-use kasumi_core::state::{AppState, SubErrorKind, SubWarning, Subscription};
+use kasumi_core::state::{
+    AppState, AuditEntry, AuditOutcome, SubErrorKind, SubWarning, Subscription,
+};
 use kasumi_core::sub_apply::{
     ProfileFilter, apply_subscription_profiles, deduplicate_profiles_scoped,
     map_fetched_subscription_profiles, profile_filter_regex, refreshed_id,
 };
-use kasumi_core::sub_changes::consented_keys;
+use kasumi_core::sub_changes::{consented_keys, host_of, offer_changes, push_audit, routing_off};
 use kasumi_core::sub_ingest::{
     IngestInput, StoredSubMeta, ingest, limits, record_after, stored_for_url,
 };
@@ -268,6 +270,9 @@ struct Fetched {
 /// What a successful fetch carries besides its profiles.
 struct Outcome {
     record: StoredSubMeta,
+    /// The stored meta this fetch merged into, to tell what the provider changed.
+    previous: Option<MetaMap>,
+    routing: Vec<RoutingAction>,
     warnings: Vec<SubWarning>,
     /// No stored meta matched: this fetch read the URL fragment.
     imported: bool,
@@ -312,16 +317,41 @@ async fn fetch_and_map(
     };
     // The fragment carries provider directives for the import and never goes on
     // the wire.
-    let res = match fetch_like_happ(happ_sub::meta::fetch_url(&sub.url), opts, &request).await {
+    let primary = fetch_like_happ(happ_sub::meta::fetch_url(&sub.url), opts.clone(), &request);
+    let mut merge = merge;
+    let mut used_fallback = None;
+    let res = match primary.await {
         Ok(res) => res,
         Err(e) => {
             // Full cause chain (with the URL) to the log — the manual "update now"
             // path logs nowhere else; the UI gets just the cause.
             log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
-            return Err(SubFetchError {
+            let failed = SubFetchError {
                 message: display_fetch_error(&e),
                 kind: Some(fetch_error_kind(&e)),
-            });
+            };
+            // Only a fallback URL the user accepted is ever contacted, and a redirect
+            // from it may not lead to a private address.
+            let Some(fallback) = sub.fallback_url.as_deref() else {
+                return Err(failed);
+            };
+            let opts = FetchUrlOptions {
+                redirect_guard: true,
+                ..opts
+            };
+            match fetch_like_happ(happ_sub::meta::fetch_url(fallback), opts, &request).await {
+                Ok(res) => {
+                    log::info!("subscription {}: used the fallback URL", sub.remarks);
+                    used_fallback = Some(host_of(fallback));
+                    // Happ merges a fallback response like a background update.
+                    merge = MergeMode::Partial;
+                    res
+                }
+                Err(e) => {
+                    log::warn!("subscription {}: fallback failed: {e:#}", sub.remarks);
+                    return Err(failed);
+                }
+            }
         }
     };
     let ingested = ingest(&IngestInput {
@@ -338,12 +368,18 @@ async fn fetch_and_map(
             kind: Some(e.kind()),
         }
     })?;
-    log_warnings(sub, &ingested.warnings);
+    let mut warnings = ingested.warnings.clone();
+    if let Some(host) = used_fallback {
+        warnings.insert(0, SubWarning::UsedFallback { host });
+    }
+    log_warnings(sub, &warnings);
     Ok(Fetched {
         mapped: map_fetched_subscription_profiles(&ingested.profiles, sub, filter),
         outcome: Outcome {
             record: record_after(&sub.url, &ingested),
-            warnings: ingested.warnings,
+            previous: stored.map(|s| s.meta.clone()),
+            routing: ingested.routing,
+            warnings,
             imported: stored.is_none(),
         },
     })
@@ -454,8 +490,30 @@ async fn apply(
         apply_auto(&mut updated, &o.record.meta, disposition, first_import);
         updated.warnings.clone_from(&o.warnings);
         updated.body_encrypted = o.record.encrypted;
+        let now = now_iso();
+        let offers = offer_changes(
+            &next,
+            &updated,
+            o.previous.as_ref(),
+            &o.record.meta,
+            &o.routing,
+            &now,
+        );
+        updated.pending_changes = offers.pending;
+        push_audit(&mut updated, offers.audit);
         rename_owned_group(&mut next, &updated);
         next.subscriptions[i] = updated;
+        // `happ://routing/off` needs no consent: it only switches off what this
+        // subscription's own routing turned on.
+        if o.routing.contains(&RoutingAction::Off) && routing_off(&mut next, &sub.id) {
+            let entry = AuditEntry {
+                at: now,
+                key: "routing".into(),
+                outcome: AuditOutcome::AutoApplied,
+                summary: "happ://routing/off".into(),
+            };
+            push_audit(&mut next.subscriptions[i], vec![entry]);
+        }
     }
     if current.settings.dedup_on_update {
         let (kept, _) = deduplicate_profiles_scoped(
@@ -1252,5 +1310,120 @@ mod tests {
         )
         .await;
         assert!(calls.iter().any(|c| c.starts_with("restart")), "{calls:?}");
+    }
+
+    fn request_paths(requests: &crate::testutil::Requests) -> Vec<String> {
+        requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.split(' ').nth(1).unwrap_or_default().to_owned())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn fallback_used_only_after_consent() {
+        let (p, _d) = TestPlatform::new();
+        let offered = [("fallback-url", "https://backup.example.net/s")];
+        let (base, requests) = serve(vec![
+            http_response(200, &offered, LINK),
+            http_response(500, &[], b"down"),
+        ])
+        .await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        let s = sub_after(&p).await;
+        assert_eq!(s.fallback_url, None, "offered, not applied");
+        assert_eq!(s.pending_changes[0].key, "fallback-url");
+
+        let s = update(&p).await.subscriptions.remove(0);
+        assert!(s.last_error.is_some());
+        assert_eq!(request_paths(&requests), ["/s", "/s"], "no fallback fetch");
+
+        // Accepted: the next failure falls back to it.
+        let (fb, fb_requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].fallback_url = Some(format!("{fb}/backup"));
+        write_app_state(&p, &state).await.unwrap();
+        let s = update(&p).await.subscriptions.remove(0);
+        assert_eq!(s.last_error, None);
+        assert_eq!(request_paths(&fb_requests), ["/backup"]);
+        assert_eq!(
+            s.warnings[0],
+            SubWarning::UsedFallback {
+                host: "127.0.0.1".into()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn fallback_redirect_to_private_refused() {
+        let (p, _d) = TestPlatform::new();
+        let (target, target_requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        let location = format!("{target}/internal");
+        let (fb, _) = serve(vec![http_response(
+            302,
+            &[("location", location.as_str())],
+            b"",
+        )])
+        .await;
+        let (base, _) = serve(vec![http_response(503, &[], b"down")]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].fallback_url = Some(format!("{fb}/backup"));
+        write_app_state(&p, &state).await.unwrap();
+
+        update(&p).await;
+        assert_kept(&p, "HTTP 503").await;
+        assert!(target_requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn live_fixture_offers_routing_and_applies_none() {
+        let (p, _d) = TestPlatform::new();
+        let (base, _) = serve(vec![crate::testutil::fixture_response("01-happ-full")]).await;
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", &format!("{base}/s"))];
+        write_app_state(&p, &state).await.unwrap();
+        let next = update(&p).await;
+
+        let s = &next.subscriptions[0];
+        assert_eq!(s.pending_changes.len(), 1);
+        let change = &s.pending_changes[0];
+        assert_eq!(
+            (change.key.as_str(), change.value.as_str()),
+            ("routing", "EXAMPLE-ROUTING")
+        );
+        assert!(matches!(
+            change.action,
+            kasumi_core::state::ChangeAction::ImportRouting { .. }
+        ));
+        assert_eq!(next.routes, state.routes, "no routing applied");
+        assert_eq!(next.rule_blocks, state.rule_blocks);
+        assert_eq!(s.audit.len(), 1);
+        assert_eq!(s.audit[0].outcome, AuditOutcome::Offered);
+    }
+
+    #[tokio::test]
+    async fn routing_off_switches_the_provider_route_off() {
+        let (p, _d) = TestPlatform::new();
+        let body = [LINK, b"happ://routing/off\n"].concat();
+        let (base, _) = serve(vec![http_response(200, &[], &body)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.routes.push(kasumi_core::route::Route {
+            id: "sub-route-s1".into(),
+            name: "Provider".into(),
+            source_sub_id: Some("s1".into()),
+            ..kasumi_core::route::default_route()
+        });
+        write_app_state(&p, &state).await.unwrap();
+        let next = update(&p).await;
+        let route = next.routes.iter().find(|r| r.id == "sub-route-s1").unwrap();
+        assert!(!route.enabled);
+        assert_eq!(
+            next.subscriptions[0].audit[0].outcome,
+            AuditOutcome::AutoApplied
+        );
     }
 }

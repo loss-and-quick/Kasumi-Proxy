@@ -47,6 +47,23 @@ pub struct FetchUrlOptions {
     pub ipv4_only: bool,
     /// Offer only gzip, as OkHttp does, instead of every supported encoding.
     pub gzip_only: bool,
+    /// Follow a redirect only to a public https host (a provider-chosen URL).
+    pub redirect_guard: bool,
+}
+
+/// Most redirects one fetch follows, as reqwest's default policy.
+const MAX_REDIRECTS: usize = 10;
+
+fn guarded_redirects() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            return attempt.error("too many redirects");
+        }
+        match happ_sub::meta::validate_url_safety(attempt.url().as_str(), true) {
+            Ok(()) => attempt.follow(),
+            Err(why) => attempt.error(format!("redirect refused: {why}")),
+        }
+    })
 }
 
 #[derive(Debug)]
@@ -125,6 +142,9 @@ async fn fetch_once(
     }
     if opts.ipv4_only {
         builder = builder.dns_resolver(Arc::new(Ipv4Only));
+    }
+    if opts.redirect_guard {
+        builder = builder.redirect(guarded_redirects());
     }
     // reqwest keeps a manual `Cookie` and skips the jar; OkHttp, which Happ uses, sends
     // the jar's cookies instead whenever it has some for the URL.
