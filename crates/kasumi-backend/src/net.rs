@@ -50,6 +50,12 @@ pub struct FetchUrlOptions {
     /// Offer HTTP/2 in TLS ALPN (`h2, http/1.1`), as OkHttp does; otherwise only
     /// HTTP/1.1 is offered. Plain `http://` stays on HTTP/1.1 either way.
     pub http2: bool,
+    /// Write HTTP/1.1 header names in title case (`User-Agent`, `X-Hwid`) instead of
+    /// lower case. OkHttp sends names as spelled (`User-agent`, `X-HWID`); hyper can't,
+    /// as the case map it would need is private to it. Title case still matches the
+    /// `Host`, `Connection` and `Accept-Encoding` OkHttp writes. HTTP/2 always sends
+    /// lower case.
+    pub title_case_headers: bool,
     /// Follow a redirect only to a public https host (a provider-chosen URL).
     pub redirect_guard: bool,
 }
@@ -145,6 +151,9 @@ async fn fetch_once(
     }
     if !opts.http2 {
         builder = builder.http1_only();
+    }
+    if opts.title_case_headers {
+        builder = builder.http1_title_case_headers();
     }
     if opts.ipv4_only {
         builder = builder.dns_resolver(Arc::new(Ipv4Only));
@@ -559,6 +568,44 @@ mod tests {
         let res = fetch(&format!("{base}/s"), happ_like(true)).await.unwrap();
         assert_eq!(res.body, b"ok");
         assert!(requests.lock().unwrap()[0].starts_with("GET /s HTTP/1.1\r\n"));
+    }
+
+    /// Header names of a raw request head as written, in wire order.
+    fn raw_names(head: &str) -> Vec<String> {
+        head.lines()
+            .skip(1)
+            .filter_map(|l| l.split_once(": "))
+            .map(|(n, _)| n.to_owned())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn header_case_is_lower_unless_title_case_is_asked() {
+        let (base, requests) = serve(vec![http_response(200, &[], b"ok")]).await;
+        let headers = vec![
+            ("User-agent".to_string(), "Happ/test".to_string()),
+            ("X-HWID".to_string(), "0123456789abcdef".to_string()),
+        ];
+        let plain = FetchUrlOptions {
+            headers: headers.clone(),
+            ..direct()
+        };
+        let titled = FetchUrlOptions {
+            headers,
+            title_case_headers: true,
+            ..direct()
+        };
+        fetch(&base, plain).await.unwrap();
+        fetch(&base, titled).await.unwrap();
+        let heads = requests.lock().unwrap().clone();
+        assert_eq!(
+            raw_names(&heads[0]),
+            ["user-agent", "x-hwid", "accept", "accept-encoding", "host"]
+        );
+        assert_eq!(
+            raw_names(&heads[1]),
+            ["User-Agent", "X-Hwid", "Accept", "Accept-Encoding", "Host"]
+        );
     }
 
     #[tokio::test]

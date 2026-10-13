@@ -330,6 +330,9 @@ async fn fetch_and_map(
         gzip_only: true,
         // Offer HTTP/2 as Happ's OkHttp does; downloads and probes keep HTTP/1.1.
         http2: true,
+        // As close to Happ's request as reqwest allows; it still adds `Accept: */*`,
+        // which no client or request option removes.
+        title_case_headers: true,
         ..Default::default()
     };
     // The fragment carries provider directives for the import and never goes on
@@ -946,6 +949,44 @@ mod tests {
             "{seen:?}"
         );
         assert_eq!(state.subscriptions[0].last_error, None);
+    }
+
+    #[tokio::test]
+    async fn subscription_request_head_on_the_wire() {
+        let (p, _d) = TestPlatform::new();
+        phone(&p);
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+
+        let head = requests.lock().unwrap()[0].clone();
+        let mut lines = head.split("\r\n");
+        assert_eq!(lines.next(), Some("GET /s HTTP/1.1"));
+        let sent: Vec<(&str, &str)> = lines.filter_map(|l| l.split_once(": ")).collect();
+        let names: Vec<&str> = sent.iter().map(|(n, _)| *n).collect();
+        // Happ writes `User-agent`, `X-HWID`, `X-Device-OS`, `X-Ver-OS` and
+        // `X-Device-model`, then `Host` and `Accept-Encoding`, and no `Accept`.
+        assert_eq!(
+            names,
+            [
+                "Connection",
+                "User-Agent",
+                "X-Device-Locale",
+                "X-Hwid",
+                "X-Device-Os",
+                "X-Ver-Os",
+                "X-Device-Model",
+                "Accept",
+                "Accept-Encoding",
+                "Host",
+            ]
+        );
+        let value = |name: &str| sent.iter().find(|(n, _)| *n == name).unwrap().1;
+        assert_eq!(value("Connection"), "close");
+        assert_eq!(value("X-Device-Model"), "Pixel 9");
+        assert_eq!(value("Accept"), "*/*");
+        assert_eq!(value("Accept-Encoding"), "gzip");
+        assert_eq!(value("Host"), base.trim_start_matches("http://"));
     }
 
     #[tokio::test]
