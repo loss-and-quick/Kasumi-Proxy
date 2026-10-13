@@ -61,9 +61,14 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
             return Some(Xray);
         }
         Profile::Shadowsocks(ss) => {
-            // Ciphers only Xray implements — sing-box has the `-ietf-` chacha variant
-            // only and no `plain`, so these must run on Xray even when a v2ray-plugin
-            // transport would otherwise route shadowsocks to sing-box below.
+            // Xray dropped its QUIC transport, so v2ray-plugin's QUIC mode runs only
+            // on sing-box, whatever the cipher.
+            if matches!(ss.transport, Transport::Quic(_)) {
+                return Some(SingBox);
+            }
+            // Xray's spellings of none / chacha20-ietf-poly1305 /
+            // xchacha20-ietf-poly1305: a profile naming them stays on Xray unless
+            // its transport needs sing-box.
             if matches!(
                 ss.method,
                 SsMethod::Plain | SsMethod::Chacha20Poly1305 | SsMethod::Xchacha20Poly1305
@@ -305,8 +310,7 @@ mod tests {
     #[test]
     fn shadowsocks_method_routing_splits_by_core() {
         use CoreEngine::{SingBox, Xray};
-        // Ciphers only Xray implements (sing-box has no `plain` and only the IETF
-        // chacha variant) — must route to Xray.
+        // Xray's own cipher names stay on Xray.
         for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
             assert_eq!(
                 forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
@@ -436,6 +440,21 @@ mod tests {
         s2.core_by_protocol
             .insert(Protocol::Vless, CoreEngine::SingBox);
         assert_eq!(resolve_core(&prof, &s2), CoreEngine::SingBox);
+    }
+
+    #[test]
+    fn shadowsocks_over_quic_runs_on_singbox_with_every_cipher() {
+        use strum::IntoEnumIterator;
+        for method in SsMethod::iter() {
+            let Profile::Shadowsocks(mut ss) = p(
+                "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dquic%3Bhost%3Dq.example#q",
+            ) else {
+                panic!("not shadowsocks")
+            };
+            ss.method = method;
+            let prof = Profile::Shadowsocks(ss);
+            assert_eq!(forced_core(&prof), Some(CoreEngine::SingBox), "{method:?}");
+        }
     }
 
     #[test]

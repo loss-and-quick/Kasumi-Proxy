@@ -363,6 +363,20 @@ fn generate() -> Vec<(String, Profile)> {
         }
     }
 
+    // 15c. A v2ray-plugin QUIC link (no `tls`, as the plugin forces it) with
+    //      every cipher, left to the core resolution.
+    for method in SsMethod::iter() {
+        let name = format!("ss-link/quic-{}", wire(&method));
+        if let Some(Profile::Shadowsocks(mut s)) = kasumi_core::share::parse_share_link(
+            "ss://YWVzLTI1Ni1nY206cHc=@e.example:8388?plugin=v2ray-plugin%3Bmode%3Dquic%3Bhost%3Dq.example#q",
+            None,
+        ) {
+            s.method = method;
+            s.password = ss_key(method).to_string();
+            cases.push((name, Profile::Shadowsocks(s)));
+        }
+    }
+
     // 16. Shadowsocks plugin code paths. SS+WS triggers the v2ray-plugin
     //     websocket branch; SS+TCP+http-header triggers obfs-local. Neither
     //     is reached by the SS cipher sweep (plain TCP).
