@@ -11,7 +11,10 @@
 //! idempotent.
 //!
 //! With an xray core the system's DNS is sent into the tun as well (see
-//! [`point_dns_at_tun`]).
+//! [`point_dns_at_tun`]), and port 53 is closed everywhere else for as long as this
+//! process holds the [`dns_guard`].
+
+use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +24,8 @@ use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
 use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
+
+use super::dns_guard;
 
 /// The userspace tun's address + mask; `/15` covers the 198.18/15 test net.
 /// Address single-sourced from core so it can't drift from hev's / the routing's.
@@ -33,6 +38,8 @@ const SPLIT_DEFAULT: [(&str, &str); 2] = [("0.0.0.0", "128.0.0.0"), ("128.0.0.0"
 
 /// Resolver the tun advertises; see [`kasumi_core::tun::TUN_DNS_IPV4`].
 const TUN_DNS: &str = kasumi_core::tun::TUN_DNS_IPV4;
+
+static DNS_GUARD: Mutex<Option<dns_guard::Guard>> = Mutex::new(None);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
@@ -151,6 +158,22 @@ async fn point_dns_at_tun(tun: &str, tun_ifindex: u32) {
     run_argv(&netsh_metric_argv(tun_ifindex)).await;
 }
 
+/// Close port 53 outside the tun until [`clear_external_tun_routing`] or the end of
+/// this process. Best effort: without it, other adapters' resolvers stay reachable.
+fn guard_dns(tun_ifindex: u32, core_bin: &str) {
+    let installed = luid_of(tun_ifindex).and_then(|luid| {
+        let tun_dns = TUN_DNS.parse().map_err(std::io::Error::other)?;
+        // SAFETY: `Value` spans the whole LUID union.
+        let luid = unsafe { luid.Value };
+        let key = dns_guard::new_sublayer_key()?;
+        dns_guard::install(&dns_guard::plan(key, luid, tun_dns, core_bin))
+    });
+    match installed {
+        Ok(guard) => *DNS_GUARD.lock().unwrap_or_else(PoisonError::into_inner) = Some(guard),
+        Err(e) => log::warn!("DNS guard not installed ({e}); other resolvers stay reachable"),
+    }
+}
+
 /// Run a PowerShell one-liner, returning trimmed stdout (empty on failure).
 pub(super) async fn powershell(script: &str) -> String {
     let (code, out) = run_out(&[
@@ -242,11 +265,13 @@ fn split_cidr(cidr: &str) -> (&str, bool) {
 }
 
 /// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address the
-/// tun and split-default into it. Persists the installed set.
+/// tun and split-default into it. Persists the installed set. `core_bin` is the core
+/// whose own DNS stays allowed out of the uplink while `capture_dns` guards the rest.
 pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
     capture_dns: bool,
+    core_bin: &str,
     route_state_file: &str,
 ) -> anyhow::Result<()> {
     let Some((gw, uplink)) = read_default_route().await else {
@@ -319,12 +344,19 @@ pub async fn apply_external_tun_routing(
     write_text_atomic(route_state_file, &serde_json::to_string(&state)?).await?;
     if capture_dns {
         point_dns_at_tun(tun, tun_ifindex).await;
+        guard_dns(tun_ifindex, core_bin);
     }
     Ok(())
 }
 
 /// Tear down everything `apply_external_tun_routing` installed. Idempotent.
 pub async fn clear_external_tun_routing(route_state_file: &str) {
+    // Dropping the guard removes its filters.
+    let guard = DNS_GUARD
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take();
+    drop(guard);
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };

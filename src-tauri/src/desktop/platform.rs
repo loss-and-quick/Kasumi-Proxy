@@ -368,8 +368,14 @@ impl DesktopPlatform {
         .await;
         // The helper creates the tun device; wait for it before addressing/routing.
         self.os.await_tun_up(&iface).await?;
-        routing::apply_external_tun_routing(&iface, &bypass, capture_dns, &self.p.route_state_file)
-            .await?;
+        routing::apply_external_tun_routing(
+            &iface,
+            &bypass,
+            capture_dns,
+            &core_bin,
+            &self.p.route_state_file,
+        )
+        .await?;
         Ok(())
     }
 }

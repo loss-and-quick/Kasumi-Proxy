@@ -106,6 +106,9 @@ pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
     capture_dns: bool,
+    // Windows-seam signature match: the core's uplink-bound DNS already falls past
+    // the capture rule (see [`DNS_TABLE`]).
+    _core_bin: &str,
     route_state_file: &str,
 ) -> anyhow::Result<()> {
     let Some((gw, dev)) = read_default_route().await else {

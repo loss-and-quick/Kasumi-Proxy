@@ -87,12 +87,15 @@ futures-util = "0.3"
 # Win32_NetworkManagement_{IpHelper,Ndis} + Win32_System_LibraryLoader: the tun's
 # DNS server (SetInterfaceDnsSettings, resolved at run time) — see
 # desktop/windows/routing.rs.
+# Win32_NetworkManagement_WindowsFilteringPlatform + Win32_System_Rpc: the DNS guard
+# (a dynamic WFP session) — see desktop/windows/dns_guard.rs.
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.7"
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
   "Win32_NetworkManagement_Ndis",
+  "Win32_NetworkManagement_WindowsFilteringPlatform",
   "Win32_Networking_WinInet",
   "Win32_Networking_WinSock",
   "Win32_Security",
@@ -100,6 +103,7 @@ windows-sys = { version = "0.59", features = [
   "Win32_System_LibraryLoader",
   "Win32_System_Power",
   "Win32_System_Registry",
+  "Win32_System_Rpc",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
