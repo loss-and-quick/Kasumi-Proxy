@@ -152,6 +152,8 @@ const hi = {
   "editor.editTitle": "प्रोफ़ाइल संपादित करें",
   "editor.save": "सहेजें",
   "editor.basics": "मूल बातें",
+  "editor.protocolUnavailable":
+    "Android पर Naive उपलब्ध नहीं है: साथ आया sing-box इसके बिना बनाया गया है।",
   "editor.protocol": "प्रोटोकॉल",
   "editor.remarks": "टिप्पणी",
   "editor.address": "पता",
@@ -393,6 +395,8 @@ const hi = {
   "add.unsupported.sendToDevice": "Happ का डिवाइस-सिंक लिंक; इसे केवल Happ पढ़ सकता है।",
   "add.unsupported.routingOff": "प्रदाता की रूटिंग बंद करता है। इसके बजाय सेटिंग्स → रूटिंग में रूट बंद करें।",
   "add.unsupported.urlDecrypt": "इस एन्क्रिप्टेड लिंक के लिए Kasumi के पास कुंजी नहीं है।",
+  "add.unsupported.unavailableProtocol":
+    "Android पर Naive उपलब्ध नहीं है: साथ आया sing-box इसके बिना बनाया गया है।",
   "add.unsupported.invalid": "यह मान्य Happ लिंक नहीं है।",
   "add.linkUseAdd": "यह लिंक है, JSON नहीं। इसे “जोड़ें” बटन से जोड़ें।",
   "groups.picker.new": "नया समूह…",
@@ -724,6 +728,11 @@ const hi = {
   "subs.warnings.unsupportedLinks": plural("count", {
     one: "# सर्वर ऐसे फ़ॉर्मेट में है जिसे Kasumi सपोर्ट नहीं करता",
     other: "# सर्वर ऐसे फ़ॉर्मेट में हैं जिसे Kasumi सपोर्ट नहीं करता",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    one: "# सर्वर ऐसा प्रोटोकॉल इस्तेमाल करता है जिसे यह डिवाइस नहीं चला सकता, इसलिए छोड़ा गया (Android पर Naive उपलब्ध नहीं है, साथ आया sing-box इसके बिना बनाया गया है)",
+    other:
+      "# सर्वर ऐसा प्रोटोकॉल इस्तेमाल करते हैं जिसे यह डिवाइस नहीं चला सकता, इसलिए छोड़े गए (Android पर Naive उपलब्ध नहीं है, साथ आया sing-box इसके बिना बनाया गया है)",
   }),
   "subs.warnings.invalidRouting": "प्रदाता की रूटिंग प्रोफ़ाइल अमान्य है और अनदेखी की गई।",
   "subs.warnings.invalidFragment": "URL में # के बाद की कुछ सेटिंग्स पढ़ी नहीं जा सकीं।",

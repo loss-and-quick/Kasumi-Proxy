@@ -21,12 +21,13 @@ use kasumi_core::contract::{
 };
 use kasumi_core::core::{forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
-use kasumi_core::enums::CoreEngine;
+use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::import_input::{
     ResolvedImport, is_encrypted_url, resolve_import_text, subscription_fetch_url,
+    withhold_unavailable,
 };
 use kasumi_core::mutate::{Backup, ImportMode, MutationIntent, apply_mutation};
-use kasumi_core::profile::Profile;
+use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
@@ -305,6 +306,7 @@ pub(crate) async fn build_profile_config(
         .iter()
         .find(|p| p.meta().id == id)
         .ok_or_else(|| err(format!("profile not found: {id}")))?;
+    refuse_unavailable(platform, profile, profiles)?;
     let rules = kasumi_core::route::resolve_route(&state, profile);
     let srs_dir = paths.srs_dir.to_str().unwrap_or("");
     let mut settings = state.settings.clone();
@@ -330,6 +332,41 @@ pub(crate) async fn build_profile_config(
     }
     platform.tune_config(built.engine, &mut built.config);
     Ok(built)
+}
+
+/// A profile, or a hop of its chain, whose protocol this platform's cores can't
+/// run fails here with the reason rather than as a core that dies on startup.
+fn refuse_unavailable(
+    platform: &dyn Platform,
+    profile: &Profile,
+    profiles: &[Profile],
+) -> Result<(), CommandError> {
+    let unavailable = platform.unavailable_protocols();
+    if unavailable.is_empty() {
+        return Ok(());
+    }
+    let hops = kasumi_core::chain::chain_hops(profile, profiles).unwrap_or_default();
+    match std::iter::once(profile)
+        .chain(hops)
+        .find(|p| unavailable.contains(&p.protocol()))
+    {
+        Some(p) => Err(err(unavailable_reason(p))),
+        None => Ok(()),
+    }
+}
+
+fn unavailable_reason(p: &Profile) -> String {
+    let name = &p.meta().remarks;
+    match p.protocol() {
+        Protocol::Naive => format!(
+            "\"{name}\" is a Naive profile, which can't run on this device: \
+             Naive isn't available on Android, where the bundled sing-box is built without it"
+        ),
+        other => format!(
+            "\"{name}\" uses {}, which this device's cores can't run",
+            wire_value(&other)
+        ),
+    }
 }
 
 /// Run one command against `platform`, returning its typed reply.
@@ -415,6 +452,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                 xray_version: c.cores.xray.unwrap_or_default(),
                 singbox_version: c.cores.singbox.unwrap_or_default(),
                 tun: c.tun,
+                unavailable_protocols: platform.unavailable_protocols().to_vec(),
             }))
         }
 
@@ -495,13 +533,17 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             crate::jobs::read_test_log(platform, &profile_id, kind).await,
         )),
 
-        Command::ParseShareLinks { text, group_id } => Ok(Response::Profiles(parse_share_links(
-            &text,
-            group_id.as_deref(),
-        ))),
+        Command::ParseShareLinks { text, group_id } => {
+            let unavailable = platform.unavailable_protocols();
+            let mut profiles = parse_share_links(&text, group_id.as_deref());
+            profiles.retain(|p| !unavailable.contains(&p.protocol()));
+            Ok(Response::Profiles(profiles))
+        }
 
         Command::ResolveImportInput { text } => {
-            Ok(Response::ImportInput(Box::new(resolve_import_text(&text))))
+            let mut resolved = resolve_import_text(&text);
+            withhold_unavailable(&mut resolved, platform.unavailable_protocols());
+            Ok(Response::ImportInput(Box::new(resolved)))
         }
 
         Command::RevealSubscriptionUrl { url } => {
@@ -1034,6 +1076,75 @@ mod tests {
         .await
         .unwrap_err();
         assert!(e.0.contains("profile not found"));
+    }
+
+    const NAIVE_LINK: &str = "naive+https://u:p@n.example:443#Naive";
+
+    #[tokio::test]
+    async fn capabilities_list_the_protocols_the_cores_cannot_run() {
+        let (p, _d) = TestPlatform::new();
+        p.set_unavailable(&[Protocol::Naive]);
+        let Response::Capabilities(c) = dispatch(&p, Command::Capabilities).await.unwrap() else {
+            panic!()
+        };
+        assert_eq!(c.unavailable_protocols, [Protocol::Naive]);
+    }
+
+    #[tokio::test]
+    async fn imports_set_aside_links_the_device_cannot_run() {
+        let (p, _d) = TestPlatform::new();
+        p.set_unavailable(&[Protocol::Naive]);
+        let vless = "vless://11111111-1111-1111-1111-111111111111@e.example:443?type=tcp&security=tls&sni=s#Home";
+        let text = format!("{vless}\n{NAIVE_LINK}");
+        let Response::ImportInput(r) =
+            dispatch(&p, Command::ResolveImportInput { text: text.clone() })
+                .await
+                .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(r.share_text, vless);
+        assert_eq!(r.unsupported.len(), 1);
+        assert_eq!(
+            r.unsupported[0].kind,
+            kasumi_core::import_input::UnsupportedInput::UnavailableProtocol
+        );
+
+        // The parser never hands back a profile that couldn't start either.
+        let Response::Profiles(profiles) = dispatch(
+            &p,
+            Command::ParseShareLinks {
+                text,
+                group_id: None,
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].protocol(), Protocol::Vless);
+    }
+
+    // A naive profile already in the state (a backup, an older build) is refused
+    // with the reason instead of a core that dies on startup, also as a hop.
+    #[tokio::test]
+    async fn starting_an_unavailable_protocol_says_why() {
+        let (p, _d) = TestPlatform::new();
+        p.set_unavailable(&[Protocol::Naive]);
+        let naive = kasumi_core::share::parse_share_link(NAIVE_LINK, None).unwrap();
+        let mut exit = vless();
+        exit.meta_mut().via = Some(naive.meta().id.clone());
+        write_json_atomic(&p.paths().app_state, &default_app_state())
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![naive.clone(), exit.clone()])
+            .await
+            .unwrap();
+        for id in [naive.meta().id.clone(), exit.meta().id.clone()] {
+            let e = build_profile_config(&p, &id).await.unwrap_err();
+            assert!(e.0.contains("Naive isn't available on Android"), "{}", e.0);
+        }
     }
 
     #[tokio::test]

@@ -25,6 +25,7 @@ use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, re
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
     AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
@@ -552,6 +553,11 @@ impl Platform for AndroidPlatform {
         &self.paths
     }
 
+    /// The official Android sing-box build is compiled without `with_naive_outbound`.
+    fn unavailable_protocols(&self) -> &'static [Protocol] {
+        &[Protocol::Naive]
+    }
+
     async fn boot_init(&self) -> anyhow::Result<()> {
         silent(&["mkdir", "-p", RUN_DIR]).await;
         // The route tables netd manages must exist before we touch ip rules/sysctl.
@@ -964,6 +970,14 @@ mod tests {
         // shape via a known iface absence (returns zeros).
         assert_eq!(iface_traffic(None).await, (0, 0));
         assert_eq!(iface_traffic(Some("definitely-not-an-iface")).await, (0, 0));
+    }
+
+    #[test]
+    fn naive_is_unavailable_on_android() {
+        assert_eq!(
+            AndroidPlatform::new().unavailable_protocols(),
+            [Protocol::Naive]
+        );
     }
 
     #[test]

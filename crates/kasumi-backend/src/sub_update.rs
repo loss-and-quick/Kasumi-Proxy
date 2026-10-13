@@ -32,6 +32,7 @@ use kasumi_core::sub_changes::{
 };
 use kasumi_core::sub_ingest::{
     IngestError, IngestInput, StoredSubMeta, ingest, limits, record_after, stored_for_url,
+    withhold_unavailable_profiles,
 };
 use kasumi_core::sub_policy::{apply_auto, effective_interval_minutes};
 
@@ -383,7 +384,7 @@ async fn fetch_and_map(
     };
     // The stored meta stays keyed by the link as saved; the fragment and `?key=`
     // are read from the URL it leads to.
-    let ingested = ingest(&IngestInput {
+    let mut ingested = ingest(&IngestInput {
         url: &url,
         headers: &res.headers,
         body: &res.body,
@@ -400,6 +401,7 @@ async fn fetch_and_map(
             needs_consent: matches!(e, IngestError::UnsupportedPayload(_)),
         }
     })?;
+    withhold_unavailable_profiles(&mut ingested, platform.unavailable_protocols());
     let mut warnings = ingested.warnings.clone();
     if let Some(host) = used_fallback {
         warnings.insert(0, SubWarning::UsedFallback { host });

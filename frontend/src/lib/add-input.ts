@@ -21,6 +21,7 @@ export const UNSUPPORTED_TEXT: Record<UnsupportedKind, DictKey> = {
   routingOff: "add.unsupported.routingOff",
   urlDecrypt: "add.unsupported.urlDecrypt",
   invalid: "add.unsupported.invalid",
+  unavailableProtocol: "add.unsupported.unavailableProtocol",
 };
 
 /** What a paste holds: subscriptions to add, the rest of the text for the backend's

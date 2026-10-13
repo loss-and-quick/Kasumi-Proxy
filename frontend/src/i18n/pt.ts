@@ -156,6 +156,8 @@ const pt = {
   "editor.editTitle": "Editar perfil",
   "editor.save": "Salvar",
   "editor.basics": "Básico",
+  "editor.protocolUnavailable":
+    "O Naive não está disponível no Android: o sing-box incluído é compilado sem ele.",
   "editor.protocol": "Protocolo",
   "editor.remarks": "Nome",
   "editor.address": "Endereço",
@@ -419,6 +421,8 @@ const pt = {
   "add.unsupported.routingOff":
     "Desativa o roteamento de um provedor. Desative as rotas em Configurações → Roteamento.",
   "add.unsupported.urlDecrypt": "O Kasumi não tem chave para este link criptografado.",
+  "add.unsupported.unavailableProtocol":
+    "O Naive não está disponível no Android: o sing-box incluído é compilado sem ele.",
   "add.unsupported.invalid": "Não é um link do Happ válido.",
   "add.linkUseAdd": "É um link, não um JSON. Adicione-o pelo botão “Adicionar”.",
   "groups.picker.new": "Novo grupo…",
@@ -753,6 +757,11 @@ const pt = {
   "subs.warnings.unsupportedLinks": plural("count", {
     one: "# servidor usa um formato que o Kasumi não suporta",
     other: "# servidores usam um formato que o Kasumi não suporta",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    one: "# servidor usa um protocolo que este dispositivo não consegue usar e foi ignorado (o Naive não está disponível no Android, o sing-box incluído é compilado sem ele)",
+    other:
+      "# servidores usam um protocolo que este dispositivo não consegue usar e foram ignorados (o Naive não está disponível no Android, o sing-box incluído é compilado sem ele)",
   }),
   "subs.warnings.invalidRouting": "O perfil de roteamento do provedor é inválido e foi ignorado.",
   "subs.warnings.invalidFragment": "Parte das configurações após o # na URL não pôde ser lida.",

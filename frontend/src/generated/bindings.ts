@@ -462,6 +462,11 @@ export type Capabilities = {
 	singboxVersion: string,
 	/**  Whether the host can route through a TUN device. */
 	tun: boolean,
+	/**
+	 *  Protocols this host's cores can't run (Android: naive, which the bundled
+	 *  sing-box is compiled without). Absent from an older daemon: none.
+	 */
+	unavailableProtocols?: Protocol[],
 };
 
 /**  What accepting a [`PendingChange`] does. */
@@ -1755,7 +1760,9 @@ export type SubWarning = { kind: "skippedLines"; count: number; sample: string }
  *  sing-box outbounds Kasumi can't import: an unknown or unsupported type, or a
  *  server it can't read. Routing outbounds (`direct`, groups) are not counted.
  */
-{ kind: "skippedOutbounds"; count: number };
+{ kind: "skippedOutbounds"; count: number } | 
+/**  Servers whose protocol this device's cores can't run (naive on Android). */
+{ kind: "unavailableProtocols"; count: number };
 
 /**  A subscription source (`SubscriptionSchema`). */
 export type Subscription = Subscription_Serialize | Subscription_Deserialize;
@@ -2003,7 +2010,7 @@ export type TunEngine = "singbox-tun" | "tun2socks" | "hev";
 
 export type TunnelSetting = { kind: "mux"; on: boolean } | { kind: "fragment"; on: boolean } | { kind: "fragmentPackets"; value: string } | { kind: "fragmentLength"; value: string } | { kind: "fragmentInterval"; value: string } | { kind: "sniffing"; on: boolean };
 
-/**  Why a `happ://` link cannot be imported. */
+/**  Why a link in an import cannot be used. */
 export type UnsupportedInput = 
 /**
  *  `toggle`, `connect`, `disconnect`, `open`, `close` and their `_without_ui`
@@ -2020,7 +2027,12 @@ export type UnsupportedInput =
 /**  No built-in key opens the encrypted link. */
 "urlDecrypt" | 
 /**  A malformed `happ://` link, or one that does not lead to an http(s) URL. */
-"invalid";
+"invalid" | 
+/**
+ *  A share link for a protocol this device's cores can't run (see
+ *  [`withhold_unavailable`]).
+ */
+"unavailableProtocol";
 
 export type UnsupportedLink = {
 	text: string,

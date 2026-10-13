@@ -152,6 +152,7 @@ const zh = {
   "editor.editTitle": "编辑配置",
   "editor.save": "保存",
   "editor.basics": "基础",
+  "editor.protocolUnavailable": "Android 上不支持 Naive：内置的 sing-box 编译时未包含它。",
   "editor.protocol": "协议",
   "editor.remarks": "备注",
   "editor.address": "地址",
@@ -387,6 +388,7 @@ const zh = {
   "add.unsupported.sendToDevice": "Happ 的设备同步链接，只有 Happ 能读取。",
   "add.unsupported.routingOff": "用于关闭服务商的路由。请在“设置 → 路由”中关闭路由。",
   "add.unsupported.urlDecrypt": "Kasumi 没有这个加密链接的密钥。",
+  "add.unsupported.unavailableProtocol": "Android 上不支持 Naive：内置的 sing-box 编译时未包含它。",
   "add.unsupported.invalid": "不是有效的 Happ 链接。",
   "add.linkUseAdd": "这是链接，不是 JSON。请用“添加”按钮导入。",
   "groups.picker.new": "新建分组…",
@@ -713,6 +715,11 @@ const zh = {
   "subs.warnings.unsupportedLinks": plural("count", {
     one: "# 个服务器的格式 Kasumi 不支持",
     other: "# 个服务器的格式 Kasumi 不支持",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    one: "# 个服务器使用此设备无法运行的协议，已跳过（Android 上不支持 Naive，内置的 sing-box 编译时未包含它）",
+    other:
+      "# 个服务器使用此设备无法运行的协议，已跳过（Android 上不支持 Naive，内置的 sing-box 编译时未包含它）",
   }),
   "subs.warnings.invalidRouting": "服务商的路由配置无效，已忽略。",
   "subs.warnings.invalidFragment": "链接中 # 之后的部分设置无法读取。",

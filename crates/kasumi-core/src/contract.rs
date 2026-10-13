@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::enums::CoreEngine;
+use crate::profile::Protocol;
 
 /// Canonical log-file identifiers (backend log paths ↔ UI log picker).
 #[derive(
@@ -132,6 +133,10 @@ pub struct Capabilities {
     pub singbox_version: String,
     /// Whether the host can route through a TUN device.
     pub tun: bool,
+    /// Protocols this host's cores can't run (Android: naive, which the bundled
+    /// sing-box is compiled without). Absent from an older daemon: none.
+    #[serde(default)]
+    pub unavailable_protocols: Vec<Protocol>,
 }
 
 /// Daemon push: it fetched & applied a subscription headlessly.

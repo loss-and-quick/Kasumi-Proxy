@@ -153,6 +153,8 @@ const vi = {
   "editor.editTitle": "Chỉnh sửa hồ sơ",
   "editor.save": "Lưu",
   "editor.basics": "Cơ bản",
+  "editor.protocolUnavailable":
+    "Naive không khả dụng trên Android: sing-box đi kèm được biên dịch không có nó.",
   "editor.protocol": "Giao thức",
   "editor.remarks": "Ghi chú",
   "editor.address": "Địa chỉ",
@@ -401,6 +403,8 @@ const vi = {
   "add.unsupported.routingOff":
     "Tắt định tuyến của nhà cung cấp. Hãy tắt tuyến trong Cài đặt → Định tuyến.",
   "add.unsupported.urlDecrypt": "Kasumi không có khóa cho liên kết mã hóa này.",
+  "add.unsupported.unavailableProtocol":
+    "Naive không khả dụng trên Android: sing-box đi kèm được biên dịch không có nó.",
   "add.unsupported.invalid": "Không phải liên kết Happ hợp lệ.",
   "add.linkUseAdd": "Đây là liên kết, không phải JSON. Hãy thêm bằng nút “Thêm”.",
   "groups.picker.new": "Nhóm mới…",
@@ -735,6 +739,11 @@ const vi = {
   "subs.warnings.unsupportedLinks": plural("count", {
     one: "# máy chủ dùng định dạng Kasumi không hỗ trợ",
     other: "# máy chủ dùng định dạng Kasumi không hỗ trợ",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    one: "# máy chủ dùng giao thức thiết bị này không chạy được nên đã bị bỏ qua (Naive không khả dụng trên Android, sing-box đi kèm được biên dịch không có nó)",
+    other:
+      "# máy chủ dùng giao thức thiết bị này không chạy được nên đã bị bỏ qua (Naive không khả dụng trên Android, sing-box đi kèm được biên dịch không có nó)",
   }),
   "subs.warnings.invalidRouting": "Hồ sơ định tuyến của nhà cung cấp không hợp lệ và đã bị bỏ qua.",
   "subs.warnings.invalidFragment": "Không đọc được một phần cài đặt sau dấu # trong URL.",

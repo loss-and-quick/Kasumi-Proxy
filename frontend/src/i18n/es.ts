@@ -157,6 +157,8 @@ const es = {
   "editor.editTitle": "Editar perfil",
   "editor.save": "Guardar",
   "editor.basics": "Básico",
+  "editor.protocolUnavailable":
+    "Naive no está disponible en Android: el sing-box incluido se compila sin él.",
   "editor.protocol": "Protocolo",
   "editor.remarks": "Nombre",
   "editor.address": "Dirección",
@@ -417,6 +419,8 @@ const es = {
   "add.unsupported.routingOff":
     "Desactiva el enrutamiento de un proveedor. Desactiva las rutas en Ajustes → Enrutamiento.",
   "add.unsupported.urlDecrypt": "Kasumi no tiene clave para este enlace cifrado.",
+  "add.unsupported.unavailableProtocol":
+    "Naive no está disponible en Android: el sing-box incluido se compila sin él.",
   "add.unsupported.invalid": "No es un enlace de Happ válido.",
   "add.linkUseAdd": "Es un enlace, no un JSON. Añádelo con el botón «Añadir».",
   "groups.picker.new": "Nuevo grupo…",
@@ -752,6 +756,11 @@ const es = {
   "subs.warnings.unsupportedLinks": plural("count", {
     one: "# servidor usa un formato que Kasumi no admite",
     other: "# servidores usan un formato que Kasumi no admite",
+  }),
+  "subs.warnings.unavailableProtocols": plural("count", {
+    one: "# servidor usa un protocolo que este dispositivo no puede usar y se omitió (Naive no está disponible en Android, el sing-box incluido se compila sin él)",
+    other:
+      "# servidores usan un protocolo que este dispositivo no puede usar y se omitieron (Naive no está disponible en Android, el sing-box incluido se compila sin él)",
   }),
   "subs.warnings.invalidRouting":
     "El perfil de enrutamiento del proveedor no es válido y se ignoró.",

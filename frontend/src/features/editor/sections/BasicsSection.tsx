@@ -29,6 +29,7 @@ const VIA_DIRECT = "";
 
 export function BasicsSection({
   draft,
+  unavailable,
   setMeta,
   setEndpoint,
   errors,
@@ -44,6 +45,8 @@ export function BasicsSection({
   setRoute,
 }: {
   draft: Profile;
+  /** Protocols this device's cores can't run: not offered, explained when set. */
+  unavailable: readonly Protocol[];
   setMeta: MetaSetter;
   setEndpoint: EndpointSetter;
   errors: FieldErrors;
@@ -69,12 +72,19 @@ export function BasicsSection({
       <Select
         label={t("editor.protocol")}
         value={draft.protocol}
-        options={PROTOCOL_OPTS.map((protocol) => ({
+        options={PROTOCOL_OPTS.filter(
+          (protocol) => protocol === draft.protocol || !unavailable.includes(protocol),
+        ).map((protocol) => ({
           value: protocol,
           label: PROTOCOL_LABELS[protocol],
         }))}
         onChange={(value) => changeProtocol(value as Protocol)}
       />
+      {unavailable.includes(draft.protocol) && (
+        <div className="hint error" style={{ marginTop: -8, marginBottom: 10 }}>
+          {t("editor.protocolUnavailable")}
+        </div>
+      )}
       <Field
         label={t("editor.remarks")}
         mono={false}

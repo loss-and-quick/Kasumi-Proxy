@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
-use kasumi_core::profile::Profile;
+use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::share::parse_share_link;
 
@@ -31,6 +31,8 @@ pub struct TestPlatform {
     /// When set, `convert_asset` errors — for the asset-update rollback path.
     convert_fails: AtomicBool,
     identity: Mutex<IdentityFixture>,
+    /// What `unavailable_protocols` reports; none unless a test sets it.
+    unavailable: Mutex<&'static [Protocol]>,
 }
 
 /// What the identity hooks of [`TestPlatform`] return, and the calls they saw.
@@ -58,6 +60,11 @@ impl TestPlatform {
     /// Set what the identity hooks return.
     pub fn identity(&self, f: impl FnOnce(&mut IdentityFixture)) {
         f(&mut self.identity.lock().unwrap());
+    }
+
+    /// Report `protocols` as ones this platform's cores can't run.
+    pub fn set_unavailable(&self, protocols: &'static [Protocol]) {
+        *self.unavailable.lock().unwrap() = protocols;
     }
 
     /// The identity hooks called, in order.
@@ -91,6 +98,7 @@ impl TestPlatform {
                 converted: Mutex::new(Vec::new()),
                 convert_fails: AtomicBool::new(false),
                 identity: Mutex::new(IdentityFixture::default()),
+                unavailable: Mutex::new(&[]),
             },
             dir,
         )
@@ -101,6 +109,9 @@ impl TestPlatform {
 impl Platform for TestPlatform {
     fn paths(&self) -> &BackendPaths {
         &self.paths
+    }
+    fn unavailable_protocols(&self) -> &'static [Protocol] {
+        *self.unavailable.lock().unwrap()
     }
     async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
         Ok(())

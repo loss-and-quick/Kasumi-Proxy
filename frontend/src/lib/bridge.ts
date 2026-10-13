@@ -61,6 +61,7 @@ export type {
 } from "../generated/bindings";
 
 import type { AppState_Serialize, MutationIntent_Serialize } from "../generated/bindings";
+import { PROTOCOL_OPTS } from "../generated/defaults";
 
 // The persisted app state as the UI holds it. `schemaVersion` is an on-disk
 // migration detail owned by the Rust read path, so the frontend neither tracks
@@ -245,5 +246,8 @@ export function parseCapabilities(value: unknown): Capabilities {
     xrayVersion: typeof s.xrayVersion === "string" ? s.xrayVersion : "",
     singboxVersion: typeof s.singboxVersion === "string" ? s.singboxVersion : "",
     tun: s.tun === true || s.tun === 1 || s.tun === "1",
+    unavailableProtocols: Array.isArray(s.unavailableProtocols)
+      ? PROTOCOL_OPTS.filter((p) => (s.unavailableProtocols as unknown[]).includes(p))
+      : [],
   };
 }
