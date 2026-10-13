@@ -19,7 +19,7 @@ use kasumi_backend::lifecycle::{
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     AppFilterCapability, AppInfo, BackendPaths, Engine, InstalledCores, Platform,
-    PlatformCapabilities, StartDataPath, StopDataPath,
+    PlatformCapabilities, StopDataPath,
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
@@ -33,14 +33,14 @@ use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
     AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
-use kasumi_core::tun::{TUN_IPV4, TUN_IPV6, TUN2_IPV4, TUN2_IPV6, TunOptions};
+use kasumi_core::tun::TunOptions;
 
 use super::network::run_watcher;
 use super::paths::{
-    CORE_BINS, DATA_PATH_STATE_FILE, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG,
-    HEV2_CONFIG, IP, PIDFILE, RUN_DIR, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG, SINGBOX_BRIDGE2_CONFIG,
-    TUN_IFACE_FILE, TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE,
-    TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
+    CORE_BINS, DATA_PATH_STATE_FILE, DATADIR, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG, HEV2_CONFIG, IP,
+    PIDFILE, RUN_DIR, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG, SINGBOX_BRIDGE2_CONFIG, TUN_IFACE_FILE,
+    TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE, TUN2SOCKS2_CONFIG,
+    TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
     AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
@@ -110,9 +110,6 @@ struct HelperSpec {
     pidfile: &'static str,
     iface_file: &'static str,
     log: &'static str,
-    /// The addresses a self-addressing engine (hev, the sidecar) gives its tun.
-    ipv4: &'static str,
-    ipv6: &'static str,
 }
 
 fn helper_spec(h: HelperSlot) -> HelperSpec {
@@ -128,8 +125,6 @@ fn helper_spec(h: HelperSlot) -> HelperSpec {
             pidfile: TUN2SOCKS_PIDFILE,
             iface_file: TUN_IFACE_FILE,
             log: "tun-engine.log",
-            ipv4: TUN_IPV4,
-            ipv6: TUN_IPV6,
         },
         TunSlot::Force => HelperSpec {
             bin,
@@ -141,8 +136,6 @@ fn helper_spec(h: HelperSlot) -> HelperSpec {
             pidfile: TUN2SOCKS2_PIDFILE,
             iface_file: TUN2_IFACE_FILE,
             log: "tun-engine2.log",
-            ipv4: TUN2_IPV4,
-            ipv6: TUN2_IPV6,
         },
     }
 }
@@ -313,7 +306,7 @@ async fn core_version(engine: CoreEngine) -> Option<String> {
 /// of routing into a bridge that never came up and black-holing the device until
 /// the watchdog happens to notice.
 async fn bring_up_tun_helper(
-    engine: TunEngine,
+    helper: HelperSlot,
     spec: &HelperSpec,
     iface: &str,
     socks_port: u16,
@@ -324,8 +317,8 @@ async fn bring_up_tun_helper(
     let spawn = TunSpawn {
         bin: spec.bin,
         iface,
-        ipv4: spec.ipv4,
-        ipv6: Some(spec.ipv6),
+        slot: helper.slot,
+        ipv6: true,
         socks_port,
         log_path: Path::new(&log),
         fwmark: Some(FWMARK),
@@ -333,7 +326,7 @@ async fn bring_up_tun_helper(
         stack,
         opts,
     };
-    let child = spawn_tun_engine(engine, &spawn)
+    let child = spawn_tun_engine(helper.engine, &spawn)
         .await
         .map_err(|e| anyhow::anyhow!("spawn tun helper: {e} — see {log}"))?;
     let pid = child.id().unwrap_or(0);
@@ -365,7 +358,7 @@ async fn bring_up_external_tun(plan: &DataPathPlan, ext: &ExternalTun) -> anyhow
         let pid = read_pidfile(spec.pidfile).await;
         if !(pid > 0 && pid_matches_bin(pid, spec.bin).await) {
             let target = helper_target(h.slot, &plan.ports);
-            bring_up_tun_helper(h.engine, &spec, &iface, target, &stack, &ext.opts).await?;
+            bring_up_tun_helper(h, &spec, &iface, target, &stack, &ext.opts).await?;
         }
         ifaces.push((h.slot, iface));
     }
@@ -456,11 +449,12 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
             return fail("missing rule_set assets").await;
         }
         // Only the native tun has tun inbounds to name; socks-only has none.
-        if native {
+        if let TunPlan::Native { force_tun } = plan.tun {
             inject_singbox_ifaces(
                 Path::new(cfg),
                 Path::new(TUN_IFACE_FILE),
                 Path::new(TUN2_IFACE_FILE),
+                force_tun,
             )
             .await?;
         }
@@ -600,14 +594,12 @@ impl Platform for AndroidPlatform {
         // before the first command. Drop the pre-document `service-started` marker.
         write_state(&DataPathState::default()).await;
         remove_file("/data/adb/kasumi-proxy/service-started").await;
+        // Older versions recorded the core engine in a marker file.
+        remove_file("/data/adb/kasumi-proxy/engine").await;
         Ok(())
     }
 
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the daemon starts the data path from its plan")
-    }
-
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         // Record the bring-up (no started_at yet) so teardown and the watchdog know
         // what runs before the core is even up.
         write_state(&plan.state(RunState::Connecting)).await;
@@ -904,12 +896,7 @@ impl AppFilterCapability for AndroidPlatform {
         }
         // sing-box bakes the filter into its config and needs a restart (the Service
         // handles that); only xray reloads live here.
-        if read_text(ENGINE_FILE)
-            .await
-            .map(|s| s.trim().to_string())
-            .as_deref()
-            == Some("sing-box")
-        {
+        if read_state().await.and_then(|s| s.engine) == Some(CoreEngine::SingBox) {
             return Ok(());
         }
         reload_app_filter_rules(&read_app_filter().await).await;

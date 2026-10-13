@@ -88,11 +88,13 @@ pub async fn prepare_singbox_config(
     cfg_path: &str,
     tun_iface_file: &str,
     tun2_iface_file: &str,
+    force_tun: bool,
 ) -> anyhow::Result<String> {
     let (tun, _) = inject_singbox_ifaces(
         Path::new(cfg_path),
         Path::new(tun_iface_file),
         Path::new(tun2_iface_file),
+        force_tun,
     )
     .await?;
 
@@ -202,6 +204,7 @@ mod tests {
             cfg_path.to_str().unwrap(),
             tun1.to_str().unwrap(),
             tun2.to_str().unwrap(),
+            false,
         )
         .await
         .unwrap();

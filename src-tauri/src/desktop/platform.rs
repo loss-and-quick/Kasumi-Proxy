@@ -23,7 +23,7 @@ use kasumi_backend::lifecycle::{
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
     AppFilterCapability, AppInfo, BackendPaths, Engine, InstalledCores, Platform,
-    PlatformCapabilities, StartDataPath, StopDataPath, TestCore, spawn_local_test_core,
+    PlatformCapabilities, StopDataPath, TestCore, spawn_local_test_core,
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
@@ -270,11 +270,16 @@ impl DesktopPlatform {
                 // escape (the core's own egress rides the physical default route).
                 return self.spawn_core_verify(&core_bin, &cfg, &log).await;
             }
-            TunPlan::Native { .. } => {
+            TunPlan::Native { force_tun } => {
                 // Native sing-box tun: the core owns the tun; the server bypass is baked
                 // into the config (route_exclude_address) by prepare_singbox_config.
-                prepare_singbox_config(&cfg, &self.p.tun_iface_file, &self.p.tun2_iface_file)
-                    .await?;
+                prepare_singbox_config(
+                    &cfg,
+                    &self.p.tun_iface_file,
+                    &self.p.tun2_iface_file,
+                    *force_tun,
+                )
+                .await?;
 
                 // Defensive sweep before bring-up: if a previous core crashed (so
                 // stop_data_path never ran its teardown), its orphaned auto_route rules
@@ -432,10 +437,6 @@ impl Platform for DesktopPlatform {
         &self.p.backend
     }
 
-    fn supports_proxy_modes(&self) -> bool {
-        true
-    }
-
     fn host_traits(&self) -> HostTraits {
         HostTraits {
             proxy_modes: true,
@@ -473,11 +474,7 @@ impl Platform for DesktopPlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the desktop starts the data path from its plan")
-    }
-
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         let engine = plan.engine;
         log::info!(
             "starting data-path: engine={engine:?} tun={:?} ports={:?} mode={:?}",

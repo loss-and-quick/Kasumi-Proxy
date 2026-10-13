@@ -17,8 +17,8 @@ use tokio::sync::mpsc;
 
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
-    AppFilterCapability, BackendPaths, Engine, Platform, PlatformCapabilities, StartDataPath,
-    StopDataPath, TestCore,
+    AppFilterCapability, BackendPaths, Engine, Platform, PlatformCapabilities, StopDataPath,
+    TestCore,
 };
 use kasumi_core::contract::ServiceState;
 use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
@@ -57,10 +57,6 @@ impl Platform for RemotePlatform {
         self.local.paths()
     }
 
-    fn supports_proxy_modes(&self) -> bool {
-        self.local.supports_proxy_modes()
-    }
-
     // Deliberately answered by the local half, NOT forwarded: the OS proxy lives in
     // the logged-in user's session (gsettings/D-Bus/HKCU) — the GUI's, not the
     // helper's root/LocalSystem one.
@@ -81,11 +77,7 @@ impl Platform for RemotePlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the helper starts the data path from its plan")
-    }
-
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         self.call(PrivRequest::StartDataPath { plan: plan.clone() })
             .await?;
         Ok(())

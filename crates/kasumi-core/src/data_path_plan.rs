@@ -8,10 +8,9 @@ use crate::contract::RunState;
 use crate::core::{owns_native_tun, resolve_tun};
 use crate::data_path_state::{DataPathState, HelperSlot, TunSelection};
 use crate::enums::{CoreEngine, TunEngine};
-use crate::singbox_config::uid_of;
 use crate::state::{
     AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT,
-    DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, force_socks_port,
+    DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, app_filter_uid, force_socks_port,
 };
 use crate::tun::TunOptions;
 
@@ -121,7 +120,7 @@ impl DataPathPlan {
         let force_tun = host.app_routing == AppRouting::PerUid
             && s.app_filter
                 .iter()
-                .any(|(k, m)| *m == AppFilterMode::ForceProxy && uid_of(k).is_some());
+                .any(|(k, m)| *m == AppFilterMode::ForceProxy && app_filter_uid(k).is_some());
         let tun = if mode != ProxyMode::Tun {
             TunPlan::None
         } else if owns_native_tun(engine, tun_engine) {

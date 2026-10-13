@@ -844,7 +844,7 @@ mod tests {
         // Tun is refused at the gate with the restart-required reason, and the failure
         // is recorded in the service state.
         let err = platform
-            .start_planned(&start(ProxyMode::Tun))
+            .start_data_path(&start(ProxyMode::Tun))
             .await
             .unwrap_err();
         assert_eq!(err.to_string(), RESTART);
@@ -855,7 +855,7 @@ mod tests {
         // A non-tun mode passes the gate; with no core binary installed it fails later
         // with a different reason, proving the gate is mode-selective.
         let err = platform
-            .start_planned(&start(ProxyMode::ProxyOnly))
+            .start_data_path(&start(ProxyMode::ProxyOnly))
             .await
             .unwrap_err();
         assert_ne!(err.to_string(), RESTART);

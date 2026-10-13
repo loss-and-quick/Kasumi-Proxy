@@ -8,10 +8,9 @@ use std::path::Path;
 use tokio::process::Child;
 
 use kasumi_backend::lifecycle::{TunSpawn, spawn_tun_engine};
+use kasumi_core::data_path_state::TunSlot;
 use kasumi_core::enums::TunEngine;
-// TUN_IPV4 is the address a self-addressing engine (hev) assigns to the tun it
-// creates; sourced from core so it can't drift from what the routing layer assigns.
-use kasumi_core::tun::{TUN_IPV4, TunOptions};
+use kasumi_core::tun::TunOptions;
 
 use super::paths::DesktopPaths;
 
@@ -61,8 +60,8 @@ pub async fn spawn(
     let spawn = TunSpawn {
         bin,
         iface,
-        ipv4: TUN_IPV4,
-        ipv6: None,
+        slot: TunSlot::Main,
+        ipv6: false,
         socks_port,
         log_path: log,
         fwmark,

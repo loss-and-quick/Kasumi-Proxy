@@ -12,13 +12,12 @@ use regex::Regex;
 use tokio::process::Child;
 
 use kasumi_core::core_config::CoreConfig;
+use kasumi_core::data_path_state::TunSlot;
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
-use kasumi_core::tun2socks_config::build_tun2socks_config;
-// Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
-use kasumi_core::tun as tun_addr;
 use kasumi_core::tun::TunOptions;
+use kasumi_core::tun2socks_config::build_tun2socks_config;
 
 use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
@@ -56,11 +55,10 @@ pub fn random_tun_iface() -> String {
     format!("{lead}{}", &hex[1..9])
 }
 
-/// Build the config for `profile_id` (else the active profile), write it and the
-/// engine marker, and return the exact [`CoreConfig`] that was written, whose plan
-/// the platform starts — the in-memory baseline a running data path is later
-/// diffed against (the on-disk file may be tuned further after start) — and the id
-/// of the profile it was built from.
+/// Build the config for `profile_id` (else the active profile), write it, and return
+/// the exact [`CoreConfig`] that was written, whose plan the platform starts — the
+/// in-memory baseline a running data path is later diffed against (the on-disk file
+/// may be tuned further after start) — and the id of the profile it was built from.
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
@@ -83,19 +81,7 @@ pub async fn resolve_and_write_config(
     write_text_atomic(cfg_path, &cfg_text)
         .await
         .map_err(|e| CommandError(e.to_string()))?;
-    write_text(&paths.engine_file, engine_label(engine))
-        .await
-        .map_err(|e| CommandError(e.to_string()))?;
     Ok((built, id))
-}
-
-/// The core engine's on-disk label (written to `paths.engine_file` at config
-/// resolution).
-pub fn engine_label(engine: CoreEngine) -> &'static str {
-    match engine {
-        CoreEngine::Xray => "xray",
-        CoreEngine::SingBox => "sing-box",
-    }
 }
 
 // ---------- geo assets (geodat2srs) ----------
@@ -255,11 +241,12 @@ pub async fn missing_rule_sets(cfg_text: &str) -> Vec<String> {
 
 /// Inject random `interface_name`s into the sing-box tun inbounds (stripping any a
 /// prior start added, so re-runs don't stack duplicates) and persist them. The
-/// second name is `None` when there is no force-proxy inbound.
+/// second name is `None` when the plan runs no force-proxy tun.
 pub async fn inject_singbox_ifaces(
     cfg_path: &Path,
     tun_iface_file: &Path,
     tun2_iface_file: &Path,
+    force_tun: bool,
 ) -> std::io::Result<(String, Option<String>)> {
     let raw = read_text(cfg_path).await.unwrap_or_default();
     let strip = Regex::new(r#", "interface_name": "[^"]*""#).unwrap();
@@ -277,7 +264,7 @@ pub async fn inject_singbox_ifaces(
         1,
     );
 
-    let tun2 = if text.contains(r#""tag": "tun-force""#) {
+    let tun2 = if force_tun {
         let t2 = read_text(tun2_iface_file)
             .await
             .map(|s| s.trim().to_owned())
@@ -351,15 +338,15 @@ async fn spawn_tun2socks(s: &TunSpawn<'_>) -> std::io::Result<Child> {
 
 /// Everything needed to bring up one external TUN engine, gathered so adding an
 /// engine is a single match arm. `bin` is the engine binary (resolved per-platform);
-/// `cfg_path` is where the engine's rendered config is written; `ipv4`/`ipv6` are
-/// the host addresses a self-addressing engine assigns to the tun it
-/// creates itself; `stack` is the sing-box tun stack (only the sidecar sing-box reads
+/// `cfg_path` is where the engine's rendered config is written; `slot` names the
+/// addresses a self-addressing engine gives the tun it creates, IPv6 too when
+/// `ipv6`; `stack` is the sing-box tun stack (only the sidecar sing-box reads
 /// it); `opts` carries the resolved tuning.
 pub struct TunSpawn<'a> {
     pub bin: &'a str,
     pub iface: &'a str,
-    pub ipv4: &'a str,
-    pub ipv6: Option<&'a str>,
+    pub slot: TunSlot,
+    pub ipv6: bool,
     pub socks_port: u16,
     pub log_path: &'a Path,
     pub fwmark: Option<u32>,
@@ -384,7 +371,8 @@ pub async fn spawn_tun_engine(tun: TunEngine, s: &TunSpawn<'_>) -> std::io::Resu
 /// hev creates and addresses its own tun from a YAML config: render it, write it
 /// next to the runtime state, then run `<hev_bin> <cfg>`.
 async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
-    let yaml = build_hev_config(s.iface, s.ipv4, s.ipv6, s.socks_port, s.fwmark, s.opts);
+    let ipv6 = s.ipv6.then(|| s.slot.ipv6());
+    let yaml = build_hev_config(s.iface, s.slot.ipv4(), ipv6, s.socks_port, s.fwmark, s.opts);
     write_text(s.cfg_path, &yaml).await?;
     let argv = [s.bin.to_owned(), s.cfg_path.to_string_lossy().into_owned()];
     spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await
@@ -395,24 +383,10 @@ async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
 /// it terminates a userspace tun and forwards to the core's SOCKS; the OS routing the
 /// shell installs drives traffic in. Uses sing-box's TUN stack, hence the `stack`.
 async fn spawn_singbox_bridge(s: &TunSpawn<'_>) -> std::io::Result<Child> {
-    // Host address → its CIDR (single-sourced in `kasumi_core::tun`). The shell hands
-    // us the force-proxy tun's address when bringing up the second tun.
-    let ipv4_cidr = if s.ipv4 == tun_addr::TUN2_IPV4 {
-        tun_addr::TUN2_IPV4_CIDR
-    } else {
-        tun_addr::TUN_IPV4_CIDR
-    };
-    let ipv6_cidr = s.ipv6.map(|v6| {
-        if v6 == tun_addr::TUN2_IPV6 {
-            tun_addr::TUN2_IPV6_CIDR
-        } else {
-            tun_addr::TUN_IPV6_CIDR
-        }
-    });
     let cfg = build_singbox_bridge_config(
         s.iface,
-        ipv4_cidr,
-        ipv6_cidr,
+        s.slot.ipv4_cidr(),
+        s.ipv6.then(|| s.slot.ipv6_cidr()),
         s.socks_port,
         i64::from(s.opts.mtu),
         s.stack,
@@ -504,10 +478,6 @@ mod tests {
         // The returned build mirrors what was written.
         assert_eq!(built.engine(), CoreEngine::Xray);
         assert!(built.config["outbounds"].is_array());
-        assert_eq!(
-            read_text(&p.paths().engine_file).await.as_deref(),
-            Some("xray")
-        );
         let cfg = read_text(&p.paths().xray_config).await.unwrap();
         assert!(cfg.contains("outbounds"));
     }
@@ -524,7 +494,7 @@ mod tests {
             r#"{ "inbounds": [{ "type": "tun", "tag": "tun-in" }, { "type": "tun", "tag": "tun-force" }] }"#,
         )
         .unwrap();
-        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2, true).await.unwrap();
         assert!(tun2.is_some());
         let text = read_text(&cfg).await.unwrap();
         assert!(text.contains(&format!(r#""interface_name": "{tun}""#)));
@@ -532,7 +502,7 @@ mod tests {
         assert_eq!(read_text(&f1).await.as_deref(), Some(tun.as_str()));
 
         // Re-running reuses the persisted names and doesn't stack duplicates.
-        let (tun_again, _) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        let (tun_again, _) = inject_singbox_ifaces(&cfg, &f1, &f2, true).await.unwrap();
         assert_eq!(tun_again, tun);
         let text2 = read_text(&cfg).await.unwrap();
         assert_eq!(text2.matches(r#""interface_name""#).count(), 2);
@@ -545,14 +515,14 @@ mod tests {
         let f1 = dir.path().join("tun1");
         let f2 = dir.path().join("tun2");
         // A stale tun2 name from a prior force-proxy run must be cleared when the
-        // config no longer has a force-proxy inbound.
+        // plan no longer runs a force-proxy tun.
         std::fs::write(&f2, b"stale").unwrap();
         std::fs::write(
             &cfg,
             r#"{ "inbounds": [{ "type": "tun", "tag": "tun-in" }] }"#,
         )
         .unwrap();
-        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2).await.unwrap();
+        let (tun, tun2) = inject_singbox_ifaces(&cfg, &f1, &f2, false).await.unwrap();
         assert!(tun2.is_none());
         assert!(!exists(&f2).await);
         let text = read_text(&cfg).await.unwrap();

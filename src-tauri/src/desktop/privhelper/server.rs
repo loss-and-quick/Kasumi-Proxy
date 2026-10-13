@@ -70,7 +70,7 @@ impl Server {
             },
             PrivRequest::BootInit => to_reply(self.platform.boot_init().await),
             PrivRequest::StartDataPath { plan } => {
-                to_reply(self.platform.start_planned(&plan).await)
+                to_reply(self.platform.start_data_path(&plan).await)
             }
             PrivRequest::StopDataPath { keep_service_state } => to_reply(
                 self.platform

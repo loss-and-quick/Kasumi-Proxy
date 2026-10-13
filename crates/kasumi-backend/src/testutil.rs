@@ -16,9 +16,9 @@ use kasumi_core::share::parse_share_link;
 
 use crate::net::ProxyStatus;
 use crate::platform::{
-    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StartDataPath,
-    StopDataPath,
+    BackendPaths, Engine, InstalledCores, Platform, PlatformCapabilities, StopDataPath,
 };
+use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
 
 /// A `Platform` whose paths live in a tempdir. `core_path` points under a `bin/`
 /// dir that doesn't exist, so diagnostics that require a real core binary take
@@ -85,7 +85,6 @@ impl TestPlatform {
             profiles: d.join("profiles.json"),
             xray_config: d.join("xray.json"),
             singbox_config: d.join("singbox.json"),
-            engine_file: d.join("engine"),
             run_dir: d.join("run"),
             ws_info: d.join("ws.json"),
             webroot: None,
@@ -110,10 +109,17 @@ impl Platform for TestPlatform {
     fn paths(&self) -> &BackendPaths {
         &self.paths
     }
+    fn host_traits(&self) -> HostTraits {
+        HostTraits {
+            proxy_modes: false,
+            app_routing: AppRouting::PerUid,
+            pinned_singbox_stack: None,
+        }
+    }
     fn unavailable_protocols(&self) -> &'static [Protocol] {
         *self.unavailable.lock().unwrap()
     }
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+    async fn start_data_path(&self, _plan: &DataPathPlan) -> anyhow::Result<()> {
         Ok(())
     }
     async fn stop_data_path(&self, _opts: StopDataPath) -> anyhow::Result<()> {

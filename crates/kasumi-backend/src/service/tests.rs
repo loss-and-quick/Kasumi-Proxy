@@ -1,11 +1,9 @@
 use super::*;
 use crate::fs::read_text;
-use crate::platform::{
-    BackendPaths, Engine, InstalledCores, PlatformCapabilities, StartDataPath, StopDataPath,
-};
+use crate::platform::{BackendPaths, Engine, InstalledCores, PlatformCapabilities, StopDataPath};
 use crate::testutil::sample_vless;
 use kasumi_core::contract::{ConnectionProbe, RunState, ServiceState};
-use kasumi_core::data_path_plan::DataPathPlan;
+use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{ProxyMode, default_app_state};
 use std::path::PathBuf;
@@ -43,7 +41,6 @@ impl RecordingPlatform {
             profiles: d.join("profiles.json"),
             xray_config: d.join("xray.json"),
             singbox_config: d.join("singbox.json"),
-            engine_file: d.join("engine"),
             run_dir: d.join("run"),
             ws_info: d.join("ws.json"),
             webroot: None,
@@ -72,16 +69,17 @@ impl Platform for RecordingPlatform {
     fn paths(&self) -> &BackendPaths {
         &self.paths
     }
-    fn supports_proxy_modes(&self) -> bool {
-        true
+    fn host_traits(&self) -> HostTraits {
+        HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: None,
+        }
     }
     async fn set_os_proxy(&self, mode: ProxyMode, _plan: &DataPathPlan) {
         self.log(&format!("os_proxy:{mode:?}"));
     }
-    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
-        anyhow::bail!("the service starts from a plan")
-    }
-    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+    async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         self.log(&format!("start:{:?}", plan.engine));
         *self.started.lock().unwrap() = Some(plan.clone());
         if self.hold_start.load(Ordering::SeqCst) {
@@ -167,11 +165,8 @@ async fn start_stops_first_then_writes_config_and_starts() {
         assert_eq!(calls[0], "stop:keep=true");
         assert!(calls.iter().any(|c| c.starts_with("start:")));
     }
-    // Config + engine marker were written.
-    assert_eq!(
-        read_text(&platform.paths.engine_file).await.as_deref(),
-        Some("xray")
-    );
+    let cfg = read_text(&platform.paths.xray_config).await.unwrap();
+    assert!(cfg.contains("outbounds"));
 }
 
 #[tokio::test]

@@ -3,7 +3,7 @@
 //! This is the small, transport-shaped subset of the settings an external engine
 //! (hev, tun2socks) needs to spawn. It is resolved once where the data-path is started
 //! and travels with the start request — on desktop that means across the privilege
-//! boundary inside `StartDataPath` — so neither the root helper nor the Android
+//! boundary inside the data-path plan — so neither the root helper nor the Android
 //! daemon has to re-read the settings schema to build the engine config.
 
 use serde::{Deserialize, Serialize};
