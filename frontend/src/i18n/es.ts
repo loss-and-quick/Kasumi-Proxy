@@ -625,7 +625,7 @@ const es = {
     return `${pluralPart(Number(groups), { one: "# grupo", other: "# grupos" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# suscripción", other: "# suscripciones" }, runtime)}`;
   },
   "backup.mergeHint":
-    "Combinar añade los perfiles/grupos/suscripciones importados y superpone los ajustes. Reemplazar sobrescribe por completo el estado canónico actual.",
+    "Combinar añade los perfiles, grupos y suscripciones de la copia que aún no tienes y superpone los ajustes. Reemplazar sobrescribe por completo el estado canónico actual.",
   "backup.invalidJson": "JSON no válido",
   "backup.invalidStructure": "Estructura de copia no válida",
   "backup.copied": "Copia copiada",

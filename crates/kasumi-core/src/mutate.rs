@@ -576,15 +576,7 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 state.profiles = profiles;
             }
             ImportMode::Merge => {
-                state.profiles.extend(incoming.profiles.iter().cloned());
-                state.groups.extend(incoming.groups.iter().cloned());
-                state
-                    .subscriptions
-                    .extend(incoming.subscriptions.iter().cloned());
-                merge_routes(state, incoming);
-                state
-                    .asset_files
-                    .extend(incoming.asset_files.iter().cloned());
+                merge_backup(state, incoming);
                 // Per-field override by the backup, matching the UI's prior merge.
                 state.settings = incoming.settings.clone();
             }
@@ -597,6 +589,129 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
 
 fn block_mut<'a>(state: &'a mut AppState, id: &str) -> Option<&'a mut RuleBlock> {
     state.rule_blocks.iter_mut().find(|b| b.id == id)
+}
+
+/// Add a backup's groups, subscriptions, resource files, profiles, blocks and
+/// routes to the current ones. An incoming item that is already here is
+/// skipped, and the backup's references to it follow the current one:
+/// - a group: the same id or the same name;
+/// - a subscription: the same id or URL, since it would fetch the same profiles;
+/// - a resource file: the same id or URL;
+/// - a profile: the same id, or the same protocol, endpoint and name
+///   (`same_profile_identity`, the match a subscription refresh uses).
+fn merge_backup(state: &mut AppState, incoming: &AppState) {
+    let mut incoming = incoming.clone();
+    // Legacy rules can name profiles, so they are folded before the re-pointing.
+    fold_legacy_rules(&mut incoming);
+
+    let groups = matched_ids(
+        &state.groups,
+        &incoming.groups,
+        |a, b| a.id == b.id || a.name == b.name,
+        |g| &g.id,
+    );
+    let subs = matched_ids(
+        &state.subscriptions,
+        &incoming.subscriptions,
+        |a, b| a.id == b.id || (!a.url.is_empty() && a.url == b.url),
+        |s| &s.id,
+    );
+    let assets = matched_ids(
+        &state.asset_files,
+        &incoming.asset_files,
+        |a, b| a.id == b.id || (!a.url.is_empty() && a.url == b.url),
+        |a| &a.id,
+    );
+    let profiles = matched_ids(
+        &state.profiles,
+        &incoming.profiles,
+        |a, b| a.meta().id == b.meta().id || crate::sub_apply::same_profile_identity(a, b),
+        |p| &p.meta().id,
+    );
+    let follow = |map: &std::collections::HashMap<String, String>, id: &mut String| {
+        if let Some(kept) = map.get(id.as_str()) {
+            id.clone_from(kept);
+        }
+    };
+
+    for g in &mut incoming.groups {
+        g.sub_id.iter_mut().for_each(|s| follow(&subs, s));
+    }
+    for s in &mut incoming.subscriptions {
+        s.group_id.iter_mut().for_each(|g| follow(&groups, g));
+    }
+    for p in &mut incoming.profiles {
+        let meta = p.meta_mut();
+        follow(&groups, &mut meta.group_id);
+        meta.sub_id.iter_mut().for_each(|s| follow(&subs, s));
+        meta.via.iter_mut().for_each(|v| follow(&profiles, v));
+    }
+    for route in &mut incoming.routes {
+        route.groups.iter_mut().for_each(|g| follow(&groups, g));
+        route
+            .source_sub_id
+            .iter_mut()
+            .for_each(|s| follow(&subs, s));
+    }
+    for block in &mut incoming.rule_blocks {
+        block
+            .source_sub_id
+            .iter_mut()
+            .for_each(|s| follow(&subs, s));
+    }
+    crate::route::repoint_profile_ids(&mut incoming, &|id| {
+        Some(profiles.get(id).cloned().unwrap_or_else(|| id.to_owned()))
+    });
+
+    state.groups.extend(
+        incoming
+            .groups
+            .iter()
+            .filter(|g| !groups.contains_key(&g.id))
+            .cloned(),
+    );
+    state.subscriptions.extend(
+        incoming
+            .subscriptions
+            .iter()
+            .filter(|s| !subs.contains_key(&s.id))
+            .cloned(),
+    );
+    state.asset_files.extend(
+        incoming
+            .asset_files
+            .iter()
+            .filter(|a| !assets.contains_key(&a.id))
+            .cloned(),
+    );
+    state.profiles.extend(
+        incoming
+            .profiles
+            .iter()
+            .filter(|p| !profiles.contains_key(&p.meta().id))
+            .cloned(),
+    );
+    merge_routes(state, &incoming);
+}
+
+/// Each incoming item that matches a current one, keyed by its id, mapped to the
+/// id of the current item it matches.
+fn matched_ids<T>(
+    current: &[T],
+    incoming: &[T],
+    same: impl Fn(&T, &T) -> bool,
+    id: impl Fn(&T) -> &String,
+) -> std::collections::HashMap<String, String> {
+    incoming
+        .iter()
+        .filter_map(|new| {
+            let kept = current
+                .iter()
+                .find(|old| id(old) == id(new))
+                .or_else(|| current.iter().find(|old| same(old, new)))?;
+            Some((id(new).clone(), id(kept).clone()))
+        })
+        .collect()
 }
 
 /// Add a backup's blocks and routes to the current ones. Its default route's
@@ -1626,6 +1741,128 @@ mod tests {
             },
         );
         assert!(s.subscriptions.iter().any(|x| x.id == "s9"));
+    }
+
+    fn subscription(id: &str, url: &str, group: Option<&str>) -> Subscription {
+        Subscription {
+            id: id.into(),
+            remarks: id.into(),
+            url: url.into(),
+            enabled: true,
+            group_id: group.map(str::to_owned),
+            interval: 60,
+            ..Default::default()
+        }
+    }
+
+    fn asset(id: &str, url: &str) -> AssetFile {
+        AssetFile {
+            id: id.into(),
+            remarks: id.into(),
+            url: url.into(),
+            last_updated: None,
+            locked: false,
+        }
+    }
+
+    fn merge(state: &mut AppState, incoming: AppState) {
+        apply_mutation(
+            state,
+            &MutationIntent::ImportBackup {
+                incoming: Box::new(incoming),
+                mode: ImportMode::Merge,
+            },
+        );
+    }
+
+    #[test]
+    fn import_backup_merge_skips_what_is_already_here() {
+        let mut s = base();
+        s.subscriptions = vec![subscription("s1", "https://sub.example/a", Some("g2"))];
+        s.asset_files = vec![asset("geoip", "https://geo.example/geoip.dat")];
+        s.profiles = vec![with_id("trojan://pw@a.com:443#A", "a", "g-main")];
+
+        let mut incoming = default_app_state();
+        incoming.groups.push(Group {
+            id: "g-two".into(),
+            name: "Two".into(),
+            sub_id: None,
+        });
+        incoming.subscriptions = vec![
+            subscription("s9", "https://sub.example/a", Some("g-two")),
+            subscription("s10", "https://sub.example/b", None),
+        ];
+        incoming.asset_files = vec![
+            asset("geoip", "https://mirror.example/geoip.dat"),
+            asset("geo-copy", "https://geo.example/geoip.dat"),
+        ];
+        let mut chained = with_id("trojan://pw@c.com:443#C", "c", "g-two");
+        chained.meta_mut().sub_id = Some("s9".into());
+        chained.meta_mut().via = Some("a-copy".into());
+        incoming.profiles = vec![
+            // Same id, other server: the current one stays.
+            with_id("trojan://pw@other.com:443#Other", "a", "g-main"),
+            // Same server and name under a new id: the same profile.
+            with_id("trojan://pw@a.com:443#A", "a-copy", "g-main"),
+            chained,
+        ];
+        let mut work = crate::route::default_route();
+        work.id = "work".into();
+        work.profiles = vec!["a-copy".into()];
+        work.groups = vec!["g-two".into()];
+        work.final_outbound = "a-copy".into();
+        incoming.routes.push(work);
+
+        merge(&mut s, incoming);
+
+        let ids = |v: Vec<&str>| v.join(",");
+        assert_eq!(
+            ids(s.groups.iter().map(|g| g.id.as_str()).collect()),
+            "g-main,g2"
+        );
+        assert_eq!(
+            ids(s.subscriptions.iter().map(|x| x.id.as_str()).collect()),
+            "s1,s10"
+        );
+        assert_eq!(
+            ids(s.asset_files.iter().map(|a| a.id.as_str()).collect()),
+            "geoip"
+        );
+        assert_eq!(
+            s.asset_files[0].url, "https://geo.example/geoip.dat",
+            "the current file wins"
+        );
+        assert_eq!(
+            ids(s.profiles.iter().map(|p| p.meta().id.as_str()).collect()),
+            "a,c"
+        );
+        assert_eq!(s.profiles[0].address(), "a.com");
+
+        // What the backup pointed at follows the item that stayed.
+        let c = s.profiles[1].meta();
+        assert_eq!(
+            (c.group_id.as_str(), c.sub_id.as_deref(), c.via.as_deref()),
+            ("g2", Some("s1"), Some("a"))
+        );
+        let work = s.routes.iter().find(|r| r.id == "work").unwrap();
+        assert_eq!(work.profiles, vec!["a".to_string()]);
+        assert_eq!(work.groups, vec!["g2".to_string()]);
+        assert_eq!(work.final_outbound, "a");
+    }
+
+    #[test]
+    fn import_backup_merge_of_the_same_state_changes_nothing() {
+        let mut s = base();
+        s.subscriptions = vec![subscription("s1", "https://sub.example/a", Some("g2"))];
+        s.asset_files = vec![asset("geoip", "https://geo.example/geoip.dat")];
+        s.profiles = vec![with_id("trojan://pw@a.com:443#A", "a", "g2")];
+        let before = s.clone();
+        merge(&mut s, before.clone());
+        assert_eq!(s.groups, before.groups);
+        assert_eq!(s.subscriptions, before.subscriptions);
+        assert_eq!(s.asset_files, before.asset_files);
+        assert_eq!(s.profiles, before.profiles);
+        assert_eq!(s.routes, before.routes);
     }
 
     fn import_intent(incoming: &Value, mode: &str) -> Result<MutationIntent, serde_json::Error> {

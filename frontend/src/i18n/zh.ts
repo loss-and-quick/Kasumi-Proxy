@@ -586,7 +586,8 @@ const zh = {
     const { groups = 0, subscriptions = 0 } = vars ?? {};
     return `${pluralPart(Number(groups), { one: "# 个分组", other: "# 个分组" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# 个订阅", other: "# 个订阅" }, runtime)}`;
   },
-  "backup.mergeHint": "合并会追加导入的配置/分组/订阅，并覆盖设置。替换会完整覆盖当前的规范状态。",
+  "backup.mergeHint":
+    "合并会添加备份中你尚未拥有的配置、分组和订阅，并覆盖设置。替换会完整覆盖当前的规范状态。",
   "backup.invalidJson": "JSON 无效",
   "backup.invalidStructure": "备份结构无效",
   "backup.copied": "备份已复制",

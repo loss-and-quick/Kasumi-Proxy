@@ -597,7 +597,7 @@ const hi = {
     return `${pluralPart(Number(groups), { one: "# समूह", other: "# समूह" }, runtime)} · ${pluralPart(Number(subscriptions), { one: "# सदस्यता", other: "# सदस्यताएँ" }, runtime)}`;
   },
   "backup.mergeHint":
-    "मर्ज आयातित प्रोफ़ाइलों/समूहों/सदस्यताओं को जोड़ता है और सेटिंग्स को ओवरले करता है। Replace वर्तमान canonical state को पूरी तरह अधिलेखित कर देता है।",
+    "मर्ज बैकअप की वे प्रोफ़ाइलें, समूह और सदस्यताएँ जोड़ता है जो आपके पास अभी नहीं हैं, और सेटिंग्स को ओवरले करता है। Replace वर्तमान canonical state को पूरी तरह अधिलेखित कर देता है।",
   "backup.invalidJson": "अमान्य JSON",
   "backup.invalidStructure": "अमान्य बैकअप संरचना",
   "backup.copied": "बैकअप कॉपी हो गया",
