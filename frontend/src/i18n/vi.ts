@@ -213,6 +213,9 @@ const vi = {
   "editor.viaHint":
     "Kết nối tới máy chủ này qua một hồ sơ khác (chuỗi proxy). Chuỗi chạy trên lõi của hồ sơ này.",
   "editor.engineForced": "Hồ sơ này chỉ có thể chạy trên {core}",
+  "editor.engineForcedByHop": "“{hop}” trong chuỗi chỉ chạy trên {core}, nên hồ sơ này cũng vậy",
+  "editor.engineChainConflict":
+    "Chuỗi này không thể khởi động: “{xray}” chỉ chạy trên xray còn “{singBox}” chỉ chạy trên sing-box. Hãy chọn chặng khác.",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Mật khẩu obfs",

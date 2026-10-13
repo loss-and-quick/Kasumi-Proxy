@@ -220,13 +220,18 @@ export default function Editor({
   const network = "transport" in draft && draft.transport ? draft.transport.kind : "tcp";
   const needsHostPath = ["ws", "grpc", "httpupgrade", "xhttp", "h2"].includes(network);
   const engineForced = coreResolution?.forced ?? null;
+  const forcedByHop = coreResolution?.forcedByHop ?? null;
   const conflict = coreResolution?.conflict ?? null;
   const engineError = conflict ? coreConflictText(t, conflict) : "";
-  const engineHint = engineForced
-    ? t("editor.engineForced", { core: engineForced })
-    : coreResolution
-      ? t("editor.engineResolved", { core: coreResolution.resolved })
-      : "";
+  const engineHint = conflict
+    ? ""
+    : engineForced && forcedByHop
+      ? t("editor.engineForcedByHop", { hop: forcedByHop, core: engineForced })
+      : engineForced
+        ? t("editor.engineForced", { core: engineForced })
+        : coreResolution
+          ? t("editor.engineResolved", { core: coreResolution.resolved })
+          : "";
   const mux = "muxEnabled" in draft ? !!draft.muxEnabled : false;
 
   return (

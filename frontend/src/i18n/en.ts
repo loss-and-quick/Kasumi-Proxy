@@ -217,6 +217,9 @@ const en = {
   "editor.viaHint":
     "Reach this server through another profile (a proxy chain). The chain runs on this profile's core.",
   "editor.engineForced": "This profile can only run on {core}",
+  "editor.engineForcedByHop": "“{hop}” in its chain runs only on {core}, so this profile does too",
+  "editor.engineChainConflict":
+    "This chain can't start: “{xray}” runs only on xray and “{singBox}” only on sing-box. Pick another hop.",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Obfs password",

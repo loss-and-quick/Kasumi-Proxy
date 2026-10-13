@@ -251,6 +251,10 @@ const ar = {
   "editor.viaHint":
     "الوصول إلى هذا الخادم عبر ملف تعريف آخر (سلسلة وكلاء). تعمل السلسلة على نواة ملف التعريف هذا.",
   "editor.engineForced": "هذا الملف الشخصي يعمل فقط على {core}",
+  "editor.engineForcedByHop":
+    "«{hop}» في السلسلة يعمل فقط على {core}، لذا يعمل هذا الملف الشخصي عليه أيضًا",
+  "editor.engineChainConflict":
+    "لا يمكن تشغيل هذه السلسلة: «{xray}» يعمل فقط على xray و«{singBox}» فقط على sing-box. اختر قفزة أخرى.",
   // editor — hysteria2 / tuic
   "editor.obfsType": "التعمية",
   "editor.obfsPassword": "كلمة مرور obfs",

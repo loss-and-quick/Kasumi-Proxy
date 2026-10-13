@@ -10,4 +10,14 @@ describe("coreConflictText", () => {
     expect(text).toContain("“Pinned certificate (SHA-256)”");
     expect(text).toContain("“Allow insecure”");
   });
+
+  it("explains a proxy chain needing both cores", () => {
+    const text = coreConflictText((key, vars) => translate("en", key, vars), {
+      kind: "chainCoreConflict",
+      xray: "exit",
+      singBox: "hop",
+    });
+    expect(text).toContain("“exit”");
+    expect(text).toContain("“hop”");
+  });
 });
