@@ -19,6 +19,7 @@ import type {
 } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
+import { coreConflictText } from "../../lib/core-conflict";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
 import { emptyProfile, isProviderCustom, schemaFor, switchProtocol } from "../../lib/profile-utils";
 import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
@@ -203,6 +204,8 @@ export default function Editor({
   const network = "transport" in draft && draft.transport ? draft.transport.kind : "tcp";
   const needsHostPath = ["ws", "grpc", "httpupgrade", "xhttp", "h2"].includes(network);
   const engineForced = coreResolution?.forced ?? null;
+  const conflict = coreResolution?.conflict ?? null;
+  const engineError = conflict ? coreConflictText(t, conflict) : "";
   const engineHint = engineForced
     ? t("editor.engineForced", { core: engineForced })
     : coreResolution
@@ -234,6 +237,7 @@ export default function Editor({
         changeProtocol={changeProtocol}
         engineForced={engineForced}
         engineHint={engineHint}
+        engineError={engineError}
         route={route}
         routeOpts={routeOpts}
         setRoute={setRoute}

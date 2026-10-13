@@ -667,6 +667,8 @@ const zh = {
   "profiles.row.more": "更多",
   "profiles.row.json": "JSON",
   "profiles.row.jsonHint": "来自订阅的完整 Xray 配置，已清理",
+  "profiles.conflict.unpinnedInsecureTls":
+    "无法启动：此配置只能在 xray 上运行，而 xray 已不再跳过证书校验。请填写「{pin}」或关闭「{insecure}」。",
   // subscriptions extra
   "subs.saved": "订阅已保存",
   "subs.deleted": "订阅已删除",

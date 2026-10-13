@@ -706,6 +706,8 @@ const es = {
   "profiles.row.more": "Más",
   "profiles.row.json": "JSON",
   "profiles.row.jsonHint": "Una configuración completa de Xray de la suscripción, depurada",
+  "profiles.conflict.unpinnedInsecureTls":
+    "No puede iniciarse: este perfil solo funciona en xray, que ya no omite la verificación de certificados. Rellena «{pin}» o desactiva «{insecure}».",
   // subscriptions extra
   "subs.saved": "Suscripción guardada",
   "subs.deleted": "Suscripción eliminada",

@@ -808,6 +808,8 @@ const ar = {
   "profiles.row.more": "المزيد",
   "profiles.row.json": "JSON",
   "profiles.row.jsonHint": "إعداد Xray كامل من الاشتراك، بعد تنقيته",
+  "profiles.conflict.unpinnedInsecureTls":
+    "لا يمكن التشغيل: هذا الملف الشخصي يعمل فقط على xray، الذي لم يعد يتخطى التحقق من الشهادة. املأ «{pin}» أو أوقف «{insecure}».",
   // subscriptions extra
   "subs.saved": "تم حفظ الاشتراك",
   "subs.deleted": "تم حذف الاشتراك",

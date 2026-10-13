@@ -678,6 +678,8 @@ const hi = {
   "profiles.row.more": "और",
   "profiles.row.json": "JSON",
   "profiles.row.jsonHint": "सब्सक्रिप्शन से मिला पूरा Xray कॉन्फ़िग, साफ़ किया हुआ",
+  "profiles.conflict.unpinnedInsecureTls":
+    "शुरू नहीं हो सकता: यह प्रोफ़ाइल केवल xray पर चलती है, जो अब प्रमाणपत्र जाँच नहीं छोड़ता। “{pin}” भरें या “{insecure}” बंद करें।",
   // subscriptions extra
   "subs.saved": "सदस्यता सहेज दी गई",
   "subs.deleted": "सदस्यता हटा दी गई",

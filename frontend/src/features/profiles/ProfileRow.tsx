@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { Card, EngineTag, Icon, Ping, ProtoTag, Speed, Spinner } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import { coreConflictText } from "../../lib/core-conflict";
 import {
   isProviderCustom,
   profileEndpointLabel,
@@ -48,6 +49,8 @@ export function ProfileRow({
   // undefined until the first resolution lands, which just hides the tag.
   const engine = useAppStore((s) => s.coreResolutions[profile.meta.id]?.resolved);
   const t = useT();
+  const conflict = useAppStore((s) => s.coreResolutions[profile.meta.id]?.conflict);
+  const conflictText = conflict ? coreConflictText(t, conflict) : "";
 
   return (
     <Card
@@ -156,6 +159,11 @@ export function ProfileRow({
               {profileSecurity(profile) !== "none" ? ` · ${profileSecurity(profile)}` : ""}
             </span>
           </div>
+          {conflictText && (
+            <div className="hint error" style={{ marginTop: 4 }}>
+              {conflictText}
+            </div>
+          )}
         </div>
       </button>
       {/* The metrics sit outside the "use profile" button so an `err` can be its own
