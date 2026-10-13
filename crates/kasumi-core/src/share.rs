@@ -1571,15 +1571,37 @@ fn build_http(p: &Http) -> String {
 
 // ======================= extract =======================
 
-// Shareable schemes (S = the proxy schemes; SH adds http/https, which only count
-// as links when they carry userinfo `@`). FRAG lazily captures a remarks fragment
-// up to the next whitespace-separated scheme, a newline, or end (lookahead).
-const SCHEMES: &str = r"vless|vmess|trojan|ss|hysteria2|hy2|tuic|anytls|naive\+https|naive\+quic|shadowtls|wireguard|socks5?";
+/// Schemes of the proxy share links Kasumi reads. `http` and `https` count too,
+/// but only with userinfo (`user:pass@host`); without it they are subscription URLs.
+pub const SHARE_LINK_SCHEMES: &[&str] = &[
+    "vless",
+    "vmess",
+    "trojan",
+    "ss",
+    "hysteria2",
+    "hy2",
+    "tuic",
+    "anytls",
+    "naive+https",
+    "naive+quic",
+    "shadowtls",
+    "wireguard",
+    "socks5",
+    "socks",
+];
 
+// SH adds http/https to the share-link schemes. FRAG lazily captures a remarks
+// fragment up to the next whitespace-separated scheme, a newline, or end
+// (lookahead).
 static URI_RE: LazyLock<FancyRegex> = LazyLock::new(|| {
-    let sh = format!("{SCHEMES}|https?");
+    let schemes = SHARE_LINK_SCHEMES
+        .iter()
+        .map(|s| regex::escape(s))
+        .collect::<Vec<_>>()
+        .join("|");
+    let sh = format!("{schemes}|https?");
     let frag = format!(r"(?:#[^\r\n]*?(?=\s+(?:{sh})://|[\r\n]|$))?");
-    let pat = format!(r"(?:{sh})://[^\s@]*@[^\s#]*{frag}|(?:{SCHEMES})://[^\s#]*{frag}");
+    let pat = format!(r"(?:{sh})://[^\s@]*@[^\s#]*{frag}|(?:{schemes})://[^\s#]*{frag}");
     FancyRegex::new(&pat).unwrap()
 });
 
@@ -1653,6 +1675,19 @@ mod tests {
 
     const FIXTURES: &str = include_str!("../tests/fixtures/share_parse.json");
     const REFERENCE_FLAT: &str = include_str!("../tests/fixtures/share_reference.json");
+
+    #[test]
+    fn every_listed_scheme_is_extracted() {
+        for scheme in SHARE_LINK_SCHEMES {
+            let uri = format!("{scheme}://user@example.com:443#n");
+            assert_eq!(extract_uris(&format!("x {uri}\n")), vec![uri], "{scheme}");
+        }
+        assert!(extract_uris("https://sub.example.com/s").is_empty());
+        assert_eq!(
+            extract_uris("https://u:p@proxy.example.com:8080"),
+            ["https://u:p@proxy.example.com:8080"]
+        );
+    }
 
     /// Branch-coverage parity: an independent flat parse of each URI, fed through
     /// the proven `migrate_profile` upgrade, must equal `parse_share_link` for

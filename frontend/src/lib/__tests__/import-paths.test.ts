@@ -4,6 +4,7 @@
 // same thing whatever brought it in.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { SHARE_LINK_SCHEMES } from "../../generated/defaults";
 import {
   addInputFrom,
   appendScanned,
@@ -15,7 +16,7 @@ import {
   withClipboard,
 } from "../add-input";
 import type { ResolvedImport } from "../bridge";
-import { mockBridge } from "../mock-bridge";
+import { isShareLink, mockBridge } from "../mock-bridge";
 
 const crypt5 = (
   JSON.parse(
@@ -270,5 +271,25 @@ describe("name a typed subscription URL suggests", () => {
   it("names a plain URL after its host before and after the check", async () => {
     expect(subscriptionNameFrom("https://a.example/s", null, enc)).toBe("a.example");
     expect(await nameOf("https://a.example/s")).toBe("a.example");
+  });
+});
+
+describe("mock bridge share-link sorting", () => {
+  it("counts only links in the backend's share-link schemes", async () => {
+    for (const scheme of SHARE_LINK_SCHEMES)
+      expect(isShareLink(`${scheme}://u@h.example:443#n`)).toBe(true);
+    expect(isShareLink("https://u:p@proxy.example:8080")).toBe(true);
+    expect(isShareLink("https://sub.example/s")).toBe(false);
+    expect(isShareLink("not a backup")).toBe(false);
+    expect(isShareLink("ftp://u@h.example")).toBe(false);
+    const parsed = await mockBridge.parseShareLinks(`${SAMPLES.vless}\nhello\n{"a":1}`);
+    expect(parsed).toHaveLength(1);
+  });
+
+  it("leaves plain text in a JSON import as broken JSON, not a link", async () => {
+    expect(await resolveLinkInput("not a backup", mockBridge)).toBeNull();
+    expect(await resolveLinkInput("https://u:p@proxy.example:8080", mockBridge)).toEqual({
+      kind: "add",
+    });
   });
 });
