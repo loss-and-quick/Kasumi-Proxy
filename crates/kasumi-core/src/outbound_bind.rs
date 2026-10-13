@@ -405,6 +405,7 @@ mod tests {
     fn singbox(p: &Profile, s: &AdvancedSettings, rules: &[RoutingRule], all: &[Profile]) -> Value {
         let opts = SingboxBuildOpts {
             no_tun: true,
+            force_tun: false,
             srs_dir: "",
         };
         build_singbox_config(p, s, rules, all, opts).unwrap()
@@ -785,9 +786,10 @@ mod tests {
             &[],
             std::slice::from_ref(&p),
             "",
+            crate::data_path_plan::TEST_HOST,
         )
         .unwrap();
-        assert_eq!(cfg.engine, engine);
+        assert_eq!(cfg.engine(), engine);
         cfg.config
     }
 

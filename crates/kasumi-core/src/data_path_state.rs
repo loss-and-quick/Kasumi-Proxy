@@ -32,10 +32,30 @@ pub struct DataPathState {
     pub engine: Option<CoreEngine>,
     pub tun: TunSelection,
     pub socks_port: u16,
+    /// A second external helper bridges the force-proxy tun. Absent in documents
+    /// written before the field existed, which never ran one.
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    pub force_tun: bool,
     /// Epoch seconds the core process came up; `Some` marks the old `running` state
     /// (vs bring-up `connecting`) and drives uptime. Every non-running write clears it.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub started_at: Option<u64>,
+}
+
+/// Which of a data path's tuns an external helper bridges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TunSlot {
+    Main,
+    /// The force-proxy apps' tun.
+    Force,
+}
+
+/// One external helper process a data path runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HelperSlot {
+    pub engine: TunEngine,
+    pub slot: TunSlot,
 }
 
 impl Default for DataPathState {
@@ -47,6 +67,7 @@ impl Default for DataPathState {
             engine: None,
             tun: TunSelection::NoTun,
             socks_port: 0,
+            force_tun: false,
             started_at: None,
         }
     }
@@ -78,6 +99,25 @@ impl DataPathState {
             }
         }
     }
+
+    /// The helper processes this data path runs; start brings up exactly these and
+    /// the watchdog and teardown look for exactly these.
+    pub fn helpers(&self) -> Vec<HelperSlot> {
+        let Some(engine) = self.external_tun() else {
+            return Vec::new();
+        };
+        let mut slots = vec![HelperSlot {
+            engine,
+            slot: TunSlot::Main,
+        }];
+        if self.force_tun {
+            slots.push(HelperSlot {
+                engine,
+                slot: TunSlot::Force,
+            });
+        }
+        slots
+    }
 }
 
 #[cfg(test)]
@@ -92,6 +132,7 @@ mod tests {
             engine: Some(CoreEngine::Xray),
             tun: TunSelection::Engine(TunEngine::Tun2socks),
             socks_port: 10808,
+            force_tun: true,
             started_at: Some(1_700_000_000),
         }
     }
@@ -153,5 +194,38 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&doc.to_json()).unwrap();
         assert!(v.get("failureReason").is_none() && v.get("failure_reason").is_none());
         assert!(v.get("startedAt").is_none() && v.get("started_at").is_none());
+    }
+
+    #[test]
+    fn a_document_without_force_tun_still_reads() {
+        let mut v = serde_json::to_value(sample()).unwrap();
+        v.as_object_mut().unwrap().remove("force_tun");
+        let doc = DataPathState::from_json(v.to_string().as_bytes()).unwrap();
+        assert!(!doc.force_tun);
+    }
+
+    #[test]
+    fn helpers_follow_the_external_engine() {
+        let mut doc = sample();
+        let slots = |d: &DataPathState| {
+            d.helpers()
+                .iter()
+                .map(|h| (h.engine, h.slot))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            slots(&doc),
+            [
+                (TunEngine::Tun2socks, TunSlot::Main),
+                (TunEngine::Tun2socks, TunSlot::Force)
+            ]
+        );
+        doc.force_tun = false;
+        assert_eq!(slots(&doc), [(TunEngine::Tun2socks, TunSlot::Main)]);
+        // A native tun has no helper, whatever the force flag says.
+        doc.engine = Some(CoreEngine::SingBox);
+        doc.tun = TunSelection::Engine(TunEngine::SingboxTun);
+        doc.force_tun = true;
+        assert!(doc.helpers().is_empty());
     }
 }

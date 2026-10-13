@@ -33,6 +33,7 @@ pub mod contract;
 pub mod core;
 pub mod core_config;
 pub mod custom_sanitize;
+pub mod data_path_plan;
 pub mod data_path_state;
 pub mod enums;
 pub mod hev_config;

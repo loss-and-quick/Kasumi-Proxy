@@ -327,6 +327,7 @@ fn build_test_config(
             &loaded.profiles,
             SingboxBuildOpts {
                 no_tun: true,
+                force_tun: false,
                 srs_dir,
             },
         )?,

@@ -15,16 +15,21 @@
 
 use serde_json::{Value, json};
 
-use crate::core::{owns_native_tun, resolve_tun};
+use crate::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
 use crate::enums::CoreEngine;
-use crate::state::{AdvancedSettings, AppCaptureMode, AppFilterMode, ProxyMode};
+use crate::state::{AdvancedSettings, AppCaptureMode, AppFilterMode};
 
 /// `appFilter` key prefix for a desktop program.
 pub const EXE_KEY_PREFIX: &str = "exe:";
 
 /// Whether `engine` can tell which program opened a connection under `s`.
 pub fn sees_processes(engine: CoreEngine, s: &AdvancedSettings) -> bool {
-    s.proxy_mode != ProxyMode::Tun || owns_native_tun(engine, resolve_tun(engine, s))
+    let host = HostTraits {
+        proxy_modes: true,
+        app_routing: AppRouting::PerProcess,
+        pinned_singbox_stack: None,
+    };
+    DataPathPlan::resolve(engine, s, host).sees_processes()
 }
 
 /// The process names a program shows up under. The executable's own name, plus
@@ -143,6 +148,7 @@ fn keeps_running_first(engine: CoreEngine, rule: &Value) -> bool {
 mod tests {
     use super::*;
     use crate::enums::TunEngine;
+    use crate::state::ProxyMode;
 
     fn settings(entries: &[(&str, AppFilterMode)], mode: ProxyMode) -> AdvancedSettings {
         AdvancedSettings {

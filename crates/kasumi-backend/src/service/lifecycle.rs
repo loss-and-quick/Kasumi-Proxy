@@ -4,7 +4,7 @@
 use std::sync::atomic::Ordering;
 
 use kasumi_core::core_config::{CoreConfig, MutationEffect, mutation_effect};
-use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
+use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
 
 use crate::commands::{self, CommandError, Response};
 use crate::fs::read_text;
@@ -28,7 +28,6 @@ pub(super) enum LifecycleCmd {
 #[derive(Debug, Clone)]
 pub(super) struct RunningPath {
     pub config: CoreConfig,
-    pub mode: ProxyMode,
     pub profile_id: String,
 }
 
@@ -72,7 +71,7 @@ impl Service {
                 // With the data-path up, align the OS proxy with the mode (set for
                 // system/pac, cleared otherwise — covers mode switches).
                 self.platform.set_os_proxy(mode, engine, socks_port).await;
-                self.note_data_path_started(built, mode, profile_id);
+                self.note_data_path_started(built, profile_id);
                 self.settle_pending_restart().await;
                 Ok(())
             }
@@ -103,10 +102,9 @@ impl Service {
                     let (opts, built, profile_id) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
-                    let mode = opts.mode;
                     match self.platform.start_data_path(opts).await {
                         Ok(()) => {
-                            self.note_data_path_started(built, mode, profile_id);
+                            self.note_data_path_started(built, profile_id);
                             self.settle_pending_restart().await;
                             Ok(())
                         }
@@ -124,15 +122,11 @@ impl Service {
         }
     }
 
-    /// Record a successful data-path start: the given build, mode and profile
+    /// Record a successful data-path start: the given build and profile
     /// become the baseline mutations are diffed against, and nothing is pending
     /// anymore.
-    fn note_data_path_started(&self, config: CoreConfig, mode: ProxyMode, profile_id: String) {
-        *self.running_config.lock().unwrap() = Some(RunningPath {
-            config,
-            mode,
-            profile_id,
-        });
+    fn note_data_path_started(&self, config: CoreConfig, profile_id: String) {
+        *self.running_config.lock().unwrap() = Some(RunningPath { config, profile_id });
         self.pending_restart.store(false, Ordering::SeqCst);
     }
 
@@ -173,23 +167,17 @@ impl Service {
         let Ok(next_cfg) = commands::build_profile_config(&*self.platform, active_id).await else {
             return;
         };
-        // Same normalization as the start path: no proxy-mode support → tun.
-        let next_mode = if self.platform.supports_proxy_modes() {
-            state.settings.proxy_mode
-        } else {
-            ProxyMode::Tun
-        };
-        match mutation_effect(&running.config, running.mode, &next_cfg, next_mode) {
+        match mutation_effect(&running.config, &next_cfg) {
             MutationEffect::LiveModeSwitch(mode) => {
                 let socks_port = state
                     .settings
                     .local_socks_port
                     .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
                 self.platform
-                    .set_os_proxy(mode, next_cfg.engine, socks_port)
+                    .set_os_proxy(mode, next_cfg.engine(), socks_port)
                     .await;
                 if let Some(running) = self.running_config.lock().unwrap().as_mut() {
-                    running.mode = mode;
+                    running.config.plan.mode = mode;
                 }
             }
             MutationEffect::SetPending(pending) => {

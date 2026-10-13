@@ -325,9 +325,16 @@ pub(crate) async fn build_profile_config(
         // a desktop backup.
         settings.proxy_mode = kasumi_core::state::ProxyMode::Tun;
     }
-    let mut built =
-        build_core_config(profile, &settings, &rules, profiles, srs_dir).map_err(err)?;
-    if built.engine == CoreEngine::SingBox {
+    let mut built = build_core_config(
+        profile,
+        &settings,
+        &rules,
+        profiles,
+        srs_dir,
+        platform.host_traits(),
+    )
+    .map_err(err)?;
+    if built.engine() == CoreEngine::SingBox {
         apply_singbox_cache_file(
             &mut built.config,
             &paths.singbox_cache().to_string_lossy(),
@@ -337,9 +344,13 @@ pub(crate) async fn build_profile_config(
     if platform.supports_proxy_modes() {
         // Desktop: the per-app filter matches programs by executable (Android
         // routes its uid entries in the platform instead).
-        kasumi_core::app_process::apply_process_filter(built.engine, &settings, &mut built.config);
+        kasumi_core::app_process::apply_process_filter(
+            built.engine(),
+            &settings,
+            &mut built.config,
+        );
     }
-    platform.tune_config(built.engine, &mut built.config);
+    platform.tune_config(built.engine(), &mut built.config);
     Ok(built)
 }
 

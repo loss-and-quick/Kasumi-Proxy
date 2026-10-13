@@ -4,29 +4,31 @@
 
 use serde_json::Value;
 
-use crate::core::{owns_native_tun, resolve_core, resolve_tun};
+use crate::core::resolve_core;
+use crate::data_path_plan::{DataPathPlan, HostTraits, TunPlan};
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::Profile;
 use crate::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use crate::state::{AdvancedSettings, ProxyMode, RoutingRule};
-use crate::tun::TunOptions;
 use crate::xray_config::build_xray_config;
 
-/// Engine + TUN engine + config JSON for a profile, mirroring what the core is
+/// The data-path plan and config JSON for a profile, mirroring what the core is
 /// launched with.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreConfig {
-    pub engine: CoreEngine,
-    /// The resolved TUN engine for this core. When it isn't `SingboxTun`, the
-    /// core is built socks-only (an external tun→socks engine fronts it).
+    pub plan: DataPathPlan,
+    /// The TUN engine the settings resolve for this core, also when the plan runs
+    /// no tun.
     pub tun: TunEngine,
     /// The built config as a JSON value (serialize to a string when writing it
     /// to disk; comparing values is order-independent for restart diffing).
     pub config: Value,
-    /// The external tun engine's tuning, `None` when no external engine runs
-    /// (a non-tun proxy mode, or sing-box owning its native tun). The engine
-    /// reads it only at start, so a change to it needs a restart too.
-    pub external_tun: Option<TunOptions>,
+}
+
+impl CoreConfig {
+    pub fn engine(&self) -> CoreEngine {
+        self.plan.engine
+    }
 }
 
 /// Build the launch config for a profile. `srs_dir` is the platform's rule-set
@@ -37,9 +39,10 @@ pub fn build_core_config(
     routing_rules: &[RoutingRule],
     profiles: &[Profile],
     srs_dir: &str,
+    host: HostTraits,
 ) -> Result<CoreConfig, String> {
     let engine = resolve_core(profile, settings, profiles).map_err(|e| e.to_string())?;
-    let tun = resolve_tun(engine, settings);
+    let plan = DataPathPlan::resolve(engine, settings, host);
     let config = match engine {
         CoreEngine::SingBox => build_singbox_config(
             profile,
@@ -47,23 +50,19 @@ pub fn build_core_config(
             routing_rules,
             profiles,
             SingboxBuildOpts {
-                // Socks-only (no native tun inbound) when an external tun engine
-                // fronts sing-box, or when the proxy mode runs no tun at all
-                // (proxy-only/system/pac). SingboxTun in tun mode keeps the native
-                // tun. Xray is already inbound-only either way.
-                no_tun: settings.proxy_mode != ProxyMode::Tun || tun != TunEngine::SingboxTun,
+                // Only the native tun lives in the core's config; an external
+                // engine or a non-tun mode leaves sing-box socks-only.
+                no_tun: !matches!(plan.tun, TunPlan::Native { .. }),
+                force_tun: matches!(plan.tun, TunPlan::Native { force_tun: true }),
                 srs_dir,
             },
         )?,
         CoreEngine::Xray => build_xray_config(profile, settings, routing_rules, profiles)?,
     };
-    let external_tun = (settings.proxy_mode == ProxyMode::Tun && !owns_native_tun(engine, tun))
-        .then(|| settings.tun_options());
     Ok(CoreConfig {
-        engine,
-        tun,
+        tun: crate::core::resolve_tun(engine, settings),
+        plan,
         config,
-        external_tun,
     })
 }
 
@@ -71,10 +70,10 @@ pub fn build_core_config(
 /// A TUN-engine switch or a retuned external engine counts too: it changes how the
 /// data-path is brought up even when the core config JSON is identical.
 pub fn active_config_changed(prev: &CoreConfig, next: &CoreConfig) -> bool {
-    prev.engine != next.engine
+    prev.engine() != next.engine()
         || prev.tun != next.tun
         || prev.config != next.config
-        || prev.external_tun != next.external_tun
+        || prev.plan.restart_key() != next.plan.restart_key()
 }
 
 /// What a settings mutation means for a running data path, decided against the
@@ -94,12 +93,8 @@ pub enum MutationEffect {
 /// (the tun device and routing are start-time constructs), as does any change
 /// to the resolved core config; a mode move within the non-tun family is the
 /// one live-applicable case.
-pub fn mutation_effect(
-    running: &CoreConfig,
-    running_mode: ProxyMode,
-    next: &CoreConfig,
-    next_mode: ProxyMode,
-) -> MutationEffect {
+pub fn mutation_effect(running: &CoreConfig, next: &CoreConfig) -> MutationEffect {
+    let (running_mode, next_mode) = (running.plan.mode, next.plan.mode);
     let config_changed = active_config_changed(running, next);
     let tunness_changed = (running_mode == ProxyMode::Tun) != (next_mode == ProxyMode::Tun);
     if !config_changed && !tunness_changed && next_mode != running_mode {
@@ -108,11 +103,23 @@ pub fn mutation_effect(
         MutationEffect::SetPending(config_changed || tunness_changed)
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data_path_plan::AppRouting;
     use crate::share::parse_share_link;
+
+    const HOST: HostTraits = HostTraits {
+        proxy_modes: true,
+        app_routing: AppRouting::PerProcess,
+        pinned_singbox_stack: None,
+    };
+
+    fn with_mode(c: &CoreConfig, mode: ProxyMode) -> CoreConfig {
+        let mut c = c.clone();
+        c.plan.mode = mode;
+        c
+    }
 
     #[test]
     fn dispatches_by_resolved_engine() {
@@ -120,12 +127,12 @@ mod tests {
         let xray = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
         let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
 
-        let cx = build_core_config(&xray, &s, &[], std::slice::from_ref(&xray), "").unwrap();
-        assert_eq!(cx.engine, CoreEngine::Xray);
+        let cx = build_core_config(&xray, &s, &[], std::slice::from_ref(&xray), "", HOST).unwrap();
+        assert_eq!(cx.engine(), CoreEngine::Xray);
         assert!(cx.config["outbounds"].is_array());
 
-        let cs = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
-        assert_eq!(cs.engine, CoreEngine::SingBox);
+        let cs = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "", HOST).unwrap();
+        assert_eq!(cs.engine(), CoreEngine::SingBox);
         assert!(cs.config["route"].is_object());
     }
 
@@ -143,7 +150,7 @@ mod tests {
 
         // Default: sing-box keeps its native tun inbound.
         let s = AdvancedSettings::default();
-        let native = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+        let native = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "", HOST).unwrap();
         assert_eq!(native.tun, TunEngine::SingboxTun);
         assert_eq!(tun_inbounds(&native), 1);
 
@@ -151,7 +158,7 @@ mod tests {
         let mut s2 = AdvancedSettings::default();
         s2.tun_by_core
             .insert(CoreEngine::SingBox, TunEngine::Tun2socks);
-        let ext = build_core_config(&sb, &s2, &[], std::slice::from_ref(&sb), "").unwrap();
+        let ext = build_core_config(&sb, &s2, &[], std::slice::from_ref(&sb), "", HOST).unwrap();
         assert_eq!(ext.tun, TunEngine::Tun2socks);
         assert_eq!(tun_inbounds(&ext), 0);
         assert!(
@@ -173,7 +180,7 @@ mod tests {
                 proxy_mode: mode,
                 ..Default::default()
             };
-            let c = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
+            let c = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "", HOST).unwrap();
             assert_eq!(c.tun, TunEngine::SingboxTun);
             let inbounds = c.config["inbounds"].as_array().unwrap();
             assert!(inbounds.iter().all(|i| i["type"] != "tun"), "{mode:?}");
@@ -185,13 +192,13 @@ mod tests {
     fn change_detection() {
         let s = AdvancedSettings::default();
         let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
-        let a = build_core_config(&p, &s, &[], std::slice::from_ref(&p), "").unwrap();
+        let a = build_core_config(&p, &s, &[], std::slice::from_ref(&p), "", HOST).unwrap();
         let b = a.clone();
         assert!(!active_config_changed(&a, &b));
 
         let mut s2 = s.clone();
         s2.fragment = true; // changes the built config
-        let c = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
+        let c = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "", HOST).unwrap();
         assert!(active_config_changed(&a, &c));
     }
 
@@ -199,11 +206,14 @@ mod tests {
     fn external_tun_tuning_counts_as_change() {
         let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
         let build = |s: &AdvancedSettings| {
-            build_core_config(&p, s, &[], std::slice::from_ref(&p), "").unwrap()
+            build_core_config(&p, s, &[], std::slice::from_ref(&p), "", HOST).unwrap()
         };
         let s = AdvancedSettings::default();
         let base = build(&s);
-        assert_eq!(base.external_tun, Some(s.tun_options()));
+        assert_eq!(
+            base.plan.external().map(|e| &e.opts),
+            Some(&s.tun_options())
+        );
 
         // The xray config is identical, but tun2socks would start with other knobs.
         for edit in [
@@ -217,7 +227,10 @@ mod tests {
             assert_eq!(next.config, base.config);
             assert!(active_config_changed(&base, &next));
             assert_eq!(
-                mutation_effect(&base, ProxyMode::Tun, &next, ProxyMode::Tun),
+                mutation_effect(
+                    &with_mode(&base, ProxyMode::Tun),
+                    &with_mode(&next, ProxyMode::Tun)
+                ),
                 MutationEffect::SetPending(true)
             );
         }
@@ -238,24 +251,33 @@ mod tests {
             proxy_mode: ProxyMode::ProxyOnly,
             ..Default::default()
         };
-        let a =
-            build_core_config(&xray, &proxy_only, &[], std::slice::from_ref(&xray), "").unwrap();
+        let a = build_core_config(
+            &xray,
+            &proxy_only,
+            &[],
+            std::slice::from_ref(&xray),
+            "",
+            HOST,
+        )
+        .unwrap();
         let b = build_core_config(
             &xray,
             &retune(&proxy_only),
             &[],
             std::slice::from_ref(&xray),
             "",
+            HOST,
         )
         .unwrap();
-        assert_eq!(a.external_tun, None);
+        assert_eq!(a.plan.external().map(|e| &e.opts), None);
         assert!(!active_config_changed(&a, &b));
 
         // sing-box owns its native tun; the external-engine knobs never reach it.
         let s = AdvancedSettings::default();
-        let a = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
-        let b = build_core_config(&sb, &retune(&s), &[], std::slice::from_ref(&sb), "").unwrap();
-        assert_eq!(a.external_tun, None);
+        let a = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "", HOST).unwrap();
+        let b =
+            build_core_config(&sb, &retune(&s), &[], std::slice::from_ref(&sb), "", HOST).unwrap();
+        assert_eq!(a.plan.external().map(|e| &e.opts), None);
         assert!(!active_config_changed(&a, &b));
     }
 
@@ -263,46 +285,67 @@ mod tests {
     fn mutation_effect_decides_live_apply_vs_pending() {
         let s = AdvancedSettings::default();
         let p = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
-        let cfg = build_core_config(&p, &s, &[], std::slice::from_ref(&p), "").unwrap();
+        let cfg = build_core_config(&p, &s, &[], std::slice::from_ref(&p), "", HOST).unwrap();
 
         // Identical build + mode: nothing is stale.
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::Tun, &cfg, ProxyMode::Tun),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::Tun),
+                &with_mode(&cfg, ProxyMode::Tun)
+            ),
             MutationEffect::SetPending(false)
         );
 
         // A changed build needs a restart whatever the mode.
         let mut s2 = s.clone();
         s2.fragment = true;
-        let changed = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "").unwrap();
+        let changed = build_core_config(&p, &s2, &[], std::slice::from_ref(&p), "", HOST).unwrap();
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::Tun, &changed, ProxyMode::Tun),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::Tun),
+                &with_mode(&changed, ProxyMode::Tun)
+            ),
             MutationEffect::SetPending(true)
         );
 
         // Entering/leaving tun mode needs a restart even with an identical build.
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::Tun, &cfg, ProxyMode::System),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::Tun),
+                &with_mode(&cfg, ProxyMode::System)
+            ),
             MutationEffect::SetPending(true)
         );
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::ProxyOnly, &cfg, ProxyMode::Tun),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::ProxyOnly),
+                &with_mode(&cfg, ProxyMode::Tun)
+            ),
             MutationEffect::SetPending(true)
         );
 
         // Same build, mode moved within the non-tun family: live apply.
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::ProxyOnly, &cfg, ProxyMode::System),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::ProxyOnly),
+                &with_mode(&cfg, ProxyMode::System)
+            ),
             MutationEffect::LiveModeSwitch(ProxyMode::System)
         );
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::System, &cfg, ProxyMode::Pac),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::System),
+                &with_mode(&cfg, ProxyMode::Pac)
+            ),
             MutationEffect::LiveModeSwitch(ProxyMode::Pac)
         );
 
         // Config change + non-tun mode move: the restart wins over the live apply.
         assert_eq!(
-            mutation_effect(&cfg, ProxyMode::ProxyOnly, &changed, ProxyMode::System),
+            mutation_effect(
+                &with_mode(&cfg, ProxyMode::ProxyOnly),
+                &with_mode(&changed, ProxyMode::System)
+            ),
             MutationEffect::SetPending(true)
         );
     }
@@ -314,9 +357,9 @@ mod tests {
         let s = AdvancedSettings::default();
         let xray = parse_share_link("vless://u@e.x:443?type=tcp&security=tls&sni=s", None).unwrap();
         let sb = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex", None).unwrap();
-        let a = build_core_config(&xray, &s, &[], std::slice::from_ref(&xray), "").unwrap();
-        let b = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "").unwrap();
-        assert_ne!(a.engine, b.engine);
+        let a = build_core_config(&xray, &s, &[], std::slice::from_ref(&xray), "", HOST).unwrap();
+        let b = build_core_config(&sb, &s, &[], std::slice::from_ref(&sb), "", HOST).unwrap();
+        assert_ne!(a.engine(), b.engine());
         assert!(active_config_changed(&a, &b));
     }
 }

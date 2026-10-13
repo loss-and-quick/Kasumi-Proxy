@@ -386,6 +386,7 @@ mod tests {
             &[],
             std::slice::from_ref(&xhttp),
             "",
+            crate::data_path_plan::TEST_HOST,
         )
         .unwrap_err();
         assert_eq!(err, CoreConflict::UnpinnedInsecureTls.to_string());

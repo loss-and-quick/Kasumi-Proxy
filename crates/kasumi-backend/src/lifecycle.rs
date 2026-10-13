@@ -75,7 +75,7 @@ pub async fn resolve_and_write_config(
         .or_else(|| state.as_ref().and_then(|s| s.active_id.clone()))
         .unwrap_or_default();
     let built = build_profile_config(platform, &id).await?;
-    let engine = built.engine;
+    let engine = built.engine();
     let tun = built.tun;
     let cfg_path = match engine {
         CoreEngine::SingBox => &paths.singbox_config,
@@ -95,8 +95,9 @@ pub async fn resolve_and_write_config(
         .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
     // The engine starts with exactly the tuning the baseline records.
     let tun_opts = built
-        .external_tun
-        .clone()
+        .plan
+        .external()
+        .map(|e| e.opts.clone())
         .unwrap_or_else(|| settings.tun_options());
     // Same normalization as the config build: a platform without proxy-mode
     // support always starts in tun mode.
@@ -527,7 +528,7 @@ mod tests {
         // TestPlatform doesn't support proxy modes → always normalized to tun.
         assert_eq!(opts.mode, ProxyMode::Tun);
         // The returned build mirrors what was written.
-        assert_eq!(built.engine, CoreEngine::Xray);
+        assert_eq!(built.engine(), CoreEngine::Xray);
         assert!(built.config["outbounds"].is_array());
         assert_eq!(
             read_text(&p.paths().engine_file).await.as_deref(),

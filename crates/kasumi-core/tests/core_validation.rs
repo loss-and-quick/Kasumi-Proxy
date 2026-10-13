@@ -27,6 +27,7 @@ use strum::IntoEnumIterator;
 use happ_sub::MergeMode;
 use kasumi_core::core::{core_conflict, forced_core};
 use kasumi_core::core_config::build_core_config;
+use kasumi_core::data_path_plan::{AppRouting, HostTraits};
 use kasumi_core::enums::{
     CongestionControl, CoreEngine, Fingerprint, Flow, HeaderType, Hysteria2Obfs, Network,
     PacketEncoding, Security, SsMethod, VmessEnc,
@@ -1093,6 +1094,13 @@ fn find_core(env_var: &str, prefix: &str) -> Option<PathBuf> {
     None
 }
 
+/// The configs are validated as a desktop builds them: every proxy mode honoured.
+const HOST: HostTraits = HostTraits {
+    proxy_modes: true,
+    app_routing: AppRouting::PerProcess,
+    pinned_singbox_stack: None,
+};
+
 fn build_config(
     profile: &Profile,
     others: &[Profile],
@@ -1109,14 +1117,16 @@ fn build_config(
         rules,
         &profiles,
         &srs_dir.to_string_lossy(),
+        HOST,
     )
     .ok()?;
+    let engine = built.engine();
     let mut config = built.config;
     // The backend adds the cache file to every sing-box config it launches.
-    if built.engine == CoreEngine::SingBox {
+    if engine == CoreEngine::SingBox {
         apply_singbox_cache_file(&mut config, "cache.db", settings);
     }
-    Some((config, built.engine))
+    Some((config, engine))
 }
 
 fn write_config(cfg: &Value) -> (tempfile::TempDir, PathBuf) {
@@ -1507,9 +1517,10 @@ fn link_corpus_validates_against_real_cores() {
                 &[],
                 std::slice::from_ref(&profile),
                 "",
+                HOST,
             );
             if built.as_ref().err() != Some(&conflict.to_string()) {
-                let built = built.map(|c| c.engine);
+                let built = built.map(|c| c.engine());
                 failures.push(format!("[{name}] not refused as {conflict:?}: {built:?}"));
             }
             continue;
@@ -1603,8 +1614,15 @@ fn chain_needing_both_cores_is_refused_by_name() {
     let mut mid = make(Protocol::Tuic, None, Security::Tls, "tuic-mid").unwrap();
     mid.meta_mut().id = "mid".into();
     let profiles = vec![exit.clone(), mid];
-    let err =
-        build_core_config(&exit, &AdvancedSettings::default(), &[], &profiles, "").unwrap_err();
+    let err = build_core_config(
+        &exit,
+        &AdvancedSettings::default(),
+        &[],
+        &profiles,
+        "",
+        HOST,
+    )
+    .unwrap_err();
     assert!(
         err.contains("\"xhttp-exit\"") && err.contains("\"tuic-mid\""),
         "{err}"
