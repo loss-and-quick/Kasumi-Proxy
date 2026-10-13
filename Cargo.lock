@@ -2721,6 +2721,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "caps",
+ "embed-resource",
  "fern",
  "freedesktop-icons",
  "futures-util",

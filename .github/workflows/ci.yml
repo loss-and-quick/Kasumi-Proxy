@@ -327,6 +327,10 @@ jobs:
       - name: Windows process tests
         run: 'cargo test -p kasumi-backend --lib -- proc::'
 
+      # cfg(windows) desktop code has tests the Linux `rust` job never compiles.
+      - name: Windows desktop tests
+        run: cargo test -p kasumi-desktop --lib
+
   # ── The single required status check. It always runs and aggregates the gated
   #    jobs above: a skipped area (its files weren't touched) is fine; only a real
   #    failure or cancellation fails CI. Point branch protection at THIS context so
