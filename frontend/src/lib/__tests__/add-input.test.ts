@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { addInputFrom, firstSubscriptionUrl, parseSubscriptionDump } from "../add-input";
+import {
+  type AddOptions,
+  addInputFrom,
+  makeSubscription,
+  parseSubscriptionDump,
+  subDraft,
+  subDraftFrom,
+} from "../add-input";
 import type { ResolvedImport } from "../bridge";
 
 const defaults = { autoUpdate: false, interval: 360 };
@@ -101,13 +108,54 @@ describe("parseSubscriptionDump", () => {
   });
 });
 
-describe("firstSubscriptionUrl", () => {
+describe("subDraftFrom", () => {
+  const options: AddOptions = {
+    autoUpdate: true,
+    interval: 120,
+    groupEach: false,
+    group: { id: "g-work" },
+  };
+  const groups = [{ id: "g-main" }, { id: "g-work" }];
+
+  it("carries the sheet's options and its picked group", () => {
+    const first = makeSubscription({ url: "https://a.example.com/s" }, options);
+    const { sub, group } = subDraftFrom(first, options, groups);
+    expect(sub).toMatchObject({ url: "https://a.example.com/s", autoUpdate: true, interval: 120 });
+    expect(group).toEqual({ id: "g-work" });
+  });
+
+  it("leaves a stand-in name for the editor to suggest, and keeps a given one", () => {
+    const host = makeSubscription({ url: "https://a.example.com/s" }, options);
+    expect(subDraftFrom(host, options, groups).sub.remarks).toBe("");
+    const named = makeSubscription({ url: "https://a.example.com/s", remarks: "Work" }, options);
+    expect(subDraftFrom(named, options, groups).sub.remarks).toBe("Work");
+  });
+
+  it("gives the subscription a group of its own unless a dump names one that exists", () => {
+    const each = { ...options, groupEach: true };
+    const plain = makeSubscription({ url: "https://a.example.com/s" }, each);
+    expect(subDraftFrom(plain, each, groups).group).toEqual({ newName: "" });
+    const kept = makeSubscription({ url: "https://a.example.com/s", groupId: "g-main" }, each);
+    expect(subDraftFrom(kept, each, groups).group).toEqual({ id: "g-main" });
+    const gone = makeSubscription({ url: "https://a.example.com/s", groupId: "g-gone" }, each);
+    expect(subDraftFrom(gone, each, groups).group).toEqual({ newName: "" });
+  });
+
+  it("is a blank subscription with the options when the text holds none", () => {
+    const { sub, group } = subDraftFrom(null, { ...options, group: { newName: "New" } }, groups);
+    expect(sub).toMatchObject({ url: "", remarks: "", autoUpdate: true, interval: 120 });
+    expect(group).toEqual({ newName: "New" });
+  });
+});
+
+describe("subDraft", () => {
+  const options: AddOptions = { ...defaults, groupEach: true, group: { id: "g-main" } };
   const bridgeOf = (value: ResolvedImport) => ({
     resolveImportInput: async () => value,
     parseShareLinks: async () => [],
   });
 
-  it("is the first subscription the backend finds", async () => {
+  it("opens on the first subscription the backend finds", async () => {
     const b = bridgeOf(
       resolved({
         subscriptions: [
@@ -116,20 +164,20 @@ describe("firstSubscriptionUrl", () => {
         ],
       }),
     );
-    expect(await firstSubscriptionUrl("https://a.example.com/s", defaults, b)).toBe(
-      "https://a.example.com/s",
-    );
+    const { sub } = await subDraft("https://a.example.com/s", options, [], "Encrypted", b);
+    expect(sub.url).toBe("https://a.example.com/s");
   });
 
-  it("reads an exported dump without the backend", async () => {
+  it("reads an exported dump without the backend, keeping its name", async () => {
     const b = bridgeOf(resolved());
     const dump = JSON.stringify([{ url: "https://d.example.com/s", remarks: "D" }]);
-    expect(await firstSubscriptionUrl(dump, defaults, b)).toBe("https://d.example.com/s");
+    const { sub } = await subDraft(dump, options, [], "Encrypted", b);
+    expect(sub).toMatchObject({ url: "https://d.example.com/s", remarks: "D" });
   });
 
-  it("is null for blank text and for text with no subscription", async () => {
+  it("is blank for blank text and for text with no subscription", async () => {
     const b = bridgeOf(resolved({ shareText: "trojan://pw@h:443#T" }));
-    expect(await firstSubscriptionUrl("  ", defaults, b)).toBeNull();
-    expect(await firstSubscriptionUrl("trojan://pw@h:443#T", defaults, b)).toBeNull();
+    expect((await subDraft("  ", options, [], "E", b)).sub.url).toBe("");
+    expect((await subDraft("trojan://pw@h:443#T", options, [], "E", b)).sub.url).toBe("");
   });
 });
