@@ -13,10 +13,15 @@
 //!   IPv6 reject in `FORWARD` entirely.
 //!   Whether BPF offload runs is fixed when Tethering starts
 //!   (`BpfCoordinator.mIsBpfEnabled`, from `TetheringConfiguration
-//!   .isBpfOffloadEnabled()`), so the only runtime lever is removing the programs
-//!   from the downstream. Tethering attaches them again on an upstream change, so
-//!   the watcher removes them on every poll. Conntrack is not flushed: once the
-//!   programs are gone, the packets of an older flow take the kernel path, are
+//!   .isBpfOffloadEnabled()`), and Tethering attaches the programs again on every
+//!   upstream change (`BpfUtils.attachProgram`, ingress prio `PRIO_TETHER6` = 2
+//!   and `PRIO_TETHER4` = 3). Rather than racing that, a filter of our own sits at
+//!   prio 1 on each steered downstream: an action-less `matchall` returns
+//!   `TC_ACT_OK` (`tcf_exts_exec`), which ends classification, so the packet takes
+//!   the kernel path and Tethering's programs never run, however often they are
+//!   re-attached. Removing the filter hands offload straight back. Where it cannot
+//!   be installed, the programs are removed on every poll instead.
+//!   Conntrack is not flushed: an older flow's packets take the kernel path, are
 //!   steered into the tun mid-connection and die there, and the client reconnects
 //!   through the proxy.
 //! - **Hardware offload** (`OffloadController`, the offload HAL, Qualcomm IPA on
@@ -209,15 +214,108 @@ fn tether_bpf_filters(tc_out: &str) -> Vec<(String, String)> {
     found
 }
 
-/// Remove Tethering's BPF upstream programs from `iface`'s ingress, so its packets
-/// take the kernel path through the steering rules.
-pub async fn detach_tether_bpf(iface: &str) {
-    let (_, out) = run_out(&[TC, "filter", "show", "dev", iface, "ingress"]).await;
+/// Our ingress filter's prio, ahead of Tethering's `PRIO_TETHER6` (2).
+const PIN_PREF: &str = "1";
+/// Marks the prio-1 filter as ours, so another prio-1 filter is never removed.
+const PIN_HANDLE: &str = "0x4b53";
+
+/// `tc` arguments that add (`"add"`) or delete (`"del"`) our filter on `iface`.
+/// Android's `tc` (iproute2-ss171113) has no `gact`, and sends no options for a
+/// bare `matchall`, which the kernel rejects; `classid 0` is a no-op option that
+/// gets the filter through without an action.
+fn pin_argv(op: &str, iface: &str) -> Vec<String> {
+    let mut a = vec![
+        "filter", op, "dev", iface, "ingress", "pref", PIN_PREF, "protocol", "all", "handle",
+        PIN_HANDLE, "matchall",
+    ];
+    if op == "add" {
+        a.extend(["classid", "0"]);
+    }
+    a.into_iter().map(String::from).collect()
+}
+
+/// Whether `tc filter show dev <iface> ingress` lists our filter.
+fn has_pin(tc_out: &str) -> bool {
+    tc_out.lines().any(|line| {
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        toks.windows(2).any(|w| w == ["pref", PIN_PREF])
+            && toks.contains(&"matchall")
+            && toks.windows(2).any(|w| w == ["handle", PIN_HANDLE])
+    })
+}
+
+/// The devices with a `clsact` qdisc, out of `tc qdisc show`: the only ones that
+/// can hold an ingress filter.
+fn clsact_devs(qdisc_out: &str) -> Vec<String> {
+    let mut devs: Vec<String> = Vec::new();
+    for line in qdisc_out.lines() {
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        if toks.get(1) != Some(&"clsact") {
+            continue;
+        }
+        if let Some(w) = toks.windows(2).find(|w| w[0] == "dev")
+            && !devs.iter().any(|d| d == w[1])
+        {
+            devs.push(w[1].to_string());
+        }
+    }
+    devs
+}
+
+async fn tc(args: &[String]) -> i32 {
+    let mut a = vec![TC];
+    a.extend(args.iter().map(String::as_str));
+    silent(&a).await
+}
+
+async fn ingress_filters(iface: &str) -> String {
+    run_out(&[TC, "filter", "show", "dev", iface, "ingress"])
+        .await
+        .1
+}
+
+/// How a downstream's packets are kept away from Tethering's BPF programs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BpfHold {
+    /// Our prio-1 filter is in place.
+    Pinned,
+    /// It could not be installed; the programs were removed instead.
+    Detached,
+}
+
+/// Keep `iface`'s ingress packets on the kernel path: install our filter if it is
+/// missing, else remove Tethering's programs. Idempotent; Tethering's own filters
+/// are only touched in the fallback.
+pub async fn hold_tether_bpf(iface: &str) -> BpfHold {
+    if has_pin(&ingress_filters(iface).await) {
+        return BpfHold::Pinned;
+    }
+    tc(&pin_argv("add", iface)).await;
+    let out = ingress_filters(iface).await;
+    if has_pin(&out) {
+        return BpfHold::Pinned;
+    }
     for (proto, pref) in tether_bpf_filters(&out) {
         silent(&[
             TC, "filter", "del", "dev", iface, "ingress", "protocol", &proto, "pref", &pref,
         ])
         .await;
+    }
+    BpfHold::Detached
+}
+
+/// Remove our filter from `iface`, if it is there.
+pub async fn release_tether_bpf(iface: &str) {
+    if has_pin(&ingress_filters(iface).await) {
+        tc(&pin_argv("del", iface)).await;
+    }
+}
+
+/// Remove our filter from every device, whichever downstreams it was put on.
+pub async fn release_all_tether_bpf() {
+    let (_, out) = run_out(&[TC, "qdisc", "show"]).await;
+    for dev in clsact_devs(&out) {
+        release_tether_bpf(&dev).await;
     }
 }
 
@@ -265,6 +363,80 @@ filter protocol ip pref 3 bpf chain 0 handle 0x1 prog_offload_schedcls_tether_up
                 ("ip".to_string(), "3".to_string())
             ]
         );
+    }
+
+    // `tc filter show dev rndis0 ingress` on the reference phone with our filter
+    // added ahead of Tethering's programs.
+    const PINNED: &str = "\
+filter protocol all pref 1 matchall chain 0
+filter protocol all pref 1 matchall chain 0 handle 0x4b53
+  not_in_hw
+filter protocol ipv6 pref 2 bpf chain 0
+filter protocol ipv6 pref 2 bpf chain 0 handle 0x1 prog_offload_schedcls_tether_upstream6_ether:[*fsobj] direct-action not_in_hw id 5 tag f2fa64982b1a7903 jited
+filter protocol ip pref 3 bpf chain 0
+filter protocol ip pref 3 bpf chain 0 handle 0x1 prog_offload_schedcls_tether_upstream4_ether:[*fsobj] direct-action not_in_hw id 11 tag 40c2769c56431439 jited
+";
+
+    #[test]
+    fn the_pin_runs_before_every_tether_program() {
+        assert!(has_pin(PINNED));
+        let pin: u32 = PIN_PREF.parse().unwrap();
+        let progs = tether_bpf_filters(PINNED);
+        assert_eq!(progs.len(), 2);
+        for (_, pref) in progs {
+            assert!(pin < pref.parse().unwrap(), "prio {pref}");
+        }
+    }
+
+    #[test]
+    fn the_pin_matches_every_protocol_without_an_action() {
+        let add = pin_argv("add", "rndis0").join(" ");
+        assert_eq!(
+            add,
+            "filter add dev rndis0 ingress pref 1 protocol all handle 0x4b53 matchall classid 0"
+        );
+        assert!(!add.contains("action"));
+    }
+
+    #[test]
+    fn the_pin_is_removed_exactly_as_added() {
+        for iface in ["rndis0", "wlan0"] {
+            let add = pin_argv("add", iface);
+            let del = pin_argv("del", iface);
+            assert_eq!((add[1].as_str(), del[1].as_str()), ("add", "del"));
+            // Same device, prio, protocol, handle and kind: only our filter goes.
+            assert_eq!(add[2..12], del[2..]);
+            assert_eq!(add[3], iface);
+        }
+    }
+
+    #[test]
+    fn only_our_prio_1_filter_counts_as_the_pin() {
+        // ConnectivityService's ingress rate limit is a prio-1 matchall too
+        // (`TC_PRIO_POLICE`), with the kernel-chosen handle.
+        let police = "\
+filter protocol all pref 1 matchall chain 0
+filter protocol all pref 1 matchall chain 0 handle 0x1
+";
+        assert!(!has_pin(police));
+        assert!(!has_pin(""));
+        assert!(!has_pin(
+            "filter protocol all pref 4 matchall chain 0 handle 0x4b53\n"
+        ));
+    }
+
+    #[test]
+    fn devices_that_can_hold_the_pin() {
+        // `tc qdisc show` on the reference phone, trimmed.
+        let out = "\
+qdisc mq 0: dev wlan0 root
+qdisc clsact ffff: dev rmnet_data1 parent ffff:fff1
+qdisc clsact ffff: dev wlan0 parent ffff:fff1
+qdisc pfifo_fast 0: dev rndis0 root refcnt 2 bands 3
+qdisc clsact ffff: dev rndis0 parent ffff:fff1
+";
+        assert_eq!(clsact_devs(out), ["rmnet_data1", "wlan0", "rndis0"]);
+        assert!(clsact_devs("").is_empty());
     }
 
     #[test]
