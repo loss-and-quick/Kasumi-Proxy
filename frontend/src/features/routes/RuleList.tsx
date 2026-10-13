@@ -11,7 +11,7 @@ import type { RoutingRule } from "../../generated/bindings";
 import { useFormatters, useT } from "../../i18n";
 import type { RuleBlock } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
-import { isCatchAllRule, isRedundantCatchAll, ruleIcon, ruleSummary } from "../settings/helpers";
+import { isRedundantCatchAll, ruleIcon, ruleSummary } from "../settings/helpers";
 import { makeQuickRule, QUICK_RULES } from "../settings/rule-presets";
 
 export function RuleList({
@@ -39,7 +39,8 @@ export function RuleList({
     const to = rules.findIndex((r) => r.id === over.id);
     if (from !== -1 && to !== -1) void reorderRoutingRules(block.id, from, to);
   };
-  const catchAllIndex = rules.findIndex(isCatchAllRule);
+  const catchAllIds = useAppStore((s) => s.catchAllRules[block.id]);
+  const catchAllIndex = rules.findIndex((r) => catchAllIds?.includes(r.id) ?? false);
   const catchAllRedundant = isRedundantCatchAll(rules, catchAllIndex);
 
   return (

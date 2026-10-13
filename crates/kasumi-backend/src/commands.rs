@@ -30,9 +30,10 @@ use kasumi_core::mutate::{Backup, ImportMode, MutationIntent, apply_mutation};
 use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
-use kasumi_core::singbox_config::apply_singbox_cache_file;
+use kasumi_core::singbox_config::{apply_singbox_cache_file, matches_every_connection};
 use kasumi_core::state::{
-    AdvancedSettings, AppState, DEFAULT_LOG_ROTATE_KB, PortCollision, default_app_state,
+    AdvancedSettings, AppState, DEFAULT_LOG_ROTATE_KB, PortCollision, RoutingRule,
+    default_app_state,
 };
 use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::stored_for_url;
@@ -170,6 +171,12 @@ pub enum Command {
     CheckLocalPorts {
         settings: Box<AdvancedSettings>,
     },
+    /// Which of these rules match every connection once built
+    /// (`singbox_config::matches_every_connection`), so the UI can mark the
+    /// rules they shadow without re-implementing the rule parser.
+    CatchAllRules {
+        rules: Vec<RoutingRule>,
+    },
     #[serde(rename_all = "camelCase")]
     Ping {
         profile_id: String,
@@ -245,6 +252,8 @@ pub enum Response {
     ProfileIds(Vec<String>),
     /// Two local listeners on one port, or `null` when the ports are fine.
     PortCollision(Option<PortCollision>),
+    /// One answer per item of the request, in its order.
+    Flags(Vec<bool>),
     /// Latency in ms (tcp-ping and real-ping); `null` when there is no result.
     Ping(Option<i64>),
     Probe(ConnectionProbe),
@@ -599,6 +608,10 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             settings.port_collision(platform.supports_proxy_modes()),
         )),
 
+        Command::CatchAllRules { rules } => Ok(Response::Flags(
+            rules.iter().map(matches_every_connection).collect(),
+        )),
+
         Command::ResolveCores { profiles } => {
             let settings = crate::state::read_state_shell(&paths.app_state)
                 .await
@@ -905,6 +918,33 @@ mod tests {
         };
         assert!(!p.supports_proxy_modes());
         run_mutation(&p, &set(pac_on_socks)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn catch_all_rules_answers_per_rule() {
+        let (p, _d) = TestPlatform::new();
+        let rule = |domain: &str| RoutingRule {
+            id: domain.into(),
+            remarks: String::new(),
+            enabled: true,
+            outbound_tag: "direct".into(),
+            domain: Some(vec![domain.into()]),
+            ip: None,
+            port: Some("0-65535".into()),
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        };
+        let rules = vec![rule("example.com"), rule("# example.com")];
+        let Response::Flags(flags) = dispatch(&p, Command::CatchAllRules { rules })
+            .await
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(flags, [false, true]);
     }
 
     #[tokio::test]

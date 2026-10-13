@@ -9,6 +9,7 @@
 import dagre from "@dagrejs/dagre";
 import type { Route } from "../../generated/bindings";
 import {
+  type CatchAllRules,
   catchAllBlockIndex,
   PROXY_OUTBOUND,
   type RuleBlock,
@@ -43,6 +44,7 @@ export const outNodeId = (tag: string) => `out:${tag}`;
 export function buildRouteGraph(
   routes: Route[],
   blocks: RuleBlock[],
+  catchAll: CatchAllRules,
 ): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const nodes = new Map<string, GraphNode>();
   const edges: GraphEdge[] = [];
@@ -55,7 +57,7 @@ export function buildRouteGraph(
   for (const route of routes) {
     const start = routeNodeId(route.id);
     nodes.set(start, { id: start, kind: "route", routeId: route.id });
-    const deadFrom = catchAllBlockIndex(route, blocks);
+    const deadFrom = catchAllBlockIndex(route, catchAll);
     let prev = start;
     routeBlocks(route).forEach((ref, index) => {
       const block = blocks.find((b) => b.id === ref.blockId);

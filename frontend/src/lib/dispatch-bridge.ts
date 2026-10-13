@@ -329,6 +329,11 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "portCollision" ? r.value : wrongKind(r, "portCollision");
     },
 
+    async catchAllRules(rules) {
+      const r = await dispatch({ cmd: "catchAllRules", rules });
+      return r.kind === "flags" ? r.value : wrongKind(r, "flags");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);

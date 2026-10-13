@@ -21,6 +21,7 @@ import type {
   Profile,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
+  RoutingRule,
   RunState,
   SubAppliedEvent,
   TestKind,
@@ -193,6 +194,10 @@ export interface Bridge {
   // platform, by the backend check a settings write is refused by; `null` when
   // the ports are fine.
   checkLocalPorts(settings: AdvancedSettings): Promise<PortCollision | null>;
+
+  // Which of `rules` match every connection once built, by the backend's rule
+  // builder; one flag per rule, in order.
+  catchAllRules(rules: RoutingRule[]): Promise<boolean[]>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription

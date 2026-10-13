@@ -1094,6 +1094,68 @@ fn build_structured_singbox_rules(
     }
 }
 
+/// Whether `rule` matches every connection once built, so sing-box never reaches
+/// the rules after it (including the resolve step and the IP checks the builder
+/// appends). That holds when the built rule keeps no condition but ports and
+/// transports covering everything: entries that parse to nothing (`#` comments,
+/// `ext:` lists, malformed ports) leave such a rule behind.
+pub fn matches_every_connection(rule: &RoutingRule) -> bool {
+    let built = build_structured_singbox_rules(std::slice::from_ref(rule), &|t| t.to_owned());
+    let [only] = built.rules.as_slice() else {
+        return false;
+    };
+    let Some(fields) = only.as_object() else {
+        return false;
+    };
+    let mut ranges: Vec<(u32, u32)> = Vec::new();
+    for (key, value) in fields {
+        match key.as_str() {
+            "outbound" | "action" => {}
+            "network" => {
+                let has = |n: &str| value.as_array().is_some_and(|a| a.iter().any(|v| v == n));
+                if !(has("tcp") && has("udp")) {
+                    return false;
+                }
+            }
+            "port" => {
+                for p in value.as_array().into_iter().flatten() {
+                    let Some(p) = p.as_u64().and_then(|p| u32::try_from(p).ok()) else {
+                        return false;
+                    };
+                    ranges.push((p, p));
+                }
+            }
+            "port_range" => {
+                for r in value.as_array().into_iter().flatten() {
+                    let bounds = r
+                        .as_str()
+                        .and_then(|r| r.split_once(':'))
+                        .and_then(|(a, b)| {
+                            Some((a.trim().parse::<u32>().ok()?, b.trim().parse::<u32>().ok()?))
+                        });
+                    let Some((a, b)) = bounds else {
+                        return false;
+                    };
+                    ranges.push((a.min(b), a.max(b)));
+                }
+            }
+            _ => return false,
+        }
+    }
+    if !fields.contains_key("port") && !fields.contains_key("port_range") {
+        return true;
+    }
+    ranges.sort_unstable();
+    let mut reached = 0;
+    for (from, to) in ranges {
+        if from > reached + 1 {
+            break;
+        }
+        reached = reached.max(to);
+    }
+    reached >= u32::from(u16::MAX)
+}
+
 fn build_singbox_resolve_rule(s: &AdvancedSettings) -> Value {
     json!({ "action": "resolve", "strategy": wire(&s.domain_strategy4_singbox) })
 }
@@ -1598,6 +1660,58 @@ mod tests {
             package_name: None,
             source_ip: None,
         }
+    }
+
+    #[test]
+    fn a_rule_left_with_only_full_ports_or_both_transports_matches_everything() {
+        use crate::state::RuleNetwork;
+        let rule = |edit: &dyn Fn(&mut RoutingRule)| {
+            let mut r = source_rule("proxy");
+            edit(&mut r);
+            matches_every_connection(&r)
+        };
+        let port = |p: &'static str| move |r: &mut RoutingRule| r.port = Some(p.into());
+
+        // Full port coverage, in one range or several.
+        assert!(rule(&port("0-65535")));
+        assert!(rule(&port("1-65535")));
+        assert!(rule(&port("1-1000,1001-65535")));
+        assert!(!rule(&port("1-1000,1002-65535")));
+        assert!(!rule(&port("0-65534")));
+        assert!(!rule(&port("443")));
+        assert!(!rule(&port("0-abc")));
+
+        // A real condition keeps it narrow.
+        for edit in [
+            |r: &mut RoutingRule| r.domain = Some(vec!["geosite:private".into()]),
+            |r: &mut RoutingRule| r.ip = Some(vec!["geoip:ru".into()]),
+            |r: &mut RoutingRule| r.protocol = Some(vec!["bittorrent".into()]),
+            |r: &mut RoutingRule| r.process = Some(vec!["curl".into()]),
+            |r: &mut RoutingRule| r.network = Some(RuleNetwork::Udp),
+            |r: &mut RoutingRule| r.enabled = false,
+        ] {
+            assert!(!rule(&|r: &mut RoutingRule| {
+                r.port = Some("0-65535".into());
+                edit(r);
+            }));
+        }
+
+        // A domain list that parses to nothing is no condition at all.
+        assert!(rule(&|r: &mut RoutingRule| {
+            r.port = Some("0-65535".into());
+            r.domain = Some(vec!["# geosite:ru".into(), "ext:custom.dat:ads".into()]);
+        }));
+        // Both transports and nothing else is the route's own catch-all shape.
+        assert!(rule(
+            &|r: &mut RoutingRule| r.network = Some(RuleNetwork::TcpUdp)
+        ));
+        assert!(rule(&|r: &mut RoutingRule| {
+            r.network = Some(RuleNetwork::TcpUdp);
+            r.port = Some("0-65535".into());
+        }));
+        // No field at all: the builder drops the rule.
+        assert!(!rule(&|_| {}));
+        assert!(!rule(&port("  ")));
     }
 
     #[test]

@@ -156,6 +156,25 @@ describe("dispatch-bridge local ports", () => {
   });
 });
 
+describe("dispatch-bridge catch-all rules", () => {
+  it("catchAllRules ships the rules and unwraps one flag per rule", async () => {
+    const rules = [
+      { id: "a", remarks: "", enabled: true, outboundTag: "direct", domain: ["x"] },
+      { id: "b", remarks: "", enabled: true, outboundTag: "direct", network: "tcp,udp" as const },
+    ];
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
+      if (cmd.cmd === "catchAllRules") {
+        expect(cmd.rules).toEqual(rules);
+        return { kind: "flags", value: [false, true] } as Response_Serialize;
+      }
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, noPush);
+
+    expect(await bridge.catchAllRules(rules)).toEqual([false, true]);
+  });
+});
+
 describe("dispatch-bridge status stream", () => {
   const statusFrame = (extra: Record<string, unknown>) => ({
     state: "connected",
