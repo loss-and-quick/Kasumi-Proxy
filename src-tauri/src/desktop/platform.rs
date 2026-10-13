@@ -465,6 +465,8 @@ impl Platform for DesktopPlatform {
         // before the first command. Drop the pre-document `service-started` marker.
         self.write_state(&DataPathState::default()).await;
         remove_file(&format!("{}/service-started", self.p.run_dir)).await;
+        // Older versions recorded the core engine in a marker file next to the configs.
+        remove_file(&Path::new(&self.p.datadir).join("engine")).await;
         Ok(())
     }
 
