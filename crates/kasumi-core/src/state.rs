@@ -142,6 +142,11 @@ pub struct Group {
     pub sub_id: Option<String>,
 }
 
+/// Whether a new subscription refreshes on a schedule before the user turns it on.
+pub const NEW_SUB_AUTO_UPDATE: bool = false;
+/// The refresh interval (minutes) a new subscription starts with: every 6 hours.
+pub const NEW_SUB_INTERVAL: i64 = 360;
+
 /// A subscription source (`SubscriptionSchema`).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
