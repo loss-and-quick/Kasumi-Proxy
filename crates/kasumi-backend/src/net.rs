@@ -47,6 +47,9 @@ pub struct FetchUrlOptions {
     pub ipv4_only: bool,
     /// Offer only gzip, as OkHttp does, instead of every supported encoding.
     pub gzip_only: bool,
+    /// Offer HTTP/2 in TLS ALPN (`h2, http/1.1`), as OkHttp does; otherwise only
+    /// HTTP/1.1 is offered. Plain `http://` stays on HTTP/1.1 either way.
+    pub http2: bool,
     /// Follow a redirect only to a public https host (a provider-chosen URL).
     pub redirect_guard: bool,
 }
@@ -139,6 +142,9 @@ async fn fetch_once(
     }
     if opts.gzip_only {
         builder = builder.no_brotli().no_deflate();
+    }
+    if !opts.http2 {
+        builder = builder.http1_only();
     }
     if opts.ipv4_only {
         builder = builder.dns_resolver(Arc::new(Ipv4Only));
@@ -336,7 +342,7 @@ pub async fn tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testutil::{fixture_response, http_response, serve};
+    use crate::testutil::{fixture_response, http_response, serve, serve_tls};
 
     #[tokio::test]
     async fn free_port_skips_a_used_port() {
@@ -499,6 +505,60 @@ mod tests {
         assert_eq!(ours, want, "same headers, same order");
         let enc = sent.iter().find(|(n, _)| n == "accept-encoding").unwrap();
         assert_eq!(enc.1, "gzip");
+    }
+
+    fn happ_like(http2: bool) -> FetchUrlOptions {
+        FetchUrlOptions {
+            headers: vec![
+                ("Connection".into(), "close".into()),
+                ("User-agent".into(), "Happ/test".into()),
+            ],
+            gzip_only: true,
+            http2,
+            // The test server's certificate is self-signed.
+            allow_insecure: true,
+            ..direct()
+        }
+    }
+
+    #[tokio::test]
+    async fn http2_is_agreed_over_alpn_when_offered() {
+        let (base, requests) = serve_tls(b"ok").await;
+        let res = fetch(&format!("{base}/s"), happ_like(true)).await.unwrap();
+        assert_eq!(res.body, b"ok");
+        let seen = requests.lock().unwrap()[0].clone();
+        assert_eq!(seen.alpn.as_deref(), Some("h2"));
+        assert_eq!(seen.version, "HTTP/2");
+        // HTTP/2 has no connection-level headers; `Connection: close` is dropped,
+        // as OkHttp drops it.
+        assert!(seen.headers.contains(&"user-agent".to_string()), "{seen:?}");
+        assert!(
+            !seen.headers.contains(&"connection".to_string()),
+            "{seen:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn http1_stays_when_http2_is_not_offered() {
+        let (base, requests) = serve_tls(b"ok").await;
+        let res = fetch(&format!("{base}/s"), happ_like(false)).await.unwrap();
+        assert_eq!(res.body, b"ok");
+        let seen = requests.lock().unwrap()[0].clone();
+        assert_eq!(seen.alpn.as_deref(), Some("http/1.1"));
+        assert_eq!(seen.version, "HTTP/1.1");
+        assert!(
+            seen.headers
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case("connection"))
+        );
+    }
+
+    #[tokio::test]
+    async fn plain_http_stays_on_http1_with_http2_offered() {
+        let (base, requests) = serve(vec![http_response(200, &[], b"ok")]).await;
+        let res = fetch(&format!("{base}/s"), happ_like(true)).await.unwrap();
+        assert_eq!(res.body, b"ok");
+        assert!(requests.lock().unwrap()[0].starts_with("GET /s HTTP/1.1\r\n"));
     }
 
     #[tokio::test]

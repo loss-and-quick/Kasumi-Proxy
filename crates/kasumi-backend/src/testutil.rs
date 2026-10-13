@@ -251,6 +251,104 @@ pub fn http_response(status: u16, headers: &[(&str, &str)], body: &[u8]) -> Vec<
     out
 }
 
+/// What a [`serve_tls`] server saw of one request: the protocol ALPN agreed on,
+/// the HTTP version the request came in and its header names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TlsRequest {
+    pub alpn: Option<String>,
+    pub version: &'static str,
+    pub headers: Vec<String>,
+}
+
+pub type TlsRequests = std::sync::Arc<Mutex<Vec<TlsRequest>>>;
+
+/// An HTTPS server on 127.0.0.1 with a self-signed `localhost` certificate that
+/// offers `h2` and `http/1.1` over ALPN and answers every request with `body`.
+pub async fn serve_tls(body: &'static [u8]) -> (String, TlsRequests) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_rustls::rustls::pki_types::pem::PemObject;
+    use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
+    use tokio_rustls::rustls::{ServerConfig, crypto::ring};
+
+    const CERT: &[u8] = include_bytes!("../tests/fixtures/localhost-cert.pem");
+    const KEY: &[u8] = include_bytes!("../tests/fixtures/localhost-key.pem");
+    let certs = CertificateDer::pem_slice_iter(CERT)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let key = PrivateKeyDer::from_pem_slice(KEY).unwrap();
+    let mut config = ServerConfig::builder_with_provider(ring::default_provider().into())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .unwrap();
+    config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    let acceptor = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("https://{}", listener.local_addr().unwrap());
+    let requests = TlsRequests::default();
+    let seen = requests.clone();
+    tokio::spawn(async move {
+        while let Ok((sock, _)) = listener.accept().await {
+            let (acceptor, seen) = (acceptor.clone(), seen.clone());
+            tokio::spawn(async move {
+                let Ok(mut tls) = acceptor.accept(sock).await else {
+                    return;
+                };
+                let alpn = tls
+                    .get_ref()
+                    .1
+                    .alpn_protocol()
+                    .map(|p| String::from_utf8_lossy(p).into_owned());
+                if alpn.as_deref() == Some("h2") {
+                    let Ok(mut conn) = h2::server::handshake(tls).await else {
+                        return;
+                    };
+                    while let Some(Ok((req, mut respond))) = conn.accept().await {
+                        seen.lock().unwrap().push(TlsRequest {
+                            alpn: alpn.clone(),
+                            version: "HTTP/2",
+                            headers: req.headers().keys().map(|k| k.to_string()).collect(),
+                        });
+                        let head = http::Response::builder().status(200).body(()).unwrap();
+                        let mut send = respond.send_response(head, false).unwrap();
+                        let _ = send.send_data(bytes::Bytes::from_static(body), true);
+                    }
+                    return;
+                }
+                let mut head = Vec::new();
+                let mut buf = [0u8; 1024];
+                while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                    match tls.read(&mut buf).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => head.extend_from_slice(&buf[..n]),
+                    }
+                }
+                let head = String::from_utf8_lossy(&head).into_owned();
+                let version = if head.lines().next().is_some_and(|l| l.ends_with("HTTP/1.1")) {
+                    "HTTP/1.1"
+                } else {
+                    "other"
+                };
+                seen.lock().unwrap().push(TlsRequest {
+                    alpn,
+                    version,
+                    headers: head
+                        .lines()
+                        .skip(1)
+                        .filter_map(|l| l.split_once(": "))
+                        .map(|(n, _)| n.to_owned())
+                        .collect(),
+                });
+                let _ = tls.write_all(&http_response(200, &[], body)).await;
+                let _ = tls.shutdown().await;
+            });
+        }
+    });
+    (base, requests)
+}
+
 /// A captured provider response from the core fixtures, replayed over HTTP/1.1.
 pub fn fixture_response(name: &str) -> Vec<u8> {
     let path = format!(
