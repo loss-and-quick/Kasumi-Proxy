@@ -66,16 +66,11 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
             if matches!(ss.transport, Transport::Quic(_)) {
                 return Some(SingBox);
             }
-            // Xray's spellings of none / chacha20-ietf-poly1305 /
-            // xchacha20-ietf-poly1305: a profile naming them stays on Xray unless
-            // its transport needs sing-box.
-            if matches!(
-                ss.method,
-                SsMethod::Plain | SsMethod::Chacha20Poly1305 | SsMethod::Xchacha20Poly1305
-            ) {
-                return Some(Xray);
-            }
-            // The 2022 AEAD ciphers and the IETF chacha variant route to sing-box.
+            // Xray's `plain` / `chacha20-poly1305` / `xchacha20-poly1305` are
+            // aliases of ciphers both cores run (the sing-box builder renames
+            // them), so they follow the transport rules below like any shared
+            // cipher. The 2022 AEAD ciphers and the IETF chacha variant route to
+            // sing-box.
             if matches!(
                 ss.method,
                 SsMethod::Chacha20IetfPoly1305
@@ -309,13 +304,13 @@ mod tests {
 
     #[test]
     fn shadowsocks_method_routing_splits_by_core() {
-        use CoreEngine::{SingBox, Xray};
-        // Xray's own cipher names stay on Xray.
+        use CoreEngine::SingBox;
+        // Xray's spellings of shared ciphers run on either core.
         for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
             assert_eq!(
                 forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
-                Some(Xray),
-                "{m} must route to xray"
+                None,
+                "{m} must stay selectable"
             );
         }
         // The 2022 AEAD ciphers and the IETF chacha variant route to sing-box.
@@ -454,6 +449,36 @@ mod tests {
             ss.method = method;
             let prof = Profile::Shadowsocks(ss);
             assert_eq!(forced_core(&prof), Some(CoreEngine::SingBox), "{method:?}");
+        }
+    }
+
+    #[test]
+    fn xray_cipher_spellings_follow_the_core_choice() {
+        for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
+            let mut prof = p(&format!("ss://{m}:pw@h.ex:8388#x"));
+            assert_eq!(
+                resolve_core(&prof, &AdvancedSettings::default()),
+                CoreEngine::Xray,
+                "{m}"
+            );
+            let mut s = AdvancedSettings::default();
+            s.core_by_protocol
+                .insert(Protocol::Shadowsocks, CoreEngine::SingBox);
+            assert_eq!(resolve_core(&prof, &s), CoreEngine::SingBox, "{m}");
+            prof.meta_mut().core_type = Some(CoreEngine::SingBox);
+            assert_eq!(
+                resolve_core(&prof, &AdvancedSettings::default()),
+                CoreEngine::SingBox,
+                "{m}"
+            );
+            // A v2ray-plugin transport pins sing-box, as for every cipher.
+            assert_eq!(
+                forced_core(&p(&format!(
+                    "ss://{m}:pw@h.ex:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket#ws"
+                ))),
+                Some(CoreEngine::SingBox),
+                "{m}"
+            );
         }
     }
 
