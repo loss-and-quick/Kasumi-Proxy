@@ -93,7 +93,11 @@ pub async fn resolve_and_write_config(
     let socks_port = settings
         .local_socks_port
         .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-    let tun_opts = settings.tun_options();
+    // The engine starts with exactly the tuning the baseline records.
+    let tun_opts = built
+        .external_tun
+        .clone()
+        .unwrap_or_else(|| settings.tun_options());
     // Same normalization as the config build: a platform without proxy-mode
     // support always starts in tun mode.
     let mode = if platform.supports_proxy_modes() {
