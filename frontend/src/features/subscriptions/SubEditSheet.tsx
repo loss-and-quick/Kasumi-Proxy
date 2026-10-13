@@ -26,6 +26,7 @@ import {
 import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { SubIdentitySection } from "./SubIdentitySection";
+import { savedName } from "./sub-edit";
 
 export function SubEditSheet({
   open,
@@ -157,9 +158,7 @@ export function SubEditSheet({
         {
           ...d,
           url,
-          remarks: saveName,
-          // A name the user typed survives the provider's title; the default does not.
-          manualTitle: d.remarks.trim() !== "" && d.remarks.trim() !== defaultName,
+          ...savedName(d.remarks, sub, saveName, defaultName),
           // An accepted provider `insecure` stays until the user turns it off below.
           allowInsecure: d.insecureByProvider ? d.allowInsecure : isLocalOrPrivateHost(url),
         },

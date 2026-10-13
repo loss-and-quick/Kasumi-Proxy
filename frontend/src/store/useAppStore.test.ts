@@ -1344,6 +1344,23 @@ describe("useAppStore", () => {
     await vi.waitFor(() => expect(bridge.applySubscription).toHaveBeenCalledWith("s1"));
   });
 
+  it("an edit saves only what the user changed since the sheet opened", async () => {
+    const opened = makeSub({ id: "s1", remarks: "Old Title", autoUpdate: false });
+    const fetched = { ...opened, remarks: "New Title", autoUpdate: true };
+    bridge.readState.mockResolvedValue(makeState({ subscriptions: [fetched] }));
+    await useAppStore.getState().hydrate();
+
+    await useAppStore
+      .getState()
+      .saveSubscription({ ...opened, filter: "DE" }, { id: "g-main" }, opened);
+
+    expect(useAppStore.getState().subscriptions[0]).toMatchObject({
+      remarks: "New Title",
+      autoUpdate: true,
+      filter: "DE",
+    });
+  });
+
   it("saving a copy from before a fetch keeps what the fetch wrote", async () => {
     const before = makeSub({ id: "s1" });
     const ask = {
