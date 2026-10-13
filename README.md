@@ -42,7 +42,9 @@ Both run the same Rust backend and the same React UI.
   [happ-sub](https://github.com/loss-and-quick/happ-sub). Updates identify like Happ (User-Agent,
   HWID and device headers); every value can be changed per subscription or in Settings.
   Changes the provider proposes (a new URL or domain, a fallback URL, routing profiles, tunnel
-  tweaks) apply only after you review and accept them.
+  tweaks) apply only after you review and accept them. JSON bodies work too: full Xray configs,
+  once you allow them, keep only their outbounds and routing, and sing-box configs become regular
+  profiles.
 - **Honest status.** An end-to-end probe tells *connected* apart from *no internet* and *failed*.
 - **Diagnostics.** TCP ping, real ping and a speed test for each profile.
 - **Per-app routing** on Android, plus a choice of TUN engine: tun2socks, hev-socks5-tunnel or
