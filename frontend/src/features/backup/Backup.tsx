@@ -6,8 +6,8 @@
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import { SCHEMA_VERSION } from "../../generated/defaults";
-import { AppStateSchema } from "../../generated/schemas";
 import { useT } from "../../i18n";
+import { BackupSchema } from "../../lib/backup-schema";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
@@ -64,7 +64,7 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const importValidation = useMemo(() => {
     try {
       const data = JSON.parse(importText || "{}");
-      const parsed = AppStateSchema.safeParse(data);
+      const parsed = BackupSchema.safeParse(data);
       return parsed.success
         ? {
             ok: true as const,

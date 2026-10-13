@@ -73,10 +73,11 @@ pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16, pa
 
 /// The persisted proxy mode, read as a bare field from `<datadir>/app-state.json`,
 /// defaulting to [`ProxyMode::Tun`] on any failure (unresolvable paths, missing file,
-/// parse error, absent key). Deliberately a bare-field read — not the full [`AppState`]
-/// schema/migration — so a legacy or foreign document still answers sanely; the safe
-/// default matches the always-privileged behaviour, so a bad read never silently drops
-/// the helper for a tun user.
+/// parse error, absent key). The document goes through the migration ladder like every
+/// other read, but only the one field is typed, not the full [`AppState`], so a legacy
+/// or foreign document still answers sanely. The safe default matches the
+/// always-privileged behaviour, so a bad read never silently drops the helper for a
+/// tun user.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub fn saved_proxy_mode() -> ProxyMode {
     let Ok(paths) = paths::DesktopPaths::resolve() else {
@@ -94,7 +95,8 @@ pub fn saved_proxy_mode() -> ProxyMode {
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn proxy_mode_from_state(text: &str) -> ProxyMode {
     let extract = || -> Option<ProxyMode> {
-        let doc: serde_json::Value = serde_json::from_str(text).ok()?;
+        let mut doc: serde_json::Value = serde_json::from_str(text).ok()?;
+        kasumi_core::migrate::migrate_app_state(&mut doc);
         let field = doc.get("settings")?.get("proxyMode")?.clone();
         serde_json::from_value::<ProxyMode>(field).ok()
     };

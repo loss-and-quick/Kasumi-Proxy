@@ -8,7 +8,6 @@
 // ============================================================
 
 import type {
-  AppState_Serialize,
   Endpoint,
   Meta,
   Profile,
@@ -17,8 +16,8 @@ import type {
   Tls,
   Transport,
 } from "../generated/bindings";
-import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION } from "../generated/defaults";
-import { AppStateSchema } from "../generated/schemas";
+import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION, SCHEMA_VERSION } from "../generated/defaults";
+import { ProfileSchema } from "../generated/schemas";
 import { applyMutation } from "./apply-mutation";
 import type {
   AppState,
@@ -370,6 +369,9 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
   },
 
   async mutate(intent) {
+    // The schema migrations live only in Rust, so the mock restores just a
+    // backup that already has the current shape.
+    if (intent.kind === "importBackup") ProfileSchema.array().parse(intent.incoming.profiles ?? []);
     // No backend in dev: apply the intent locally with the same logic the Rust
     // backend runs, then return the canonical state.
     state = applyMutation(state, intent);
@@ -556,11 +558,15 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return new Blob([json], { type: "application/json" });
   },
 
-  async importBackup(file: Blob, mode: "merge" | "replace") {
-    const text = await file.text();
-    // `parse` yields the `Serialize | Deserialize` union; narrow to the all-fields
-    // phase (assignable to the UI `AppState`, which only omits `schemaVersion`).
-    const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
+  async importBackup(backup, mode) {
+    // The migrations live only in Rust, so a profile without the current shape is
+    // left out and counted, as the backend does with one that still doesn't fit.
+    const profiles = backup.profiles.filter((p) => ProfileSchema.safeParse(p).success);
+    const incoming = { ...backup, profiles };
     state = applyMutation(state, { kind: "importBackup", incoming, mode });
+    return {
+      state: { ...(await this.readState()), schemaVersion: SCHEMA_VERSION },
+      skippedProfiles: backup.profiles.length - profiles.length,
+    };
   },
 };

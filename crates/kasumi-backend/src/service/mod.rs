@@ -22,8 +22,9 @@ use reqwest::cookie::Jar;
 use tokio::sync::{Mutex, broadcast};
 
 use kasumi_core::contract::PushFrame;
+use kasumi_core::mutate::{Backup, MutationIntent};
 
-use crate::commands::{self, Command, CommandError, Response};
+use crate::commands::{self, BackupRestored, Command, CommandError, Response};
 use crate::platform::Platform;
 use crate::sub_update;
 
@@ -116,6 +117,23 @@ impl Service {
                 // lock so a concurrent edit can't interleave its own recompute).
                 self.refresh_pending_restart(&state).await;
                 Ok(Response::State(Box::new(state)))
+            }
+            Command::ImportBackup { backup, mode } => {
+                let _g = self.state_write.lock().await;
+                let Backup {
+                    state: incoming,
+                    skipped_profiles,
+                } = *backup;
+                let intent = MutationIntent::ImportBackup {
+                    incoming: Box::new(incoming),
+                    mode,
+                };
+                let state = commands::run_mutation(&*self.platform, &intent).await?;
+                self.refresh_pending_restart(&state).await;
+                Ok(Response::BackupRestored(Box::new(BackupRestored {
+                    state,
+                    skipped_profiles,
+                })))
             }
             Command::ApplySubscription { sub_id } => {
                 let state = sub_update::update_subscription(

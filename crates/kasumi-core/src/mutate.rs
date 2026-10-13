@@ -236,15 +236,60 @@ pub enum MutationIntent {
     },
 }
 
+/// A backup read for a restore: migrated like stored state and typed. A profile
+/// that still doesn't fit is left out and counted, so one bad entry doesn't cost
+/// the whole restore.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Backup {
+    pub state: AppState,
+    pub skipped_profiles: u32,
+}
+
+impl Backup {
+    /// Read a backup document of any past schema; a newer one is refused.
+    pub fn read(mut doc: serde_json::Value) -> Result<Self, String> {
+        crate::migrate::migrate_backup(&mut doc)?;
+        // Taken out to be typed one at a time.
+        let profiles = doc
+            .as_object_mut()
+            .and_then(|o| o.remove("profiles"))
+            .and_then(|v| match v {
+                serde_json::Value::Array(items) => Some(items),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let mut state: AppState = serde_json::from_value(doc).map_err(|e| e.to_string())?;
+        let total = profiles.len();
+        state.profiles = profiles
+            .into_iter()
+            .filter_map(|p| serde_json::from_value(p).ok())
+            .collect();
+        let skipped_profiles = u32::try_from(total - state.profiles.len()).unwrap_or(u32::MAX);
+        Ok(Self {
+            state,
+            skipped_profiles,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Backup {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        Self::read(serde_json::Value::deserialize(d)?).map_err(D::Error::custom)
+    }
+}
+
+/// Written as the state it carries, the shape [`Backup::read`] takes back.
+impl Serialize for Backup {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.state.serialize(s)
+    }
+}
+
 /// Read a backup of any past schema through the migration ladder before typing
 /// it, since typing would default the fields the migrations read.
 fn migrated_backup<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Box<AppState>, D::Error> {
-    use serde::de::Error;
-    let mut doc = serde_json::Value::deserialize(d)?;
-    crate::migrate::migrate_backup(&mut doc).map_err(D::Error::custom)?;
-    serde_json::from_value(doc)
-        .map(Box::new)
-        .map_err(D::Error::custom)
+    Backup::deserialize(d).map(|b| Box::new(b.state))
 }
 
 /// Apply one [`MutationIntent`] to `state` in place. Pure: no I/O. Invariants that
@@ -1359,6 +1404,41 @@ mod tests {
         backup["schemaVersion"] = json!(crate::migrate::SCHEMA_VERSION + 1);
         let err = import_intent(&backup, "merge").unwrap_err().to_string();
         assert!(err.contains("newer"), "{err}");
+    }
+
+    #[test]
+    fn a_backup_profile_that_does_not_fit_is_left_out_and_counted() {
+        let mut backup = current_backup();
+        let good = serde_json::to_value(p("trojan://pw@a.com:443#A")).unwrap();
+        let bad = json!({ "protocol": "vless", "meta": { "id": "x" } });
+        backup["profiles"] = json!([good, bad]);
+        let read = Backup::read(backup.clone()).unwrap();
+        assert_eq!(read.skipped_profiles, 1);
+        assert_eq!(read.state.profiles.len(), 1);
+        // The intent reads it the same way rather than failing the restore.
+        let mut s = base();
+        import(&mut s, &backup, "merge");
+        assert_eq!(s.profiles.len(), 1);
+    }
+
+    #[test]
+    fn importing_a_v0_backup_lifts_its_flat_profiles() {
+        // The first Backup screen exported profiles with every field at the top level.
+        let flat = json!({
+            "protocol": "trojan", "id": "t1", "remarks": "Home", "groupId": "g-main",
+            "address": "ex.com", "port": 443, "network": "tcp", "headerType": "none",
+            "security": "tls", "sni": "ex.com", "fingerprint": "chrome", "alpn": "",
+            "password": "pw", "muxEnabled": false
+        });
+        let mut backup = v1_backup();
+        backup["profiles"] = json!([flat]);
+        let mut s = base();
+        import(&mut s, &backup, "merge");
+        let Some(Profile::Trojan(t)) = s.profiles.iter().find(|p| p.meta().id == "t1") else {
+            panic!("{:?}", s.profiles);
+        };
+        assert_eq!(t.endpoint.address, "ex.com");
+        assert_eq!(t.tls.sni, "ex.com");
     }
 
     #[test]

@@ -8,12 +8,7 @@
 // transport only provides `dispatch(cmd)` plus the two push subscriptions.
 // ============================================================
 
-import type {
-  AppState_Serialize,
-  Command_Deserialize,
-  Profile,
-  Response_Serialize,
-} from "../generated/bindings";
+import type { Command_Deserialize, Profile, Response_Serialize } from "../generated/bindings";
 import type {
   AppEntry,
   AppState,
@@ -347,13 +342,11 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       const state = await this.readState();
       return new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
     },
-    async importBackup(file, mode) {
-      const text = await file.text();
-      const { AppStateSchema } = await import("../generated/schemas");
-      // `parse` returns the `Serialize | Deserialize` union; narrow to the all-fields
-      // phase the intent carries (the backend re-validates and owns the merge).
-      const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
-      await this.mutate({ kind: "importBackup", incoming, mode });
+    async importBackup(backup, mode) {
+      const r = await dispatch({ cmd: "importBackup", backup, mode });
+      if (r.kind !== "backupRestored") wrongKind(r, "backupRestored");
+      lastState = r.value.state;
+      return r.value;
     },
   };
   return bridge;

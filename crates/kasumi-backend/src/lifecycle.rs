@@ -15,7 +15,7 @@ use kasumi_core::core_config::CoreConfig;
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
-use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
+use kasumi_core::state::{DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
 use kasumi_core::tun2socks_config::build_tun2socks_config;
 // Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
 use kasumi_core::tun as tun_addr;
@@ -23,7 +23,7 @@ use kasumi_core::tun::TunOptions;
 
 use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
-use crate::fsjson::{read_json, write_text_atomic};
+use crate::fsjson::write_text_atomic;
 use crate::platform::{Platform, StartDataPath};
 use crate::proc::{RunOpts, pid_matches_bin, run, spawn_logged};
 
@@ -68,7 +68,7 @@ pub async fn resolve_and_write_config(
     profile_id: Option<&str>,
 ) -> Result<(StartDataPath, CoreConfig, String), CommandError> {
     let paths = platform.paths();
-    let state = read_json::<AppState>(&paths.app_state).await;
+    let state = crate::state::read_state_shell(&paths.app_state).await;
     let id = profile_id
         .filter(|s| !s.is_empty())
         .map(str::to_owned)

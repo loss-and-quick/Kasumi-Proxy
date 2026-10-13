@@ -20,6 +20,7 @@ import type {
   AppState,
   AssetFile,
   AssetsUpdatedEvent,
+  BackupRestored,
   Capabilities,
   CoreResolution,
   MutationIntent,
@@ -1152,15 +1153,15 @@ export const useAppStore = create<Store>((set, get) => {
         get().notify(translateCurrent("store.backup.invalidJson"));
         return;
       }
-      const { AppStateSchema } = await import("../generated/schemas");
-      const parsed = AppStateSchema.safeParse(parsedJson);
+      const { BackupSchema } = await import("../lib/backup-schema");
+      const parsed = BackupSchema.safeParse(parsedJson);
       if (!parsed.success) {
         get().notify(translateCurrent("store.backup.invalidStructure"));
         return;
       }
-      // `safeParse` yields the `Serialize | Deserialize` union; narrow to the
-      // all-fields phase the importBackup intent carries.
-      const parsedState = parsed.data as AppState_Serialize;
+      // Narrow to the all-fields phase the importBackup intent carries.
+      const { profiles, ...rest } = parsed.data;
+      const parsedState = rest as Omit<AppState_Serialize, "profiles">;
       // The backend refuses it as well; checking first keeps a running service up.
       if ((parsedState.schemaVersion ?? 0) > SCHEMA_VERSION) {
         get().notify(translateCurrent("store.backup.newerVersion"));
@@ -1175,25 +1176,28 @@ export const useAppStore = create<Store>((set, get) => {
       const keepRoutes = !hasRoutes && !("routingRules" in raw);
       const incoming: AppState_Serialize = {
         ...parsedState,
+        // Possibly an older shape; the backend migrates them before typing them.
+        profiles: (profiles ?? []) as Profile[],
         ruleBlocks: keepRoutes ? get().ruleBlocks : (parsedState.ruleBlocks ?? []),
         routes: keepRoutes ? get().routes : (parsedState.routes ?? []),
         routingRules: hasRoutes ? undefined : parsedState.routingRules,
         assetFiles: "assetFiles" in raw ? parsedState.assetFiles : get().assetFiles,
       };
-      // AppStateSchema silently drops invalid profiles (logged with reasons via
-      // console.warn). Surface how many were skipped so a partial import is visible.
-      const rawProfiles = (parsedJson as { profiles?: unknown }).profiles;
-      const skipped = Array.isArray(rawProfiles)
-        ? rawProfiles.length - incoming.profiles.length
-        : 0;
       if (mode === "replace" && isServiceUp(get().service.state)) {
         await stopServiceIfRunning(translateCurrent("store.service.stoppedBeforeBackupRestore"));
       }
-      await mutate({ kind: "importBackup", incoming, mode });
+      let restored: BackupRestored;
+      try {
+        restored = await bridge.importBackup(incoming, mode);
+      } catch (e: unknown) {
+        get().notify(translateCurrent("store.write.failed", { error: errorMessage(e) }));
+        throw new ReportedError(e);
+      }
+      applyState(restored.state);
       pushActivity("backup", translateCurrent("activity.backupRestored"));
       get().notify(
-        skipped > 0
-          ? translateCurrent("store.backup.profilesSkipped", { count: skipped })
+        restored.skippedProfiles > 0
+          ? translateCurrent("store.backup.profilesSkipped", { count: restored.skippedProfiles })
           : translateCurrent(mode === "replace" ? "store.backup.restored" : "store.backup.merged"),
       );
     },

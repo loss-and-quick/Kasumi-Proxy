@@ -6,9 +6,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use kasumi_core::contract::{AssetsUpdatedEvent, PushFrame, RunState, SubAppliedEvent};
-use kasumi_core::state::AppState;
 
-use crate::fsjson::read_json;
 use crate::platform::StopDataPath;
 use crate::{asset_update, sub_update, updater};
 
@@ -31,7 +29,8 @@ impl Service {
         if self.auto_started.swap(true, Ordering::SeqCst) {
             return;
         }
-        let Some(state) = read_json::<AppState>(&self.platform.paths().app_state).await else {
+        let Some(state) = crate::state::read_state_shell(&self.platform.paths().app_state).await
+        else {
             return;
         };
         if state.active_id.is_none() || !state.settings.auto_start {
@@ -131,7 +130,7 @@ impl Service {
                 // Probe at once for a fresh core, every tick while it can't reach the
                 // internet (so recovery shows quickly), and every PROBE_INTERVAL once
                 // it can. Nothing is sent when the user turned the check off.
-                let check = read_json::<AppState>(&this.platform.paths().app_state)
+                let check = crate::state::read_state_shell(&this.platform.paths().app_state)
                     .await
                     .is_none_or(|s| s.settings.connectivity_check);
                 if !check {

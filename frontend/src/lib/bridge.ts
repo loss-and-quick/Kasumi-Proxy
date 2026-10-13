@@ -8,11 +8,13 @@
 // ============================================================
 import type {
   AssetsUpdatedEvent,
+  BackupRestored_Serialize as BackupRestored,
   Capabilities,
   ConnectionProbe,
   CoreResolution,
   FetchMode,
   IdentityInput_Serialize as IdentityInput,
+  ImportMode,
   LogTarget,
   Profile,
   ResolvedIdentity,
@@ -32,6 +34,7 @@ export type {
   AssetsUpdatedEvent,
   AuditEntry,
   AuditOutcome,
+  BackupRestored_Serialize as BackupRestored,
   Capabilities,
   ChangeAction_Serialize as ChangeAction,
   ConnectionProbe,
@@ -192,7 +195,9 @@ export interface Bridge {
   parseShareLinks(text: string): Promise<Profile[]>; // vless:// vmess:// trojan://
   buildShareLink(p: Profile): Promise<string>;
   exportBackup(): Promise<Blob>;
-  importBackup(file: Blob, mode: "merge" | "replace"): Promise<void>;
+  // Restore a backup through the backend's migrations. Profiles that still don't
+  // fit are left out and counted in `skippedProfiles`.
+  importBackup(backup: AppState_Serialize, mode: ImportMode): Promise<BackupRestored>;
 }
 
 /** Parse a raw service-status payload into a typed `ServiceStatus`. */

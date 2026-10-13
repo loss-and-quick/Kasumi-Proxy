@@ -8,7 +8,6 @@ use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
 
 use crate::commands::{self, CommandError, Response};
 use crate::fs::read_text;
-use crate::fsjson::read_json;
 use crate::lifecycle::resolve_and_write_config;
 use crate::platform::StopDataPath;
 use crate::updater::LifecycleControl;
@@ -151,7 +150,7 @@ impl Service {
     /// (while the baseline was empty, so it flagged nothing) is still unapplied.
     async fn settle_pending_restart(&self) {
         let _g = self.state_write.lock().await;
-        if let Some(state) = read_json::<AppState>(&self.platform.paths().app_state).await {
+        if let Some(state) = crate::state::read_app_state(&*self.platform).await {
             self.refresh_pending_restart(&state).await;
         }
     }

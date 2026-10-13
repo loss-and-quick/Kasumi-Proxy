@@ -179,7 +179,7 @@ export const bridge: Bridge = {
   async exportBackup() {
     return (await loadBridge()).exportBackup();
   },
-  async importBackup(file, mode) {
-    return (await loadBridge()).importBackup(file, mode);
+  async importBackup(backup, mode) {
+    return (await loadBridge()).importBackup(backup, mode);
   },
 };
