@@ -975,6 +975,7 @@ mod tests {
             let xray = build_xray_config(&p, &s, &[], profiles).unwrap();
             let opts = SingboxBuildOpts {
                 no_tun: true,
+                force_tun: false,
                 srs_dir: "",
             };
             let sing_box = build_singbox_config(&p, &s, &[], profiles, opts).unwrap();

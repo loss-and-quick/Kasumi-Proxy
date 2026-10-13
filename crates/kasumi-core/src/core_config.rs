@@ -53,6 +53,7 @@ pub fn build_core_config(
                 // Only the native tun lives in the core's config; an external
                 // engine or a non-tun mode leaves sing-box socks-only.
                 no_tun: !matches!(plan.tun, TunPlan::Native { .. }),
+                force_tun: matches!(plan.tun, TunPlan::Native { force_tun: true }),
                 srs_dir,
             },
         )?,

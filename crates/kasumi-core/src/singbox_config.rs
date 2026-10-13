@@ -1188,7 +1188,7 @@ fn singbox_tun_inbound(
     ib
 }
 
-fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
+fn build_singbox_tun_inbounds(s: &AdvancedSettings, force_tun: bool) -> Vec<Value> {
     let force_uids: Vec<i64> = s
         .app_filter
         .iter()
@@ -1238,28 +1238,29 @@ fn build_singbox_tun_inbounds(s: &AdvancedSettings) -> Vec<Value> {
         main_tun["route_exclude_address"] = json!(exclude_cidrs);
     }
     let mut inbounds = vec![main_tun];
-    if !force_uids.is_empty() {
+    if force_tun && !force_uids.is_empty() {
         let force_addr = if v6 {
             json!([crate::tun::TUN2_IPV4_CIDR, crate::tun::TUN2_IPV6_CIDR])
         } else {
             json!([crate::tun::TUN2_IPV4_CIDR])
         };
-        let mut force_tun = singbox_tun_inbound("tun-force", None, force_addr, s.tun_mtu, &stack);
-        force_tun["auto_route"] = json!(true);
+        let mut force_inbound =
+            singbox_tun_inbound("tun-force", None, force_addr, s.tun_mtu, &stack);
+        force_inbound["auto_route"] = json!(true);
         // Both tuns auto_route, so the force tun MUST own a separate iproute2 table +
         // rule range — otherwise it tries to add the default route to tun-in's table
         // (2022) and sing-box FATALs with "add route 0: file exists". The kernel
         // filters packets into each tun by uid, then each tun's default route lives in
         // its own table.
-        force_tun["iproute2_table_index"] = json!(SINGBOX_FORCE_TABLE);
-        force_tun["iproute2_rule_index"] = json!(SINGBOX_FORCE_RULE_PRIO);
-        force_tun["strict_route"] = json!(s.strict_route);
-        force_tun["include_uid"] = json!(force_uids);
+        force_inbound["iproute2_table_index"] = json!(SINGBOX_FORCE_TABLE);
+        force_inbound["iproute2_rule_index"] = json!(SINGBOX_FORCE_RULE_PRIO);
+        force_inbound["strict_route"] = json!(s.strict_route);
+        force_inbound["include_uid"] = json!(force_uids);
         // Same user exclusions apply to the force tun (Android force-proxy uids).
         if !exclude_cidrs.is_empty() {
-            force_tun["route_exclude_address"] = json!(exclude_cidrs);
+            force_inbound["route_exclude_address"] = json!(exclude_cidrs);
         }
-        inbounds.push(force_tun);
+        inbounds.push(force_inbound);
     }
     inbounds
 }
@@ -1499,6 +1500,8 @@ fn attach_chain(
 #[derive(Default, Clone, Copy)]
 pub struct SingboxBuildOpts<'a> {
     pub no_tun: bool,
+    /// Add the force-proxy apps' tun beside the native one.
+    pub force_tun: bool,
     pub srs_dir: &'a str,
 }
 
@@ -1595,7 +1598,7 @@ pub fn build_singbox_config(
     });
     let mut inbounds = vec![socks_in, force_in];
     if !opts.no_tun {
-        inbounds.extend(build_singbox_tun_inbounds(s));
+        inbounds.extend(build_singbox_tun_inbounds(s, opts.force_tun));
     }
 
     let direct = json!({ "type": "direct", "tag": "direct" });
@@ -1949,7 +1952,10 @@ mod tests {
             &s,
             &[],
             std::slice::from_ref(&p),
-            SingboxBuildOpts::default(),
+            SingboxBuildOpts {
+                force_tun: true,
+                ..Default::default()
+            },
         )
         .unwrap();
         let inbounds = cfg["inbounds"].as_array().unwrap();
