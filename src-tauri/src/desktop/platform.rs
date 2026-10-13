@@ -419,15 +419,11 @@ fn now_secs() -> u64 {
 
 /// Desktop per-app filter: the launcher's programs, matched by process name in the
 /// core's own routing (`kasumi_core::app_process`). The filter is baked into the
-/// built config, so a change shows up as a pending restart instead of a reload.
+/// built config, so a change shows up as a pending restart.
 #[async_trait]
 impl AppFilterCapability for DesktopPlatform {
     async fn list_apps(&self) -> anyhow::Result<Vec<AppInfo>> {
         Ok(crate::desktop::apps::list_apps().await)
-    }
-
-    async fn reload_app_filter(&self) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 

@@ -165,8 +165,6 @@ pub struct StopDataPath {
 pub trait AppFilterCapability: Send + Sync {
     /// Enumerate installed apps for the app-filter UI.
     async fn list_apps(&self) -> anyhow::Result<Vec<AppInfo>>;
-    /// Re-apply per-app routing rules without restarting the core.
-    async fn reload_app_filter(&self) -> anyhow::Result<()>;
 }
 
 /// OS-specific operations. The defaulted methods aren't meaningful on every

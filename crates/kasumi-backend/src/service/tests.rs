@@ -748,7 +748,7 @@ async fn start_hands_the_platform_the_baseline_plan() {
 }
 
 #[tokio::test]
-async fn app_filter_reload_follows_the_running_plan() {
+async fn app_filter_reload_restarts_a_running_data_path() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;
     let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
@@ -766,22 +766,10 @@ async fn app_filter_reload_follows_the_running_plan() {
     svc.dispatch(Command::ReloadAppFilter).await.unwrap();
     assert_eq!(starts(), 0);
 
-    // xray routes the filter outside its config: no restart.
+    // Running: the filter is part of what a start builds, so it restarts.
     svc.dispatch(Command::Start { profile_id: None })
         .await
         .unwrap();
     svc.dispatch(Command::ReloadAppFilter).await.unwrap();
-    assert_eq!(starts(), 1);
-
-    // sing-box bakes it into the config: a restart.
-    set_settings(&svc, |s| {
-        s.core_by_protocol
-            .insert(kasumi_core::profile::Protocol::Vless, CoreEngine::SingBox);
-    })
-    .await;
-    svc.dispatch(Command::Restart { profile_id: None })
-        .await
-        .unwrap();
-    svc.dispatch(Command::ReloadAppFilter).await.unwrap();
-    assert_eq!(starts(), 3);
+    assert_eq!(starts(), 2);
 }

@@ -84,46 +84,13 @@ impl Service {
                     .map_err(|e| e.to_string())
             }
             LifecycleCmd::ReloadAppFilter => {
-                let running = self
-                    .running_config
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map(|r| r.config.plan.app_filter_live());
-                let live = match running {
-                    Some(live) => live,
-                    // A data path another process started: a restart applies the
-                    // filter whatever that path is.
-                    None if self.data_path_up().await => false,
-                    None => return Ok(()),
-                };
-                if !live {
-                    self.platform
-                        .stop_data_path(StopDataPath {
-                            keep_service_state: true,
-                        })
-                        .await
-                        .map_err(|e| e.to_string())?;
-                    self.note_data_path_stopped();
-                    let (built, profile_id) = resolve_and_write_config(&*self.platform, None)
-                        .await
-                        .map_err(|e| e.0)?;
-                    match self.platform.start_data_path(&built.plan).await {
-                        Ok(()) => {
-                            self.note_data_path_started(built, profile_id);
-                            self.settle_pending_restart().await;
-                            Ok(())
-                        }
-                        Err(e) => {
-                            self.note_data_path_stopped();
-                            Err(e.to_string())
-                        }
-                    }
-                } else if let Some(f) = self.platform.app_filter() {
-                    f.reload_app_filter().await.map_err(|e| e.to_string())
-                } else {
-                    Ok(())
+                // The filter is part of what a start builds (the core config, or the OS
+                // routing in front of an external helper), so applying it is a restart.
+                let running = self.running_config.lock().unwrap().is_some();
+                if !running && !self.data_path_up().await {
+                    return Ok(());
                 }
+                Box::pin(self.run_lifecycle(LifecycleCmd::Restart(None))).await
             }
         }
     }

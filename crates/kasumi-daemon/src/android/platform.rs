@@ -44,7 +44,6 @@ use super::paths::{
 };
 use super::routing::{
     AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
-    reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
@@ -883,26 +882,6 @@ impl AppFilterCapability for AndroidPlatform {
             }
         }
         Ok(apps)
-    }
-
-    async fn reload_app_filter(&self) -> anyhow::Result<()> {
-        let pid = read_pidfile(PIDFILE).await;
-        if !(pid > 0 && pid_matches_any(pid, &core_bins()).await) {
-            return Ok(());
-        }
-        // sing-box bakes the filter into its config and needs a restart (the Service
-        // handles that); only xray reloads live here.
-        if read_state().await.and_then(|s| s.engine) == Some(CoreEngine::SingBox) {
-            return Ok(());
-        }
-        reload_app_filter_rules(&read_app_filter().await).await;
-        let socks_port = read_state()
-            .await
-            .map(|d| d.socks_port)
-            .filter(|&p| p != 0)
-            .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-        refresh_guards(socks_port).await;
-        Ok(())
     }
 }
 

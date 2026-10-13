@@ -151,6 +151,11 @@ fn plan_config_and_state_agree() {
             TunPlan::External(ext) => {
                 assert_eq!(ext.engine, c.tun, "{at}");
                 assert_eq!(ext.force_tun, force_tun, "{at}");
+                assert_eq!(
+                    ext.uid_filter.is_some(),
+                    c.host.app_routing == AppRouting::PerUid,
+                    "{at}"
+                );
             }
             TunPlan::None => {}
         }
