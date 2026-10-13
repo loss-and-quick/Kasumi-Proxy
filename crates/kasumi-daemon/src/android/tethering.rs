@@ -14,8 +14,10 @@
 //!
 //! A hotspot can be switched on long after the proxy started, and the setting can
 //! be flipped at any time, so a small watcher task re-reads both every few seconds
-//! and reconciles the rules. Teardown ([`clear_tethering`]) always removes
-//! everything, whatever the setting says by then.
+//! and reconciles the rules. While the option is on, Android's tethering offload is
+//! held off ([`super::tether_offload`]), since offloaded packets never reach the
+//! rules. Teardown ([`clear_tethering`]) always removes everything and restores
+//! the offload setting, whatever the option says by then.
 
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
@@ -29,6 +31,7 @@ use super::paths::{IP, IP6TABLES, IPTABLES, TUN_IFACE_FILE};
 use super::platform::{read_iface, read_settings};
 use super::routing::{TUN_TABLE, ip_rule};
 use super::sysctl::lock_tun_iface;
+use super::tether_offload::{detach_tether_bpf, restore_hw_offload, suppress_hw_offload};
 use super::{default_uplink, run_out, silent};
 
 /// Our own chain in `filter FORWARD` (accepts) and `nat PREROUTING` (DNS).
@@ -312,7 +315,7 @@ async fn install(plan: &TetherPlan) {
 
 /// Remove everything [`install`] adds, in any state. Safe to call when nothing
 /// was installed.
-pub async fn clear_tethering() {
+async fn clear_rules() {
     for (bin, table, hook) in [
         (IPTABLES, None, "FORWARD"),
         (IP6TABLES, None, "FORWARD"),
@@ -332,6 +335,12 @@ pub async fn clear_tethering() {
     ip_rule(false, &["route", "flush", "table", REPLY_TABLE]).await;
 }
 
+/// Data-path teardown: remove the rules and give the offload setting back.
+pub async fn clear_tethering() {
+    clear_rules().await;
+    restore_hw_offload().await;
+}
+
 async fn watch(path: TetherPath) {
     let table = path.table();
     let mut applied: Vec<TetherIface> = Vec::new();
@@ -342,8 +351,20 @@ async fn watch(path: TetherPath) {
             (true, Some(tun)) => wanted(true, detect(&[tun]).await),
             _ => Vec::new(),
         };
+        // Kept off whenever the option is on, so a hotspot started later comes up
+        // without hardware offload.
+        if enabled && tun.is_some() {
+            if suppress_hw_offload().await && !want.is_empty() {
+                log::warn!(
+                    "tethering: hardware offload stays on for the running tethering \
+                     session until the hotspot / USB tethering is restarted"
+                );
+            }
+        } else {
+            restore_hw_offload().await;
+        }
         if want != applied {
-            clear_tethering().await;
+            clear_rules().await;
             if let Some(tun) = tun.as_deref()
                 && !want.is_empty()
             {
@@ -352,6 +373,10 @@ async fn watch(path: TetherPath) {
                 install(&tether_plan(&want, tun, &table)).await;
             }
             applied = want;
+        }
+        // Tethering re-attaches its programs on an upstream change.
+        for t in &applied {
+            detach_tether_bpf(&t.name).await;
         }
         tokio::time::sleep(POLL).await;
     }

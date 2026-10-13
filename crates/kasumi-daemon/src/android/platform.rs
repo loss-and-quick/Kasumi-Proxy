@@ -43,6 +43,7 @@ use super::routing::{
     has_force_proxy, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
+use super::tether_offload::restore_hw_offload;
 use super::tethering::{TetherPath, start_tether_watcher, stop_tether_watcher};
 use super::{run_out, silent, ssaid};
 
@@ -541,6 +542,9 @@ impl Platform for AndroidPlatform {
         ])
         .await;
         setup_sysctl_locks().await;
+        // A daemon that died while the tethering option was on left the offload
+        // setting changed; no data path runs yet, so give it back.
+        restore_hw_offload().await;
         // Fresh boot: seed a stopped document so a stale value can't make status lie
         // before the first command. Drop the pre-document `service-started` marker.
         write_state(&DataPathState::default()).await;

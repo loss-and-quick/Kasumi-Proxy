@@ -24,6 +24,8 @@ pub const TUN2_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun2-iface";
 /// The single persisted record of the running data-path (run state, engine, TUN
 /// selection, socks port, start time), written by the daemon in the run dir.
 pub const DATA_PATH_STATE_FILE: &str = "/data/adb/kasumi-proxy/run/data-path.json";
+/// `tether_offload_disabled` as it was before the tethering option changed it.
+pub const TETHER_OFFLOAD_SAVED: &str = "/data/adb/kasumi-proxy/run/tether-offload-disabled.prev";
 
 pub const XRAY_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/xray";
 pub const SINGBOX_BIN: &str = "/data/adb/modules/kasumi-proxy/bin/sing-box";
@@ -46,6 +48,8 @@ pub const CORE_BINS: [&str; 2] = [XRAY_BIN, SINGBOX_BIN];
 pub const IP: &str = "/system/bin/ip";
 pub const IPTABLES: &str = "/system/bin/iptables";
 pub const IP6TABLES: &str = "/system/bin/ip6tables";
+pub const TC: &str = "/system/bin/tc";
+pub const CMD: &str = "/system/bin/cmd";
 
 /// The backend's on-disk locations for the Android module.
 pub fn backend_paths() -> BackendPaths {
