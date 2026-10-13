@@ -8,6 +8,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const hi = {
   // app shell
   "app.loading": "लोड हो रहा है…",
+  "startup.helperOutdated.title": "हेल्पर किसी दूसरे संस्करण का है",
+  "startup.helperOutdated.body":
+    "Kasumi Proxy टनल को एक बैकग्राउंड हेल्पर के ज़रिए चलाता है, लेकिन जो हेल्पर मिला वह ऐप के किसी दूसरे संस्करण का है। Kasumi Proxy को फिर से शुरू करें। अगर यह संदेश फिर दिखे, तो ऐप को दोबारा इंस्टॉल करें ताकि ऐप और हेल्पर के संस्करण मेल खाएँ।",
+  "startup.helperOutdated.detail": "ऐप प्रोटोकॉल {app}, हेल्पर प्रोटोकॉल {helper}",
+  "startup.helperOutdated.noVersion": "कोई नहीं",
   // nav
   "nav.overview": "अवलोकन",
   "nav.profiles": "प्रोफ़ाइल",

@@ -6,12 +6,13 @@
 // contexts.
 // ============================================================
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { ConfirmHost, Icon, Toaster } from "./components";
+import { Btn, ConfirmHost, Icon, Toaster } from "./components";
 import Overview from "./features/overview/Overview";
 import { useProfilesView } from "./features/profiles/viewState";
 import { useT } from "./i18n";
 import { configureKsuWebUi, hasKsuNativeApi } from "./lib/ksu-webui";
 import { useSheetOpen } from "./lib/sheetPresence";
+import { quitApp, type StartupProblem, startupProblem, startupProblemText } from "./lib/startup";
 import { useIsWide } from "./lib/useIsWide";
 import { useTraySync } from "./lib/useTraySync";
 import { useAppStore } from "./store/useAppStore";
@@ -33,6 +34,34 @@ function LoadingScreen({ label }: { label: string }) {
       style={{ alignItems: "center", justifyContent: "center" }}
     >
       <div style={{ color: "var(--on-surface-faint)", fontSize: 14 }}>{label}</div>
+    </div>
+  );
+}
+
+function StartupProblemScreen({ problem }: { problem: StartupProblem }) {
+  const t = useT();
+  const text = startupProblemText(problem, t);
+  return (
+    <div
+      className="app-region screen-enter"
+      role="alert"
+      style={{
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 16,
+        padding: 24,
+        textAlign: "center",
+      }}
+    >
+      <Icon name="error" />
+      <div style={{ fontSize: 18, fontWeight: 600 }}>{text.title}</div>
+      <div style={{ maxWidth: 440, color: "var(--on-surface-variant)", fontSize: 14 }}>
+        {text.body}
+      </div>
+      <div style={{ color: "var(--on-surface-faint)", fontSize: 12 }}>{text.detail}</div>
+      <Btn variant="tonal" icon="logout" onClick={() => void quitApp()}>
+        {t("tray.quit")}
+      </Btn>
     </div>
   );
 }
@@ -67,6 +96,10 @@ export default function App() {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+  const [problem, setProblem] = useState<StartupProblem | null>(null);
+  useEffect(() => {
+    void startupProblem().then(setProblem);
+  }, []);
   useEffect(() => {
     configureKsuWebUi();
   }, []);
@@ -116,6 +149,16 @@ export default function App() {
     { id: "subs", icon: "cloud_sync", labelKey: "nav.subs" },
     { id: "settings", icon: "tune", labelKey: "nav.settings" },
   ];
+  if (problem) {
+    return (
+      <div className={`device${isWide ? " wide" : ""}`}>
+        <div className="app-main">
+          <StartupProblemScreen problem={problem} />
+        </div>
+      </div>
+    );
+  }
+
   const nativeToast = hasKsuNativeApi();
   const navVisible = !editorId && !backupOpen && !logsOpen && !appFilterOpen;
   const loadingScreen = <LoadingScreen label={t("app.loading")} />;

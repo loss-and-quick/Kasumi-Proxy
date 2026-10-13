@@ -8,6 +8,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const es = {
   // app shell
   "app.loading": "Cargando…",
+  "startup.helperOutdated.title": "El asistente es de otra versión",
+  "startup.helperOutdated.body":
+    "Kasumi Proxy gestiona el túnel mediante un asistente en segundo plano, y el que encontró pertenece a otra versión de la aplicación. Reinicia Kasumi Proxy. Si el mensaje vuelve a aparecer, reinstala la aplicación para que ambos coincidan.",
+  "startup.helperOutdated.detail": "Protocolo de la app: {app}, del asistente: {helper}",
+  "startup.helperOutdated.noVersion": "ninguno",
   // nav
   "nav.overview": "Resumen",
   "nav.profiles": "Perfiles",

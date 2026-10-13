@@ -10,6 +10,11 @@ import type { MessageRuntime, MessageValue, Vars } from "./runtime";
 const en = {
   // app shell
   "app.loading": "Loading…",
+  "startup.helperOutdated.title": "The helper is from another version",
+  "startup.helperOutdated.body":
+    "Kasumi Proxy runs the tunnel through a background helper, and the one it found belongs to a different version of the app. Restart Kasumi Proxy. If this message comes back, reinstall the app so that the app and its helper match.",
+  "startup.helperOutdated.detail": "App protocol {app}, helper protocol {helper}",
+  "startup.helperOutdated.noVersion": "none",
   // nav
   "nav.overview": "Overview",
   "nav.profiles": "Profiles",
