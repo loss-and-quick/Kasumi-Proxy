@@ -1915,4 +1915,25 @@ mod tests {
         assert_eq!(again.transport, quic.transport, "{link}");
         assert_eq!(again.tls.sni, "q.example", "{link}");
     }
+
+    #[test]
+    fn absent_security_param_means_no_tls() {
+        for uri in [
+            "vless://11111111-1111-1111-1111-111111111111@e.example:443?type=tcp#v",
+            "trojan://pw@e.example:443?type=tcp#t",
+            "http://user:pw@e.example:8080#h",
+        ] {
+            let p = parse_share_link(uri, None).unwrap();
+            assert_eq!(p.tls().unwrap().security, Security::None, "{uri}");
+        }
+        // vmess:// carries its TLS mode in the JSON `tls` key.
+        let vmess = format!(
+            "vmess://{}",
+            b64encode(
+                r#"{"v":"2","ps":"m","add":"e.example","port":"443","id":"11111111-1111-1111-1111-111111111111","aid":"0","net":"tcp"}"#
+            )
+        );
+        let p = parse_share_link(&vmess, None).unwrap();
+        assert_eq!(p.tls().unwrap().security, Security::None);
+    }
 }

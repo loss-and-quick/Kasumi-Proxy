@@ -8,7 +8,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{CongestionControl, Flow, Hysteria2Obfs, PacketEncoding, SsMethod, VmessEnc};
+use crate::enums::{
+    CongestionControl, Flow, Hysteria2Obfs, PacketEncoding, Security, SsMethod, VmessEnc,
+};
 use crate::mixins::{Endpoint, Meta, Tls, Transport};
 
 // ---- non-trivial field defaults (match the Zod `.default(...)`) ----
@@ -75,7 +77,8 @@ pub enum Protocol {
 /// Built by deserializing a minimal seed so every `#[serde(default)]` field is
 /// populated from its own definition — no default value is restated here. The
 /// seed carries all blank required credentials; each variant ignores the keys
-/// it doesn't use.
+/// it doesn't use. The one create-form choice on top is TLS, see
+/// [`starts_without_tls`].
 pub fn empty_profile(protocol: Protocol, group_id: &str) -> Profile {
     let seed = serde_json::json!({
         "protocol": protocol,
@@ -86,7 +89,24 @@ pub fn empty_profile(protocol: Protocol, group_id: &str) -> Profile {
         "secretKey": "",
         "peerPublicKey": "",
     });
-    serde_json::from_value(seed).expect("empty profile seed deserializes")
+    let mut p: Profile = serde_json::from_value(seed).expect("empty profile seed deserializes");
+    if starts_without_tls(protocol)
+        && let Some(tls) = p.tls_mut()
+    {
+        tls.security = Security::None;
+    }
+    p
+}
+
+/// Whether a new profile of this protocol starts with TLS off, as in v2rayN and
+/// NekoBox: TLS is optional for these, while Trojan's spec requires it and the
+/// QUIC-based and TLS-wrapping protocols can't run without it. A stored profile
+/// with no `tls` object still deserializes to the serde default.
+fn starts_without_tls(protocol: Protocol) -> bool {
+    matches!(
+        protocol,
+        Protocol::Vless | Protocol::Vmess | Protocol::Shadowsocks | Protocol::Http
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -518,7 +538,7 @@ impl Profile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enums::{Network, Security};
+    use crate::enums::Network;
 
     #[test]
     fn vless_full_round_trip_and_tag() {
@@ -610,5 +630,37 @@ mod tests {
             panic!("not shadowsocks")
         };
         assert_eq!(ss.tls.security, Security::None);
+    }
+
+    #[test]
+    fn new_profiles_start_with_tls_only_where_the_protocol_needs_it() {
+        use strum::IntoEnumIterator;
+        for proto in Protocol::iter() {
+            let p = empty_profile(proto, "g-main");
+            let Some(tls) = p.tls() else { continue };
+            let want = match proto {
+                Protocol::Vless | Protocol::Vmess | Protocol::Shadowsocks | Protocol::Http => {
+                    Security::None
+                }
+                _ => Security::Tls,
+            };
+            assert_eq!(tls.security, want, "{proto:?}");
+        }
+    }
+
+    #[test]
+    fn stored_profiles_without_a_tls_object_keep_tls_on() {
+        // Only the editor's blank profile changed; a stored profile that omits
+        // `tls` still reads as the serde default.
+        for proto in ["vless", "vmess", "http"] {
+            let p: Profile = serde_json::from_value(serde_json::json!({
+                "protocol": proto,
+                "meta": { "id": "x", "remarks": "r", "groupId": "g-main" },
+                "endpoint": { "address": "e.example", "port": 443 },
+                "uuid": "11111111-1111-1111-1111-111111111111",
+            }))
+            .unwrap();
+            assert_eq!(p.tls().unwrap().security, Security::Tls, "{proto}");
+        }
     }
 }

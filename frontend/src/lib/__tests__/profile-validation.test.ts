@@ -63,8 +63,29 @@ describe("provider custom profiles", () => {
 describe("switching protocol", () => {
   const tlsOf = (p: Profile) => ("tls" in p && p.tls ? p.tls : null);
 
-  it("starts a new Shadowsocks profile without TLS", () => {
-    expect(tlsOf(emptyProfile("shadowsocks"))?.security).toBe("none");
+  it("starts new profiles with TLS only where the protocol needs it", () => {
+    for (const proto of ["vless", "vmess", "shadowsocks", "http"] as const) {
+      expect(tlsOf(emptyProfile(proto))?.security, proto).toBe("none");
+    }
+    for (const proto of ["trojan", "hysteria2", "tuic", "anytls", "naive", "shadowtls"] as const) {
+      expect(tlsOf(emptyProfile(proto))?.security, proto).toBe("tls");
+    }
+  });
+
+  it("gives Trojan its TLS back when the draft had none", () => {
+    const fresh = emptyProfile("vless");
+    expect(tlsOf(switchProtocol(fresh, "trojan"))?.security).toBe("tls");
+    expect(tlsOf(switchProtocol(fresh, "vmess"))?.security).toBe("none");
+    expect(tlsOf(switchProtocol(fresh, "http"))?.security).toBe("none");
+  });
+
+  it("keeps a TLS mode the user picked when switching to VMess", () => {
+    const vless = emptyProfile("vless");
+    const draft = { ...vless, tls: { ...tlsOf(vless), security: "tls", sni: "s.example" } };
+    expect(tlsOf(switchProtocol(draft as Profile, "vmess"))).toMatchObject({
+      security: "tls",
+      sni: "s.example",
+    });
   });
 
   it("doesn't carry TLS into Shadowsocks, where it is a v2ray-plugin option", () => {
