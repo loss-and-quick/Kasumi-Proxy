@@ -25,6 +25,7 @@ use serde_json::{Value, json};
 use strum::IntoEnumIterator;
 
 use happ_sub::MergeMode;
+use kasumi_core::core::{core_conflict, forced_core};
 use kasumi_core::core_config::build_core_config;
 use kasumi_core::enums::{
     CongestionControl, CoreEngine, Fingerprint, Flow, HeaderType, Hysteria2Obfs, Network,
@@ -33,6 +34,7 @@ use kasumi_core::enums::{
 use kasumi_core::mixins::Transport;
 use kasumi_core::outbound_bind::bind_uplink_outbounds;
 use kasumi_core::profile::{Profile, Protocol};
+use kasumi_core::share::parse_share_link;
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{
     AdvancedSettings, DomainStrategy, LogLevel, MuxXudp443, RoutingMode, RoutingRule,
@@ -1476,6 +1478,65 @@ fn chain_cases() -> Vec<Case> {
 #[test]
 fn chain_matrix_validates_against_real_cores() {
     validate_all(chain_cases());
+}
+
+/// Real-world share links (`fixtures/share_links.txt`): each one must parse and
+/// build for every core that can run it — the one it is forced onto, else both —
+/// before the staged cores check the result. One that no core can run must be
+/// refused with the reason.
+#[test]
+fn link_corpus_validates_against_real_cores() {
+    const CORPUS: &str = include_str!("fixtures/share_links.txt");
+    let srs_dir = tempfile::tempdir().unwrap();
+    let mut failures = Vec::new();
+    let mut cases = Vec::new();
+    for link in CORPUS
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+    {
+        let Some(profile) = parse_share_link(link, None) else {
+            failures.push(format!("doesn't parse: {link}"));
+            continue;
+        };
+        let name = profile.meta().remarks.clone();
+        if let Some(conflict) = core_conflict(&profile) {
+            let built = build_core_config(
+                &profile,
+                &AdvancedSettings::default(),
+                &[],
+                std::slice::from_ref(&profile),
+                "",
+            );
+            if built.as_ref().err() != Some(&conflict.to_string()) {
+                let built = built.map(|c| c.engine);
+                failures.push(format!("[{name}] not refused as {conflict:?}: {built:?}"));
+            }
+            continue;
+        }
+        let engines = forced_core(&profile)
+            .map(|e| vec![e])
+            .unwrap_or_else(|| vec![CoreEngine::Xray, CoreEngine::SingBox]);
+        for engine in engines {
+            let mut p = profile.clone();
+            p.meta_mut().core_type = Some(engine);
+            let settings = AdvancedSettings::default();
+            if build_config(&p, &[], &settings, &[], srs_dir.path()).is_none() {
+                failures.push(format!("[{name}] {engine:?} build failed: {link}"));
+                continue;
+            }
+            cases.push(Case {
+                name: format!("link/{name}/{}", wire(&engine)),
+                profile: p,
+                settings,
+                rules: vec![],
+                needs_geo: false,
+                others: vec![],
+            });
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    validate_all(cases);
 }
 
 #[test]
