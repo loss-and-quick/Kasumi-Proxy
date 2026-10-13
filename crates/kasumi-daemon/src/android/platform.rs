@@ -149,14 +149,10 @@ fn helper_target(slot: TunSlot, ports: &LocalPorts) -> u16 {
     }
 }
 
-/// The helpers the watchdog requires alive for a recorded data path.
+/// The helpers the watchdog requires alive for a recorded data path: every one the
+/// start brought up.
 fn watched_helpers(state: &DataPathState) -> Vec<HelperSpec> {
-    state
-        .helpers()
-        .into_iter()
-        .filter(|h| h.slot == TunSlot::Main)
-        .map(helper_spec)
-        .collect()
+    state.helpers().into_iter().map(helper_spec).collect()
 }
 
 /// Helper binary a teardown matches for the running data-path — tun2socks by
@@ -999,10 +995,8 @@ mod tests {
                         plan.helpers().into_iter().map(helper_spec).collect();
                     let doc = plan.state(RunState::Connecting).to_json();
                     let recorded = DataPathState::from_json(doc.as_bytes()).unwrap();
-                    let watched = watched_helpers(&recorded);
-                    assert_eq!(watched[..], started[..watched.len()], "{at}");
+                    assert_eq!(watched_helpers(&recorded), started, "{at}");
                     let external = !owns_native_tun(engine, tun);
-                    assert_eq!(watched.len(), usize::from(external), "{at}");
                     assert_eq!(
                         started.len(),
                         usize::from(external) * (1 + usize::from(force)),
