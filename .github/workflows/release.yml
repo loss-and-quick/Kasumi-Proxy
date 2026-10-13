@@ -145,6 +145,9 @@ jobs:
           T2S_NEW: ${{ steps.changes.outputs.t2s_version }}
           SB_NEW: ${{ steps.changes.outputs.sb_version }}
         run: |
+          # geodat2srs is pinned by commit and its nix hashes can't be derived
+          # here, so a sing-box line change is rejected rather than half-bumped.
+          scripts/check-geodat2srs-line.sh "$SB_NEW"
           sed -i -E \
             -e "s|(XRAY_VERSION=\"\\\$\{XRAY_VERSION:-)[^}]*|\1${XRAY_NEW}|" \
             -e "s|(TUN2SOCKS_VERSION=\"\\\$\{TUN2SOCKS_VERSION:-)[^}]*|\1${T2S_NEW}|" \

@@ -20,6 +20,8 @@ SINGBOX_VERSION="${SINGBOX_VERSION:-v1.14.3}"
 # main directly. Its go.mod pins sing-box to the same line as SINGBOX_VERSION —
 # bump them together: the .srs format version follows the core, and a set written
 # by the newer writer is rejected by the older core ("unsupported version").
+# The release auto-bump runs scripts/check-geodat2srs-line.sh and stops when the
+# lines differ (the rev and its nix hashes need a manual bump).
 GEODAT2SRS_REV="${GEODAT2SRS_REV:-eba138bf95ab128e87f881d888009b27779d609e}"
 
 # Windows only: the wintun driver DLL that sing-box (tun inbound) and tun2socks
