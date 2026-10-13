@@ -139,6 +139,23 @@ describe("dispatch-bridge chain candidates", () => {
   });
 });
 
+describe("dispatch-bridge local ports", () => {
+  it("checkLocalPorts ships the draft settings and unwraps the clash", async () => {
+    const clash = { port: 10808, first: "socks", second: "http" } as const;
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
+      if (cmd.cmd === "checkLocalPorts") {
+        expect(cmd.settings.localHttpPort).toBe(10808);
+        return { kind: "portCollision", value: clash } as Response_Serialize;
+      }
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, noPush);
+
+    const draft = { ...DEFAULT_ADVANCED_SETTINGS, localHttpPort: 10808 };
+    expect(await bridge.checkLocalPorts(draft)).toEqual(clash);
+  });
+});
+
 describe("dispatch-bridge status stream", () => {
   const statusFrame = (extra: Record<string, unknown>) => ({
     state: "connected",

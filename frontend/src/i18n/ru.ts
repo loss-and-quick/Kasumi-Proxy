@@ -601,6 +601,8 @@ const ru = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "внутренний SOCKS-порт (следует за SOCKS)",
+  "settings.portCollision": "Порт {port} указан дважды: {first} и {second}. Выберите другой порт.",
   "settings.allowNonLocalhost": "Разрешить доступ не с localhost",
   "settings.allowNonLocalhostSub":
     "Привязать прокси-порты к 0.0.0.0, чтобы другие устройства в сети могли подключаться",

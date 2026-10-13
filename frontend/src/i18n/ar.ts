@@ -602,6 +602,8 @@ const ar = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "منفذ SOCKS الداخلي (يلي منفذ SOCKS)",
+  "settings.portCollision": "سيُستخدم المنفذ {port} مرتين: {first} و{second}. اختر منفذًا آخر.",
   "settings.allowNonLocalhost": "السماح بالوصول من غير المضيف المحلي",
   "settings.allowNonLocalhostSub":
     "ربط منافذ الوكيل بـ 0.0.0.0 للسماح للأجهزة الأخرى على الشبكة بالاتصال",

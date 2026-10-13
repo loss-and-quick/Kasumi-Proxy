@@ -41,6 +41,75 @@ pub const fn force_socks_port(socks: u16, http: u16) -> u16 {
     }
 }
 
+/// A local listener the settings give a port to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum LocalPort {
+    Socks,
+    Http,
+    /// The desktop PAC server (`pac` proxy mode).
+    Pac,
+    /// The core's `force-in` inbound ([`force_socks_port`]).
+    Force,
+}
+
+/// Two local listeners set to one port: only one of them could bind it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PortCollision {
+    pub port: u16,
+    pub first: LocalPort,
+    pub second: LocalPort,
+}
+
+impl std::fmt::Display for PortCollision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = |p: LocalPort| match p {
+            LocalPort::Socks => "SOCKS",
+            LocalPort::Http => "HTTP",
+            LocalPort::Pac => "PAC",
+            LocalPort::Force => "force-proxy SOCKS",
+        };
+        write!(
+            f,
+            "the {} and {} ports are both {}",
+            name(self.first),
+            name(self.second),
+            self.port
+        )
+    }
+}
+
+impl AdvancedSettings {
+    /// The first pair of local listeners these settings put on one port. `pac`
+    /// says whether the platform runs the PAC server at all (desktop only).
+    pub fn port_collision(&self, pac: bool) -> Option<PortCollision> {
+        let socks = self.local_socks_port.unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
+        let http = self.local_http_port.unwrap_or(DEFAULT_LOCAL_HTTP_PORT);
+        let mut ports = vec![
+            (LocalPort::Socks, socks),
+            (LocalPort::Http, http),
+            (LocalPort::Force, force_socks_port(socks, http)),
+        ];
+        if pac {
+            ports.push((
+                LocalPort::Pac,
+                self.local_pac_port.unwrap_or(DEFAULT_LOCAL_PAC_PORT),
+            ));
+        }
+        ports.iter().enumerate().find_map(|(i, &(first, port))| {
+            ports[i + 1..]
+                .iter()
+                .find(|&&(_, other)| other == port)
+                .map(|&(second, _)| PortCollision {
+                    port,
+                    first,
+                    second,
+                })
+        })
+    }
+}
+
 // Default probe URLs used when delayTestUrl/speedTestUrl are unset.
 pub const DEFAULT_DELAY_TEST_URL: &str = "https://www.gstatic.com/generate_204";
 pub const DEFAULT_SPEED_TEST_URL: &str = "http://speed.cloudflare.com/__down?bytes=10000000";
@@ -638,6 +707,40 @@ mod tests {
         assert_eq!(force_socks_port(10808, 10810), 10811);
         // socks + 3 itself never collides (only reached when http == socks + 2).
         assert_eq!(force_socks_port(10808, 10811), 10810);
+    }
+
+    #[test]
+    fn port_collision_names_the_clashing_listeners() {
+        let ports = |socks, http, pac| AdvancedSettings {
+            local_socks_port: socks,
+            local_http_port: http,
+            local_pac_port: pac,
+            ..Default::default()
+        };
+        let clash = |port, first, second| {
+            Some(PortCollision {
+                port,
+                first,
+                second,
+            })
+        };
+        assert_eq!(ports(None, None, None).port_collision(true), None);
+        assert_eq!(
+            ports(Some(10809), None, None).port_collision(false),
+            clash(10809, LocalPort::Socks, LocalPort::Http)
+        );
+        assert_eq!(
+            ports(None, None, Some(10808)).port_collision(true),
+            clash(10808, LocalPort::Socks, LocalPort::Pac)
+        );
+        // http on socks + 2 moves force-in onto socks + 3, the default PAC port.
+        let shifted = ports(None, Some(10810), None);
+        assert_eq!(
+            shifted.port_collision(true),
+            clash(10811, LocalPort::Force, LocalPort::Pac)
+        );
+        // Without a PAC server the same layout is fine.
+        assert_eq!(shifted.port_collision(false), None);
     }
 
     #[test]

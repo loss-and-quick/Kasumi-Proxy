@@ -30,7 +30,9 @@ use kasumi_core::profile::Profile;
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
-use kasumi_core::state::{AppState, DEFAULT_LOG_ROTATE_KB, default_app_state};
+use kasumi_core::state::{
+    AdvancedSettings, AppState, DEFAULT_LOG_ROTATE_KB, PortCollision, default_app_state,
+};
 use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::stored_for_url;
 use kasumi_core::sub_policy::safe_provider_link;
@@ -161,6 +163,12 @@ pub enum Command {
     ChainCandidates {
         profile: Box<Profile>,
     },
+    /// The local-port clash these (possibly unsaved) settings would have on this
+    /// platform, by `AdvancedSettings::port_collision` — the check a settings
+    /// write is refused by.
+    CheckLocalPorts {
+        settings: Box<AdvancedSettings>,
+    },
     #[serde(rename_all = "camelCase")]
     Ping {
         profile_id: String,
@@ -234,6 +242,8 @@ pub enum Response {
     CoreResolutions(Vec<CoreResolution>),
     /// Profile ids, in stored order.
     ProfileIds(Vec<String>),
+    /// Two local listeners on one port, or `null` when the ports are fine.
+    PortCollision(Option<PortCollision>),
     /// Latency in ms (tcp-ping and real-ping); `null` when there is no result.
     Ping(Option<i64>),
     Probe(ConnectionProbe),
@@ -543,6 +553,10 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             Ok(Response::ProfileIds(chain_candidates(&profile, &profiles)))
         }
 
+        Command::CheckLocalPorts { settings } => Ok(Response::PortCollision(
+            settings.port_collision(platform.supports_proxy_modes()),
+        )),
+
         Command::ResolveCores { profiles } => {
             let settings = crate::state::read_state_shell(&paths.app_state)
                 .await
@@ -605,6 +619,15 @@ pub(crate) async fn run_mutation(
         .unwrap_or_else(default_app_state);
     let mut next = prev.clone();
     apply_mutation(&mut next, intent);
+    // A write may not introduce a port clash: the core (or the PAC server) would
+    // fail to bind only at the next start. A clash already on disk doesn't block
+    // unrelated edits.
+    let pac = platform.supports_proxy_modes();
+    if let Some(clash) = next.settings.port_collision(pac)
+        && prev.settings.port_collision(pac) != Some(clash)
+    {
+        return Err(err(clash.to_string()));
+    }
     persist_with_chain(platform, &prev, &mut next)
         .await
         .map_err(|e| err(e.to_string()))?;
@@ -645,6 +668,7 @@ mod tests {
     use crate::fsjson::write_json_atomic;
     use crate::testutil::{TestPlatform, sample_vless as vless};
     use kasumi_core::contract::RunState;
+    use kasumi_core::state::DEFAULT_LOCAL_SOCKS_PORT;
 
     #[tokio::test]
     async fn read_state_defaults_when_missing() {
@@ -800,6 +824,45 @@ mod tests {
         let v = view(resolve(None, None).await.unwrap());
         assert!(!v.provider_hides_device);
         assert_eq!(v.headers.len(), 7);
+    }
+
+    #[tokio::test]
+    async fn settings_write_with_clashing_ports_is_refused() {
+        let (p, _d) = TestPlatform::new();
+        let set = |settings: AdvancedSettings| MutationIntent::SetSettings {
+            settings: Box::new(settings),
+        };
+        let clashing = AdvancedSettings {
+            local_http_port: Some(DEFAULT_LOCAL_SOCKS_PORT),
+            ..Default::default()
+        };
+        let e = run_mutation(&p, &set(clashing.clone())).await.unwrap_err();
+        assert_eq!(e.0, "the SOCKS and HTTP ports are both 10808");
+        // Nothing was written.
+        let Response::State(state) = dispatch(&p, Command::ReadState).await.unwrap() else {
+            panic!()
+        };
+        assert_eq!(state.settings.local_http_port, None);
+
+        let Response::PortCollision(check) = dispatch(
+            &p,
+            Command::CheckLocalPorts {
+                settings: Box::new(clashing),
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(check.map(|c| c.port), Some(DEFAULT_LOCAL_SOCKS_PORT));
+
+        // A PAC port means nothing where no PAC server runs.
+        let pac_on_socks = AdvancedSettings {
+            local_pac_port: Some(DEFAULT_LOCAL_SOCKS_PORT),
+            ..Default::default()
+        };
+        assert!(!p.supports_proxy_modes());
+        run_mutation(&p, &set(pac_on_socks)).await.unwrap();
     }
 
     #[tokio::test]

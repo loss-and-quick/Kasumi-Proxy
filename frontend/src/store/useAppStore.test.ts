@@ -193,6 +193,7 @@ function createBridgeMock(): BridgeMock {
       profiles.map(() => ({ resolved: "xray" as const, forced: null })),
     ),
     chainCandidates: vi.fn(async (_profile: Profile) => []),
+    checkLocalPorts: vi.fn(async () => null),
     parseShareLinks: vi.fn(async (_text: string) => []),
     resolveImportInput: vi.fn(async (_text: string) => ({
       subscriptions: [],

@@ -530,6 +530,9 @@ const vi = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "cổng SOCKS nội bộ (nằm sau SOCKS)",
+  "settings.portCollision":
+    "Cổng {port} sẽ bị dùng hai lần: {first} và {second}. Hãy chọn cổng khác.",
   "settings.allowNonLocalhost": "Cho phép truy cập không phải localhost",
   "settings.allowNonLocalhostSub":
     "Gắn cổng proxy vào 0.0.0.0 để các thiết bị khác trên mạng có thể kết nối",

@@ -6,8 +6,18 @@ import {
   DEFAULT_LOCAL_SOCKS_PORT,
 } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
-import type { AdvancedSettings } from "../../../lib/bridge";
+import type { AdvancedSettings, PortCollision } from "../../../lib/bridge";
+import { bridge } from "../../../lib/bridge-provider";
 import { getRuntimeBridgeMode } from "../../../lib/ksu-webui";
+
+const PORT_LABEL = {
+  socks: "settings.socks",
+  http: "settings.http",
+  pac: "settings.pac",
+  force: "settings.portForce",
+} as const;
+
+type PortKey = "localSocksPort" | "localHttpPort" | "localPacPort";
 
 export function LocalPortsSection({
   settings,
@@ -24,6 +34,14 @@ export function LocalPortsSection({
   const [authOpen, setAuthOpen] = useState(
     Boolean(settings.socksUsername || settings.socksPassword),
   );
+  // A port that would clash with another listener is not saved; the backend
+  // decides, since it knows which listeners this platform runs.
+  const [clash, setClash] = useState<PortCollision | null>(null);
+  const setPort = async (key: PortKey, value: number) => {
+    const found = await bridge.checkLocalPorts({ ...settings, [key]: value }).catch(() => null);
+    setClash(found);
+    if (!found) set(key, value);
+  };
   const toggleAuth = (on: boolean) => {
     setAuthOpen(on);
     if (!on) {
@@ -42,14 +60,14 @@ export function LocalPortsSection({
             label={t("settings.socks")}
             value={settings.localSocksPort ?? DEFAULT_LOCAL_SOCKS_PORT}
             type="number"
-            onChange={(value) => set("localSocksPort", Number(value))}
+            onChange={(value) => void setPort("localSocksPort", Number(value))}
           />
           <Field
             commitOnBlur
             label={t("settings.http")}
             value={settings.localHttpPort ?? DEFAULT_LOCAL_HTTP_PORT}
             type="number"
-            onChange={(value) => set("localHttpPort", Number(value))}
+            onChange={(value) => void setPort("localHttpPort", Number(value))}
           />
           {isDesktop && (
             <Field
@@ -57,10 +75,19 @@ export function LocalPortsSection({
               label={t("settings.pac")}
               value={settings.localPacPort ?? DEFAULT_LOCAL_PAC_PORT}
               type="number"
-              onChange={(value) => set("localPacPort", Number(value))}
+              onChange={(value) => void setPort("localPacPort", Number(value))}
             />
           )}
         </div>
+        {clash && (
+          <div className="hint error" style={{ marginTop: -6, marginBottom: 12 }}>
+            {t("settings.portCollision", {
+              port: clash.port,
+              first: t(PORT_LABEL[clash.first]),
+              second: t(PORT_LABEL[clash.second]),
+            })}
+          </div>
+        )}
         <RowToggle
           icon="lan"
           title={t("settings.allowNonLocalhost")}

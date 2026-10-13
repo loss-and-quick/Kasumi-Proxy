@@ -164,6 +164,9 @@ export const bridge: Bridge = {
   async chainCandidates(profile) {
     return (await loadBridge()).chainCandidates(profile);
   },
+  async checkLocalPorts(settings) {
+    return (await loadBridge()).checkLocalPorts(settings);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

@@ -546,6 +546,9 @@ const en = {
   "settings.socks": "SOCKS",
   "settings.http": "HTTP",
   "settings.pac": "PAC",
+  "settings.portForce": "the internal SOCKS port (follows SOCKS)",
+  "settings.portCollision":
+    "Port {port} would be used twice: {first} and {second}. Pick another port.",
   "settings.allowNonLocalhost": "Allow non-localhost access",
   "settings.allowNonLocalhostSub":
     "Bind proxy ports to 0.0.0.0 so other devices on the network can connect",
