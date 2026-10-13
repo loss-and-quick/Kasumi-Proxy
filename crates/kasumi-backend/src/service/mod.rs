@@ -148,6 +148,12 @@ impl Service {
                 self.emit_status().await;
                 Ok(Response::State(Box::new(state)))
             }
+            Command::Status => Ok(Response::Status(
+                self.current_status()
+                    .await
+                    .ok_or_else(|| CommandError("service state unavailable".into()))?
+                    .service,
+            )),
             Command::ProbeConnection => {
                 // An explicit check through the running core — also when the
                 // background check is off.

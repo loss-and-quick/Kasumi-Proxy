@@ -3,5 +3,6 @@
 //! neutral backend), the Android `Platform` implementation, and the argv dispatch.
 
 pub mod android;
+pub mod cli;
 pub mod run;
 pub mod server;

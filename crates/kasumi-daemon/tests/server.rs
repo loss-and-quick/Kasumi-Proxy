@@ -161,3 +161,96 @@ async fn ws_typed_request_response() {
     let groups = reply["value"]["value"]["groups"].as_array().unwrap();
     assert!(groups.iter().any(|g| g["id"] == "g-main"));
 }
+
+fn status_with(state: RunState) -> ServiceState {
+    ServiceState {
+        state,
+        error: None,
+        upload_bytes: 0,
+        download_bytes: 0,
+        uptime_sec: 0,
+        engine: None,
+        tether_offload_bypass: false,
+    }
+}
+
+/// A daemon stand-in: pushes a status frame first, then answers the CLI's
+/// request with `Connected`.
+async fn fake_daemon_answering_connected(platform: &StubPlatform) {
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let info = WsInfo {
+        port,
+        token: "t".into(),
+    };
+    std::fs::write(
+        &platform.paths().ws_info,
+        serde_json::to_vec(&info).unwrap(),
+    )
+    .unwrap();
+    tokio::spawn(async move {
+        let (sock, _) = listener.accept().await.unwrap();
+        let mut ws = tokio_tungstenite::accept_async(sock).await.unwrap();
+        ws.send(Message::Text(r#"{"event":"status"}"#.into()))
+            .await
+            .unwrap();
+        let req = ws.next().await.unwrap().unwrap();
+        let req: serde_json::Value = serde_json::from_str(req.to_text().unwrap()).unwrap();
+        assert_eq!(req["cmd"], "status");
+        let value = kasumi_backend::Response::Status(status_with(RunState::Connected));
+        let reply = serde_json::json!({ "id": req["id"], "ok": true, "value": value });
+        ws.send(Message::Text(reply.to_string())).await.unwrap();
+    });
+}
+
+#[tokio::test]
+async fn cli_status_uses_the_daemon_answer() {
+    let (platform, _dir) = StubPlatform::new();
+    fake_daemon_answering_connected(&platform).await;
+    let resp = kasumi_daemon::cli::status(&*platform, Duration::from_secs(2))
+        .await
+        .unwrap();
+    // The platform alone would say Stopped.
+    let kasumi_backend::Response::Status(s) = resp else {
+        panic!("expected status")
+    };
+    assert_eq!(s.state, RunState::Connected);
+}
+
+#[tokio::test]
+async fn cli_status_falls_back_to_the_platform_without_a_daemon() {
+    let (platform, _dir) = StubPlatform::new();
+    // No wsInfo at all.
+    let resp = kasumi_daemon::cli::status(&*platform, Duration::from_millis(300))
+        .await
+        .unwrap();
+    assert!(matches!(
+        resp,
+        kasumi_backend::Response::Status(s) if s.state == RunState::Stopped
+    ));
+
+    // A stale wsInfo whose daemon is gone.
+    let dead = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
+    let port = dead.local_addr().unwrap().port();
+    drop(dead);
+    let info = WsInfo {
+        port,
+        token: "t".into(),
+    };
+    std::fs::write(
+        &platform.paths().ws_info,
+        serde_json::to_vec(&info).unwrap(),
+    )
+    .unwrap();
+    let resp = kasumi_daemon::cli::status(&*platform, Duration::from_millis(300))
+        .await
+        .unwrap();
+    assert!(matches!(
+        resp,
+        kasumi_backend::Response::Status(s) if s.state == RunState::Stopped
+    ));
+}
