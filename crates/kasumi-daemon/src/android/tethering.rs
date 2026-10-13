@@ -31,7 +31,10 @@ use super::paths::{IP, IP6TABLES, IPTABLES, TUN_IFACE_FILE};
 use super::platform::{read_iface, read_settings};
 use super::routing::{TUN_TABLE, ip_rule};
 use super::sysctl::lock_tun_iface;
-use super::tether_offload::{detach_tether_bpf, reconcile_hw_offload, restore_hw_offload};
+use super::tether_offload::{
+    BpfHold, hold_tether_bpf, reconcile_hw_offload, release_all_tether_bpf, release_tether_bpf,
+    restore_hw_offload,
+};
 use super::{default_uplink, run_out, silent};
 
 /// Our own chain in `filter FORWARD` (accepts) and `nat PREROUTING` (DNS).
@@ -373,15 +376,26 @@ async fn clear_rules() {
     ip_rule(false, &["route", "flush", "table", REPLY_TABLE]).await;
 }
 
-/// Data-path teardown: remove the rules and give the offload setting back.
+/// Data-path teardown: remove the rules, hand BPF offload back and give the
+/// offload setting back.
 pub async fn clear_tethering() {
     clear_rules().await;
+    release_all_tether_bpf().await;
     restore_hw_offload().await;
+}
+
+/// The interfaces held from BPF offload that are no longer steered.
+fn departed(held: &[(String, BpfHold)], applied: &[TetherIface]) -> Vec<String> {
+    held.iter()
+        .filter(|(name, _)| !applied.iter().any(|t| t.name == *name))
+        .map(|(name, _)| name.clone())
+        .collect()
 }
 
 async fn watch(path: TetherPath) {
     let table = path.table();
     let mut applied: Vec<TetherIface> = Vec::new();
+    let mut held: Vec<(String, BpfHold)> = Vec::new();
     loop {
         let enabled = read_settings().await.is_some_and(|s| s.proxy_tethering);
         let tun = read_iface(TUN_IFACE_FILE).await;
@@ -420,10 +434,25 @@ async fn watch(path: TetherPath) {
             }
             applied = want;
         }
-        // Tethering re-attaches its programs on an upstream change.
-        for t in &applied {
-            detach_tether_bpf(&t.name).await;
+        for name in departed(&held, &applied) {
+            release_tether_bpf(&name).await;
         }
+        let mut now = Vec::with_capacity(applied.len());
+        for t in &applied {
+            let hold = hold_tether_bpf(&t.name).await;
+            if !held.contains(&(t.name.clone(), hold)) {
+                match hold {
+                    BpfHold::Pinned => log::info!("tethering: BPF offload held off on {}", t.name),
+                    BpfHold::Detached => log::warn!(
+                        "tethering: cannot add the tc filter on {}, removing BPF \
+                         offload programs on every poll",
+                        t.name
+                    ),
+                }
+            }
+            now.push((t.name.clone(), hold));
+        }
+        held = now;
         tokio::time::sleep(POLL).await;
     }
 }
@@ -723,6 +752,18 @@ mod tests {
             REPLY_ROUTES,
             false
         ));
+    }
+
+    #[test]
+    fn a_downstream_that_stops_being_steered_is_released() {
+        let held = [
+            ("rndis0".to_string(), BpfHold::Pinned),
+            ("wlan0".to_string(), BpfHold::Detached),
+        ];
+        let applied = [iface("wlan0", "10.183.251.0/24")];
+        assert_eq!(departed(&held, &applied), ["rndis0"]);
+        assert_eq!(departed(&held, &[]), ["rndis0", "wlan0"]);
+        assert!(departed(&[], &applied).is_empty());
     }
 
     #[test]
