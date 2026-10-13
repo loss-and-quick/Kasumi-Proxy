@@ -249,6 +249,24 @@ pub struct RoutingImport {
     pub ignored_fields: Vec<String>,
 }
 
+impl RoutingImport {
+    /// Whether accepting it would change routing: a rule, or a `GlobalProxy` verdict
+    /// that sets the route's final outbound.
+    pub fn has_effect(&self) -> bool {
+        self.global_proxy.is_some()
+            || [
+                &self.direct_sites,
+                &self.direct_ip,
+                &self.proxy_sites,
+                &self.proxy_ip,
+                &self.block_sites,
+                &self.block_ip,
+            ]
+            .iter()
+            .any(|l| !l.is_empty())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TunnelSetting {
