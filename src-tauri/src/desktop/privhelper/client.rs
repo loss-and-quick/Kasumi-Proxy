@@ -99,7 +99,9 @@ mod tests {
         StopDataPath,
     };
     use kasumi_core::contract::{RunState, ServiceState};
+    use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits};
     use kasumi_core::enums::CoreEngine;
+    use kasumi_core::state::AdvancedSettings;
 
     use super::super::proto::{PrivReply, PrivRequest};
     use super::super::server;
@@ -110,7 +112,7 @@ mod tests {
     /// ones panic if ever reached (dispatch must not touch them).
     #[derive(Default)]
     struct StubPlatform {
-        started: std::sync::Mutex<Vec<(CoreEngine, u16)>>,
+        started: std::sync::Mutex<Vec<DataPathPlan>>,
         stopped: std::sync::atomic::AtomicBool,
     }
 
@@ -122,11 +124,11 @@ mod tests {
         async fn boot_init(&self) -> anyhow::Result<()> {
             Ok(())
         }
-        async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-            self.started
-                .lock()
-                .unwrap()
-                .push((opts.engine, opts.socks_port));
+        async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+            unimplemented!("the helper starts from a plan")
+        }
+        async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+            self.started.lock().unwrap().push(plan.clone());
             Ok(())
         }
         async fn stop_data_path(&self, _opts: StopDataPath) -> anyhow::Result<()> {
@@ -193,8 +195,8 @@ mod tests {
         let sock = dir.path().join("helper.sock");
         let sock_str = sock.to_string_lossy().into_owned();
 
-        let platform: Arc<dyn Platform> = Arc::new(StubPlatform::default());
-        let stub = platform.clone();
+        let stub = Arc::new(StubPlatform::default());
+        let platform: Arc<dyn Platform> = stub.clone();
         let serve_path = sock_str.clone();
         tokio::spawn(async move {
             let _ = server::serve(platform, &serve_path, None).await;
@@ -213,19 +215,21 @@ mod tests {
             client.call(PrivRequest::BootInit).await.unwrap(),
             PrivReply::Ok
         );
+        let host = HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: None,
+        };
+        let plan = DataPathPlan::resolve(CoreEngine::SingBox, &AdvancedSettings::default(), host);
         assert_eq!(
             client
-                .call(PrivRequest::StartDataPath {
-                    engine: CoreEngine::SingBox,
-                    tun: kasumi_core::enums::TunEngine::SingboxTun,
-                    tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
-                    socks_port: 1080,
-                    mode: kasumi_core::state::ProxyMode::Tun,
-                })
+                .call(PrivRequest::StartDataPath { plan: plan.clone() })
                 .await
                 .unwrap(),
             PrivReply::Ok
         );
+        // The helper executes the plan the GUI sent, unchanged.
+        assert_eq!(stub.started.lock().unwrap()[..], [plan]);
         match client.call(PrivRequest::ServiceState).await.unwrap() {
             PrivReply::State(s) => assert_eq!(s.download_bytes, 20),
             other => panic!("expected State, got {other:?}"),
@@ -282,7 +286,6 @@ mod tests {
         );
         assert!(!slow.is_finished());
         slow.abort();
-        let _ = stub; // kept alive for the duration of the server task
     }
 
     /// A helper built before the versioned handshake answers `Ping` with a bare

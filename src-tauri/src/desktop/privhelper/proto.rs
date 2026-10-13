@@ -19,15 +19,14 @@
 use serde::{Deserialize, Serialize};
 
 use kasumi_core::contract::ServiceState;
-use kasumi_core::enums::{CoreEngine, TunEngine};
-use kasumi_core::state::ProxyMode;
-use kasumi_core::tun::TunOptions;
+use kasumi_core::data_path_plan::DataPathPlan;
+use kasumi_core::enums::CoreEngine;
 
 /// Version of this protocol, reported in the helper's `Pong`. Bump it whenever a
 /// request or reply changes in a way the other side can't read, so a helper left
 /// over from another build is refused at the handshake instead of failing later on
 /// a request it doesn't know.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// A privileged operation the GUI asks the helper to perform. Mirrors the
 /// privilege-needing methods of `Platform`.
@@ -39,17 +38,9 @@ pub enum PrivRequest {
     Ping,
     /// One-time boot setup (run dirs, seed lifecycle state).
     BootInit,
-    /// Bring the data-path up for `engine` with TUN engine `tun`, routing through
-    /// the local SOCKS. `mode` defaults to tun so a stale helper build without the
-    /// field keeps its old behaviour rather than failing the request.
-    StartDataPath {
-        engine: CoreEngine,
-        tun: TunEngine,
-        tun_opts: TunOptions,
-        socks_port: u16,
-        #[serde(default)]
-        mode: ProxyMode,
-    },
+    /// Bring up the data path the GUI planned. The helper executes the plan as is,
+    /// so start and the state it records come from one decision.
+    StartDataPath { plan: DataPathPlan },
     /// Tear the data-path down. Idempotent.
     StopDataPath { keep_service_state: bool },
     /// Current data-path status (liveness + byte counters).
@@ -160,6 +151,9 @@ pub fn check_handshake(reply: &PrivReply) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use kasumi_core::contract::RunState;
+    use kasumi_core::data_path_plan::{AppRouting, HostTraits};
+    use kasumi_core::enums::TunEngine;
+    use kasumi_core::state::{AdvancedSettings, ProxyMode, SingboxStack};
 
     #[test]
     fn pong_carries_the_protocol_version() {
@@ -230,24 +224,34 @@ mod tests {
         assert_eq!(&serde_json::from_str::<PrivReply>(&line).unwrap(), r);
     }
 
+    fn plan(engine: CoreEngine, tun: TunEngine, mode: ProxyMode) -> DataPathPlan {
+        let mut s = AdvancedSettings {
+            proxy_mode: mode,
+            ..Default::default()
+        };
+        s.tun_by_core.insert(engine, tun);
+        let host = HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: Some(SingboxStack::Gvisor),
+        };
+        DataPathPlan::resolve(engine, &s, host)
+    }
+
     #[test]
     fn requests_round_trip() {
         for r in [
             PrivRequest::Ping,
             PrivRequest::BootInit,
             PrivRequest::StartDataPath {
-                engine: CoreEngine::Xray,
-                tun: TunEngine::Hev,
-                tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
-                socks_port: 10808,
-                mode: ProxyMode::Tun,
+                plan: plan(CoreEngine::Xray, TunEngine::Hev, ProxyMode::Tun),
             },
             PrivRequest::StartDataPath {
-                engine: CoreEngine::SingBox,
-                tun: TunEngine::SingboxTun,
-                tun_opts: kasumi_core::state::AdvancedSettings::default().tun_options(),
-                socks_port: 1080,
-                mode: ProxyMode::ProxyOnly,
+                plan: plan(
+                    CoreEngine::SingBox,
+                    TunEngine::SingboxTun,
+                    ProxyMode::ProxyOnly,
+                ),
             },
             PrivRequest::StopDataPath {
                 keep_service_state: true,
