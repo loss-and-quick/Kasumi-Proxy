@@ -5,6 +5,7 @@ use crate::platform::{
 };
 use crate::testutil::sample_vless;
 use kasumi_core::contract::{ConnectionProbe, RunState, ServiceState};
+use kasumi_core::data_path_plan::DataPathPlan;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{ProxyMode, default_app_state};
 use std::path::PathBuf;
@@ -26,6 +27,8 @@ struct RecordingPlatform {
     /// The running core's `force-in` port the connectivity probe goes through;
     /// 0 = no proxy to probe.
     core_socks: AtomicU16,
+    /// The plan of the last start.
+    started: StdMutex<Option<DataPathPlan>>,
 }
 
 impl RecordingPlatform {
@@ -54,6 +57,7 @@ impl RecordingPlatform {
                 entered: tokio::sync::Notify::new(),
                 release: tokio::sync::Notify::new(),
                 core_socks: AtomicU16::new(0),
+                started: StdMutex::new(None),
             }),
             dir,
         )
@@ -74,8 +78,12 @@ impl Platform for RecordingPlatform {
     async fn set_os_proxy(&self, mode: ProxyMode, _engine: Engine, _socks_port: u16) {
         self.log(&format!("os_proxy:{mode:?}"));
     }
-    async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-        self.log(&format!("start:{:?}", opts.engine));
+    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        anyhow::bail!("the service starts from a plan")
+    }
+    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        self.log(&format!("start:{:?}", plan.engine));
+        *self.started.lock().unwrap() = Some(plan.clone());
         if self.hold_start.load(Ordering::SeqCst) {
             self.entered.notify_one();
             self.release.notified().await;

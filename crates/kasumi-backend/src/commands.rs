@@ -21,6 +21,7 @@ use kasumi_core::contract::{
 };
 use kasumi_core::core::{chain_forced_core, core_conflict, forced_core, preferred_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
+use kasumi_core::data_path_plan::AppRouting;
 use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::import_input::{
     ResolvedImport, is_encrypted_url, resolve_import_text, subscription_fetch_url,
@@ -318,37 +319,23 @@ pub(crate) async fn build_profile_config(
     refuse_unavailable(platform, profile, profiles)?;
     let rules = kasumi_core::route::resolve_route(&state, profile);
     let srs_dir = paths.srs_dir.to_str().unwrap_or("");
-    let mut settings = state.settings.clone();
-    if !platform.supports_proxy_modes() {
-        // A platform that always runs tun (the Android root module) must not have
-        // its tun inbound stripped by a non-tun proxyMode — e.g. one restored from
-        // a desktop backup.
-        settings.proxy_mode = kasumi_core::state::ProxyMode::Tun;
-    }
-    let mut built = build_core_config(
-        profile,
-        &settings,
-        &rules,
-        profiles,
-        srs_dir,
-        platform.host_traits(),
-    )
-    .map_err(err)?;
+    let settings = &state.settings;
+    let host = platform.host_traits();
+    // The plan normalizes the proxy mode for the host, so a non-tun mode restored
+    // from a desktop backup still builds the tun an Android data path needs.
+    let mut built =
+        build_core_config(profile, settings, &rules, profiles, srs_dir, host).map_err(err)?;
     if built.engine() == CoreEngine::SingBox {
         apply_singbox_cache_file(
             &mut built.config,
             &paths.singbox_cache().to_string_lossy(),
-            &settings,
+            settings,
         );
     }
-    if platform.supports_proxy_modes() {
+    if host.app_routing == AppRouting::PerProcess {
         // Desktop: the per-app filter matches programs by executable (Android
         // routes its uid entries in the platform instead).
-        kasumi_core::app_process::apply_process_filter(
-            built.engine(),
-            &settings,
-            &mut built.config,
-        );
+        kasumi_core::app_process::apply_process_filter(built.engine(), settings, &mut built.config);
     }
     platform.tune_config(built.engine(), &mut built.config);
     Ok(built)

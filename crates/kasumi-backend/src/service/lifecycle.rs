@@ -56,12 +56,10 @@ impl Service {
                 // an edit made just before (a profile switch) or during this start
                 // must not raise "restart to apply" over the restart itself.
                 self.note_data_path_stopped();
-                let (opts, built, profile_id) =
-                    resolve_and_write_config(&*self.platform, id.as_deref())
-                        .await
-                        .map_err(|e| e.0)?;
-                let (mode, engine, socks_port) = (opts.mode, opts.engine, opts.socks_port);
-                if let Err(e) = self.platform.start_data_path(opts).await {
+                let (built, profile_id) = resolve_and_write_config(&*self.platform, id.as_deref())
+                    .await
+                    .map_err(|e| e.0)?;
+                if let Err(e) = self.platform.start_planned(&built.plan).await {
                     // A failed bring-up must not leave a previously-set OS proxy
                     // pointing at a dead port.
                     self.platform.clear_os_proxy().await;
@@ -70,7 +68,10 @@ impl Service {
                 }
                 // With the data-path up, align the OS proxy with the mode (set for
                 // system/pac, cleared otherwise — covers mode switches).
-                self.platform.set_os_proxy(mode, engine, socks_port).await;
+                let plan = &built.plan;
+                self.platform
+                    .set_os_proxy(plan.mode, plan.engine, plan.ports.socks)
+                    .await;
                 self.note_data_path_started(built, profile_id);
                 self.settle_pending_restart().await;
                 Ok(())
@@ -99,10 +100,10 @@ impl Service {
                         .await
                         .map_err(|e| e.to_string())?;
                     self.note_data_path_stopped();
-                    let (opts, built, profile_id) = resolve_and_write_config(&*self.platform, None)
+                    let (built, profile_id) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
-                    match self.platform.start_data_path(opts).await {
+                    match self.platform.start_planned(&built.plan).await {
                         Ok(()) => {
                             self.note_data_path_started(built, profile_id);
                             self.settle_pending_restart().await;

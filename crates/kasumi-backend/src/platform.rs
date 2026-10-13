@@ -10,11 +10,12 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
-use kasumi_core::data_path_plan::{AppRouting, HostTraits};
+use kasumi_core::core::default_tun_for;
+use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits, TunPlan};
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
-use kasumi_core::state::ProxyMode;
+use kasumi_core::state::{AdvancedSettings, ProxyMode};
 use kasumi_core::tun::TunOptions;
 
 use crate::lifecycle::spawn_core;
@@ -175,6 +176,26 @@ pub struct StartDataPath {
     pub mode: ProxyMode,
 }
 
+impl StartDataPath {
+    pub fn from_plan(plan: &DataPathPlan) -> Self {
+        let (tun, tun_opts) = match &plan.tun {
+            TunPlan::External(ext) => (ext.engine, ext.opts.clone()),
+            // Neither is read without an external engine.
+            TunPlan::Native { .. } | TunPlan::None => (
+                default_tun_for(plan.engine),
+                AdvancedSettings::default().tun_options(),
+            ),
+        };
+        Self {
+            engine: plan.engine,
+            tun,
+            tun_opts,
+            socks_port: plan.ports.socks,
+            mode: plan.mode,
+        }
+    }
+}
+
 /// Options for [`Platform::stop_data_path`].
 #[derive(Debug, Clone, Default)]
 pub struct StopDataPath {
@@ -236,6 +257,12 @@ pub trait Platform: Send + Sync {
     /// Spawn the core for `engine` from the on-disk config and route traffic through
     /// it. Resolves once the core is confirmed up, or errors with a reason.
     async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()>;
+
+    /// Bring up the data path `plan` describes. The default hands a platform that
+    /// still takes loose options their [`StartDataPath`] form.
+    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        self.start_data_path(StartDataPath::from_plan(plan)).await
+    }
 
     /// Stop the core/helpers and remove all routing. Idempotent.
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()>;
