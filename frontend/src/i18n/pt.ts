@@ -1185,10 +1185,6 @@ const pt = {
     "Este backup é de uma versão mais recente do app. Atualize o app para restaurá-lo",
   "store.backup.restored": "Backup restaurado",
   "store.backup.merged": "Backup mesclado",
-  "store.backup.profilesSkipped": plural("count", {
-    one: "# perfil inválido ignorado",
-    other: "# perfis inválidos ignorados",
-  }),
 
   // app filter
   "appFilter.title": "Filtro de apps",

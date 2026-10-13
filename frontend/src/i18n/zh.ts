@@ -1112,10 +1112,6 @@ const zh = {
   "store.backup.newerVersion": "此备份来自更新版本的应用。请先更新应用再恢复",
   "store.backup.restored": "备份已恢复",
   "store.backup.merged": "备份已合并",
-  "store.backup.profilesSkipped": plural("count", {
-    one: "已跳过 # 个无效配置",
-    other: "已跳过 # 个无效配置",
-  }),
 
   // app filter
   "appFilter.title": "应用过滤",

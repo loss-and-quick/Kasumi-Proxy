@@ -210,6 +210,11 @@ beforeEach(async () => {
       safeParse: (value: unknown) => ({ success: true, data: value }),
     },
   }));
+  vi.doMock("../lib/backup-schema", () => ({
+    BackupSchema: {
+      safeParse: (value: unknown) => ({ success: true, data: value }),
+    },
+  }));
 
   ({ useAppStore } = await import("./useAppStore"));
 

@@ -1196,10 +1196,6 @@ const en = {
     "This backup is from a newer app version. Update the app to restore it",
   "store.backup.restored": "Backup restored",
   "store.backup.merged": "Backup merged",
-  "store.backup.profilesSkipped": plural("count", {
-    one: "Skipped # invalid profile",
-    other: "Skipped # invalid profiles",
-  }),
   // routes
   "routes.title": "Routes",
   "routes.count": plural("count", { one: "# route", other: "# routes" }),

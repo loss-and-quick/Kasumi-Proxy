@@ -349,10 +349,10 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     },
     async importBackup(file, mode) {
       const text = await file.text();
-      const { AppStateSchema } = await import("../generated/schemas");
-      // `parse` returns the `Serialize | Deserialize` union; narrow to the all-fields
-      // phase the intent carries (the backend re-validates and owns the merge).
-      const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
+      const { BackupSchema } = await import("./backup-schema");
+      // Narrow to the all-fields phase the intent carries; the backend migrates
+      // the unchecked profiles, re-validates and owns the merge.
+      const incoming = BackupSchema.parse(JSON.parse(text)) as AppState_Serialize;
       await this.mutate({ kind: "importBackup", incoming, mode });
     },
   };
