@@ -1190,6 +1190,10 @@ const es = {
     "Esta copia es de una versión más reciente de la app. Actualiza la app para restaurarla",
   "store.backup.restored": "Copia restaurada",
   "store.backup.merged": "Copia combinada",
+  "store.backup.profilesSkipped": plural("count", {
+    one: "Se omitió # perfil no válido",
+    other: "Se omitieron # perfiles no válidos",
+  }),
 
   // app filter
   "appFilter.title": "Filtro de apps",

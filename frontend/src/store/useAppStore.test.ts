@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AssetFile, Profile, RoutingRule } from "../generated/bindings";
+import type { AppState_Serialize, AssetFile, Profile, RoutingRule } from "../generated/bindings";
 import type {
   AdvancedSettings,
   AppState,
@@ -191,7 +191,11 @@ function createBridgeMock(): BridgeMock {
     revealSubscriptionUrl: vi.fn(async (_url: string) => ""),
     buildShareLink: vi.fn(async (_profile: Profile) => ""),
     exportBackup: vi.fn(async () => new Blob()),
-    importBackup: vi.fn(async (_file: Blob, _mode: "merge" | "replace") => {}),
+    // Wired in beforeEach like `mutate`.
+    importBackup: vi.fn(async (backup: AppState_Serialize, _mode: "merge" | "replace") => ({
+      state: backup,
+      skippedProfiles: 0,
+    })),
   };
 }
 
@@ -221,7 +225,7 @@ beforeEach(async () => {
   // The backend's Mutate is faithfully emulated: apply the intent to the store's
   // current persisted slice with the same logic the Rust backend runs, return the
   // canonical state. Mirrors the round-trip the real bridge performs.
-  bridge.mutate.mockImplementation(async (intent) => {
+  const emulate = async (intent: Parameters<Bridge["mutate"]>[0]) => {
     const s = useAppStore.getState();
     const prev: AppState = {
       profiles: s.profiles,
@@ -235,7 +239,16 @@ beforeEach(async () => {
       version: s.version,
     };
     return applyMutation(prev, intent);
-  });
+  };
+  bridge.mutate.mockImplementation(emulate);
+  // The restore command applies the same intent and reports nothing left out.
+  bridge.importBackup.mockImplementation(async (incoming, mode) => ({
+    state: {
+      ...(await emulate({ kind: "importBackup", incoming, mode })),
+      schemaVersion: SCHEMA_VERSION,
+    },
+    skippedProfiles: 0,
+  }));
 });
 
 describe("useAppStore", () => {
@@ -585,9 +598,20 @@ describe("useAppStore", () => {
     await useAppStore.getState().importBackup(newer, "replace");
     expect(bridge.stop).not.toHaveBeenCalled();
     expect(bridge.mutate).not.toHaveBeenCalled();
+    expect(bridge.importBackup).not.toHaveBeenCalled();
     expect(useAppStore.getState().toasts.map((x) => x.msg)).toEqual([
       "This backup is from a newer app version. Update the app to restore it",
     ]);
+  });
+
+  it("restoring says how many profiles the backend left out", async () => {
+    useAppStore.setState({ ...makeState(), toasts: [] });
+    bridge.importBackup.mockResolvedValueOnce({
+      state: { ...makeState(), schemaVersion: SCHEMA_VERSION },
+      skippedProfiles: 2,
+    });
+    await useAppStore.getState().importBackup(JSON.stringify(makeState()), "merge");
+    expect(useAppStore.getState().toasts.map((x) => x.msg)).toEqual(["Skipped 2 invalid profiles"]);
   });
 
   it("a backup from before routes brings its flat rules in as a block", async () => {

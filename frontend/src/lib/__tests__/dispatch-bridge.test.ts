@@ -308,3 +308,17 @@ describe("dispatch-bridge import input", () => {
     });
   });
 });
+
+describe("dispatch-bridge backup restore", () => {
+  it("sends the backup as one command and returns what the backend left out", async () => {
+    const restored = { state: { schemaVersion: 4 }, skippedProfiles: 1 };
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
+      if (cmd.cmd === "importBackup" && cmd.mode === "merge")
+        return { kind: "backupRestored", value: restored } as unknown as Response_Serialize;
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, noPush);
+    const backup = { profiles: [] } as unknown as Parameters<typeof bridge.importBackup>[0];
+    await expect(bridge.importBackup(backup, "merge")).resolves.toEqual(restored);
+  });
+});

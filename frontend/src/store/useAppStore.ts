@@ -20,6 +20,7 @@ import type {
   AppState,
   AssetFile,
   AssetsUpdatedEvent,
+  BackupRestored,
   Capabilities,
   CoreResolution,
   MutationIntent,
@@ -1170,10 +1171,19 @@ export const useAppStore = create<Store>((set, get) => {
       if (mode === "replace" && isServiceUp(get().service.state)) {
         await stopServiceIfRunning(translateCurrent("store.service.stoppedBeforeBackupRestore"));
       }
-      await mutate({ kind: "importBackup", incoming, mode });
+      let restored: BackupRestored;
+      try {
+        restored = await bridge.importBackup(incoming, mode);
+      } catch (e: unknown) {
+        get().notify(translateCurrent("store.write.failed", { error: errorMessage(e) }));
+        throw new ReportedError(e);
+      }
+      applyState(restored.state);
       pushActivity("backup", translateCurrent("activity.backupRestored"));
       get().notify(
-        translateCurrent(mode === "replace" ? "store.backup.restored" : "store.backup.merged"),
+        restored.skippedProfiles > 0
+          ? translateCurrent("store.backup.profilesSkipped", { count: restored.skippedProfiles })
+          : translateCurrent(mode === "replace" ? "store.backup.restored" : "store.backup.merged"),
       );
     },
   };

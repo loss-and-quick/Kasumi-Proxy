@@ -1139,6 +1139,10 @@ const hi = {
   "store.backup.newerVersion": "यह बैकअप ऐप के नए संस्करण का है। इसे बहाल करने के लिए ऐप अपडेट करें",
   "store.backup.restored": "बैकअप पुनर्स्थापित किया गया",
   "store.backup.merged": "बैकअप मर्ज किया गया",
+  "store.backup.profilesSkipped": plural("count", {
+    one: "# अमान्य प्रोफ़ाइल छोड़ी गई",
+    other: "# अमान्य प्रोफ़ाइलें छोड़ी गईं",
+  }),
 
   // app filter
   "appFilter.title": "ऐप फ़िल्टर",
