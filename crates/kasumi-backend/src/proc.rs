@@ -217,10 +217,10 @@ fn build_logged_command(
 }
 
 /// Spawn a long-running process (core/tun2socks) with `env`, its stdout+stderr
-/// redirected (truncating) to `log_path`. On Unix the child is tied to the caller
-/// via `PR_SET_PDEATHSIG` (see [`die_with_parent`]), so it dies with its parent —
-/// no `pre_exec` argument. Returns the live [`Child`] so the caller can record its
-/// pid and supervise it.
+/// redirected (truncating) to `log_path`. The child dies with its parent: on Unix
+/// via `PR_SET_PDEATHSIG` (see [`die_with_parent`]), on Windows via the parent's
+/// kill-on-close job (see [`job`]). Returns the live [`Child`] so the caller can
+/// record its pid and supervise it.
 /// `kill_on_drop` ties the OS process lifetime to the returned [`Child`] handle:
 /// for ephemeral diagnostic cores (ping/speed) the handle may be dropped by a
 /// cancelled future — e.g. the client's WS frame is dropped mid-test — and
@@ -233,7 +233,155 @@ pub async fn spawn_logged(
     log_path: impl AsRef<Path>,
     kill_on_drop: bool,
 ) -> std::io::Result<Child> {
-    build_logged_command(argv, env, log_path, kill_on_drop)?.spawn()
+    let mut cmd = build_logged_command(argv, env, log_path, kill_on_drop)?;
+    #[cfg(windows)]
+    {
+        job::spawn_in_job(&mut cmd)
+    }
+    #[cfg(not(windows))]
+    {
+        cmd.spawn()
+    }
+}
+
+/// The Windows counterpart of [`die_with_parent`]. Windows never kills children
+/// with their parent, so every `spawn_logged` child joins one job object flagged
+/// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, and this process holds the only handle to
+/// it. When the process ends for any reason, a crash or `TerminateProcess`
+/// included, the kernel closes that handle and terminates every process in the
+/// job, grandchildren too. No graceful window is needed: the wintun driver
+/// reclaims a dead core's adapter.
+/// <https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_limit_information>
+#[cfg(windows)]
+mod job {
+    use std::sync::OnceLock;
+
+    use tokio::process::{Child, Command};
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
+    };
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+        SetInformationJobObject,
+    };
+    use windows_sys::Win32::System::Threading::{
+        CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
+    };
+
+    struct Job(HANDLE);
+    // SAFETY: a job handle names a kernel object and is usable from any thread.
+    unsafe impl Send for Job {}
+    unsafe impl Sync for Job {}
+
+    /// Never closed: the handle has to live exactly as long as this process.
+    static PARENT_JOB: OnceLock<Option<Job>> = OnceLock::new();
+
+    pub(super) fn parent_job() -> Option<HANDLE> {
+        PARENT_JOB
+            .get_or_init(|| match kill_on_close_job() {
+                Ok(h) => Some(Job(h)),
+                Err(e) => {
+                    log::warn!("no job object, children can outlive a crash: {e}");
+                    None
+                }
+            })
+            .as_ref()
+            .map(|j| j.0)
+    }
+
+    /// A new unnamed job whose processes die when its last handle closes. Null
+    /// security attributes make the handle non-inheritable, so no child can keep
+    /// the job open after this process is gone.
+    pub(super) fn kill_on_close_job() -> std::io::Result<HANDLE> {
+        // SAFETY: Win32 calls on a handle we own; `info` outlives the call.
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+            if job.is_null() {
+                return Err(std::io::Error::last_os_error());
+            }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let ok = SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                (&raw const info).cast(),
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            if ok == 0 {
+                let e = std::io::Error::last_os_error();
+                CloseHandle(job);
+                return Err(e);
+            }
+            Ok(job)
+        }
+    }
+
+    /// Spawn `cmd` suspended, put it in the job, then let it run, so it can't
+    /// start a process of its own before it is in the job (children of a job
+    /// member join the job, <https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects>).
+    /// A process that already belongs to a job, e.g. because this one was started
+    /// inside a job, can join a second one since Windows 8
+    /// (<https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs>).
+    /// A failed assignment only loses the crash guarantee, so the child still runs.
+    pub(super) fn spawn_in_job(cmd: &mut Command) -> std::io::Result<Child> {
+        cmd.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+        let mut child = cmd.spawn()?;
+        let (Some(process), Some(pid)) = (child.raw_handle(), child.id()) else {
+            return Ok(child);
+        };
+        if let Some(job) = parent_job() {
+            // SAFETY: both handles are open; `child` owns `process`.
+            if unsafe { AssignProcessToJobObject(job, process as HANDLE) } == 0 {
+                log::warn!(
+                    "pid {pid} is not in the parent job: {}",
+                    std::io::Error::last_os_error()
+                );
+            }
+        }
+        if let Err(e) = resume_threads(pid) {
+            let _ = child.start_kill();
+            return Err(e);
+        }
+        Ok(child)
+    }
+
+    /// Resume a process created with `CREATE_SUSPENDED`. Only threads can be
+    /// resumed, and `std` closes the main thread's handle right after
+    /// `CreateProcessW`, so the thread is looked up again by owner pid.
+    fn resume_threads(pid: u32) -> std::io::Result<()> {
+        // SAFETY: the snapshot and every thread handle are closed on all paths.
+        unsafe {
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+            if snap == INVALID_HANDLE_VALUE {
+                return Err(std::io::Error::last_os_error());
+            }
+            let mut entry: THREADENTRY32 = std::mem::zeroed();
+            entry.dwSize = size_of::<THREADENTRY32>() as u32;
+            let mut resumed = 0;
+            let mut more = Thread32First(snap, &mut entry) != 0;
+            while more {
+                if entry.th32OwnerProcessID == pid {
+                    let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
+                    if !thread.is_null() {
+                        if ResumeThread(thread) != u32::MAX {
+                            resumed += 1;
+                        }
+                        CloseHandle(thread);
+                    }
+                }
+                more = Thread32Next(snap, &mut entry) != 0;
+            }
+            CloseHandle(snap);
+            if resumed == 0 {
+                return Err(std::io::Error::other(format!(
+                    "could not resume suspended pid {pid}"
+                )));
+            }
+            Ok(())
+        }
+    }
 }
 
 /// POSIX process identity: a pid's executable is matched by `(dev, ino)` of
