@@ -8,6 +8,7 @@ use async_trait::async_trait;
 
 use kasumi_backend::fs::{exists, read_text};
 use kasumi_core::request_identity::DeviceFacts;
+use kasumi_core::state::SingboxStack;
 
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::platform::DesktopOs;
@@ -79,8 +80,8 @@ impl DesktopOs for LinuxOs {
         exists("/dev/net/tun").await
     }
 
-    fn singbox_stack(&self) -> &'static str {
-        "gvisor"
+    fn singbox_stack(&self) -> SingboxStack {
+        SingboxStack::Gvisor
     }
 
     async fn machine_id(&self) -> Option<String> {
