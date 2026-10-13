@@ -680,10 +680,11 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
         } => {
             let target = RoutingTarget {
                 ids: provider_ids(&sub.id),
-                group: sub
-                    .group_id
-                    .clone()
-                    .unwrap_or_else(|| BASE_GROUP_ID.to_owned()),
+                group: Some(
+                    sub.group_id
+                        .clone()
+                        .unwrap_or_else(|| BASE_GROUP_ID.to_owned()),
+                ),
                 source_sub_id: Some(sub.id.clone()),
             };
             import_routing(state, target, routing, activate.unwrap_or(*offered));
@@ -706,10 +707,11 @@ fn apply_action(state: &mut AppState, i: usize, action: &ChangeAction, activate:
     }
 }
 
-/// Block and route ids, the routed group and the subscription that sent the profile.
+/// Block and route ids, the routed group (none for a route of its own) and the
+/// subscription that sent the profile.
 struct RoutingTarget {
     ids: (String, String),
-    group: String,
+    group: Option<String>,
     source_sub_id: Option<String>,
 }
 
@@ -725,13 +727,25 @@ pub fn import_routing_link(
             format!("link-block-{group_id}"),
             format!("link-route-{group_id}"),
         ),
-        group: group_id.to_owned(),
+        group: Some(group_id.to_owned()),
         source_sub_id: None,
     };
     import_routing(state, target, routing, enabled);
 }
 
-/// One block and one route for the target's group, replacing an earlier import.
+/// A `happ://routing` profile as a new route `route_id` that applies to nothing
+/// yet, the way a shared route comes in: the user picks its profiles and groups
+/// afterwards.
+pub fn import_routing_route(state: &mut AppState, route_id: &str, routing: &RoutingImport) {
+    let target = RoutingTarget {
+        ids: (format!("{route_id}-block"), route_id.to_owned()),
+        group: None,
+        source_sub_id: None,
+    };
+    import_routing(state, target, routing, true);
+}
+
+/// One block and one route for the target, replacing an earlier import.
 /// Rules run block, direct, proxy: Happ's default `BLOCK_DIRECT_PROXY` order.
 fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport, enabled: bool) {
     let RoutingTarget {
@@ -783,7 +797,7 @@ fn import_routing(state: &mut AppState, target: RoutingTarget, r: &RoutingImport
             name: r.name.clone(),
             enabled,
             profiles: Vec::new(),
-            groups: vec![group],
+            groups: group.into_iter().collect(),
             blocks: vec![RouteBlockRef {
                 block_id,
                 enabled: true,
@@ -1171,6 +1185,34 @@ mod tests {
             .unwrap();
         assert_eq!(block.source_sub_id, None);
         assert_eq!(block.rules.len(), 4);
+    }
+
+    #[test]
+    fn routing_route_stands_alone_and_leaves_group_routes_alone() {
+        let mut st = state();
+        let routing = routing_import(&routing_profile());
+        import_routing_link(&mut st, "g-main", &routing, true);
+        import_routing_route(&mut st, "r1", &routing);
+        import_routing_route(&mut st, "r2", &routing);
+
+        let route = st.routes.iter().find(|r| r.id == "r1").unwrap();
+        assert!(route.groups.is_empty() && route.profiles.is_empty());
+        assert!(route.enabled);
+        assert_eq!(route.source_sub_id, None);
+        assert_eq!(route.blocks[0].block_id, "r1-block");
+        let block = st.rule_blocks.iter().find(|b| b.id == "r1-block").unwrap();
+        assert_eq!(block.rules.len(), 4);
+        assert_eq!(
+            st.routes.len(),
+            4,
+            "the default, the group route and two imports"
+        );
+        let group_route = st
+            .routes
+            .iter()
+            .find(|r| r.id == "link-route-g-main")
+            .unwrap();
+        assert_eq!(group_route.groups, ["g-main"]);
     }
 
     #[test]

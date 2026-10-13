@@ -27,7 +27,8 @@ use crate::sub_apply::{
     deduplicate_profiles_scoped, migrate_profiles_to_new_group, remove_profiles_by_sub_id,
 };
 use crate::sub_changes::{
-    import_routing_link, remove_provider_routing, resolve_changes, withdraw_provider_configs,
+    import_routing_link, import_routing_route, remove_provider_routing, resolve_changes,
+    withdraw_provider_configs,
 };
 use crate::sub_meta_types::RoutingImport;
 
@@ -189,6 +190,14 @@ pub enum MutationIntent {
         routing: Box<RoutingImport>,
         group_id: String,
         activate: bool,
+    },
+    /// Add a routing profile from a `happ://routing` link as route `route_id`
+    /// (block `{route_id}-block`) that applies to nothing until the user picks
+    /// its profiles or groups.
+    #[serde(rename_all = "camelCase")]
+    ImportRoutingRoute {
+        routing: Box<RoutingImport>,
+        route_id: String,
     },
     /// Run profile `profile_id` with route `route_id` (`None` or the default:
     /// whatever its group gets).
@@ -509,6 +518,9 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             group_id,
             activate,
         } => import_routing_link(state, group_id, routing, *activate),
+        MutationIntent::ImportRoutingRoute { routing, route_id } => {
+            import_routing_route(state, route_id, routing);
+        }
         MutationIntent::SetProfileRoute {
             profile_id,
             route_id,
@@ -1615,6 +1627,19 @@ mod tests {
             s.routes
                 .iter()
                 .any(|r| r.id == "link-route-g-main" && r.enabled)
+        );
+        let intent: MutationIntent = serde_json::from_value(serde_json::json!({
+            "kind": "importRoutingRoute",
+            "routing": { "name": "R", "directSites": [], "directIp": [], "proxySites": [],
+                "proxyIp": [], "blockSites": ["geosite:ads"], "blockIp": [] },
+            "routeId": "r1"
+        }))
+        .unwrap();
+        apply_mutation(&mut s, &intent);
+        assert!(
+            s.routes
+                .iter()
+                .any(|r| r.id == "r1" && r.groups.is_empty() && r.blocks[0].block_id == "r1-block")
         );
     }
 }

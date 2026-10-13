@@ -1235,6 +1235,10 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	groupId: z.string(),
 	activate: z.boolean(),
 }), z.object({
+	kind: z.literal("importRoutingRoute"),
+	routing: RoutingImport_SerializeSchema,
+	routeId: z.string(),
+}), z.object({
 	kind: z.literal("importRoutingRules"),
 	blockId: z.string(),
 	rules: z.array(RoutingRule_SerializeSchema),
@@ -1468,6 +1472,10 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	routing: RoutingImport_DeserializeSchema,
 	groupId: z.string(),
 	activate: z.boolean(),
+}), z.object({
+	kind: z.literal("importRoutingRoute"),
+	routing: RoutingImport_DeserializeSchema,
+	routeId: z.string(),
 }), z.object({
 	kind: z.literal("importRoutingRules"),
 	blockId: z.string(),

@@ -905,6 +905,12 @@ export type MutationIntent_Deserialize =
  */
 ({ kind: "importRoutingLink"; routing: RoutingImport_Deserialize; groupId: string; activate: boolean }) & { accept?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
+ *  Add a routing profile from a `happ://routing` link as route `route_id`
+ *  (block `{route_id}-block`) that applies to nothing until the user picks
+ *  its profiles or groups.
+ */
+({ kind: "importRoutingRoute"; routing: RoutingImport_Deserialize; routeId: string }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
  *  Run profile `profile_id` with route `route_id` (`None` or the default:
  *  whatever its group gets).
  */
@@ -999,6 +1005,12 @@ export type MutationIntent_Serialize =
  *  `group_id`, switched on when `activate`.
  */
 ({ kind: "importRoutingLink"; routing: RoutingImport_Serialize; groupId: string; activate: boolean }) & { accept?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
+/**
+ *  Add a routing profile from a `happ://routing` link as route `route_id`
+ *  (block `{route_id}-block`) that applies to nothing until the user picks
+ *  its profiles or groups.
+ */
+({ kind: "importRoutingRoute"; routing: RoutingImport_Serialize; routeId: string }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**
  *  Run profile `profile_id` with route `route_id` (`None` or the default:
  *  whatever its group gets).
