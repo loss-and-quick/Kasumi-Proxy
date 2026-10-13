@@ -453,6 +453,11 @@ fn is_stream(p: &Profile) -> bool {
 
 /// Build the outbound `proxy` object for a profile (None if it can't run on xray).
 fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
+    // Xray has removed its QUIC and HTTP/2 transports and rejects a config naming
+    // either, so such a profile (or chain hop) is left to sing-box.
+    if matches!(p.transport(), Some(Transport::Quic(_) | Transport::H2(_))) {
+        return None;
+    }
     let mut outbound = build_outbound_base(p)?;
     // hysteria2 already carries complete streamSettings.
     if matches!(p, Profile::Hysteria2(_)) {
@@ -1180,6 +1185,27 @@ mod tests {
             chained("tuic://u:pw@t.ex:443?sni=t.ex", "t", None),
         ];
         let err = build_xray_config(&all[0], &AdvancedSettings::default(), &[], &all).unwrap_err();
+        assert!(err.contains("requires sing-box"), "{err}");
+    }
+
+    #[test]
+    fn quic_transport_is_never_built_for_xray() {
+        let s = AdvancedSettings::default();
+        let ss_quic =
+            "ss://Y2hhY2hhMjAtcG9seTEzMDU6cHc=@q.ex:8388?plugin=v2ray-plugin%3Bmode%3Dquic#q";
+        let alone = chained(ss_quic, "q", None);
+        let err = build_xray_config(&alone, &s, &[], std::slice::from_ref(&alone)).unwrap_err();
+        assert!(err.contains("requires sing-box"), "{err}");
+
+        let all = vec![
+            chained(
+                "vless://u@exit.ex:443?security=tls&sni=exit.ex",
+                "exit",
+                Some("q"),
+            ),
+            chained(ss_quic, "q", None),
+        ];
+        let err = build_xray_config(&all[0], &s, &[], &all).unwrap_err();
         assert!(err.contains("requires sing-box"), "{err}");
     }
 

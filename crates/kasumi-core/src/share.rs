@@ -721,9 +721,10 @@ pub(crate) fn apply_ss_plugin(p: &mut Shadowsocks, plugin: &str) {
             let mode = field("mode=").unwrap_or_else(|| "websocket".into());
             let host_part = field("host=").unwrap_or_default();
             let path_part = field("path=");
-            let tls = parts.contains(&"tls");
-            // The host is only carried on the ws transport; track it so the SNI
-            // fallback below matches the old read of `transport.host`.
+            // v2ray-plugin turns TLS on by itself in QUIC mode, so a quic link
+            // needn't say `tls`.
+            let tls = parts.contains(&"tls") || mode == "quic";
+            // The plugin's host is also its TLS server name.
             let mut stored_host = String::new();
             if mode == "websocket" {
                 stored_host = host_part.clone();
@@ -737,6 +738,7 @@ pub(crate) fn apply_ss_plugin(p: &mut Shadowsocks, plugin: &str) {
                     ..Default::default()
                 });
             } else if mode == "quic" {
+                stored_host = host_part;
                 p.transport = Transport::Quic(QuicTransport::default());
             }
             if tls {
@@ -1305,6 +1307,9 @@ fn build_ss(p: &Shadowsocks) -> String {
                     }
                 } else if is_quic {
                     parts.push("mode=quic".into());
+                    if !p.tls.sni.is_empty() {
+                        parts.push(format!("host={}", p.tls.sni));
+                    }
                 }
                 if p.tls.security == Security::Tls {
                     parts.push("tls".into());
@@ -1894,5 +1899,41 @@ mod tests {
             "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dcdn.example#obfs",
         );
         assert_eq!(obfs.tls.security, Security::None);
+    }
+
+    #[test]
+    fn v2ray_plugin_quic_mode_runs_tls_with_the_host_as_sni() {
+        let quic = parse_ss_link(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dquic%3Bhost%3Dq.example#quic",
+        );
+        assert!(matches!(quic.transport, Transport::Quic(_)));
+        assert_eq!(quic.tls.security, Security::Tls);
+        assert_eq!(quic.tls.sni, "q.example");
+
+        let link = build_share_link(&Profile::Shadowsocks(quic.clone()));
+        let again = parse_ss_link(&link);
+        assert_eq!(again.transport, quic.transport, "{link}");
+        assert_eq!(again.tls.sni, "q.example", "{link}");
+    }
+
+    #[test]
+    fn absent_security_param_means_no_tls() {
+        for uri in [
+            "vless://11111111-1111-1111-1111-111111111111@e.example:443?type=tcp#v",
+            "trojan://pw@e.example:443?type=tcp#t",
+            "http://user:pw@e.example:8080#h",
+        ] {
+            let p = parse_share_link(uri, None).unwrap();
+            assert_eq!(p.tls().unwrap().security, Security::None, "{uri}");
+        }
+        // vmess:// carries its TLS mode in the JSON `tls` key.
+        let vmess = format!(
+            "vmess://{}",
+            b64encode(
+                r#"{"v":"2","ps":"m","add":"e.example","port":"443","id":"11111111-1111-1111-1111-111111111111","aid":"0","net":"tcp"}"#
+            )
+        );
+        let p = parse_share_link(&vmess, None).unwrap();
+        assert_eq!(p.tls().unwrap().security, Security::None);
     }
 }

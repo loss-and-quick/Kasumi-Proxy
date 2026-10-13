@@ -189,8 +189,9 @@ export function emptyProfile(protocol: Protocol, groupId = "g-main"): Profile {
 /**
  * The draft after switching its protocol: a fresh per-protocol skeleton that
  * carries over the identity, the endpoint/tls/transport sub-objects, and any
- * overlapping root credential field. A protocol whose template starts without
- * TLS (Shadowsocks, where TLS is a v2ray-plugin option) keeps that off.
+ * overlapping root credential field. The TLS mode carries over, except that
+ * Shadowsocks starts with it off (there TLS is a v2ray-plugin option) and a
+ * protocol that needs TLS gets its template's mode when the draft had none.
  */
 export function switchProtocol(cur: Profile, proto: Protocol): Profile {
   const next = emptyProfile(proto, cur.meta.groupId);
@@ -204,8 +205,13 @@ export function switchProtocol(cur: Profile, proto: Protocol): Profile {
   };
   if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
   if ("tls" in next && next.tls && "tls" in cur && cur.tls) {
-    const optIn = next.tls.security === "none";
-    next.tls = optIn ? { ...cur.tls, security: "none" } : { ...cur.tls };
+    const security =
+      proto === "shadowsocks"
+        ? "none"
+        : cur.tls.security === "none"
+          ? next.tls.security
+          : cur.tls.security;
+    next.tls = { ...cur.tls, security };
   }
   if ("transport" in next && "transport" in cur && cur.transport) next.transport = cur.transport;
   const skip = new Set(["meta", "endpoint", "tls", "transport", "protocol"]);

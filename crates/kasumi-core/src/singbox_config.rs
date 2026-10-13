@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
 use crate::config_shared::{parse_pem_chain, split_csv, split_list};
-use crate::enums::{Fingerprint, HeaderType, Security};
+use crate::enums::{Fingerprint, HeaderType, Security, SsMethod};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
@@ -359,6 +359,18 @@ fn build_server_ports(ports: &str) -> Vec<String> {
 
 // ---------- outbound per protocol ----------
 
+/// sing-box's name for a Shadowsocks cipher. Xray's `plain`, `chacha20-poly1305`
+/// and `xchacha20-poly1305` are aliases for ciphers sing-box accepts only under
+/// the Shadowsocks spec names.
+fn singbox_ss_method(m: SsMethod) -> String {
+    match m {
+        SsMethod::Plain => "none".into(),
+        SsMethod::Chacha20Poly1305 => "chacha20-ietf-poly1305".into(),
+        SsMethod::Xchacha20Poly1305 => "xchacha20-ietf-poly1305".into(),
+        other => wire(&other),
+    }
+}
+
 /// Build the sing-box outbound (or wireguard endpoint) object for a profile.
 pub fn build_singbox_outbound(p: &Profile, s: &AdvancedSettings) -> Value {
     let mut base = json!({ "tag": "proxy", "type": wire_protocol(p) });
@@ -423,7 +435,7 @@ pub fn build_singbox_outbound(p: &Profile, s: &AdvancedSettings) -> Value {
             apply_tls(&mut base, false);
         }
         Profile::Shadowsocks(v) => {
-            base["method"] = wire(&v.method).into();
+            base["method"] = singbox_ss_method(v.method).into();
             base["password"] = v.password.clone().into();
             match &v.transport {
                 Transport::Tcp(tc) if tc.header_type == HeaderType::Http => {
@@ -443,10 +455,18 @@ pub fn build_singbox_outbound(p: &Profile, s: &AdvancedSettings) -> Value {
                                 .replace(',', "\\,");
                             args.push_str(&format!("path={path};"));
                         }
-                        Transport::Quic(_) => args.push_str("mode=quic;"),
+                        Transport::Quic(_) => {
+                            args.push_str("mode=quic;");
+                            if !v.tls.sni.is_empty() {
+                                args.push_str(&format!("host={};", v.tls.sni));
+                            }
+                        }
                         _ => {}
                     }
-                    if v.tls.security == Security::Tls {
+                    // QUIC always runs TLS: the v2ray-plugin server forces it and
+                    // sing-box refuses QUIC mode without `tls`.
+                    if v.tls.security == Security::Tls || matches!(v.transport, Transport::Quic(_))
+                    {
                         args.push_str("tls;");
                     }
                     if !args.is_empty() {
@@ -2220,5 +2240,44 @@ mod tests {
         assert_eq!(ws["plugin"], "v2ray-plugin");
         let opts = ws["plugin_opts"].as_str().unwrap();
         assert!(!opts.split(';').any(|o| o == "tls"), "{opts}");
+    }
+
+    #[test]
+    fn shadowsocks_quic_always_asks_the_plugin_for_tls() {
+        let mut p = crate::share::parse_share_link(
+            "ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388?plugin=v2ray-plugin%3Bmode%3Dquic%3Bhost%3Dq.example#q",
+            None,
+        )
+        .unwrap();
+        // Also when the stored profile has TLS switched off.
+        p.tls_mut().unwrap().security = Security::None;
+        let o = build_singbox_outbound(&p, &AdvancedSettings::default());
+        assert_eq!(o["plugin"], "v2ray-plugin");
+        let opts: Vec<&str> = o["plugin_opts"].as_str().unwrap().split(';').collect();
+        for want in ["mode=quic", "host=q.example", "tls"] {
+            assert!(opts.contains(&want), "{opts:?}");
+        }
+    }
+
+    #[test]
+    fn shadowsocks_ciphers_use_singbox_names() {
+        let method = |m: SsMethod| {
+            let Some(Profile::Shadowsocks(mut ss)) =
+                crate::share::parse_share_link("ss://YWVzLTI1Ni1nY206cHc=@ss.example:8388", None)
+            else {
+                panic!("not shadowsocks")
+            };
+            ss.method = m;
+            build_singbox_outbound(&Profile::Shadowsocks(ss), &AdvancedSettings::default())
+                ["method"]
+                .clone()
+        };
+        assert_eq!(method(SsMethod::Plain), "none");
+        assert_eq!(method(SsMethod::Chacha20Poly1305), "chacha20-ietf-poly1305");
+        assert_eq!(
+            method(SsMethod::Xchacha20Poly1305),
+            "xchacha20-ietf-poly1305"
+        );
+        assert_eq!(method(SsMethod::Aes256Gcm), "aes-256-gcm");
     }
 }
