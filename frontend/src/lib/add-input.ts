@@ -13,9 +13,6 @@ import { uid } from "./utils";
 
 export type SubDefaults = { autoUpdate: boolean; interval: number };
 
-/** What a new subscription starts with until the user changes it. */
-export const NEW_SUB_DEFAULTS: SubDefaults = { autoUpdate: false, interval: 360 }; // 06:00
-
 type UnsupportedKind = ResolvedImport["unsupported"][number]["kind"];
 
 /** Why each kind of `happ://` link is skipped. */

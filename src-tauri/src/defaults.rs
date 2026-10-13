@@ -36,6 +36,7 @@ import type {
 \tSecurity,
 \tSingboxFragment,
 \tSsMethod,
+\tSubscription_Serialize,
 \tTransport,
 \tTunEngine,
 \tVmessEnc,
@@ -144,6 +145,15 @@ pub fn render() -> String {
         let json = serde_json::to_string(value).expect("string const");
         out.push_str(&format!("export const {name} = {json};\n"));
     }
+
+    let new_sub = serde_json::json!({
+        "autoUpdate": state::NEW_SUB_AUTO_UPDATE,
+        "interval": state::NEW_SUB_INTERVAL,
+    });
+    out.push_str("\n/** What a new subscription starts with until the user changes it. */\n");
+    out.push_str(&format!(
+        "export const NEW_SUB_DEFAULTS: Pick<Subscription_Serialize, \"autoUpdate\" | \"interval\"> = {new_sub};\n"
+    ));
 
     // Editor dropdown option lists (wire values, declaration order).
     out.push_str("\n/* Editor dropdown option lists (wire values, in declaration order). */\n");

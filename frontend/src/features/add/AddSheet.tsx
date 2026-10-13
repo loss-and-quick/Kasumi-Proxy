@@ -18,13 +18,13 @@ import {
   SheetAction,
 } from "../../components";
 import type { Profile } from "../../generated/bindings";
+import { NEW_SUB_DEFAULTS } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import {
   type AddInput,
   addInputFrom,
   appendScanned,
   EMPTY_ADD_INPUT,
-  NEW_SUB_DEFAULTS,
   parseSubscriptionDump,
   profileDraft,
   resolveAddText,
