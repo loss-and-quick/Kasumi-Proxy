@@ -96,5 +96,7 @@ export function warningKey(w: SubWarning): DictKey {
       return "subs.warnings.invalidFragment";
     case "legacyParser":
       return "subs.warnings.legacyParser";
+    case "usedFallback":
+      return "subs.warnings.usedFallback";
   }
 }

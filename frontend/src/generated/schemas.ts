@@ -320,6 +320,9 @@ export const SubWarningSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("unsupportedLinks"),
 	count: z.number(),
+}), z.object({
+	kind: z.literal("usedFallback"),
+	host: z.string(),
 })]);
 export type SubWarning = z.infer<typeof SubWarningSchema>;
 
@@ -405,6 +408,121 @@ export const ProviderInfo_SerializeSchema = z.object({
 export type ProviderInfo_Serialize = z.infer<typeof ProviderInfo_SerializeSchema>;
 
 
+export const MetaRiskSchema = z.union([z.literal("deviceIdentity"), z.literal("display"), z.literal("ignored"), z.literal("schedule"), z.literal("trustBoundary"), z.literal("tunnelBehaviour")]);
+export type MetaRisk = z.infer<typeof MetaRiskSchema>;
+
+
+export const TunnelSettingSchema = z.union([z.object({
+	kind: z.literal("fragment"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("fragmentInterval"),
+	value: z.string(),
+}), z.object({
+	kind: z.literal("fragmentLength"),
+	value: z.string(),
+}), z.object({
+	kind: z.literal("fragmentPackets"),
+	value: z.string(),
+}), z.object({
+	kind: z.literal("mux"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("sniffing"),
+	on: z.boolean(),
+})]);
+export type TunnelSetting = z.infer<typeof TunnelSettingSchema>;
+
+
+export const RoutingImport_SerializeSchema = z.object({
+	name: z.string(),
+	directSites: z.array(z.string()),
+	directIp: z.array(z.string()),
+	proxySites: z.array(z.string()),
+	proxyIp: z.array(z.string()),
+	blockSites: z.array(z.string()),
+	blockIp: z.array(z.string()),
+	globalProxy: z.boolean().nullable().optional(),
+	ignoredFields: z.array(z.string()),
+});
+export type RoutingImport_Serialize = z.infer<typeof RoutingImport_SerializeSchema>;
+
+
+export const ChangeAction_SerializeSchema = z.union([z.object({
+	kind: z.literal("importRouting"),
+	routing: RoutingImport_SerializeSchema,
+	activate: z.boolean(),
+}), z.object({
+	kind: z.literal("lockUserAgent"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("replaceDomain"),
+	url: z.string(),
+	fromHost: z.string(),
+	toHost: z.string(),
+	otherDomain: z.boolean(),
+}), z.object({
+	kind: z.literal("replaceUrl"),
+	url: z.string(),
+	fromHost: z.string(),
+	toHost: z.string(),
+	otherDomain: z.boolean(),
+}), z.object({
+	kind: z.literal("setFallbackUrl"),
+	url: z.string(),
+	host: z.string(),
+}), z.object({
+	kind: z.literal("setInsecure"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("setRoutingEnabled"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("setUserAgent"),
+	userAgent: z.string(),
+}), z.object({
+	kind: z.literal("tunnelSetting"),
+	setting: TunnelSettingSchema,
+}), z.object({
+	kind: z.literal("unsupported"),
+})]);
+export type ChangeAction_Serialize = z.infer<typeof ChangeAction_SerializeSchema>;
+
+
+export const PendingChange_SerializeSchema = z.object({
+	key: z.string(),
+	value: z.string(),
+	previous: z.string().nullable().optional(),
+	risk: MetaRiskSchema,
+	action: ChangeAction_SerializeSchema,
+	digest: z.string(),
+	seenAt: z.string(),
+});
+export type PendingChange_Serialize = z.infer<typeof PendingChange_SerializeSchema>;
+
+
+export const ChangeDecisionSchema = z.object({
+	key: z.string(),
+	digest: z.string(),
+	accepted: z.boolean(),
+	at: z.string(),
+});
+export type ChangeDecision = z.infer<typeof ChangeDecisionSchema>;
+
+
+export const AuditOutcomeSchema = z.union([z.literal("accepted"), z.literal("autoApplied"), z.literal("ignored"), z.literal("offered"), z.literal("rejected")]);
+export type AuditOutcome = z.infer<typeof AuditOutcomeSchema>;
+
+
+export const AuditEntrySchema = z.object({
+	at: z.string(),
+	key: z.string(),
+	outcome: AuditOutcomeSchema,
+	summary: z.string(),
+});
+export type AuditEntry = z.infer<typeof AuditEntrySchema>;
+
+
 export const Subscription_SerializeSchema = z.object({
 	id: z.string(),
 	remarks: z.string(),
@@ -431,6 +549,11 @@ export const Subscription_SerializeSchema = z.object({
 	warnings: z.array(SubWarningSchema).optional(),
 	lastErrorKind: SubErrorKindSchema.nullable().optional(),
 	request: SubRequestOverrides_SerializeSchema.optional(),
+	pendingChanges: z.array(PendingChange_SerializeSchema).optional(),
+	decisions: z.array(ChangeDecisionSchema).optional(),
+	audit: z.array(AuditEntrySchema).optional(),
+	fallbackUrl: z.string().nullable().optional(),
+	insecureByProvider: z.boolean(),
 });
 export type Subscription_Serialize = z.infer<typeof Subscription_SerializeSchema>;
 
@@ -460,6 +583,7 @@ export const RuleBlock_SerializeSchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	rules: z.array(RoutingRule_SerializeSchema),
+	sourceSubId: z.string().nullable().optional(),
 });
 export type RuleBlock_Serialize = z.infer<typeof RuleBlock_SerializeSchema>;
 
@@ -479,6 +603,7 @@ export const RouteSchema = z.object({
 	groups: z.array(z.string()).optional(),
 	blocks: z.array(RouteBlockRefSchema).optional(),
 	finalOutbound: z.string().optional(),
+	sourceSubId: z.string().nullable().optional(),
 });
 export type Route = z.infer<typeof RouteSchema>;
 
@@ -872,6 +997,73 @@ export const ProviderInfo_DeserializeSchema = z.object({
 export type ProviderInfo_Deserialize = z.infer<typeof ProviderInfo_DeserializeSchema>;
 
 
+export const RoutingImport_DeserializeSchema = z.object({
+	name: z.string(),
+	directSites: z.array(z.string()),
+	directIp: z.array(z.string()),
+	proxySites: z.array(z.string()),
+	proxyIp: z.array(z.string()),
+	blockSites: z.array(z.string()),
+	blockIp: z.array(z.string()),
+	globalProxy: z.boolean().nullable().optional(),
+	ignoredFields: z.array(z.string()).optional(),
+});
+export type RoutingImport_Deserialize = z.infer<typeof RoutingImport_DeserializeSchema>;
+
+
+export const ChangeAction_DeserializeSchema = z.union([z.object({
+	kind: z.literal("importRouting"),
+	routing: RoutingImport_DeserializeSchema,
+	activate: z.boolean(),
+}), z.object({
+	kind: z.literal("lockUserAgent"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("replaceDomain"),
+	url: z.string(),
+	fromHost: z.string(),
+	toHost: z.string(),
+	otherDomain: z.boolean(),
+}), z.object({
+	kind: z.literal("replaceUrl"),
+	url: z.string(),
+	fromHost: z.string(),
+	toHost: z.string(),
+	otherDomain: z.boolean(),
+}), z.object({
+	kind: z.literal("setFallbackUrl"),
+	url: z.string(),
+	host: z.string(),
+}), z.object({
+	kind: z.literal("setInsecure"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("setRoutingEnabled"),
+	on: z.boolean(),
+}), z.object({
+	kind: z.literal("setUserAgent"),
+	userAgent: z.string(),
+}), z.object({
+	kind: z.literal("tunnelSetting"),
+	setting: TunnelSettingSchema,
+}), z.object({
+	kind: z.literal("unsupported"),
+})]);
+export type ChangeAction_Deserialize = z.infer<typeof ChangeAction_DeserializeSchema>;
+
+
+export const PendingChange_DeserializeSchema = z.object({
+	key: z.string(),
+	value: z.string(),
+	previous: z.string().nullable().optional(),
+	risk: MetaRiskSchema,
+	action: ChangeAction_DeserializeSchema,
+	digest: z.string(),
+	seenAt: z.string(),
+});
+export type PendingChange_Deserialize = z.infer<typeof PendingChange_DeserializeSchema>;
+
+
 export const Subscription_DeserializeSchema = z.object({
 	id: z.string(),
 	remarks: z.string(),
@@ -898,6 +1090,11 @@ export const Subscription_DeserializeSchema = z.object({
 	warnings: z.array(SubWarningSchema).optional(),
 	lastErrorKind: SubErrorKindSchema.nullable().optional(),
 	request: SubRequestOverrides_DeserializeSchema.optional(),
+	pendingChanges: z.array(PendingChange_DeserializeSchema).optional(),
+	decisions: z.array(ChangeDecisionSchema).optional(),
+	audit: z.array(AuditEntrySchema).optional(),
+	fallbackUrl: z.string().nullable().optional(),
+	insecureByProvider: z.boolean().optional(),
 });
 export type Subscription_Deserialize = z.infer<typeof Subscription_DeserializeSchema>;
 
@@ -923,6 +1120,7 @@ export const RuleBlock_DeserializeSchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	rules: z.array(RoutingRule_DeserializeSchema).optional(),
+	sourceSubId: z.string().nullable().optional(),
 });
 export type RuleBlock_Deserialize = z.infer<typeof RuleBlock_DeserializeSchema>;
 
@@ -962,6 +1160,10 @@ export const CapabilitiesSchema = z.object({
 	tun: z.boolean(),
 });
 export type Capabilities = z.infer<typeof CapabilitiesSchema>;
+
+
+export const ChangeActionSchema = z.union([ChangeAction_DeserializeSchema, ChangeAction_SerializeSchema]);
+export type ChangeAction = z.infer<typeof ChangeActionSchema>;
 
 
 export const TestKindSchema = z.union([z.literal("realPing"), z.literal("speed"), z.literal("tcpPing")]);
@@ -1041,6 +1243,13 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("replaceState"),
 	state: AppState_SerializeSchema,
+}), z.object({
+	kind: z.literal("resolveSubChange"),
+	subId: z.string(),
+	digests: z.array(z.string()),
+	accept: z.boolean(),
+	activate: z.boolean().nullable(),
+	at: z.string(),
 }), z.object({
 	kind: z.literal("setActive"),
 	id: z.string().nullable(),
@@ -1251,6 +1460,13 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("replaceState"),
 	state: AppState_DeserializeSchema,
 }), z.object({
+	kind: z.literal("resolveSubChange"),
+	subId: z.string(),
+	digests: z.array(z.string()),
+	accept: z.boolean(),
+	activate: z.boolean().nullable().optional(),
+	at: z.string(),
+}), z.object({
 	kind: z.literal("setActive"),
 	id: z.string().nullable().optional(),
 }), z.object({
@@ -1430,6 +1646,10 @@ export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, M
 export type MutationIntent = z.infer<typeof MutationIntentSchema>;
 
 
+export const PendingChangeSchema = z.union([PendingChange_DeserializeSchema, PendingChange_SerializeSchema]);
+export type PendingChange = z.infer<typeof PendingChangeSchema>;
+
+
 export const ProviderInfoSchema = z.union([ProviderInfo_DeserializeSchema, ProviderInfo_SerializeSchema]);
 export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
 
@@ -1596,6 +1816,10 @@ export type Response_Deserialize = z.infer<typeof Response_DeserializeSchema>;
 
 export const ResponseSchema = z.union([Response_DeserializeSchema, Response_SerializeSchema]);
 export type Response = z.infer<typeof ResponseSchema>;
+
+
+export const RoutingImportSchema = z.union([RoutingImport_DeserializeSchema, RoutingImport_SerializeSchema]);
+export type RoutingImport = z.infer<typeof RoutingImportSchema>;
 
 
 export const RoutingModeSchema = z.union([RoutingMode_DeserializeSchema, RoutingMode_SerializeSchema]);

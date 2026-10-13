@@ -586,6 +586,7 @@ fn route_final_direct_rules() -> Vec<RoutingRule> {
         id: "b".into(),
         name: "B".into(),
         rules: plain_rules(),
+        source_sub_id: None,
     }];
     state.routes = vec![kasumi_core::route::Route {
         blocks: vec![RouteBlockRef {

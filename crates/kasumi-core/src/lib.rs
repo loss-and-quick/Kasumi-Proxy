@@ -20,6 +20,7 @@
 //! - [`share`] — share-link parse/build
 //! - [`sub_ingest`] — subscription responses to profiles and provider meta
 //! - [`sub_policy`] — which provider meta is applied to a subscription, and how
+//! - [`sub_changes`] — provider changes that wait for the user's consent
 //! - [`request_identity`] — the identity a subscription fetch sends, built by happ-sub
 //! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
 
@@ -45,6 +46,7 @@ pub mod share;
 pub mod singbox_config;
 pub mod state;
 pub mod sub_apply;
+pub mod sub_changes;
 pub mod sub_ingest;
 pub mod sub_meta_types;
 pub mod sub_policy;

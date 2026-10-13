@@ -39,6 +39,7 @@ export function makeSubscription(
     intervalOverride: p.intervalOverride ?? false,
     bodyEncrypted: false,
     warnings: [],
+    insecureByProvider: false,
   };
 }
 

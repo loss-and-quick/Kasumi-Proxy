@@ -26,6 +26,7 @@ use crate::state::{
 use crate::sub_apply::{
     deduplicate_profiles_scoped, migrate_profiles_to_new_group, remove_profiles_by_sub_id,
 };
+use crate::sub_changes::{remove_provider_routing, resolve_changes};
 
 /// Merge vs replace, shared by list-import and backup-restore intents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -114,6 +115,17 @@ pub enum MutationIntent {
         id: String,
         #[serde(default)]
         delete_group: bool,
+    },
+    /// Accept or reject provider-proposed changes of a subscription, by digest.
+    /// `activate` is the user's choice for a routing import; `at` stamps the answer.
+    #[serde(rename_all = "camelCase")]
+    ResolveSubChange {
+        sub_id: String,
+        digests: Vec<String>,
+        accept: bool,
+        #[serde(default)]
+        activate: Option<bool>,
+        at: String,
     },
 
     // ---- routing rules (inside a block) ----
@@ -348,6 +360,7 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 .and_then(|s| s.group_id.clone());
             state.profiles = remove_profiles_by_sub_id(&state.profiles, id, group.as_deref());
             state.subscriptions.retain(|s| s.id != *id);
+            remove_provider_routing(state, id);
             if *delete_group && let Some(g) = group.filter(|g| owned_group_is_empty(state, id, g)) {
                 state.groups.retain(|x| x.id != g);
             }
@@ -358,6 +371,14 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 }
             }
         }
+
+        MutationIntent::ResolveSubChange {
+            sub_id,
+            digests,
+            accept,
+            activate,
+            at,
+        } => resolve_changes(state, sub_id, digests, *accept, *activate, at),
 
         MutationIntent::UpsertRoutingRule { block_id, rule } => {
             if let Some(b) = block_mut(state, block_id) {
@@ -968,6 +989,7 @@ mod tests {
             id: "b1".into(),
             name: "B".into(),
             rules: rules.iter().map(|id| rule(id)).collect(),
+            source_sub_id: None,
         }];
         s
     }
@@ -1335,5 +1357,17 @@ mod tests {
         assert!(matches!(intent, MutationIntent::RemoveProfiles { .. }));
         let v = serde_json::to_value(MutationIntent::SetActive { id: None }).unwrap();
         assert_eq!(v, serde_json::json!({ "kind": "setActive", "id": null }));
+        let intent: MutationIntent = serde_json::from_value(serde_json::json!({
+            "kind": "resolveSubChange",
+            "subId": "s1",
+            "digests": ["d"],
+            "accept": true,
+            "at": "2026-10-13T00:00:00Z"
+        }))
+        .unwrap();
+        assert!(matches!(
+            intent,
+            MutationIntent::ResolveSubChange { activate: None, .. }
+        ));
     }
 }

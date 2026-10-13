@@ -90,6 +90,8 @@ function makeSub(overrides: Partial<Subscription> = {}): Subscription {
     manualTitle: overrides.manualTitle ?? false,
     intervalOverride: overrides.intervalOverride ?? false,
     bodyEncrypted: overrides.bodyEncrypted ?? false,
+    insecureByProvider: overrides.insecureByProvider ?? false,
+    pendingChanges: overrides.pendingChanges,
   };
 }
 
@@ -1119,5 +1121,36 @@ describe("useAppStore", () => {
       expect(feed[0].icon).toBe("edit_note");
       expect(feed[0].text).toContain("MyNode");
     });
+  });
+
+  it("resolveSubChange sends the intent and applies the accepted change", async () => {
+    const pending = {
+      key: "mux-enable",
+      value: "true",
+      previous: "false",
+      risk: "tunnelBehaviour" as const,
+      action: { kind: "tunnelSetting" as const, setting: { kind: "mux" as const, on: true } },
+      digest: "d1",
+      seenAt: "2026-10-13T00:00:00Z",
+    };
+    bridge.readState.mockResolvedValue(
+      makeState({ subscriptions: [makeSub({ id: "s1", pendingChanges: [pending] })] }),
+    );
+    await useAppStore.getState().hydrate();
+
+    await useAppStore.getState().resolveSubChange("s1", ["d1"], true);
+
+    expect(bridge.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "resolveSubChange",
+        subId: "s1",
+        digests: ["d1"],
+        accept: true,
+      }),
+    );
+    const s = useAppStore.getState();
+    expect(s.settings.mux).toBe(true);
+    expect(s.subscriptions[0].pendingChanges).toEqual([]);
+    expect(s.subscriptions[0].decisions?.[0]).toMatchObject({ digest: "d1", accepted: true });
   });
 });

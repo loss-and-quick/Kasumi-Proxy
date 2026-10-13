@@ -4,6 +4,7 @@ import { useFormatters, useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
 import { minutesToClock } from "../../lib/utils";
 import { ProviderBanners } from "./ProviderBanner";
+import { keyLabel, proposalCount, tunnelKeys } from "./proposals";
 import {
   daysLeft,
   displayTitle,
@@ -27,10 +28,10 @@ export function SubCard({
   updating,
   onUpdate,
   onEdit,
-  onDelete,
-  onCopyUrl,
+  onMore,
   onOpenUrl,
   onShowWarnings,
+  onShowChanges,
 }: {
   s: Subscription;
   groupName: string;
@@ -41,10 +42,10 @@ export function SubCard({
   updating: boolean;
   onUpdate: () => void;
   onEdit: () => void;
-  onDelete: () => void;
-  onCopyUrl: () => void;
+  onMore: () => void;
   onOpenUrl: (url: string) => void;
   onShowWarnings: () => void;
+  onShowChanges: () => void;
 }) {
   const t = useT();
   const { formatDateTime } = useFormatters();
@@ -55,6 +56,8 @@ export function SubCard({
   const expired = !!provider && (provider.expired || expiry === "expired");
   const interval = intervalLabel(s);
   const warnings = s.warnings ?? [];
+  const proposed = proposalCount(s.pendingChanges);
+  const tunnel = tunnelKeys(s.pendingChanges);
 
   return (
     <Card style={{ padding: 14, opacity: s.enabled ? 1 : 0.6 }}>
@@ -188,6 +191,38 @@ export function SubCard({
         style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, flexWrap: "wrap" }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {proposed > 0 && (
+            <button
+              type="button"
+              className="chip"
+              style={{
+                ...chipStyle,
+                pointerEvents: undefined,
+                background: "var(--primary)",
+                color: "var(--on-primary)",
+                borderColor: "transparent",
+              }}
+              onClick={onShowChanges}
+            >
+              <Icon name="policy" style={{ fontSize: 15 }} />{" "}
+              {t("subs.changes.badge", { count: proposed })}
+            </button>
+          )}
+          {tunnel.map((key) => {
+            const label = keyLabel(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                className="chip"
+                style={{ ...chipStyle, pointerEvents: undefined, color: "var(--warn)" }}
+                title={t("subs.changes.group.tunnelSub")}
+                onClick={onShowChanges}
+              >
+                <Icon name="tune" style={{ fontSize: 15 }} /> {label ? t(label) : key}
+              </button>
+            );
+          })}
           {s.autoUpdate ? (
             <span className="chip active" style={chipStyle}>
               <Icon name="autorenew" style={{ fontSize: 15 }} />{" "}
@@ -228,9 +263,8 @@ export function SubCard({
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-          <IconBtn sm name="content_copy" onClick={onCopyUrl} title={t("subs.copyUrl")} />
           <IconBtn sm name="edit" onClick={onEdit} title={t("subs.editAction")} />
-          <IconBtn sm name="delete" onClick={onDelete} title={t("subs.deleteAction")} />
+          <IconBtn sm name="more_vert" onClick={onMore} title={t("subs.menu.more")} />
           <Btn
             variant="tonal"
             sm
@@ -270,7 +304,11 @@ export function WarningsSheet({
           <div key={w.kind} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <Icon name="warning" style={{ fontSize: 20, color: "var(--warn)", flexShrink: 0 }} />
             <div style={{ minWidth: 0, fontSize: 13.5, lineHeight: 1.45 }}>
-              {"count" in w ? t(warningKey(w), { count: w.count }) : t(warningKey(w))}
+              {"count" in w
+                ? t(warningKey(w), { count: w.count })
+                : "host" in w
+                  ? t(warningKey(w), { host: w.host })
+                  : t(warningKey(w))}
               {w.kind === "skippedLines" && w.sample && (
                 <div
                   className="mono"

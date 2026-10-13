@@ -18,6 +18,7 @@ uuid = { version = "1", features = ["v4"] }
 strum = { version = "0.26", features = ["derive"] }
 yaml_serde = "0.10.4"
 happ-sub = { workspace = true }
+sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"

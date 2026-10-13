@@ -11,7 +11,7 @@
 
 import type { Profile, RoutingRule } from "../generated/bindings";
 import { mergeSettings } from "../store/defaults";
-import type { AppState, MutationIntent } from "./bridge";
+import type { AppState, ChangeAction, MutationIntent, RoutingImport, Subscription } from "./bridge";
 import { uid } from "./profile-utils";
 import { DEFAULT_ROUTE_ID, normalizeRoutes, setProfileRoute, upsertRoute } from "./routes";
 
@@ -97,6 +97,150 @@ function mergeRoutes(state: AppState, raw: AppState): Pick<AppState, "ruleBlocks
     ruleBlocks: [...state.ruleBlocks, ...incoming.ruleBlocks.filter((b) => !blockIds.has(b.id))],
     routes: [...routes, ...incoming.routes.filter((r) => !routeIds.has(r.id))],
   };
+}
+
+type ResolveIntent = Extract<MutationIntent, { kind: "resolveSubChange" }>;
+
+const AUDIT_MAX = 50;
+const DECISIONS_MAX = 100;
+
+/** Mirrors `remove_provider_routing`: drop what a subscription's routing imported. */
+function removeProviderRouting(state: AppState, subId: string): AppState {
+  const gone = new Set(state.ruleBlocks.filter((b) => b.sourceSubId === subId).map((b) => b.id));
+  return {
+    ...state,
+    ruleBlocks: state.ruleBlocks.filter((b) => b.sourceSubId !== subId),
+    routes: state.routes
+      .filter((r) => r.sourceSubId !== subId)
+      .map((r) => ({ ...r, blocks: (r.blocks ?? []).filter((b) => !gone.has(b.blockId)) })),
+  };
+}
+
+/** Mirrors `import_routing`: one block and one route per subscription. */
+function importRouting(
+  state: AppState,
+  sub: Subscription,
+  r: RoutingImport,
+  enabled: boolean,
+): AppState {
+  const blockId = `sub-block-${sub.id}`;
+  const routeId = `sub-route-${sub.id}`;
+  const lists: [string, string, string[], boolean][] = [
+    ["BlockSites", "block", r.blockSites, true],
+    ["BlockIp", "block", r.blockIp, false],
+    ["DirectSites", "direct", r.directSites, true],
+    ["DirectIp", "direct", r.directIp, false],
+    ["ProxySites", "proxy", r.proxySites, true],
+    ["ProxyIp", "proxy", r.proxyIp, false],
+  ];
+  const rules: RoutingRule[] = lists
+    .filter(([, , entries]) => entries.length > 0)
+    .map(([name, outbound, entries, sites]) => ({
+      id: `${blockId}-${name.toLowerCase()}`,
+      remarks: name,
+      enabled: true,
+      outboundTag: outbound,
+      domain: sites ? entries : null,
+      ip: sites ? null : entries,
+    }));
+  const block = { id: blockId, name: r.name, rules, sourceSubId: sub.id };
+  const route = {
+    id: routeId,
+    name: r.name,
+    enabled,
+    profiles: [],
+    groups: [sub.groupId ?? BASE_GROUP_ID],
+    blocks: [{ blockId, enabled: true }],
+    finalOutbound: r.globalProxy === false ? "direct" : "proxy",
+    sourceSubId: sub.id,
+  };
+  return {
+    ...state,
+    ruleBlocks: upsertById(state.ruleBlocks, block),
+    routes: upsertRoute(state.routes, route),
+  };
+}
+
+/** Mirrors `apply_action` for one accepted change. */
+function applyChange(
+  state: AppState,
+  sub: Subscription,
+  action: ChangeAction,
+  activate: boolean | null | undefined,
+): AppState {
+  const withSub = (patch: Partial<Subscription>) => ({
+    ...state,
+    subscriptions: state.subscriptions.map((s) => (s.id === sub.id ? { ...s, ...patch } : s)),
+  });
+  switch (action.kind) {
+    case "replaceUrl":
+    case "replaceDomain":
+      return withSub({ url: action.url });
+    case "setFallbackUrl":
+      return withSub({ fallbackUrl: action.url });
+    case "lockUserAgent":
+      return action.on ? withSub({ userAgent: "" }) : state;
+    case "setInsecure":
+      return withSub({ allowInsecure: action.on, insecureByProvider: action.on });
+    case "setRoutingEnabled":
+      return {
+        ...state,
+        routes: state.routes.map((r) =>
+          r.sourceSubId === sub.id ? { ...r, enabled: action.on } : r,
+        ),
+      };
+    case "importRouting":
+      return importRouting(state, sub, action.routing, activate ?? action.activate);
+    case "tunnelSetting": {
+      const s = action.setting;
+      const patch: Partial<AppState["settings"]> =
+        s.kind === "mux"
+          ? { mux: s.on }
+          : s.kind === "fragment"
+            ? { fragment: s.on }
+            : s.kind === "sniffing"
+              ? { domainSniffing: s.on }
+              : s.kind === "fragmentPackets"
+                ? { fragmentPackets: s.value }
+                : s.kind === "fragmentLength"
+                  ? { fragmentLength: s.value }
+                  : { fragmentDelay: s.value };
+      return { ...state, settings: { ...state.settings, ...patch } };
+    }
+    default:
+      return state;
+  }
+}
+
+/** Mirrors `resolve_changes`: record each answer, audit it, apply what was accepted. */
+function resolveSubChange(state: AppState, intent: ResolveIntent): AppState {
+  let next = state;
+  for (const digest of intent.digests) {
+    const sub = next.subscriptions.find((s) => s.id === intent.subId);
+    const change = sub?.pendingChanges?.find((p) => p.digest === digest);
+    if (!sub || !change) continue;
+    const accepted = intent.accept && change.action.kind !== "unsupported";
+    const answered: Subscription = {
+      ...sub,
+      pendingChanges: (sub.pendingChanges ?? []).filter((p) => p.digest !== digest),
+      decisions: [
+        { key: change.key, digest, accepted, at: intent.at },
+        ...(sub.decisions ?? []),
+      ].slice(0, DECISIONS_MAX),
+      audit: [
+        {
+          at: intent.at,
+          key: change.key,
+          outcome: accepted ? ("accepted" as const) : ("rejected" as const),
+          summary: change.value,
+        },
+        ...(sub.audit ?? []),
+      ].slice(0, AUDIT_MAX),
+    };
+    next = { ...next, subscriptions: upsertById(next.subscriptions, answered) };
+    if (accepted) next = applyChange(next, answered, change.action, intent.activate);
+  }
+  return next;
 }
 
 /** Apply one intent to `state`, returning a new state. Mirrors Rust `apply_mutation`. */
@@ -229,8 +373,10 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
       const groups = state.groups
         .filter((g) => !(dropGroup && g.id === group))
         .map((g) => (g.subId === intent.id ? { id: g.id, name: g.name } : g));
-      return { ...state, groups, profiles, subscriptions };
+      return removeProviderRouting({ ...state, groups, profiles, subscriptions }, intent.id);
     }
+    case "resolveSubChange":
+      return resolveSubChange(state, intent);
 
     case "upsertRoutingRule":
       return editBlock(state, intent.blockId, (rules) => upsertById(rules, intent.rule));

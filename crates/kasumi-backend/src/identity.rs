@@ -61,13 +61,14 @@ pub async fn resolve_request(
     platform: &dyn Platform,
     input: &IdentityInput,
     meta: Option<&MetaMap>,
+    consented: &[String],
 ) -> Resolved {
     let facts = platform.device_facts().await;
     let auto = auto_hwid(platform, input.defaults.android_user).await;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    resolve(input, &facts, &auto, meta, now)
+    resolve(input, &facts, &auto, meta, consented, now)
 }
 
 fn is_hex16(s: &str) -> bool {
