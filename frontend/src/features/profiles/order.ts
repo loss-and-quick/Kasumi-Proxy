@@ -51,3 +51,23 @@ export function useOrderedProfiles(): Profile[] {
     [profiles, groups, sort, testResults],
   );
 }
+
+/**
+ * `list` split under the groups it falls in, in the order of `groups`; each
+ * group keeps the order `list` gives its profiles. Groups left empty are skipped.
+ */
+export function groupSections<P extends Pick<Profile, "meta">, G extends Pick<Group, "id">>(
+  list: P[],
+  groups: G[],
+): { group: G; profiles: P[] }[] {
+  const byGroup = new Map<string, P[]>();
+  for (const p of list) {
+    const members = byGroup.get(p.meta.groupId);
+    if (members) members.push(p);
+    else byGroup.set(p.meta.groupId, [p]);
+  }
+  return groups.flatMap((group) => {
+    const profiles = byGroup.get(group.id);
+    return profiles ? [{ group, profiles }] : [];
+  });
+}

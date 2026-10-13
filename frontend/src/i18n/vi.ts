@@ -1253,6 +1253,11 @@ const vi = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Trực tiếp",
   "routes.out.block": "Chặn",
+  "routes.out.deleted": "Proxy (hồ sơ đã xóa)",
+  "profiles.label.deleted": "Hồ sơ đã xóa",
+  "profilePicker.title": "Chọn hồ sơ",
+  "routingSheet.outboundDeletedHint":
+    "Hồ sơ của quy tắc này đã bị xóa nên lưu lượng của nó đi qua proxy. Hãy chọn hồ sơ khác.",
   "routes.block.add": "Thêm khối",
   "routes.block.insertHere": "Chèn khối vào đây",
   "routes.block.reorder": "Kéo để sắp xếp",

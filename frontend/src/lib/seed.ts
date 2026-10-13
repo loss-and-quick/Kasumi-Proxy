@@ -47,6 +47,8 @@ export const GROUPS_SEED = [
   { id: "g-de", name: "🇩🇪 Frankfurt" },
   { id: "g-nl", name: "🇳🇱 Amsterdam" },
   { id: "g-priv", name: "Private" },
+  { id: "g-gosha1", name: "Gosha 1" },
+  { id: "g-gosha2", name: "Gosha 2" },
 ];
 
 // Expiry dates relative to now, so the dev seed shows each expiry state.
@@ -504,6 +506,31 @@ export const PROFILES_SEED: Profile[] = [
   ),
 ];
 
+// Provider-style namesakes: the same country names in two groups, one profile
+// per protocol, plus one more server under a name, group and protocol already
+// taken. Rules and routes that point at them need telling apart.
+const NAMESAKES = ["🇫🇮 Finland", "🇩🇪 Germany", "🇳🇱 Netherlands", "🇺🇸 USA", "🇯🇵 Japan"];
+const NAMESAKE_PROTOCOLS = ["vless", "hysteria2", "trojan"] as const;
+PROFILES_SEED.push(
+  ...["g-gosha1", "g-gosha2"].flatMap((groupId, g) =>
+    NAMESAKES.flatMap((remarks, c) =>
+      NAMESAKE_PROTOCOLS.map((protocol) =>
+        mk(protocol, {
+          meta: { id: `${groupId}-${c}-${protocol}`, remarks, groupId },
+          endpoint: {
+            address: `n${c}-${g + 1}.gosha.example`,
+            port: protocol === "hysteria2" ? 8443 : 443,
+          },
+        }),
+      ),
+    ),
+  ),
+  mk("vless", {
+    meta: { id: "g-gosha2-0-vless-b", remarks: "🇫🇮 Finland", groupId: "g-gosha2" },
+    endpoint: { address: "fi-b.gosha.example", port: 443 },
+  }),
+);
+
 const rule = (id: string, remarks: string, fields: Partial<RoutingRule>): RoutingRule => ({
   id,
   remarks,
@@ -533,6 +560,27 @@ export const RULE_BLOCKS_SEED: RuleBlock[] = [
       rule("r-git", "Git over SSH", { port: "22" }),
     ],
   },
+  {
+    id: "b-streaming",
+    name: "Streaming",
+    rules: [
+      rule("r-netflix", "Netflix", {
+        outboundTag: "g-gosha2-0-hysteria2",
+        domain: ["geosite:netflix"],
+      }),
+      rule("r-youtube", "YouTube", {
+        outboundTag: "g-gosha1-0-vless",
+        domain: ["geosite:youtube"],
+      }),
+      rule("r-twitch", "Twitch", { outboundTag: "g-gosha2-0-vless", domain: ["geosite:twitch"] }),
+      rule("r-spotify", "Spotify", {
+        outboundTag: "g-gosha2-0-vless-b",
+        domain: ["geosite:spotify"],
+      }),
+      // Its profile was deleted since: the config builders send it to the proxy.
+      rule("r-old", "Old exit", { outboundTag: "deleted-profile", domain: ["example.org"] }),
+    ],
+  },
 ];
 
 export const ROUTES_SEED: Route[] = [
@@ -541,6 +589,7 @@ export const ROUTES_SEED: Route[] = [
     blocks: [
       { blockId: "b-ads", enabled: true },
       { blockId: "b-lan", enabled: true },
+      { blockId: "b-streaming", enabled: true },
     ],
   },
   {
@@ -550,7 +599,7 @@ export const ROUTES_SEED: Route[] = [
       { blockId: "b-work", enabled: true },
       { blockId: "b-ads", enabled: true },
     ],
-    finalOutbound: "direct",
+    finalOutbound: "g-gosha2-0-hysteria2",
   },
 ];
 

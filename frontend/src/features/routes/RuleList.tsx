@@ -11,17 +11,17 @@ import type { RoutingRule } from "../../generated/bindings";
 import { useFormatters, useT } from "../../i18n";
 import type { RuleBlock } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
+import { useProfileLabels } from "../profiles/labels";
 import { isRedundantCatchAll, ruleIcon, ruleSummary } from "../settings/helpers";
 import { makeQuickRule, QUICK_RULES } from "../settings/rule-presets";
+import { outboundLabel } from "./labels";
 
 export function RuleList({
   block,
-  profiles,
   onEditRule,
   onAddRule,
 }: {
   block: RuleBlock;
-  profiles: { id: string; remarks: string }[];
   onEditRule: (rule: RoutingRule) => void;
   onAddRule: () => void;
 }) {
@@ -32,7 +32,8 @@ export function RuleList({
   const updateRoutingRule = useAppStore((s) => s.updateRoutingRule);
   const reorderRoutingRules = useAppStore((s) => s.reorderRoutingRules);
   const rules = block.rules;
-  const profileName = (tag: string) => profiles.find((p) => p.id === tag)?.remarks;
+  const labels = useProfileLabels();
+  const profileName = (tag: string) => outboundLabel(tag, t, labels);
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
     const from = rules.findIndex((r) => r.id === active.id);

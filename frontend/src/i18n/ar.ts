@@ -1532,6 +1532,11 @@ const ar = {
   "routes.out.proxy": "الوكيل",
   "routes.out.direct": "مباشر",
   "routes.out.block": "حظر",
+  "routes.out.deleted": "الوكيل (الملف محذوف)",
+  "profiles.label.deleted": "ملف محذوف",
+  "profilePicker.title": "اختر ملفًا",
+  "routingSheet.outboundDeletedHint":
+    "حُذف الملف الذي تشير إليه هذه القاعدة، لذا تمر حركتها عبر الوكيل. اختر ملفًا آخر.",
   "routes.block.add": "إضافة كتلة",
   "routes.block.insertHere": "إدراج كتلة هنا",
   "routes.block.reorder": "اسحب لإعادة الترتيب",

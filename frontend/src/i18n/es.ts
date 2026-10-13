@@ -1301,6 +1301,11 @@ const es = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Directo",
   "routes.out.block": "Bloquear",
+  "routes.out.deleted": "Proxy (perfil eliminado)",
+  "profiles.label.deleted": "Perfil eliminado",
+  "profilePicker.title": "Elige un perfil",
+  "routingSheet.outboundDeletedHint":
+    "El perfil de esta regla se eliminó, así que su tráfico va por el proxy. Elige otro.",
   "routes.block.add": "Añadir bloque",
   "routes.block.insertHere": "Insertar un bloque aquí",
   "routes.block.reorder": "Arrastra para reordenar",

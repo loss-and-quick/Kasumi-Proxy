@@ -124,41 +124,9 @@ export function ProfileRow({
               />
             )}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6 }}>
-            <ProtoTag protocol={profile.protocol} />
-            {isProviderCustom(profile) && (
-              <span
-                className="tag tag-json"
-                title={t("profiles.row.jsonHint")}
-                style={active ? { color: "var(--on-primary-container-variant)" } : undefined}
-              >
-                {t("profiles.row.json")}
-              </span>
-            )}
+          <ProfileMetaLine profile={profile} active={active}>
             {engine === "sing-box" && <EngineTag engine={engine} />}
-            <span
-              className="mono truncate"
-              style={{
-                fontSize: 11.5,
-                color: active ? "var(--on-primary-container-variant)" : "var(--on-surface-variant)",
-                flex: 1,
-              }}
-            >
-              {profileEndpointLabel(profile)}
-            </span>
-            <span
-              style={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                color: "var(--on-surface-faint)",
-                textTransform: "uppercase",
-                flex: "0 0 auto",
-              }}
-            >
-              {profileNetwork(profile)}
-              {profileSecurity(profile) !== "none" ? ` · ${profileSecurity(profile)}` : ""}
-            </span>
-          </div>
+          </ProfileMetaLine>
           {conflictText && (
             <div className="hint error" style={{ marginTop: 4 }}>
               {conflictText}
@@ -242,6 +210,58 @@ export function ProfileRow({
         </div>
       )}
     </Card>
+  );
+}
+
+/** The line under a profile's name: protocol, host:port and transport. */
+export function ProfileMetaLine({
+  profile,
+  active,
+  children,
+}: {
+  profile: Profile;
+  active?: boolean;
+  /** Extra tags after the protocol. */
+  children?: ReactNode;
+}) {
+  const t = useT();
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6 }}>
+      <ProtoTag protocol={profile.protocol} />
+      {isProviderCustom(profile) && (
+        <span
+          className="tag tag-json"
+          title={t("profiles.row.jsonHint")}
+          style={active ? { color: "var(--on-primary-container-variant)" } : undefined}
+        >
+          {t("profiles.row.json")}
+        </span>
+      )}
+      {children}
+      <span
+        className="mono truncate"
+        dir="ltr"
+        style={{
+          fontSize: 11.5,
+          color: active ? "var(--on-primary-container-variant)" : "var(--on-surface-variant)",
+          flex: 1,
+        }}
+      >
+        {profileEndpointLabel(profile)}
+      </span>
+      <span
+        style={{
+          fontSize: 10.5,
+          fontWeight: 600,
+          color: "var(--on-surface-faint)",
+          textTransform: "uppercase",
+          flex: "0 0 auto",
+        }}
+      >
+        {profileNetwork(profile)}
+        {profileSecurity(profile) !== "none" ? ` · ${profileSecurity(profile)}` : ""}
+      </span>
+    </div>
   );
 }
 

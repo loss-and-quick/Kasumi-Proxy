@@ -659,6 +659,30 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .sheet-head { padding: 8px 20px 12px; display: flex; align-items: center; gap: 10px; }
 .sheet-title { font-size: 19px; font-weight: 600; flex: 1; }
 .sheet-body { padding: 4px 20px calc(24px + var(--window-inset-bottom, 0px)); overflow-y: auto; }
+.sheet.full { height: calc(100% - 16px); max-height: none; }
+.sheet.full .sheet-body { flex: 1 1 auto; min-height: 0; }
+
+/* Profile picker: search pinned over a long grouped list. Off-screen rows skip
+   layout and paint, which keeps hundreds of them cheap on a phone. */
+.picker-search {
+  position: sticky; top: -4px; z-index: 1; display: flex; align-items: center; gap: 8px;
+  margin: -4px -20px 0; padding: 4px 20px 8px; background: var(--sc-low); color: var(--on-surface-faint);
+}
+.picker-search .input { flex: 1; min-width: 0; font-family: var(--font-ui); }
+.picker-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; margin-top: 6px;
+  padding: 10px 12px; border-radius: 14px; background: var(--sc-lowest); border: 1px solid oklch(1 0 0 / 0.04);
+  color: var(--on-surface); text-align: start; content-visibility: auto; contain-intrinsic-size: auto 70px;
+}
+.picker-row:hover { background: var(--sc); }
+.picker-row.selected { background: var(--primary-container); }
+.picker-row-text { flex: 1 1 auto; min-width: 0; display: block; }
+.picker-row-name { display: block; font-size: 14.5px; font-weight: 600; }
+.picker-row.selected .picker-row-name { color: var(--on-primary-container); }
+.picker-row-icon { font-size: 20px; color: var(--on-surface-variant); flex: 0 0 auto; }
+.picker-check { font-size: 20px; color: var(--primary); flex: 0 0 auto; }
+.picker-trigger-value { display: flex; flex-direction: column; }
+.picker-trigger-detail { font-size: 12px; color: var(--on-surface-variant); margin-top: 1px; }
 
 .dialog { position: absolute; left: 0; right: 0; margin-inline: auto; width: min(calc(100% - 48px), 360px); top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop var(--dur-base) var(--ease-enter); }
 @keyframes pop { from { transform: translateY(-50%) scale(0.9); opacity: 0; } }

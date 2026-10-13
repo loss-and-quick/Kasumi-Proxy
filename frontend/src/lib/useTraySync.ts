@@ -8,6 +8,7 @@
 // ============================================================
 
 import { useEffect } from "react";
+import { profileRefText, useProfileLabels } from "../features/profiles/labels";
 import { commands, events } from "../generated/bindings";
 import { ROUTING_MODE_OPTS } from "../generated/defaults";
 import { useT } from "../i18n";
@@ -38,6 +39,7 @@ function stateLabelKey(state: string) {
 export function useTraySync(): void {
   const t = useT();
   const profiles = useAppStore((s) => s.profiles);
+  const labels = useProfileLabels();
   const activeId = useAppStore((s) => s.activeId);
   const recentIds = useAppStore((s) => s.recentProfileIds);
   const service = useAppStore((s) => s.service);
@@ -61,7 +63,7 @@ export function useTraySync(): void {
       .map((id) => profiles.find((p) => p.meta.id === id))
       .filter((p): p is NonNullable<typeof p> => !!p)
       .map((p) => {
-        const name = p.meta.remarks || p.meta.id;
+        const name = profileRefText(labels, p.meta.id, p.meta.id);
         const ping = testResults[p.meta.id]?.ping;
         return {
           id: p.meta.id,
@@ -87,7 +89,7 @@ export function useTraySync(): void {
       connected,
       routingMode,
     );
-  }, [profiles, activeId, recentIds, testResults, routingMode, running, connected, t]);
+  }, [profiles, labels, activeId, recentIds, testResults, routingMode, running, connected, t]);
 
   // Push a live tooltip + state icon on every status tick (cheap — no menu rebuild).
   useEffect(() => {

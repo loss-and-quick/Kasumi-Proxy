@@ -1241,6 +1241,11 @@ const hi = {
   "routes.out.proxy": "प्रॉक्सी",
   "routes.out.direct": "सीधे",
   "routes.out.block": "ब्लॉक करें",
+  "routes.out.deleted": "प्रॉक्सी (प्रोफ़ाइल हटाई गई)",
+  "profiles.label.deleted": "हटाई गई प्रोफ़ाइल",
+  "profilePicker.title": "प्रोफ़ाइल चुनें",
+  "routingSheet.outboundDeletedHint":
+    "इस नियम की प्रोफ़ाइल हटा दी गई है, इसलिए इसका ट्रैफ़िक प्रॉक्सी से जाता है। कोई दूसरी चुनें।",
   "routes.block.add": "ब्लॉक जोड़ें",
   "routes.block.insertHere": "यहाँ ब्लॉक डालें",
   "routes.block.reorder": "क्रम बदलने के लिए खींचें",

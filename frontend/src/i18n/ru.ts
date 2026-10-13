@@ -1440,6 +1440,11 @@ const ru = {
   "routes.out.proxy": "Прокси",
   "routes.out.direct": "Напрямую",
   "routes.out.block": "Блокировать",
+  "routes.out.deleted": "Прокси (профиль удалён)",
+  "profiles.label.deleted": "Удалённый профиль",
+  "profilePicker.title": "Выберите профиль",
+  "routingSheet.outboundDeletedHint":
+    "Профиль этого правила удалён, поэтому его трафик идёт через прокси. Выберите другой.",
   "routes.block.add": "Добавить блок",
   "routes.block.insertHere": "Вставить блок сюда",
   "routes.block.reorder": "Перетащите, чтобы изменить порядок",

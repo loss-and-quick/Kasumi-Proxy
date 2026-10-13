@@ -25,7 +25,6 @@ import { emptyProfile, isProviderCustom, schemaFor, switchProtocol } from "../..
 import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
-import { useOrderedProfiles } from "../profiles/order";
 import { routeName } from "../routes/labels";
 import { BasicsSection } from "./sections/BasicsSection";
 import { CredentialsSection } from "./sections/CredentialsSection";
@@ -49,8 +48,6 @@ export default function Editor({
 }) {
   const groups = useAppStore((s) => s.groups);
   const unavailable = useAppStore((s) => s.caps?.unavailableProtocols) ?? NO_PROTOCOLS;
-  // Hops are offered in the Profiles screen's order.
-  const ordered = useOrderedProfiles();
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
   const upsert = useAppStore((s) => s.upsertProfile);
   const resolveGroup = useAppStore((s) => s.resolveGroup);
@@ -130,13 +127,13 @@ export default function Editor({
 
   // Which profiles the draft may dial through is a backend answer (the same chain
   // check the config builders make), re-asked on every edit like the engine.
-  const [viaIds, setViaIds] = useState<string[]>([]);
+  const [viaCandidates, setViaCandidates] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
     let alive = true;
     bridge
       .chainCandidates(draft)
-      .then((ids) => alive && setViaIds(ids))
-      .catch(() => alive && setViaIds([]));
+      .then((ids) => alive && setViaCandidates(new Set(ids)))
+      .catch(() => alive && setViaCandidates(new Set()));
     return () => {
       alive = false;
     };
@@ -209,9 +206,6 @@ export default function Editor({
         ]
       : [];
 
-  const viaOpts = ordered
-    .filter((p) => viaIds.includes(p.meta.id))
-    .map((hop) => ({ value: hop.meta.id, label: hop.meta.remarks }));
   const proto = draft.protocol;
   const security = "tls" in draft && draft.tls ? (draft.tls.security ?? "none") : "none";
   const isReality = security === "reality";
@@ -255,7 +249,7 @@ export default function Editor({
         groups={groups}
         group={group}
         setGroup={setGroup}
-        viaOpts={viaOpts}
+        viaCandidates={viaCandidates}
         changeProtocol={changeProtocol}
         engineForced={engineForced}
         engineHint={engineHint}

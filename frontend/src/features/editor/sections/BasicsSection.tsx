@@ -3,6 +3,7 @@ import type { CoreEngine, Group, Profile, Protocol } from "../../../generated/bi
 import { CORE_ENGINE_OPTS, PROTOCOL_OPTS } from "../../../generated/defaults";
 import { useT } from "../../../i18n";
 import type { GroupChoice } from "../../../lib/groups";
+import { ProfilePickerField } from "../../profiles/ProfilePicker";
 import type { EndpointSetter, FieldErrors, MetaSetter } from "../types";
 
 const PROTOCOL_LABELS: Record<Protocol, string> = {
@@ -36,7 +37,7 @@ export function BasicsSection({
   groups,
   group,
   setGroup,
-  viaOpts,
+  viaCandidates,
   changeProtocol,
   engineForced,
   engineHint,
@@ -54,7 +55,8 @@ export function BasicsSection({
   groups: Group[];
   group: GroupChoice;
   setGroup: (value: GroupChoice) => void;
-  viaOpts: Array<{ value: string; label: string }>;
+  /** The profiles this one may dial through. */
+  viaCandidates: ReadonlySet<string>;
   changeProtocol: (proto: Protocol) => void;
   engineForced: CoreEngine | null;
   engineHint: string;
@@ -124,10 +126,11 @@ export function BasicsSection({
       )}
 
       {draft.protocol !== "custom" && (
-        <Select
+        <ProfilePickerField
           label={t("editor.via")}
           value={draft.meta.via ?? VIA_DIRECT}
-          options={[{ value: VIA_DIRECT, label: t("editor.viaDirect") }, ...viaOpts]}
+          choices={[{ value: VIA_DIRECT, label: t("editor.viaDirect"), icon: "near_me" }]}
+          only={viaCandidates}
           onChange={(value) => setMeta({ via: value === VIA_DIRECT ? null : value })}
           hint={t("editor.viaHint")}
         />

@@ -102,7 +102,7 @@ export function buildRouteGraph(
 export const NODE_SIZE = {
   route: { width: 170, height: 56 },
   block: { width: 180, height: 56 },
-  out: { width: 130, height: 40 },
+  out: { width: 150, height: 46 },
 } as const;
 
 /**
