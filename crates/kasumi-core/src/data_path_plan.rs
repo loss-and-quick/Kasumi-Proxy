@@ -35,6 +35,14 @@ pub struct HostTraits {
     pub pinned_singbox_stack: Option<SingboxStack>,
 }
 
+/// A host that honours every mode and pins nothing, for tests that only build configs.
+#[cfg(test)]
+pub(crate) const TEST_HOST: HostTraits = HostTraits {
+    proxy_modes: true,
+    app_routing: AppRouting::PerProcess,
+    pinned_singbox_stack: None,
+};
+
 impl HostTraits {
     pub fn effective_mode(self, saved: ProxyMode) -> ProxyMode {
         if self.proxy_modes {
@@ -183,6 +191,11 @@ impl DataPathPlan {
     /// restart: sing-box bakes the filter into its config, xray's is OS routing.
     pub fn app_filter_live(&self) -> bool {
         self.engine == CoreEngine::Xray
+    }
+
+    /// What of the plan, beyond the core config itself, needs a restart to change.
+    pub(crate) fn restart_key(&self) -> Option<&TunOptions> {
+        self.external().map(|e| &e.opts)
     }
 }
 

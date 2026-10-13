@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 
 use kasumi_core::contract::SubAppliedEvent;
 use kasumi_core::core_config::{active_config_changed, build_core_config};
+use kasumi_core::data_path_plan::HostTraits;
 use kasumi_core::import_input::{is_encrypted_url, subscription_fetch_url};
 use kasumi_core::mutate::rename_owned_group;
 use kasumi_core::profile::Profile;
@@ -574,8 +575,8 @@ async fn apply(
             .map(|s| s.engine.is_some())
             .unwrap_or(false);
         if running {
-            let needs_restart =
-                res.active_id.is_none() || config_changed(&current, old_active.as_ref(), &next);
+            let needs_restart = res.active_id.is_none()
+                || config_changed(&current, old_active.as_ref(), &next, platform.host_traits());
             if needs_restart {
                 let _ = match &res.active_id {
                     Some(id) => lifecycle.restart(Some(id.clone())).await,
@@ -589,7 +590,12 @@ async fn apply(
 
 /// Rebuild the active profile's config before/after the update and report whether
 /// it differs — an unchanged re-fetch must not churn the connection.
-fn config_changed(prev: &AppState, old_active: Option<&Profile>, next: &AppState) -> bool {
+fn config_changed(
+    prev: &AppState,
+    old_active: Option<&Profile>,
+    next: &AppState,
+    host: HostTraits,
+) -> bool {
     let new_active = next
         .profiles
         .iter()
@@ -599,8 +605,8 @@ fn config_changed(prev: &AppState, old_active: Option<&Profile>, next: &AppState
     };
     let prev_rules = resolve_route(prev, old);
     let next_rules = resolve_route(next, new);
-    let prev_cfg = build_core_config(old, &prev.settings, &prev_rules, &prev.profiles, "");
-    let next_cfg = build_core_config(new, &next.settings, &next_rules, &next.profiles, "");
+    let prev_cfg = build_core_config(old, &prev.settings, &prev_rules, &prev.profiles, "", host);
+    let next_cfg = build_core_config(new, &next.settings, &next_rules, &next.profiles, "", host);
     match (prev_cfg, next_cfg) {
         (Ok(a), Ok(b)) => active_config_changed(&a, &b),
         _ => true, // a build failed → don't risk leaving a stale config

@@ -10,6 +10,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
+use kasumi_core::data_path_plan::{AppRouting, HostTraits};
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
@@ -207,6 +208,22 @@ pub trait Platform: Send + Sync {
     /// a non-tun mode can't strip the tun inbound out from under the data path.
     fn supports_proxy_modes(&self) -> bool {
         false
+    }
+
+    /// The host facts a data-path plan is resolved against. The default derives them
+    /// from [`Platform::supports_proxy_modes`]: a proxy-mode host routes apps by
+    /// program, any other by uid.
+    fn host_traits(&self) -> HostTraits {
+        let proxy_modes = self.supports_proxy_modes();
+        HostTraits {
+            proxy_modes,
+            app_routing: if proxy_modes {
+                AppRouting::PerProcess
+            } else {
+                AppRouting::PerUid
+            },
+            pinned_singbox_stack: None,
+        }
     }
 
     /// Protocols this host's cores can't run. The UI hides them, imports and

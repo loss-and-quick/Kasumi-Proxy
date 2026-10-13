@@ -785,9 +785,10 @@ mod tests {
             &[],
             std::slice::from_ref(&p),
             "",
+            crate::data_path_plan::TEST_HOST,
         )
         .unwrap();
-        assert_eq!(cfg.engine, engine);
+        assert_eq!(cfg.engine(), engine);
         cfg.config
     }
 
