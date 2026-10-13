@@ -16,6 +16,9 @@ import { useT } from "../../i18n";
 import {
   checkSubscriptionUrl,
   isHappLink,
+  makeSubscription,
+  NEW_SUB_DEFAULTS,
+  type SubDraft,
   type SubscriptionUrlCheck,
   subscriptionNameFrom,
   UNSUPPORTED_TEXT,
@@ -28,7 +31,7 @@ import {
   groupChoiceReady,
   providerConfigsOf,
 } from "../../lib/groups";
-import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
+import { isInsecureHttpUrl, isLocalOrPrivateHost } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { SubIdentitySection } from "./SubIdentitySection";
 import { savedName } from "./sub-edit";
@@ -36,14 +39,14 @@ import { savedName } from "./sub-edit";
 export function SubEditSheet({
   open,
   sub,
-  initialUrl = "",
+  draft,
   onClose,
   onSave,
 }: {
   open: boolean;
   sub: Subscription | null;
-  /** The address a new subscription starts with. */
-  initialUrl?: string;
+  /** What a new subscription starts with, when another sheet hands one over. */
+  draft?: SubDraft;
   onClose: () => void;
   onSave: (sub: Subscription, group: GroupChoice) => Promise<void>;
 }) {
@@ -91,32 +94,16 @@ export function SubEditSheet({
       setGroup({ id: sub.groupId ?? BASE_GROUP_ID });
       return;
     }
+    if (draft) {
+      setD({ ...draft.sub });
+      setGroup(draft.group);
+      return;
+    }
     // A new subscription gets a group of its own, named after it, unless the
     // user picks an existing one.
     setGroup({ newName: "" });
-    setD({
-      id: uid(),
-      remarks: "",
-      url: initialUrl,
-      userAgent: "",
-      filter: "",
-      enabled: true,
-      groupId: null,
-      autoUpdate: false,
-      interval: 360, // minutes (06:00)
-      allowInsecure: false,
-      updateMode: "auto",
-      lastUpdated: "",
-      count: 0,
-      lastError: null,
-      manualTitle: false,
-      intervalOverride: false,
-      bodyEncrypted: false,
-      warnings: [],
-      insecureByProvider: false,
-      allowProviderConfigs: false,
-    });
-  }, [open, sub, initialUrl]);
+    setD(makeSubscription({ url: "" }, NEW_SUB_DEFAULTS));
+  }, [open, sub, draft]);
 
   // A typed `happ://` address is read by the backend before it can name anything.
   const typedUrl = d?.url.trim() ?? "";

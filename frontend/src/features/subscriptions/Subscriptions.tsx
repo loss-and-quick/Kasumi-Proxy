@@ -6,6 +6,7 @@ import { lazy, Suspense, useMemo, useState } from "react";
 import { AppBar, Btn, Card, Dialog, Icon, IconBtn, Sheet, SheetAction } from "../../components";
 import type { SubWarning } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import type { SubDraft } from "../../lib/add-input";
 import type { Subscription } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, ownedGroupLeftEmpty } from "../../lib/groups";
@@ -46,8 +47,8 @@ export default function Subscriptions({
   const [addOpen, setAddOpen] = useState(false);
   const addDefaultGroup = useMemo<GroupChoice>(() => ({ id: BASE_GROUP_ID }), []);
   const [edit, setEdit] = useState<Subscription | "new" | null>(null);
-  // The address typed in the Add sheet before it handed over to the editor.
-  const [newUrl, setNewUrl] = useState("");
+  // What the Add sheet handed the editor; the sheet stays open beneath it.
+  const [newDraft, setNewDraft] = useState<SubDraft | undefined>(undefined);
   const [confirmDel, setConfirmDel] = useState<Subscription | null>(null);
   const [delGroupToo, setDelGroupToo] = useState(true);
   const [manageGroupsOpen, setManageGroupsOpen] = useState(false);
@@ -192,9 +193,8 @@ export default function Subscriptions({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         defaultGroup={addDefaultGroup}
-        onManualSub={(url) => {
-          setAddOpen(false);
-          setNewUrl(url ?? "");
+        onManualSub={(draft) => {
+          setNewDraft(draft);
           setEdit("new");
         }}
         onDone={({ subs: added, profiles, profileGroup, routes }) => {
@@ -222,7 +222,7 @@ export default function Subscriptions({
       <SubEditSheet
         open={!!edit}
         sub={edit === "new" ? null : edit}
-        initialUrl={newUrl}
+        draft={edit === "new" ? newDraft : undefined}
         onClose={() => setEdit(null)}
         onSave={async (data, group) => {
           const isNew = edit === "new";
@@ -236,9 +236,12 @@ export default function Subscriptions({
             return;
           }
           setEdit(null);
-          // A new subscription is fetched straight away; the card shows the result.
-          if (isNew) void updateSub(data.id);
-          else notify(t("subs.saved"));
+          if (isNew) {
+            // Opened from the Add sheet beneath: saving completes the add.
+            setAddOpen(false);
+            // A new subscription is fetched straight away; the card shows the result.
+            void updateSub(data.id);
+          } else notify(t("subs.saved"));
         }}
       />
 

@@ -17,15 +17,20 @@ import {
   Sheet,
   SheetAction,
 } from "../../components";
+import type { Profile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import {
   type AddInput,
   addInputFrom,
   appendScanned,
   EMPTY_ADD_INPUT,
-  firstSubscriptionUrl,
+  NEW_SUB_DEFAULTS,
   parseSubscriptionDump,
+  profileDraft,
   resolveAddText,
+  type SubDraft,
+  subDraft,
+  subGroupChoice,
   UNSUPPORTED_TEXT,
   withClipboard,
 } from "../../lib/add-input";
@@ -67,9 +72,11 @@ export function AddSheet({
   /** Added from inside a group: everything, subscriptions too, goes there by
    *  default instead of each subscription getting a group of its own. */
   inGroup?: boolean;
-  onManualProfile?: () => void;
-  /** Gets the subscription URL typed so far, if the text holds one. */
-  onManualSub?: (url: string | null) => void;
+  /** Opens the profile editor over the sheet, which stays open beneath it: on the
+   *  one profile the text holds (null for none or several), in the picked group. */
+  onManualProfile?: (draft: Profile | null, group: GroupChoice) => void;
+  /** Opens the subscription editor over the sheet, on what the sheet holds. */
+  onManualSub?: (draft: SubDraft) => void;
   onDone: (result: AddResult) => void;
 }) {
   const t = useT();
@@ -85,8 +92,8 @@ export function AddSheet({
   const [text, setText] = useState("");
   const [groupEach, setGroupEach] = useState(true);
   const [group, setGroup] = useState<GroupChoice>(defaultGroup);
-  const [autoUpdate, setAutoUpdate] = useState(false);
-  const [interval, setIntervalMinutes] = useState(360); // minutes (06:00)
+  const [autoUpdate, setAutoUpdate] = useState(NEW_SUB_DEFAULTS.autoUpdate);
+  const [interval, setIntervalMinutes] = useState(NEW_SUB_DEFAULTS.interval); // minutes
   // The backend's sorting of `text`, kept until the next one arrives.
   const [resolved, setResolved] = useState<{ text: string; value: ResolvedImport } | null>(null);
   const [routeChoices, setRouteChoices] = useState<RouteChoice[]>([]);
@@ -168,7 +175,11 @@ export function AddSheet({
   const nothing = stale || (!hasSubs && !hasProfiles && !hasRouting);
 
   const openManualSub = async () => {
-    onManualSub?.(await firstSubscriptionUrl(text, { autoUpdate, interval }, bridge));
+    const options = { autoUpdate, interval, groupEach, group };
+    onManualSub?.(await subDraft(text, options, groups, encryptedName, bridge));
+  };
+  const openManualProfile = async () => {
+    onManualProfile?.(await profileDraft(text, group, bridge), group);
   };
 
   const submit = async () => {
@@ -181,12 +192,8 @@ export function AddSheet({
     let added = 0;
     try {
       // Sequential so each write sees the previous one (a shared new group is made once).
-      for (const sub of fresh) {
-        // An exported list keeps the group it names when that group still exists.
-        const kept = groups.find((g) => g.id === sub.groupId);
-        const choice: GroupChoice = !groupEach ? group : kept ? { id: kept.id } : { newName: "" };
-        await saveSubscription(sub, choice);
-      }
+      for (const sub of fresh)
+        await saveSubscription(sub, subGroupChoice(sub, { groupEach, group }, groups));
       if (input.profileText.trim()) {
         const parsed = await bridge.parseShareLinks(input.profileText);
         if (parsed.length) {
@@ -356,7 +363,7 @@ export function AddSheet({
                 icon="edit_note"
                 label={t("profiles.add.manual")}
                 sub={t("profiles.add.manualSub")}
-                onClick={onManualProfile}
+                onClick={() => void openManualProfile()}
               />
             )}
             {onManualSub && (

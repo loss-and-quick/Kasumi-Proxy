@@ -75,6 +75,15 @@ export const Sheet = ({
   const requestClose = useCallback(async () => {
     const ask = beforeCloseRef.current;
     if (ask && !(await ask())) return;
+    // A slide-in still running holds the transform, so the slide-out would never
+    // run, nor end and unmount the sheet. Finish it and let the style settle
+    // first, so the slide-out starts from the open position.
+    const el = sheetRef.current;
+    const running = el?.getAnimations?.() ?? [];
+    if (el && running.length) {
+      for (const a of running) a.finish();
+      getComputedStyle(el).transform;
+    }
     setClosing(true);
   }, []);
   const swipe = useSwipeDownToDismiss(sheetRef, requestClose);

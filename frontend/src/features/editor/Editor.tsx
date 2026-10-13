@@ -36,14 +36,21 @@ import type { FieldErrors } from "./types";
 
 const NO_PROTOCOLS: readonly Protocol[] = [];
 
+/** How a new profile opens: blank or on a draft (a pasted link the backend read),
+ *  the group it starts in, and who hears that it was saved. */
+export type NewProfile = {
+  draft?: Profile;
+  group?: GroupChoice;
+  onSaved?: () => void;
+};
+
 export default function Editor({
   profileId,
-  newGroupId,
+  newProfile = {},
   onClose,
 }: {
   profileId: string | "new";
-  /** The group a new profile starts in (the one the user was looking at). */
-  newGroupId?: string;
+  newProfile?: NewProfile;
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
@@ -55,12 +62,19 @@ export default function Editor({
   const setProfileRoute = useAppStore((s) => s.setProfileRoute);
   const t = useT();
 
+  const startGroup = newProfile.group;
   const [draft, setDraft] = useState<Profile>(
-    () => existing ?? emptyProfile("vless", newGroupId ?? groups[0]?.id ?? "g-main"),
+    () =>
+      existing ??
+      newProfile.draft ??
+      emptyProfile(
+        "vless",
+        startGroup && "id" in startGroup ? startGroup.id : (groups[0]?.id ?? "g-main"),
+      ),
   );
   const [errors, setErrors] = useState<FieldErrors>({});
   // The group is picked apart from the draft: a new one is only created on save.
-  const [group, setGroup] = useState<GroupChoice>(() => ({ id: draft.meta.groupId }));
+  const [group, setGroup] = useState<GroupChoice>(() => startGroup ?? { id: draft.meta.groupId });
   // The route that lists this profile itself; "" follows its group's route.
   const [listedRoute] = useState(
     () => routes.find((r) => routeProfiles(r).includes(draft.meta.id))?.id ?? "",
@@ -161,6 +175,7 @@ export default function Editor({
       const groupId = await resolveGroup(group, "");
       await upsert({ ...profile, meta: { ...profile.meta, groupId } });
       if (route !== listedRoute) await setProfileRoute(profile.meta.id, route || null);
+      if (!existing) newProfile.onSaved?.();
     } catch (e) {
       // Keep the form open so nothing typed is lost.
       if (!wasReported(e))

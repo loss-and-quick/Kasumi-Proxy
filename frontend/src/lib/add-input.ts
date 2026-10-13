@@ -5,12 +5,16 @@
 // read here.
 // ============================================================
 
+import type { Profile } from "../generated/bindings";
 import type { DictKey } from "../i18n";
 import type { Bridge, ResolvedImport, Subscription } from "./bridge";
-import { hostOf } from "./groups";
+import { type GroupChoice, hostOf } from "./groups";
 import { uid } from "./utils";
 
 export type SubDefaults = { autoUpdate: boolean; interval: number };
+
+/** What a new subscription starts with until the user changes it. */
+export const NEW_SUB_DEFAULTS: SubDefaults = { autoUpdate: false, interval: 360 }; // 06:00
 
 type UnsupportedKind = ResolvedImport["unsupported"][number]["kind"];
 
@@ -134,20 +138,92 @@ export async function resolveAddText(
   }
 }
 
-/** The subscription URL "with options" should open with: the first one the text
- *  holds, read the way the sheet reads it (an exported dump here, anything else by
- *  the backend), or null when the text carries no subscription. Asked afresh so a
+/** The options the add sheet applies to what it adds. */
+export type AddOptions = SubDefaults & {
+  /** Each subscription gets a group of its own instead of `group`. */
+  groupEach: boolean;
+  group: GroupChoice;
+};
+
+/** Where a subscription from the add sheet goes: the picked group, or with a group
+ *  of its own, the one an exported list names while that group still exists. */
+export function subGroupChoice(
+  sub: Subscription,
+  { groupEach, group }: Pick<AddOptions, "groupEach" | "group">,
+  groups: readonly { id: string }[],
+): GroupChoice {
+  if (!groupEach) return group;
+  const kept = groups.find((g) => g.id === sub.groupId);
+  return kept ? { id: kept.id } : { newName: "" };
+}
+
+/** A new subscription and its group, for the editor to open with. */
+export type SubDraft = { sub: Subscription; group: GroupChoice };
+
+/** The editor's draft from the add sheet: the first subscription the text holds,
+ *  or a blank one, with the sheet's options. A name that only stands in (the host,
+ *  the encrypted-link name) is left empty, so the editor suggests its own. */
+export function subDraftFrom(
+  first: Subscription | null,
+  options: AddOptions,
+  groups: readonly { id: string }[],
+): SubDraft {
+  const sub = first ?? makeSubscription({ url: "" }, options);
+  return {
+    sub: { ...sub, remarks: sub.manualTitle ? sub.remarks : "" },
+    group: subGroupChoice(sub, options, groups),
+  };
+}
+
+/** What "with options" opens the editor on, reading the text the way the sheet
+ *  does (an exported dump here, anything else by the backend). Asked afresh so a
  *  paste still being sorted isn't dropped. */
-export async function firstSubscriptionUrl(
+export async function subDraft(
   text: string,
-  defaults: SubDefaults,
+  options: AddOptions,
+  groups: readonly { id: string }[],
+  encryptedName: string,
   b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
-): Promise<string | null> {
-  if (!text.trim()) return null;
-  const dump = parseSubscriptionDump(text, defaults);
-  if (dump) return dump[0]?.url ?? null;
-  const { value } = await resolveAddText(text, b);
-  return value.subscriptions[0]?.url ?? null;
+): Promise<SubDraft> {
+  let first: Subscription | null = null;
+  if (text.trim()) {
+    const dump = parseSubscriptionDump(text, options);
+    if (dump) first = dump[0];
+    else {
+      const { value } = await resolveAddText(text, b);
+      first = addInputFrom(value, options, encryptedName).subs[0] ?? null;
+    }
+  }
+  return subDraftFrom(first, options, groups);
+}
+
+/** The profile "enter manually" opens with: the one share link the text holds,
+ *  filed under the picked group, or null when it holds none or several. */
+export function profileDraftFrom(parsed: readonly Profile[], group: GroupChoice): Profile | null {
+  if (parsed.length !== 1) return null;
+  const [p] = parsed;
+  return "id" in group ? { ...p, meta: { ...p.meta, groupId: group.id } } : p;
+}
+
+/** The backend's reading of `text` as a single profile, asked afresh like
+ *  {@link subDraft}. */
+export async function profileDraft(
+  text: string,
+  group: GroupChoice,
+  b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
+): Promise<Profile | null> {
+  if (!text.trim() || looksLikeJson(text)) return null;
+  // Unsorted, all of it is share-link text, as the sheet reads it then.
+  let shareText = text;
+  try {
+    shareText = (await b.resolveImportInput(text)).shareText;
+  } catch {}
+  if (!shareText.trim()) return null;
+  try {
+    return profileDraftFrom(await b.parseShareLinks(shareText), group);
+  } catch {
+    return null;
+  }
 }
 
 /** A scanned QR code goes on a line of its own after what the field holds. */
