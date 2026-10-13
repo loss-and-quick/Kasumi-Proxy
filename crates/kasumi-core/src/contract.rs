@@ -24,11 +24,15 @@ pub enum LogTarget {
 /// backend will actually run it on, and the engine a capability pins it to
 /// (`None` when the profile is freely selectable). The UI renders these instead
 /// of re-implementing the resolution matrix (`core::resolve_core`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CoreResolution {
     pub resolved: CoreEngine,
     pub forced: Option<CoreEngine>,
+    /// Remarks of the chain hop that pins `forced`, when a hop rather than the
+    /// profile itself needs that core.
+    #[serde(default)]
+    pub forced_by_hop: Option<String>,
     /// Set when no core can run the profile as configured; it can't start.
     #[serde(default)]
     pub conflict: Option<CoreConflict>,
@@ -52,6 +56,7 @@ pub enum CoreConflict {
         /// Remarks of the profile that runs only on xray.
         xray: String,
         /// Remarks of the profile that runs only on sing-box.
+        #[serde(rename = "singBox")]
         sing_box: String,
     },
 }

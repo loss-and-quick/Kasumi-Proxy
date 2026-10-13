@@ -626,18 +626,30 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                 profiles
                     .iter()
                     .map(|p| {
-                        let (resolved, forced) = match chain_forced_core(p, &all) {
-                            Ok(Some((engine, _))) => (engine, Some(engine)),
-                            Ok(None) => (preferred_core(p, &settings), None),
-                            Err(_) => {
-                                let own = forced_core(p);
-                                (own.unwrap_or_else(|| preferred_core(p, &settings)), own)
-                            }
-                        };
+                        let (resolved, forced, forced_by_hop, conflict) =
+                            match chain_forced_core(p, &all) {
+                                Ok(Some((engine, by))) => (
+                                    engine,
+                                    Some(engine),
+                                    (by.meta().id != p.meta().id)
+                                        .then(|| by.meta().remarks.clone()),
+                                    core_conflict(p),
+                                ),
+                                Ok(None) => {
+                                    (preferred_core(p, &settings), None, None, core_conflict(p))
+                                }
+                                Err(c) => {
+                                    let own = forced_core(p);
+                                    let resolved =
+                                        own.unwrap_or_else(|| preferred_core(p, &settings));
+                                    (resolved, own, None, Some(c))
+                                }
+                            };
                         CoreResolution {
                             resolved,
                             forced,
-                            conflict: core_conflict(p),
+                            forced_by_hop,
+                            conflict,
                             sees_processes: kasumi_core::app_process::sees_processes(
                                 resolved, &settings,
                             ),
@@ -1351,6 +1363,60 @@ mod tests {
         assert_eq!(rs[1].forced, None);
         assert_eq!(rs[2].resolved, CoreEngine::Xray);
         assert_eq!(rs[2].forced, Some(CoreEngine::Xray));
+    }
+
+    #[tokio::test]
+    async fn resolve_cores_follows_the_proxy_chain() {
+        use kasumi_core::contract::CoreConflict;
+        use kasumi_core::enums::CoreEngine;
+        use kasumi_core::share::parse_share_link;
+
+        let named = |uri: &str, id: &str, via: Option<&str>| {
+            let mut p = parse_share_link(uri, None).unwrap();
+            p.meta_mut().id = id.into();
+            p.meta_mut().remarks = id.into();
+            p.meta_mut().via = via.map(str::to_owned);
+            p
+        };
+        let (p, _d) = TestPlatform::new();
+        let stored = vec![named("tuic://u:pw@t.ex:443?sni=t.ex", "hop", None)];
+        write_json_atomic(&p.paths().profiles, &stored)
+            .await
+            .unwrap();
+
+        // An unsaved draft dialing through the stored sing-box-only hop.
+        let drafts = vec![
+            named(
+                "vless://u@e.x:443?type=tcp&security=tls",
+                "draft",
+                Some("hop"),
+            ),
+            named(
+                "vless://u@e.x:443?type=xhttp&security=tls",
+                "xhttp",
+                Some("hop"),
+            ),
+        ];
+        let Response::CoreResolutions(rs) =
+            dispatch(&p, Command::ResolveCores { profiles: drafts })
+                .await
+                .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(rs[0].resolved, CoreEngine::SingBox);
+        assert_eq!(rs[0].forced, Some(CoreEngine::SingBox));
+        assert_eq!(rs[0].forced_by_hop.as_deref(), Some("hop"));
+        assert_eq!(rs[0].conflict, None);
+
+        assert_eq!(rs[1].resolved, CoreEngine::Xray);
+        assert_eq!(
+            rs[1].conflict,
+            Some(CoreConflict::ChainCoreConflict {
+                xray: "xhttp".into(),
+                sing_box: "hop".into(),
+            })
+        );
     }
 
     #[tokio::test]

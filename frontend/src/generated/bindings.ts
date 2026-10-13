@@ -649,7 +649,16 @@ export type CoreConflict =
  *  TLS without a certificate check or a pinned certificate, on a profile only
  *  xray runs: xray has dropped `allowInsecure`, so only a pin gets past its check.
  */
-{ kind: "unpinnedInsecureTls" };
+{ kind: "unpinnedInsecureTls" } | 
+/**
+ *  A proxy chain that no single core can build: every hop is an outbound of the
+ *  one config, and these two profiles of it each run on a different core only.
+ */
+{ kind: "chainCoreConflict"; 
+/**  Remarks of the profile that runs only on xray. */
+xray: string; 
+/**  Remarks of the profile that runs only on sing-box. */
+singBox: string };
 
 /**  An actual proxy core. Wire values: `"xray"`, `"sing-box"`. */
 export type CoreEngine = "xray" | "sing-box";
@@ -663,6 +672,11 @@ export type CoreEngine = "xray" | "sing-box";
 export type CoreResolution = {
 	resolved: CoreEngine,
 	forced: CoreEngine | null,
+	/**
+	 *  Remarks of the chain hop that pins `forced`, when a hop rather than the
+	 *  profile itself needs that core.
+	 */
+	forcedByHop?: string | null,
 	/**  Set when no core can run the profile as configured; it can't start. */
 	conflict?: CoreConflict | null,
 	/**
