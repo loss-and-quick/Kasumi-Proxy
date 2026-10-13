@@ -158,7 +158,8 @@ function Values({ change, wide }: { change: PendingChange; wide: boolean }) {
   );
 }
 
-/** The host a URL change moves to, with a stronger warning when the domain differs. */
+/** The host a URL change moves to, with a stronger warning when the domain differs.
+ *  An encrypted link's host stays hidden. */
 function DomainMoveCard({ from, to, other }: { from: string; to: string; other: boolean }) {
   const t = useT();
   return (
@@ -178,7 +179,7 @@ function DomainMoveCard({ from, to, other }: { from: string; to: string; other: 
       <Icon name="swap_horiz" style={{ fontSize: 20, color: "var(--warn)", flexShrink: 0 }} />
       <div style={{ minWidth: 0, fontSize: 13, lineHeight: 1.45 }}>
         <div className="mono" dir="ltr" style={{ fontWeight: 600, overflowWrap: "anywhere" }}>
-          {t("subs.changes.domainMove", { from, to })}
+          {t("subs.changes.domainMove", { from: from || "•••", to })}
         </div>
         <div style={{ marginTop: 2 }}>{t("subs.changes.domainMoveBody")}</div>
         {other && (

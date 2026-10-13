@@ -322,6 +322,13 @@ const es = {
   "subs.interval": "Intervalo (hh:mm)",
   "subs.edit.urlInsecureHint":
     "HTTP sin cifrar: esta suscripción podría ser manipulada en tránsito.",
+  "subs.edit.encrypted": "Enlace cifrado",
+  "subs.edit.encryptedSub":
+    "El proveedor oculta la dirección. Kasumi la descifra en cada actualización.",
+  "subs.edit.reveal": "Mostrar",
+  "subs.edit.revealedLabel": "Dirección detrás del enlace",
+  "subs.edit.revealedHint": "El enlace sigue cifrado a menos que cambies la dirección.",
+  "subs.edit.replacesEncrypted": "La nueva dirección sustituye al enlace cifrado.",
   "subs.edit.validationUrl": "La URL de la suscripción es obligatoria",
   "subs.edit.validationInterval": "El intervalo debe ser mayor que 0",
   "subs.edit.validationFilter": "Regex no válida",

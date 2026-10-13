@@ -321,6 +321,13 @@ const pt = {
   "subs.interval": "Intervalo (hh:mm)",
   "subs.edit.urlInsecureHint":
     "HTTP não criptografado — esta assinatura pode ser adulterada em trânsito.",
+  "subs.edit.encrypted": "Link criptografado",
+  "subs.edit.encryptedSub":
+    "O provedor oculta o endereço. O Kasumi o descriptografa a cada atualização.",
+  "subs.edit.reveal": "Mostrar",
+  "subs.edit.revealedLabel": "Endereço por trás do link",
+  "subs.edit.revealedHint": "O link continua criptografado, a menos que você altere o endereço.",
+  "subs.edit.replacesEncrypted": "O novo endereço substitui o link criptografado.",
   "subs.edit.validationUrl": "URL da assinatura obrigatória",
   "subs.edit.validationInterval": "O intervalo deve ser maior que 0",
   "subs.edit.validationFilter": "Regex inválida",

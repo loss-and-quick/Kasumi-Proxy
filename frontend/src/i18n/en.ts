@@ -328,6 +328,12 @@ const en = {
   "subs.interval": "Interval (hh:mm)",
   "subs.edit.urlInsecureHint":
     "Unencrypted HTTP — this subscription could be tampered with in transit.",
+  "subs.edit.encrypted": "Encrypted link",
+  "subs.edit.encryptedSub": "The provider hides the address. Kasumi decrypts it on each update.",
+  "subs.edit.reveal": "Reveal",
+  "subs.edit.revealedLabel": "Address behind the link",
+  "subs.edit.revealedHint": "The link stays encrypted unless you change the address.",
+  "subs.edit.replacesEncrypted": "The new address replaces the encrypted link.",
   "subs.edit.validationUrl": "Subscription URL required",
   "subs.edit.validationInterval": "Interval must be greater than 0",
   "subs.edit.validationFilter": "Invalid regex",

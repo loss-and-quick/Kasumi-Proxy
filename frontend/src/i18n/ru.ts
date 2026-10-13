@@ -341,6 +341,13 @@ const ru = {
   "subs.interval": "Интервал (чч:мм)",
   "subs.edit.urlInsecureHint":
     "Незашифрованное соединение (HTTP) — подписку могут подменить при передаче.",
+  "subs.edit.encrypted": "Зашифрованная ссылка",
+  "subs.edit.encryptedSub":
+    "Провайдер скрывает адрес. Kasumi расшифровывает его при каждом обновлении.",
+  "subs.edit.reveal": "Показать",
+  "subs.edit.revealedLabel": "Адрес за ссылкой",
+  "subs.edit.revealedHint": "Ссылка останется зашифрованной, пока вы не измените адрес.",
+  "subs.edit.replacesEncrypted": "Новый адрес заменит зашифрованную ссылку.",
   "subs.edit.validationUrl": "URL подписки обязателен",
   "subs.edit.validationInterval": "Интервал должен быть больше 0",
   "subs.edit.validationFilter": "Некорректный regex",

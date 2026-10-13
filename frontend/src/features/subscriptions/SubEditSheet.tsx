@@ -13,6 +13,7 @@ import {
 } from "../../components";
 import { useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
+import { bridge } from "../../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady, hostOf } from "../../lib/groups";
 import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
@@ -36,6 +37,29 @@ export function SubEditSheet({
   const [group, setGroup] = useState<GroupChoice>({ newName: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  // Whether the saved URL is an encrypted link (`null` while the backend checks),
+  // and the address behind it once the user asks to see it.
+  const [encrypted, setEncrypted] = useState<boolean | null>(false);
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const notify = useAppStore((s) => s.notify);
+
+  useEffect(() => {
+    setRevealed(null);
+    const url = open ? sub?.url.trim() : "";
+    if (!url) {
+      setEncrypted(false);
+      return;
+    }
+    setEncrypted(null);
+    let alive = true;
+    bridge
+      .resolveImportInput(url)
+      .then((r) => alive && setEncrypted(r.subscriptions[0]?.encrypted === true))
+      .catch(() => alive && setEncrypted(false));
+    return () => {
+      alive = false;
+    };
+  }, [open, sub]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,8 +100,10 @@ export function SubEditSheet({
   if (!open || !d) return null;
   const set = <K extends keyof Subscription>(k: K, v: Subscription[K]) =>
     setD((s) => (s ? { ...s, [k]: v } : s));
+  // The saved encrypted link, unless the user typed another address.
+  const keepsLink = !!sub && encrypted === true && d.url === sub.url;
   // The name the subscription gets when the field is left empty.
-  const defaultName = d.provider?.title || hostOf(d.url);
+  const defaultName = d.provider?.title || (keepsLink ? t("add.encryptedName") : hostOf(d.url));
   const name = d.remarks.trim() || defaultName;
   const providerHours = d.providerIntervalHours ?? null;
   const ownInterval = providerHours == null || d.intervalOverride;
@@ -124,6 +150,15 @@ export function SubEditSheet({
     !d.allowProviderConfigs &&
     d.lastErrorKind?.kind === "unsupportedPayload" &&
     !(d.pendingChanges ?? []).some((p) => p.action.kind === "allowProviderConfigs");
+  const reveal = async () => {
+    if (!sub) return;
+    try {
+      setRevealed(await bridge.revealSubscriptionUrl(sub.url));
+    } catch {
+      notify(t("add.unsupported.urlDecrypt"));
+    }
+  };
+
   const showInsecureHint =
     d.url.trim() !== "" && isInsecureHttpUrl(d.url) && !isLocalOrPrivateHost(d.url);
 
@@ -133,16 +168,28 @@ export function SubEditSheet({
       title={sub ? t("subs.edit.editTitle") : t("subs.edit.newTitle")}
       onClose={onClose}
     >
-      <Field
-        label={t("subs.edit.url")}
-        value={d.url}
-        area
-        mono={false}
-        placeholder={t("subs.edit.urlPh")}
-        onChange={(v) => set("url", v)}
-        error={errors.url}
-        hint={showInsecureHint ? t("subs.edit.urlInsecureHint") : undefined}
-      />
+      {sub && encrypted === true ? (
+        <EncryptedUrl
+          revealed={revealed}
+          url={d.url === sub.url ? (revealed ?? "") : d.url}
+          changed={d.url !== sub.url}
+          error={errors.url}
+          onReveal={() => void reveal()}
+          // Typing the revealed address back keeps the encrypted link.
+          onChange={(v) => set("url", revealed !== null && v.trim() === revealed ? sub.url : v)}
+        />
+      ) : encrypted === false ? (
+        <Field
+          label={t("subs.edit.url")}
+          value={d.url}
+          area
+          mono={false}
+          placeholder={t("subs.edit.urlPh")}
+          onChange={(v) => set("url", v)}
+          error={errors.url}
+          hint={showInsecureHint ? t("subs.edit.urlInsecureHint") : undefined}
+        />
+      ) : null}
       <Field
         label={t("subs.edit.remarks")}
         value={d.remarks}
@@ -330,6 +377,67 @@ function ProviderSetting({
       <Btn variant="text" sm onClick={onAction}>
         {action}
       </Btn>
+    </div>
+  );
+}
+
+/** The URL row of an encrypted link: the link stays hidden until the user reveals it,
+ *  and is saved as it was unless the revealed address is edited. */
+function EncryptedUrl({
+  revealed,
+  url,
+  changed,
+  error,
+  onReveal,
+  onChange,
+}: {
+  revealed: string | null;
+  url: string;
+  changed: boolean;
+  error?: string;
+  onReveal: () => void;
+  onChange: (v: string) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="field">
+      <div className="field-label">{t("subs.edit.url")}</div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "10px 8px 10px 12px",
+          background: "var(--sc-high)",
+          borderRadius: 12,
+        }}
+      >
+        <Icon name="lock" style={{ fontSize: 20, color: "var(--primary)", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 500 }}>{t("subs.edit.encrypted")}</div>
+          <div style={{ fontSize: 12, color: "var(--on-surface-variant)", lineHeight: 1.4 }}>
+            {t("subs.edit.encryptedSub")}
+          </div>
+        </div>
+        {revealed === null && (
+          <Btn variant="text" sm icon="visibility" onClick={onReveal}>
+            {t("subs.edit.reveal")}
+          </Btn>
+        )}
+      </div>
+      {revealed !== null && (
+        <div style={{ marginTop: 10 }}>
+          <Field
+            label={t("subs.edit.revealedLabel")}
+            value={url}
+            area
+            mono={false}
+            onChange={onChange}
+            error={error}
+            hint={changed ? t("subs.edit.replacesEncrypted") : t("subs.edit.revealedHint")}
+          />
+        </div>
+      )}
     </div>
   );
 }
