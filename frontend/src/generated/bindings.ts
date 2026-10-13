@@ -74,6 +74,12 @@ export type AdvancedSettings_Deserialize = {
 	domainStrategy?: DomainStrategy,
 	domainStrategy4Singbox?: SingboxDomainStrategy,
 	strictRoute?: boolean,
+	/**
+	 *  Android only: also route the traffic of devices tethered to the phone (Wi-Fi
+	 *  hotspot, USB, Bluetooth) through the proxy. Off, tethered clients go out
+	 *  directly as they always did. Takes effect live, without a restart.
+	 */
+	proxyTethering?: boolean,
 	singboxStack?: SingboxStack,
 	dnsViaProxy?: boolean,
 	fakeDns?: boolean,
@@ -177,6 +183,12 @@ export type AdvancedSettings_Serialize = {
 	domainStrategy: DomainStrategy,
 	domainStrategy4Singbox: SingboxDomainStrategy,
 	strictRoute: boolean,
+	/**
+	 *  Android only: also route the traffic of devices tethered to the phone (Wi-Fi
+	 *  hotspot, USB, Bluetooth) through the proxy. Off, tethered clients go out
+	 *  directly as they always did. Takes effect live, without a restart.
+	 */
+	proxyTethering: boolean,
 	singboxStack: SingboxStack,
 	dnsViaProxy: boolean,
 	fakeDns: boolean,
@@ -1343,6 +1355,12 @@ export type ServiceState_Deserialize = {
 	uptimeSec: number,
 	/**  Engine actually running (PID truth), or `null` when nothing is up. */
 	engine: CoreEngine | null,
+	/**
+	 *  Android: hardware offload still forwards a tethering session that was
+	 *  running before "proxy tethering" turned it off, so some tethered traffic
+	 *  bypasses the proxy until tethering is restarted. Always `false` elsewhere.
+	 */
+	tetherOffloadBypass?: boolean,
 };
 
 /**  Runtime facts about the data-path (`status` RPC / `Platform::service_state`). */
@@ -1354,6 +1372,12 @@ export type ServiceState_Serialize = {
 	uptimeSec: number,
 	/**  Engine actually running (PID truth), or `null` when nothing is up. */
 	engine: CoreEngine | null,
+	/**
+	 *  Android: hardware offload still forwards a tethering session that was
+	 *  running before "proxy tethering" turned it off, so some tethered traffic
+	 *  bypasses the proxy until tethering is restarted. Always `false` elsewhere.
+	 */
+	tetherOffloadBypass: boolean,
 };
 
 /**  Full status frame pushed to clients: runtime facts + active profile + core label. */

@@ -38,6 +38,7 @@ const DEFAULT_STATUS: ServiceStatus = {
   engine: null,
   pendingRestart: false,
   latencyMs: null,
+  tetherOffloadBypass: false,
 };
 
 // Nested-model builder: Vless is `meta`/`endpoint`/`transport`/`tls`/ root

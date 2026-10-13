@@ -43,6 +43,8 @@ use super::routing::{
     has_force_proxy, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
+use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
+use super::tethering::{TetherPath, start_tether_watcher, stop_tether_watcher};
 use super::{run_out, silent, ssaid};
 
 pub struct AndroidPlatform {
@@ -159,7 +161,7 @@ async fn set_failed(reason: &str) {
     write_state(&state).await;
 }
 
-async fn read_settings() -> Option<AdvancedSettings> {
+pub(super) async fn read_settings() -> Option<AdvancedSettings> {
     read_json::<AppState>(&app_state_path())
         .await
         .map(|s| s.settings)
@@ -187,7 +189,7 @@ async fn http_port() -> u16 {
         .unwrap_or(DEFAULT_LOCAL_HTTP_PORT)
 }
 
-async fn read_iface(file: &str) -> Option<String> {
+pub(super) async fn read_iface(file: &str) -> Option<String> {
     read_text(file)
         .await
         .map(|s| s.trim().to_string())
@@ -455,6 +457,14 @@ async fn start_inner(
     // own iptables during startup and shells `iptables` without `-w` — a shared
     // xtables.lock race would fail its start.
     refresh_guards(socks_port).await;
+    // Hotspot / tethering clients, if the user asked for them (watches the setting
+    // and the tethering interfaces for as long as the data path runs).
+    start_tether_watcher(if external {
+        TetherPath::External
+    } else {
+        TetherPath::Native
+    })
+    .await;
     // Process-up: `started_at` marks it (vs the bring-up `connecting`) and drives
     // uptime; the wire state stays Connecting until the Service's connectivity probe
     // refines it to Connected / NoInternet.
@@ -532,6 +542,9 @@ impl Platform for AndroidPlatform {
         ])
         .await;
         setup_sysctl_locks().await;
+        // A daemon that died while the tethering option was on left the offload
+        // setting changed; no data path runs yet, so give it back.
+        restore_hw_offload().await;
         // Fresh boot: seed a stopped document so a stale value can't make status lie
         // before the first command. Drop the pre-document `service-started` marker.
         write_state(&DataPathState::default()).await;
@@ -591,6 +604,8 @@ impl Platform for AndroidPlatform {
                 .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT),
             http_port: http_port().await,
         };
+        // The tethering watcher would re-install rules behind the teardown below.
+        stop_tether_watcher().await;
         // Stop the core first, gracefully: a sing-box auto_route core removes its own
         // ip rules + tun on shutdown. Doing this before clear_routing_rules (which
         // would delete the tun out from under it) lets that self-cleanup run.
@@ -644,6 +659,7 @@ impl Platform for AndroidPlatform {
             upload_bytes: tx,
             uptime_sec,
             engine: running_engine().await,
+            tether_offload_bypass: hw_offload_bypass(),
         })
     }
 

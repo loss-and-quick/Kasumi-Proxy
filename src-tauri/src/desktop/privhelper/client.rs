@@ -120,6 +120,7 @@ mod tests {
                 download_bytes: 20,
                 uptime_sec: 5,
                 engine: Some(CoreEngine::Xray),
+                tether_offload_bypass: false,
             })
         }
         async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {

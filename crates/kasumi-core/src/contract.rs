@@ -82,6 +82,11 @@ pub struct ServiceState {
     pub uptime_sec: u64,
     /// Engine actually running (PID truth), or `null` when nothing is up.
     pub engine: Option<CoreEngine>,
+    /// Android: hardware offload still forwards a tethering session that was
+    /// running before "proxy tethering" turned it off, so some tethered traffic
+    /// bypasses the proxy until tethering is restarted. Always `false` elsewhere.
+    #[serde(default)]
+    pub tether_offload_bypass: bool,
 }
 
 /// Full status frame pushed to clients: runtime facts + active profile + core label.
@@ -199,6 +204,7 @@ mod tests {
                 download_bytes: 20,
                 uptime_sec: 5,
                 engine: Some(CoreEngine::Xray),
+                tether_offload_bypass: false,
             },
             active_id: Some("p1".into()),
             core: "Xray 25.5.16".into(),
@@ -247,6 +253,7 @@ mod tests {
             download_bytes: 0,
             uptime_sec: 0,
             engine: None,
+            tether_offload_bypass: false,
         };
         let v = serde_json::to_value(&s).unwrap();
         assert!(v["engine"].is_null());

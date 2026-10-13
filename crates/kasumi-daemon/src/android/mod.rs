@@ -10,6 +10,8 @@ pub mod platform;
 pub mod routing;
 pub mod ssaid;
 pub mod sysctl;
+pub mod tether_offload;
+pub mod tethering;
 
 pub use platform::AndroidPlatform;
 

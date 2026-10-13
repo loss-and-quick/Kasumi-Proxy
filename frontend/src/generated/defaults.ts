@@ -554,6 +554,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "pingConcurrency": 3,
   "preferIpv6": false,
   "proxyMode": "tun",
+  "proxyTethering": false,
   "requestIdentity": {
     "androidUser": 0,
     "cookieJar": true,

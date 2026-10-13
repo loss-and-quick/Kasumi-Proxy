@@ -431,6 +431,11 @@ const pt = {
   "settings.strictRoute": "Roteamento estrito (kill-switch)",
   "settings.singboxStack": "Pilha TUN do sing-box",
   "settings.strictRouteSub": "Força todo o tráfego pelo túnel sem vazamentos.",
+  "settings.proxyTethering": "Proxy para tráfego de ponto de acesso e tethering",
+  "settings.proxyTetheringSub":
+    "Envia pelo proxy os dispositivos do ponto de acesso Wi-Fi, USB ou Bluetooth. Aplica em segundos; só IPv4.",
+  "settings.proxyTetheringOffload":
+    "Reinicie o ponto de acesso ou o compartilhamento USB: até lá, parte do tráfego dos dispositivos conectados pode contornar o proxy.",
   "settings.domainStrategy4Xray": "Estratégia de domínio (núcleo Xray)",
   "settings.domainStrategy4Xray.AsIs": "AsIs",
   "settings.domainStrategy4Xray.IPIfNonMatch": "IPIfNonMatch",

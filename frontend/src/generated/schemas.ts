@@ -79,6 +79,7 @@ export const AdvancedSettings_SerializeSchema = z.object({
 	domainStrategy: DomainStrategySchema,
 	domainStrategy4Singbox: SingboxDomainStrategySchema,
 	strictRoute: z.boolean(),
+	proxyTethering: z.boolean(),
 	singboxStack: SingboxStackSchema,
 	dnsViaProxy: z.boolean(),
 	fakeDns: z.boolean(),
@@ -159,6 +160,7 @@ export const AdvancedSettings_DeserializeSchema = z.object({
 	domainStrategy: DomainStrategySchema.optional(),
 	domainStrategy4Singbox: SingboxDomainStrategySchema.optional(),
 	strictRoute: z.boolean().optional(),
+	proxyTethering: z.boolean().optional(),
 	singboxStack: SingboxStackSchema.optional(),
 	dnsViaProxy: z.boolean().optional(),
 	fakeDns: z.boolean().optional(),
@@ -1703,6 +1705,7 @@ export const ServiceState_SerializeSchema = z.object({
 	downloadBytes: z.number(),
 	uptimeSec: z.number(),
 	engine: CoreEngineSchema.nullable(),
+	tetherOffloadBypass: z.boolean(),
 });
 export type ServiceState_Serialize = z.infer<typeof ServiceState_SerializeSchema>;
 
@@ -1762,6 +1765,7 @@ export const ServiceState_DeserializeSchema = z.object({
 	downloadBytes: z.number(),
 	uptimeSec: z.number(),
 	engine: CoreEngineSchema.nullable(),
+	tetherOffloadBypass: z.boolean().optional(),
 });
 export type ServiceState_Deserialize = z.infer<typeof ServiceState_DeserializeSchema>;
 
