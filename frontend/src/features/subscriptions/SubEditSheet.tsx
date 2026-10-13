@@ -36,11 +36,14 @@ import { savedName } from "./sub-edit";
 export function SubEditSheet({
   open,
   sub,
+  initialUrl = "",
   onClose,
   onSave,
 }: {
   open: boolean;
   sub: Subscription | null;
+  /** The address a new subscription starts with. */
+  initialUrl?: string;
   onClose: () => void;
   onSave: (sub: Subscription, group: GroupChoice) => Promise<void>;
 }) {
@@ -94,7 +97,7 @@ export function SubEditSheet({
     setD({
       id: uid(),
       remarks: "",
-      url: "",
+      url: initialUrl,
       userAgent: "",
       filter: "",
       enabled: true,
@@ -113,7 +116,7 @@ export function SubEditSheet({
       insecureByProvider: false,
       allowProviderConfigs: false,
     });
-  }, [open, sub]);
+  }, [open, sub, initialUrl]);
 
   // A typed `happ://` address is read by the backend before it can name anything.
   const typedUrl = d?.url.trim() ?? "";

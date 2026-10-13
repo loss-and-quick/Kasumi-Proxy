@@ -134,6 +134,22 @@ export async function resolveAddText(
   }
 }
 
+/** The subscription URL "with options" should open with: the first one the text
+ *  holds, read the way the sheet reads it (an exported dump here, anything else by
+ *  the backend), or null when the text carries no subscription. Asked afresh so a
+ *  paste still being sorted isn't dropped. */
+export async function firstSubscriptionUrl(
+  text: string,
+  defaults: SubDefaults,
+  b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
+): Promise<string | null> {
+  if (!text.trim()) return null;
+  const dump = parseSubscriptionDump(text, defaults);
+  if (dump) return dump[0]?.url ?? null;
+  const { value } = await resolveAddText(text, b);
+  return value.subscriptions[0]?.url ?? null;
+}
+
 /** A scanned QR code goes on a line of its own after what the field holds. */
 export function appendScanned(current: string, scanned: string): string {
   return current.trim() ? `${current.trim()}\n${scanned}` : scanned;
