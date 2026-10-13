@@ -28,7 +28,7 @@ use crate::platform::Platform;
 use crate::sub_update;
 
 use self::lifecycle::{LifecycleCmd, RunningPath};
-use self::status::{Connectivity, ProbeVerdict};
+use self::status::ProbeVerdict;
 
 const EVENT_CHANNEL_CAP: usize = 64;
 
@@ -132,15 +132,12 @@ impl Service {
             }
             Command::ProbeConnection => {
                 // An explicit check through the running core — also when the
-                // background check is off. `None` = not running or unreachable.
+                // background check is off.
                 let (verdict, changed) = self.probe_and_store().await;
                 if changed {
                     self.emit_status().await;
                 }
-                Ok(Response::Ping(match verdict {
-                    Connectivity::Reachable { latency_ms } => Some(latency_ms as i64),
-                    _ => None,
-                }))
+                Ok(Response::Probe(verdict.into()))
             }
             other => commands::dispatch(&*self.platform, other).await,
         }

@@ -4,7 +4,7 @@ use crate::platform::{
     BackendPaths, Engine, InstalledCores, PlatformCapabilities, StartDataPath, StopDataPath,
 };
 use crate::testutil::sample_vless;
-use kasumi_core::contract::{RunState, ServiceState};
+use kasumi_core::contract::{ConnectionProbe, RunState, ServiceState};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{ProxyMode, default_app_state};
 use std::path::PathBuf;
@@ -377,13 +377,14 @@ async fn stateless_command_still_works_through_service() {
     assert_eq!(c.xray_version, "Xray 1.0");
 }
 
-/// Save two profiles, the first active and the second with id `b`.
+/// Save profiles `a` (active) and `b`.
 async fn seed_two(platform: &RecordingPlatform) {
-    let a = sample_vless();
+    let mut a = sample_vless();
+    a.meta_mut().id = "a".into();
     let mut b = crate::testutil::vless_at(8443);
     b.meta_mut().id = "b".into();
     let mut state = default_app_state();
-    state.active_id = Some(a.meta().id.clone());
+    state.active_id = Some("a".into());
     state.profiles = vec![a, b];
     crate::state::write_app_state(platform, &state)
         .await
@@ -544,15 +545,43 @@ async fn running_first_of_two() -> (TempDir, Arc<Service>, Arc<FakeCoreSocks>) {
     (dir, svc, core)
 }
 
+fn as_probe(reply: Response) -> ConnectionProbe {
+    let Response::Probe(p) = reply else {
+        panic!("expected a probe reply, got {reply:?}")
+    };
+    p
+}
+
+async fn probe(svc: &Service) -> ConnectionProbe {
+    as_probe(svc.dispatch(Command::ProbeConnection).await.unwrap())
+}
+
+#[tokio::test]
+async fn probe_reply_names_the_running_profile() {
+    let (_d, svc, _core) = running_first_of_two().await;
+    let reply = probe(&svc).await;
+    assert_eq!(reply.profile_id.as_deref(), Some("a"));
+    assert!(reply.latency_ms.is_some());
+
+    // A saved switch doesn't change what runs: the answer is still the old
+    // profile's, never attributed to the new active one.
+    save_active(&svc, "b").await;
+    assert_eq!(probe(&svc).await.profile_id.as_deref(), Some("a"));
+
+    svc.dispatch(Command::Start {
+        profile_id: Some("b".into()),
+    })
+    .await
+    .unwrap();
+    assert_eq!(probe(&svc).await.profile_id.as_deref(), Some("b"));
+}
+
 #[tokio::test]
 async fn saved_switch_does_not_inherit_the_running_profiles_ping() {
     let (_d, svc, _core) = running_first_of_two().await;
     let mut rx = svc.subscribe();
 
-    assert!(matches!(
-        svc.dispatch(Command::ProbeConnection).await.unwrap(),
-        Response::Ping(Some(_))
-    ));
+    assert!(probe(&svc).await.latency_ms.is_some());
     let status = svc.current_status().await.unwrap();
     assert_eq!(status.service.state, RunState::Connected);
     assert!(status.latency_ms.is_some());
@@ -602,7 +631,8 @@ async fn probe_in_flight_across_a_saved_switch_is_not_reported_for_the_new_profi
         .expect("probe reached the core");
     save_active(&svc, "b").await;
     core.release.notify_one();
-    probing.await.unwrap().unwrap();
+    let reply = as_probe(probing.await.unwrap().unwrap());
+    assert_eq!(reply.profile_id.as_deref(), Some("a"));
 
     let status = svc.current_status().await.unwrap();
     assert_eq!(status.active_id.as_deref(), Some("b"));
@@ -630,6 +660,5 @@ async fn probe_connection_without_a_running_proxy_is_no_result() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;
     let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
-    let reply = svc.dispatch(Command::ProbeConnection).await.unwrap();
-    assert!(matches!(reply, Response::Ping(None)));
+    assert_eq!(probe(&svc).await.latency_ms, None);
 }

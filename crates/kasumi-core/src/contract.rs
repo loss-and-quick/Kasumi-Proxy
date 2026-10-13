@@ -109,6 +109,17 @@ pub struct ServiceStatus {
     pub latency_ms: Option<u64>,
 }
 
+/// Reply to the on-demand connectivity probe. It names the profile whose core
+/// answered, which can differ from the active one while a saved switch has not
+/// been restarted into yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionProbe {
+    pub profile_id: Option<String>,
+    /// Round trip in ms; `null` when unreachable or nothing is running.
+    pub latency_ms: Option<u64>,
+}
+
 /// Reply to the `capabilities` RPC.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

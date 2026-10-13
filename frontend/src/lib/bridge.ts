@@ -9,6 +9,7 @@
 import type {
   AssetsUpdatedEvent,
   Capabilities,
+  ConnectionProbe,
   CoreResolution,
   FetchMode,
   IdentityInput_Serialize as IdentityInput,
@@ -33,6 +34,7 @@ export type {
   AuditOutcome,
   Capabilities,
   ChangeAction_Serialize as ChangeAction,
+  ConnectionProbe,
   CoreResolution,
   Group,
   HwidSource,
@@ -112,8 +114,9 @@ export interface Bridge {
   realPing(profileId: string): Promise<number>;
   realPingAll(ids: string[], onResult?: BatchProgress): Promise<Record<string, number>>;
   // One connectivity check through the running core (not a test core): the live
-  // path's round trip in ms, -1 when unreachable or nothing is running.
-  probeConnection(): Promise<number>;
+  // path's round trip and the profile whose core answered — not necessarily the
+  // active one while a saved switch is still restarting.
+  probeConnection(): Promise<ConnectionProbe>;
   speedTest(profileId: string): Promise<number>; // bytes/sec, -1 = unreachable
   speedTestAll(ids: string[], onResult?: BatchProgress): Promise<Record<string, number>>;
   log(input?: { target?: LogTarget; lines?: number }): Promise<string>;

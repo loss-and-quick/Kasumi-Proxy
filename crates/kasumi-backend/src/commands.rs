@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use kasumi_core::chain::chain_candidates;
 use kasumi_core::contract::{
-    Capabilities, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind, WsInfo,
+    Capabilities, ConnectionProbe, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind,
+    WsInfo,
 };
 use kasumi_core::core::{forced_core, resolve_core};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
@@ -168,7 +169,8 @@ pub enum Command {
         profile_id: String,
     },
     /// One connectivity check through the running core, on demand; replies with
-    /// its round trip (`Ping`). Stateful: it updates the Service's verdict.
+    /// its round trip and the profile it measured (`Probe`). Stateful: it updates
+    /// the Service's verdict.
     ProbeConnection,
     // Lifecycle: stateful, owned by the Service's serialized chain. The stateless
     // `dispatch` rejects them; `Service::dispatch` intercepts and runs them.
@@ -226,6 +228,7 @@ pub enum Response {
     ProfileIds(Vec<String>),
     /// Latency in ms (tcp-ping and real-ping); `null` when there is no result.
     Ping(Option<i64>),
+    Probe(ConnectionProbe),
     /// Throughput in bytes/sec; `null` when there is no result.
     Speed(Option<i64>),
     /// A bare acknowledgement (`{ok: true}` / no body in the old protocol).

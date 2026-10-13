@@ -1644,6 +1644,13 @@ export const CommandSchema = z.union([Command_DeserializeSchema, Command_Seriali
 export type Command = z.infer<typeof CommandSchema>;
 
 
+export const ConnectionProbeSchema = z.object({
+	profileId: z.string().nullable(),
+	latencyMs: z.number().nullable(),
+});
+export type ConnectionProbe = z.infer<typeof ConnectionProbeSchema>;
+
+
 export const CoreResolutionSchema = z.object({
 	resolved: CoreEngineSchema,
 	forced: CoreEngineSchema.nullable(),
@@ -1824,6 +1831,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
 }), z.object({
+	kind: z.literal("probe"),
+	value: ConnectionProbeSchema,
+}), z.object({
 	kind: z.literal("profileIds"),
 	value: z.array(z.string()),
 }), z.object({
@@ -1886,6 +1896,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("ports"),
 	value: z.array(z.number()),
+}), z.object({
+	kind: z.literal("probe"),
+	value: ConnectionProbeSchema,
 }), z.object({
 	kind: z.literal("profileIds"),
 	value: z.array(z.string()),

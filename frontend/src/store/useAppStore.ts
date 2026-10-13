@@ -745,15 +745,20 @@ export const useAppStore = create<Store>((set, get) => {
       const id = get().service.activeId;
       if (!id || get().pinging.has(id)) return;
       set((s) => ({ pinging: new Set([...s.pinging, id]) }));
+      // The answer belongs to the profile whose core it went through: not `id`
+      // while a saved switch is still restarting.
+      let measured: string | null = id;
       let value: number;
       try {
-        value = await bridge.probeConnection();
+        const probe = await bridge.probeConnection();
+        measured = probe.profileId;
+        value = probe.latencyMs ?? -1;
       } catch (e) {
         value = -2;
         get().notify(translateCurrent("store.ping.testFailed", { error: errorMessage(e) }));
       }
       set((s) => ({
-        testResults: withTest(s, id, { ping: value }),
+        ...(measured ? { testResults: withTest(s, measured, { ping: value }) } : {}),
         pinging: new Set([...s.pinging].filter((x) => x !== id)),
       }));
     },

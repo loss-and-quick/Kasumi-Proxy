@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
 
-use kasumi_core::contract::{FetchMode, PushFrame, RunState, ServiceStatus};
+use kasumi_core::contract::{ConnectionProbe, FetchMode, PushFrame, RunState, ServiceStatus};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL};
 
 use crate::fsjson::read_json;
@@ -34,6 +34,18 @@ pub(super) enum Connectivity {
 pub(super) struct ProbeVerdict {
     profile_id: Option<String>,
     connectivity: Connectivity,
+}
+
+impl From<ProbeVerdict> for ConnectionProbe {
+    fn from(v: ProbeVerdict) -> Self {
+        Self {
+            profile_id: v.profile_id,
+            latency_ms: match v.connectivity {
+                Connectivity::Reachable { latency_ms } => Some(latency_ms),
+                _ => None,
+            },
+        }
+    }
 }
 
 impl Service {
@@ -140,7 +152,7 @@ impl Service {
     /// restarted while the probe ran (its answer would describe the old core).
     /// Returns the verdict and whether the stored one changed, so a caller only
     /// re-emits status when there's something new.
-    pub(super) async fn probe_and_store(&self) -> (Connectivity, bool) {
+    pub(super) async fn probe_and_store(&self) -> (ProbeVerdict, bool) {
         let generation = self.data_path_generation.load(Ordering::SeqCst);
         let verdict = ProbeVerdict {
             profile_id: self.probed_profile().await,
@@ -148,10 +160,10 @@ impl Service {
         };
         let mut guard = self.connectivity.lock().unwrap();
         if self.data_path_generation.load(Ordering::SeqCst) != generation || *guard == verdict {
-            return (verdict.connectivity, false);
+            return (verdict, false);
         }
         *guard = verdict.clone();
-        (verdict.connectivity, true)
+        (verdict, true)
     }
 
     /// The profile a probe started now measures: the one this process started the

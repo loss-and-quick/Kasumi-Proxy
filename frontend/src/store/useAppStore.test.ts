@@ -5,6 +5,7 @@ import type {
   AppState,
   AssetsUpdatedEvent,
   Bridge,
+  ConnectionProbe,
   LogTarget,
   ServiceStatus,
   SubAppliedEvent,
@@ -143,7 +144,9 @@ function createBridgeMock(): BridgeMock {
     clearLogs: vi.fn(async () => ({ ok: true })),
     realPing: vi.fn(async () => 0),
     realPingAll: vi.fn(async () => ({})),
-    probeConnection: vi.fn(async () => -1),
+    probeConnection: vi.fn(
+      async (): Promise<ConnectionProbe> => ({ profileId: null, latencyMs: null }),
+    ),
     speedTest: vi.fn(async () => 0),
     speedTestAll: vi.fn(async () => ({})),
     capabilities: vi.fn(async () => ({
@@ -777,12 +780,25 @@ describe("useAppStore", () => {
       service: { ...DEFAULT_STATUS, state: "connected", activeId: "p1" },
       testResults: {},
     });
-    bridge.probeConnection.mockResolvedValueOnce(64);
+    bridge.probeConnection.mockResolvedValueOnce({ profileId: "p1", latencyMs: 64 });
     const probing = useAppStore.getState().probeActive();
     expect(useAppStore.getState().pinging.has("p1")).toBe(true);
     await probing;
     expect(useAppStore.getState().pinging.has("p1")).toBe(false);
     expect(useAppStore.getState().testResults.p1.ping).toBe(64);
+  });
+
+  it("probeActive files the answer under the profile whose core measured it", async () => {
+    // p2 is saved active, but p1's core still runs until the switch restarts.
+    useAppStore.setState({
+      service: { ...DEFAULT_STATUS, state: "connected", activeId: "p2" },
+      testResults: {},
+    });
+    bridge.probeConnection.mockResolvedValueOnce({ profileId: "p1", latencyMs: 64 });
+    await useAppStore.getState().probeActive();
+    expect(useAppStore.getState().testResults.p1.ping).toBe(64);
+    expect(useAppStore.getState().testResults.p2).toBeUndefined();
+    expect(useAppStore.getState().pinging.has("p2")).toBe(false);
   });
 
   it("removeProfile stops service and clears active id when removing active profile", async () => {
