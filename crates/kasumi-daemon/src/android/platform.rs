@@ -23,9 +23,11 @@ use kasumi_backend::platform::{
 };
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{RunState, ServiceState};
-use kasumi_core::core::owns_native_tun;
-use kasumi_core::data_path_state::{DataPathState, TunSelection};
-use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::data_path_plan::{
+    AppRouting, DataPathPlan, ExternalTun, HostTraits, LocalPorts, TunPlan,
+};
+use kasumi_core::data_path_state::{DataPathState, HelperSlot, TunSlot};
+use kasumi_core::enums::{CoreEngine, TunEngine, wire_value};
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
@@ -42,12 +44,20 @@ use super::paths::{
 };
 use super::routing::{
     AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
-    has_force_proxy, reload_app_filter_rules,
+    reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
 use super::tethering::{TetherPath, start_tether_watcher, stop_tether_watcher};
 use super::{run_out, silent, ssaid};
+
+/// Every start runs a tun, apps are routed by uid, and the sidecar takes the stack
+/// the settings name.
+const HOST: HostTraits = HostTraits {
+    proxy_modes: false,
+    app_routing: AppRouting::PerUid,
+    pinned_singbox_stack: None,
+};
 
 pub struct AndroidPlatform {
     paths: BackendPaths,
@@ -90,41 +100,78 @@ fn tun_helper_bin(tun: TunEngine) -> &'static str {
     }
 }
 
-/// The config file an external engine writes at bring-up: tun2socks'/hev's YAML or
-/// the sidecar sing-box's JSON, per tun (the `2` variant is the force-proxy tun).
-fn tun_cfg_path(tun: TunEngine, force: bool) -> &'static str {
-    match (tun, force) {
-        (TunEngine::SingboxTun, false) => SINGBOX_BRIDGE_CONFIG,
-        (TunEngine::SingboxTun, true) => SINGBOX_BRIDGE2_CONFIG,
-        (TunEngine::Tun2socks, false) => TUN2SOCKS_CONFIG,
-        (TunEngine::Tun2socks, true) => TUN2SOCKS2_CONFIG,
-        (TunEngine::Hev, false) => HEV_CONFIG,
-        (TunEngine::Hev, true) => HEV2_CONFIG,
+/// Everything the daemon needs to run, find and stop one helper process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HelperSpec {
+    bin: &'static str,
+    /// The config the engine writes at bring-up: tun2socks'/hev's YAML or the
+    /// sidecar sing-box's JSON.
+    cfg: &'static str,
+    pidfile: &'static str,
+    iface_file: &'static str,
+    log: &'static str,
+    /// The addresses a self-addressing engine (hev, the sidecar) gives its tun.
+    ipv4: &'static str,
+    ipv6: &'static str,
+}
+
+fn helper_spec(h: HelperSlot) -> HelperSpec {
+    let bin = tun_helper_bin(h.engine);
+    match h.slot {
+        TunSlot::Main => HelperSpec {
+            bin,
+            cfg: match h.engine {
+                TunEngine::SingboxTun => SINGBOX_BRIDGE_CONFIG,
+                TunEngine::Tun2socks => TUN2SOCKS_CONFIG,
+                TunEngine::Hev => HEV_CONFIG,
+            },
+            pidfile: TUN2SOCKS_PIDFILE,
+            iface_file: TUN_IFACE_FILE,
+            log: "tun-engine.log",
+            ipv4: TUN_IPV4,
+            ipv6: TUN_IPV6,
+        },
+        TunSlot::Force => HelperSpec {
+            bin,
+            cfg: match h.engine {
+                TunEngine::SingboxTun => SINGBOX_BRIDGE2_CONFIG,
+                TunEngine::Tun2socks => TUN2SOCKS2_CONFIG,
+                TunEngine::Hev => HEV2_CONFIG,
+            },
+            pidfile: TUN2SOCKS2_PIDFILE,
+            iface_file: TUN2_IFACE_FILE,
+            log: "tun-engine2.log",
+            ipv4: TUN2_IPV4,
+            ipv6: TUN2_IPV6,
+        },
     }
 }
 
-/// The sing-box tun stack wire value from settings (`"gvisor"`/`"system"`/`"mixed"`), for the
-/// sidecar sing-box bridge config. Defaults to gvisor — the root-binary path needs it.
-async fn singbox_stack() -> String {
-    read_settings()
-        .await
-        .and_then(|s| serde_json::to_value(s.singbox_stack).ok())
-        .and_then(|v| v.as_str().map(str::to_owned))
-        .unwrap_or_else(|| "gvisor".into())
+/// The local port a helper bridges its tun into: the core's socks inbound, or for
+/// the force-proxy tun its `force-in`, which skips the geo rules.
+fn helper_target(slot: TunSlot, ports: &LocalPorts) -> u16 {
+    match slot {
+        TunSlot::Main => ports.socks,
+        TunSlot::Force => ports.force,
+    }
 }
 
-/// The external TUN engine the *running* data-path uses, or `None` for a native
-/// sing-box tun (or when no document is recorded). A lookup on the recorded document
-/// ([`DataPathState::external_tun`]); the daemon maps the result via [`tun_helper_bin`].
-async fn running_tun_engine() -> Option<TunEngine> {
-    read_state().await?.external_tun()
+/// The helpers the watchdog requires alive for a recorded data path.
+fn watched_helpers(state: &DataPathState) -> Vec<HelperSpec> {
+    state
+        .helpers()
+        .into_iter()
+        .filter(|h| h.slot == TunSlot::Main)
+        .map(helper_spec)
+        .collect()
 }
 
-/// Helper binary a teardown/watchdog match targets for the running data-path —
-/// tun2socks by default, a harmless guard for a native tun with no helper pid.
+/// Helper binary a teardown matches for the running data-path — tun2socks by
+/// default, a harmless guard for a native tun with no helper pid.
 async fn running_helper_bin() -> &'static str {
-    running_tun_engine()
+    read_state()
         .await
+        .and_then(|s| s.external_tun())
         .map(tun_helper_bin)
         .unwrap_or(TUN2SOCKS_BIN)
 }
@@ -260,43 +307,37 @@ async fn core_version(engine: CoreEngine) -> Option<String> {
 
 /// Spawn the external TUN helper for `iface`, persist its pid, wait for the iface
 /// to appear. Routes through the shared `spawn_tun_engine` so the daemon learns no
-/// engine specifics beyond the helper binary (via [`tun_helper_bin`]) and, for a
-/// self-addressing engine (hev), the YAML it writes at `cfg_path` and the
-/// `ipv4`/`ipv6` it assigns. A spawn failure (e.g. the binary missing after a partial
-/// module update) or the tun device never appearing is surfaced as an error so the
-/// caller fails the start loudly, instead of routing into a bridge that never came up
-/// and black-holing the device until the watchdog happens to notice.
-#[allow(clippy::too_many_arguments)]
+/// engine specifics beyond the files in its [`HelperSpec`]. A spawn failure (e.g.
+/// the binary missing after a partial module update) or the tun device never
+/// appearing is surfaced as an error so the caller fails the start loudly, instead
+/// of routing into a bridge that never came up and black-holing the device until
+/// the watchdog happens to notice.
 async fn bring_up_tun_helper(
-    tun: TunEngine,
+    engine: TunEngine,
+    spec: &HelperSpec,
     iface: &str,
-    ipv4: &str,
-    ipv6: Option<&str>,
     socks_port: u16,
-    cfg_path: &str,
-    pidfile: &str,
-    log_name: &str,
     stack: &str,
     opts: &TunOptions,
 ) -> anyhow::Result<()> {
-    let log = format!("{DATADIR}/{log_name}");
+    let log = format!("{DATADIR}/{}", spec.log);
     let spawn = TunSpawn {
-        bin: tun_helper_bin(tun),
+        bin: spec.bin,
         iface,
-        ipv4,
-        ipv6,
+        ipv4: spec.ipv4,
+        ipv6: Some(spec.ipv6),
         socks_port,
         log_path: Path::new(&log),
         fwmark: Some(FWMARK),
-        cfg_path: Path::new(cfg_path),
+        cfg_path: Path::new(spec.cfg),
         stack,
         opts,
     };
-    let child = spawn_tun_engine(tun, &spawn)
+    let child = spawn_tun_engine(engine, &spawn)
         .await
         .map_err(|e| anyhow::anyhow!("spawn tun helper: {e} — see {log}"))?;
     let pid = child.id().unwrap_or(0);
-    let _ = write_text(pidfile, &pid.to_string()).await;
+    let _ = write_text(spec.pidfile, &pid.to_string()).await;
     for _ in 0..10 {
         if silent(&[IP, "link", "show", iface]).await == 0 {
             return Ok(());
@@ -309,88 +350,55 @@ async fn bring_up_tun_helper(
     anyhow::bail!("tun helper tun {iface} never came up — see {log}")
 }
 
-/// The local port the force-proxy tun's helper bridges into: the core's `force-in`
-/// inbound, which skips the geo rules.
-fn force_tun_target(socks_port: u16, http_port: u16) -> u16 {
-    force_socks_port(socks_port, http_port)
-}
-
-/// External-tun data-path bring-up: a userspace tun bridged to the core's SOCKS via
-/// the chosen TUN engine, plus per-app routing (and a second tun for force-proxy
-/// apps). A native sing-box tun needs none of this — it auto_routes its own tun.
-async fn bring_up_external_tun(
-    tun: TunEngine,
-    socks_port: u16,
-    opts: &TunOptions,
-) -> anyhow::Result<()> {
-    let helper_bin = tun_helper_bin(tun);
-    let filter = read_app_filter().await;
-    let http = http_port().await;
-    // The sidecar sing-box (SingboxTun engine) reads this; other engines ignore it.
-    let stack = singbox_stack().await;
-    let tun_iface = match read_iface(TUN_IFACE_FILE).await {
-        Some(x) => x,
-        None => fresh_iface(TUN_IFACE_FILE).await,
-    };
-    let mut tun2_iface: Option<String> = None;
-
-    let t2 = read_pidfile(TUN2SOCKS_PIDFILE).await;
-    if !(t2 > 0 && pid_matches_bin(t2, helper_bin).await) {
-        bring_up_tun_helper(
-            tun,
-            &tun_iface,
-            TUN_IPV4,
-            Some(TUN_IPV6),
-            socks_port,
-            tun_cfg_path(tun, false),
-            TUN2SOCKS_PIDFILE,
-            "tun-engine.log",
-            &stack,
-            opts,
-        )
-        .await?;
-    }
-
-    if has_force_proxy(&filter) {
-        let t = match read_iface(TUN2_IFACE_FILE).await {
+/// External-tun data-path bring-up: a userspace tun per helper the plan runs,
+/// bridged to the core, plus per-app routing. A native sing-box tun needs none of
+/// this — it auto_routes its own tun.
+async fn bring_up_external_tun(plan: &DataPathPlan, ext: &ExternalTun) -> anyhow::Result<()> {
+    let stack = wire_value(&ext.stack);
+    let mut ifaces = Vec::new();
+    for h in plan.helpers() {
+        let spec = helper_spec(h);
+        let iface = match read_iface(spec.iface_file).await {
             Some(x) => x,
-            None => fresh_iface(TUN2_IFACE_FILE).await,
+            None => fresh_iface(spec.iface_file).await,
         };
-        let t3 = read_pidfile(TUN2SOCKS2_PIDFILE).await;
-        if !(t3 > 0 && pid_matches_bin(t3, helper_bin).await) {
-            bring_up_tun_helper(
-                tun,
-                &t,
-                TUN2_IPV4,
-                Some(TUN2_IPV6),
-                force_tun_target(socks_port, http),
-                tun_cfg_path(tun, true),
-                TUN2SOCKS2_PIDFILE,
-                "tun-engine2.log",
-                &stack,
-                opts,
-            )
-            .await?;
+        let pid = read_pidfile(spec.pidfile).await;
+        if !(pid > 0 && pid_matches_bin(pid, spec.bin).await) {
+            let target = helper_target(h.slot, &plan.ports);
+            bring_up_tun_helper(h.engine, &spec, &iface, target, &stack, &ext.opts).await?;
         }
-        tun2_iface = Some(t);
-    } else {
+        ifaces.push((h.slot, iface));
+    }
+    if !ext.force_tun {
+        let force = helper_spec(HelperSlot {
+            engine: ext.engine,
+            slot: TunSlot::Force,
+        });
         kill_if_running(
-            read_pidfile(TUN2SOCKS2_PIDFILE).await,
-            Some(helper_bin),
-            TUN2SOCKS2_PIDFILE,
+            read_pidfile(force.pidfile).await,
+            Some(force.bin),
+            force.pidfile,
             false,
         )
         .await;
-        remove_file(TUN2_IFACE_FILE).await;
+        remove_file(force.iface_file).await;
     }
-
-    lock_tun_iface(&tun_iface).await;
+    let iface_of = |slot: TunSlot| {
+        ifaces
+            .iter()
+            .find(|(s, _)| *s == slot)
+            .map(|(_, i)| i.clone())
+    };
+    let tun_iface = iface_of(TunSlot::Main);
+    if let Some(tun) = &tun_iface {
+        lock_tun_iface(tun).await;
+    }
     let rs = RoutingState {
-        tun_iface: Some(tun_iface),
-        tun2_iface,
-        filter,
-        socks_port,
-        http_port: http,
+        tun_iface,
+        tun2_iface: iface_of(TunSlot::Force),
+        filter: read_app_filter().await,
+        socks_port: plan.ports.socks,
+        http_port: plan.ports.http,
     };
     apply_external_tun_routing(&rs).await;
     Ok(())
@@ -418,37 +426,24 @@ fn start_retry_delay(native_singbox: bool, attempt: u32, log: &str) -> Option<Du
         .then(|| XTABLES_BACKOFF * 2u32.pow(attempt))
 }
 
-/// Whether a start fronts the core with an external tun helper: every pair but the
-/// sing-box core on its own tun, so `SingboxTun` under xray is a sidecar sing-box.
-/// Must agree with [`DataPathState::external_tun`], which the watchdog reads back.
-fn uses_external_tun(engine: CoreEngine, tun: TunEngine) -> bool {
-    !owns_native_tun(engine, tun)
-}
-
 async fn fail(reason: &str) -> anyhow::Result<()> {
     set_failed(reason).await;
     anyhow::bail!("{reason}")
 }
 
-async fn start_inner(
-    engine: CoreEngine,
-    tun: TunEngine,
-    tun_opts: &TunOptions,
-    bin: &str,
-    cfg: &str,
-    log: &str,
-    socks_port: u16,
-) -> anyhow::Result<()> {
+async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> anyhow::Result<()> {
     if !exists(bin).await {
         return fail("core binary missing").await;
     }
     if !exists(cfg).await {
         return fail("config missing").await;
     }
+    if plan.tun == TunPlan::None {
+        return fail("this device runs the proxy only through a tun").await;
+    }
+    let native = matches!(plan.tun, TunPlan::Native { .. });
 
-    let external = uses_external_tun(engine, tun);
-
-    if engine == CoreEngine::SingBox {
+    if plan.engine == CoreEngine::SingBox {
         // Generate/keep only the .srs this config references (needed even when
         // sing-box runs socks-only — its route rules still reference rule-sets).
         let cfg_text = read_text(cfg).await.unwrap_or_default();
@@ -461,7 +456,7 @@ async fn start_inner(
             return fail("missing rule_set assets").await;
         }
         // Only the native tun has tun inbounds to name; socks-only has none.
-        if !external {
+        if native {
             inject_singbox_ifaces(
                 Path::new(cfg),
                 Path::new(TUN_IFACE_FILE),
@@ -471,7 +466,6 @@ async fn start_inner(
         }
     }
 
-    let native_singbox = engine == CoreEngine::SingBox && !external;
     let mut attempt = 0;
     loop {
         // stopDataPath always runs before a start/restart (Service), so the pidfile is
@@ -482,15 +476,15 @@ async fn start_inner(
 
         // An external tun engine needs a userspace tun + helper + manual routing;
         // a native sing-box auto_routes its own tun.
-        if external {
-            bring_up_external_tun(tun, socks_port, tun_opts).await?;
+        if let TunPlan::External(ext) = &plan.tun {
+            bring_up_external_tun(plan, ext).await?;
         }
 
         if verify_core_alive(core_pid, bin, 6, Duration::from_millis(250)).await {
             break;
         }
         let log_text = read_text(log).await.unwrap_or_default();
-        let Some(delay) = start_retry_delay(native_singbox, attempt, &log_text) else {
+        let Some(delay) = start_retry_delay(native, attempt, &log_text) else {
             return fail(&format!("core exited on startup — see {log}")).await;
         };
         log::warn!("sing-box lost the xtables.lock race on startup; retrying in {delay:?}");
@@ -504,13 +498,13 @@ async fn start_inner(
     // own iptables during startup and shells `iptables` without `-w`. Another holder
     // of the global xtables.lock (netd) can still fail that start; the loop above
     // retries it.
-    refresh_guards(socks_port).await;
+    refresh_guards(plan.ports.socks).await;
     // Hotspot / tethering clients, if the user asked for them (watches the setting
     // and the tethering interfaces for as long as the data path runs).
-    start_tether_watcher(if external {
-        TetherPath::External
-    } else {
+    start_tether_watcher(if native {
         TetherPath::Native
+    } else {
+        TetherPath::External
     })
     .await;
     // Process-up: `started_at` marks it (vs the bring-up `connecting`) and drives
@@ -571,6 +565,10 @@ impl Platform for AndroidPlatform {
         &[Protocol::Naive]
     }
 
+    fn host_traits(&self) -> HostTraits {
+        HOST
+    }
+
     async fn boot_init(&self) -> anyhow::Result<()> {
         silent(&["mkdir", "-p", RUN_DIR]).await;
         // The route tables netd manages must exist before we touch ip rules/sysctl.
@@ -605,29 +603,18 @@ impl Platform for AndroidPlatform {
         Ok(())
     }
 
-    async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-        // `mode` is ignored: this platform reports no proxy-mode support, so it is
-        // always normalized to tun upstream.
-        let StartDataPath {
-            engine,
-            tun,
-            tun_opts,
-            socks_port,
-            ..
-        } = opts;
-        // Record the bring-up (no started_at yet); this platform is always tun mode.
-        write_state(&DataPathState {
-            run: RunState::Connecting,
-            engine: Some(engine),
-            tun: TunSelection::Engine(tun),
-            socks_port,
-            ..Default::default()
-        })
-        .await;
+    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        anyhow::bail!("the daemon starts the data path from its plan")
+    }
+
+    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        // Record the bring-up (no started_at yet) so teardown and the watchdog know
+        // what runs before the core is even up.
+        write_state(&plan.state(RunState::Connecting)).await;
         ensure_tun_node().await;
 
-        let (bin, cfg, log) = core_files(engine);
-        if let Err(e) = start_inner(engine, tun, &tun_opts, bin, &cfg, &log, socks_port).await {
+        let (bin, cfg, log) = core_files(plan.engine);
+        if let Err(e) = start_inner(plan, bin, &cfg, &log).await {
             // Roll back the half-built data-path so a failed start leaves no orphans.
             let already_failed = read_state()
                 .await
@@ -861,15 +848,15 @@ impl Platform for AndroidPlatform {
         if !(core_pid > 0 && pid_matches_any(core_pid, &core_bins()).await) {
             return Some(false);
         }
-        // An external-tun data-path also relies on its tun helper; a native sing-box
-        // runs the tun itself. When the data-path is external, the helper pid must be
-        // present AND alive — a missing pidfile (helper never spawned, e.g. its
-        // binary absent) is unhealthy, not healthy, so the watchdog rebuilds it
-        // instead of leaving traffic black-holed in an unbridged tun. (One marker
-        // read resolves both external-ness and the binary to match.)
-        if let Some(tun) = running_tun_engine().await {
-            let t = read_pidfile(TUN2SOCKS_PIDFILE).await;
-            if !(t > 0 && pid_matches_bin(t, tun_helper_bin(tun)).await) {
+        // An external-tun data-path also relies on its tun helpers; a native sing-box
+        // runs the tun itself. A helper the record expects must have a pid AND be
+        // alive — a missing pidfile (helper never spawned, e.g. its binary absent) is
+        // unhealthy, so the watchdog rebuilds it instead of leaving traffic
+        // black-holed in an unbridged tun.
+        let state = read_state().await.unwrap_or_default();
+        for spec in watched_helpers(&state) {
+            let pid = read_pidfile(spec.pidfile).await;
+            if !(pid > 0 && pid_matches_bin(pid, spec.bin).await) {
                 return Some(false);
             }
         }
@@ -939,6 +926,8 @@ impl AppFilterCapability for AndroidPlatform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kasumi_core::core::owns_native_tun;
+    use kasumi_core::state::AppFilterMode;
 
     // The FATAL line sing-box logged when netd held the lock (#189).
     const ANDROID_LOCK_LOG: &str = "FATAL[0000] start service: start inbound/tun[tun-in]: \
@@ -957,8 +946,22 @@ mod tests {
         assert!(!lost_xtables_race(""));
     }
 
+    fn plan(engine: CoreEngine, tun: TunEngine, force: bool, http: u16) -> DataPathPlan {
+        let mut s = AdvancedSettings {
+            local_socks_port: Some(10808),
+            local_http_port: Some(http),
+            ..Default::default()
+        };
+        s.tun_by_core.insert(engine, tun);
+        if force {
+            s.app_filter
+                .insert("org.game:10200".into(), AppFilterMode::ForceProxy);
+        }
+        DataPathPlan::resolve(engine, &s, HOST)
+    }
+
     #[test]
-    fn force_tun_bridges_into_the_force_inbound() {
+    fn force_helper_bridges_into_the_force_inbound() {
         use kasumi_core::share::parse_share_link;
         use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
         use kasumi_core::xray_config::build_xray_config;
@@ -972,6 +975,7 @@ mod tests {
                 local_http_port: Some(http),
                 ..Default::default()
             };
+            let ports = plan(CoreEngine::Xray, TunEngine::Tun2socks, true, http).ports;
             let xray = build_xray_config(&p, &s, &[], profiles).unwrap();
             let opts = SingboxBuildOpts {
                 no_tun: true,
@@ -988,7 +992,7 @@ mod tests {
                     .unwrap();
                 assert_eq!(
                     force_in[port_key].as_u64(),
-                    Some(u64::from(force_tun_target(10808, http))),
+                    Some(u64::from(helper_target(TunSlot::Force, &ports))),
                     "http {http}"
                 );
             }
@@ -996,30 +1000,33 @@ mod tests {
     }
 
     #[test]
-    fn start_brings_up_the_helper_the_watchdog_expects() {
-        // The watchdog tears down a data-path whose expected helper is missing, so a
-        // start that skipped it would be killed on the next tick.
-        let engines = [CoreEngine::Xray, CoreEngine::SingBox];
-        let tuns = [TunEngine::SingboxTun, TunEngine::Tun2socks, TunEngine::Hev];
-        for engine in engines {
-            for tun in tuns {
-                let doc = DataPathState {
-                    engine: Some(engine),
-                    tun: TunSelection::Engine(tun),
-                    ..Default::default()
-                };
-                assert_eq!(
-                    uses_external_tun(engine, tun),
-                    doc.external_tun().is_some(),
-                    "{engine:?} + {tun:?}"
-                );
+    fn start_and_watchdog_expect_the_same_helpers() {
+        // The watchdog tears down a data path whose expected helper is missing, so a
+        // start that skipped one would be killed on the next tick.
+        for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+            for tun in [TunEngine::SingboxTun, TunEngine::Tun2socks, TunEngine::Hev] {
+                for force in [false, true] {
+                    let plan = plan(engine, tun, force, 10809);
+                    let at = format!("{engine:?} + {tun:?}, force {force}");
+                    let started: Vec<HelperSpec> =
+                        plan.helpers().into_iter().map(helper_spec).collect();
+                    let doc = plan.state(RunState::Connecting).to_json();
+                    let recorded = DataPathState::from_json(doc.as_bytes()).unwrap();
+                    let watched = watched_helpers(&recorded);
+                    assert_eq!(watched[..], started[..watched.len()], "{at}");
+                    let external = !owns_native_tun(engine, tun);
+                    assert_eq!(watched.len(), usize::from(external), "{at}");
+                    assert_eq!(
+                        started.len(),
+                        usize::from(external) * (1 + usize::from(force)),
+                        "{at}"
+                    );
+                    for spec in &started {
+                        assert_eq!(spec.bin, tun_helper_bin(tun), "{at}");
+                    }
+                }
             }
         }
-        assert!(uses_external_tun(CoreEngine::Xray, TunEngine::SingboxTun));
-        assert!(!uses_external_tun(
-            CoreEngine::SingBox,
-            TunEngine::SingboxTun
-        ));
     }
 
     #[test]
