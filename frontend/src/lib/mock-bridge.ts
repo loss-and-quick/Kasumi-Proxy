@@ -18,7 +18,7 @@ import type {
   Transport,
 } from "../generated/bindings";
 import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION } from "../generated/defaults";
-import { AppStateSchema } from "../generated/schemas";
+import { AppStateSchema, ProfileSchema } from "../generated/schemas";
 import { applyMutation } from "./apply-mutation";
 import type {
   AppState,
@@ -370,6 +370,9 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
   },
 
   async mutate(intent) {
+    // The schema migrations live only in Rust, so the mock restores just a
+    // backup that already has the current shape.
+    if (intent.kind === "importBackup") ProfileSchema.array().parse(intent.incoming.profiles ?? []);
     // No backend in dev: apply the intent locally with the same logic the Rust
     // backend runs, then return the canonical state.
     state = applyMutation(state, intent);
@@ -560,6 +563,7 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     const text = await file.text();
     // `parse` yields the `Serialize | Deserialize` union; narrow to the all-fields
     // phase (assignable to the UI `AppState`, which only omits `schemaVersion`).
+    // Strict, unlike the real transports: the mock can't migrate an older backup.
     const incoming = AppStateSchema.parse(JSON.parse(text)) as AppState_Serialize;
     state = applyMutation(state, { kind: "importBackup", incoming, mode });
   },
