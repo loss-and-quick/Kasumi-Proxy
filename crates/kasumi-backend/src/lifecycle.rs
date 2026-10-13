@@ -55,6 +55,47 @@ pub fn random_tun_iface() -> String {
     format!("{lead}{}", &hex[1..9])
 }
 
+/// Whether `name` has the shape [`random_tun_iface`] gives our tuns.
+pub fn is_our_tun_iface(name: &str) -> bool {
+    let mut chars = name.chars();
+    let lead = chars.next();
+    name.len() == 9
+        && lead.is_some_and(|c| "0123456789abcdef".chars().any(|h| lead_letter(h) == c))
+        && chars.all(|c| matches!(c, '0'..='9' | 'a'..='f'))
+}
+
+/// The `rule del …` arguments (after `ip [-6]`) for each rule in an `ip rule show`
+/// listing that routes out of one of our tuns into a sing-box table. sing-box adds
+/// such a rule for a tun's IPv6 address and removes it only on a clean exit, so a
+/// killed one leaves it behind on a detached device. Rules on any other device or
+/// table — the OS's own, another VPN's — are never matched.
+pub fn orphaned_tun_rules(listing: &str) -> Vec<Vec<String>> {
+    use kasumi_core::singbox_config::{SINGBOX_FORCE_TABLE, SINGBOX_MAIN_TABLE};
+    listing
+        .lines()
+        .filter_map(|line| {
+            let mut words = line.split_whitespace();
+            let pref = words.next()?.strip_suffix(':')?;
+            pref.parse::<u32>().ok()?;
+            let words: Vec<&str> = words.collect();
+            let after = |key: &str| {
+                let at = words.iter().position(|w| *w == key)?;
+                words.get(at + 1).copied()
+            };
+            let oif = after("oif").filter(|d| is_our_tun_iface(d))?;
+            let table = after("lookup")?;
+            let ours = [SINGBOX_MAIN_TABLE, SINGBOX_FORCE_TABLE]
+                .iter()
+                .any(|t| t.to_string() == table);
+            ours.then(|| {
+                ["rule", "del", "pref", pref, "oif", oif, "lookup", table]
+                    .map(str::to_owned)
+                    .to_vec()
+            })
+        })
+        .collect()
+}
+
 /// Build the config for `profile_id` (else the active profile), write it, and return
 /// the exact [`CoreConfig`] that was written, whose plan the platform starts — the
 /// in-memory baseline a running data path is later diffed against (the on-disk file
@@ -423,6 +464,66 @@ mod tests {
         let mut chars = name.chars();
         assert!(chars.next().unwrap().is_ascii_alphabetic());
         assert!(chars.all(|c| c.is_ascii_hexdigit()));
+        assert!(is_our_tun_iface(&name));
+    }
+
+    #[test]
+    fn our_tun_names_only() {
+        for _ in 0..64 {
+            assert!(is_our_tun_iface(&random_tun_iface()));
+        }
+        for other in [
+            "tun0",
+            "wlan0",
+            "rmnet_data0",
+            "a3952438b",
+            "i3952438B",
+            "i3952438",
+        ] {
+            assert!(!is_our_tun_iface(other), "{other}");
+        }
+    }
+
+    #[test]
+    fn orphaned_tun_rules_match_only_our_sing_box_rules() {
+        // `ip -6 rule show` from a phone after sidecar sing-box tuns were killed.
+        let listing = "\
+0:\tfrom all lookup local \n\
+997:\tfrom all oif i3952438b [detached] lookup 2022 \n\
+998:\tfrom all oif q39f3c88f lookup 2023 \n\
+1010:\tfrom all fwmark 0x1 lookup kasumi-proxy \n\
+9002:\tnot from all iif lo lookup 2022 \n\
+11000:\tfrom all iif lo oif wlan0 uidrange 0-0 lookup wlan0 \n\
+12000:\tfrom all oif tun0 lookup 2022 \n\
+13000:\tfrom all oif q4a2f5119 lookup 1100 \n\
+32000:\tfrom all unreachable\n";
+        let dels = orphaned_tun_rules(listing);
+        assert_eq!(
+            dels,
+            [
+                [
+                    "rule",
+                    "del",
+                    "pref",
+                    "997",
+                    "oif",
+                    "i3952438b",
+                    "lookup",
+                    "2022"
+                ],
+                [
+                    "rule",
+                    "del",
+                    "pref",
+                    "998",
+                    "oif",
+                    "q39f3c88f",
+                    "lookup",
+                    "2023"
+                ],
+            ]
+        );
+        assert!(orphaned_tun_rules("").is_empty());
     }
 
     #[test]
