@@ -130,6 +130,8 @@ interface Store extends AppState {
   ) => Promise<void>;
   /** Make a routing profile from a pasted `happ://routing` link the route of a group. */
   importRoutingLink: (routing: RoutingImport, groupId: string, activate: boolean) => Promise<void>;
+  /** Add a routing profile from a `happ://routing` link as a route of its own; resolves to its id. */
+  importRoutingRoute: (routing: RoutingImport) => Promise<string>;
   /** Save a subscription into its chosen group, creating the group if it's new. */
   saveSubscription: (sub: Subscription, group: GroupChoice) => Promise<void>;
   updateSub: (id: string) => Promise<void>;
@@ -982,6 +984,11 @@ export const useAppStore = create<Store>((set, get) => {
     },
     importRoutingLink(routing, groupId, activate) {
       return mutate({ kind: "importRoutingLink", routing, groupId, activate });
+    },
+    async importRoutingRoute(routing) {
+      const routeId = uid();
+      await mutate({ kind: "importRoutingRoute", routing, routeId });
+      return routeId;
     },
     async updateSub(id) {
       // One fetch per subscription at a time; a second tap waits for the first.

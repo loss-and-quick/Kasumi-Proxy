@@ -2,13 +2,15 @@
 // features/routes/RouteShareSheet.tsx
 // Share a route with its blocks, or take one in. A route travels without the
 // profiles it applies to (they don't exist on the other side); "as one list"
-// gives the flat rule array other clients and the Custom mode take.
+// gives the flat rule array other clients and the Custom mode take. A Happ
+// `happ://routing` link comes in the same way, as a route of its own.
 // ============================================================
 
 import { lazy, Suspense, useMemo, useState } from "react";
 import { Btn, Field, SectionLabel, Segmented, Sheet } from "../../components";
 import type { Route } from "../../generated/bindings";
-import { useT } from "../../i18n";
+import { useFormatters, useT } from "../../i18n";
+import { linkInputText } from "../../lib/add-input";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
 import {
   exportRoutePackage,
@@ -18,7 +20,9 @@ import {
 } from "../../lib/routes";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
+import { useLinkInput } from "../add/useLinkInput";
 import { copyText } from "../profiles/clipboard";
+import { RoutingImportCard } from "../subscriptions/RoutingImportCard";
 import { routeName } from "./labels";
 
 const JSON_FILTER = [{ name: "JSON", extensions: ["json"] }];
@@ -40,9 +44,11 @@ export function RouteShareSheet({
   onImported: (routeId: string) => void;
 }) {
   const t = useT();
+  const { formatList } = useFormatters();
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   const notify = useAppStore((s) => s.notify);
   const importRoutePackage = useAppStore((s) => s.importRoutePackage);
+  const importRoutingRoute = useAppStore((s) => s.importRoutingRoute);
   const [format, setFormat] = useState<"route" | "flat">("route");
   const [importText, setImportText] = useState("");
   const [qrOpen, setQrOpen] = useState(false);
@@ -54,11 +60,33 @@ export function RouteShareSheet({
     [format, route, ruleBlocks],
   );
   const pkg = useMemo(() => parseRoutePackage(importText), [importText]);
+  const link = useLinkInput(importText);
+  const happRoutes = link?.kind === "routing" ? link.routing : [];
   const importHint = !importText.trim()
     ? t("routes.share.importHint")
     : pkg
       ? `${pkg.name} · ${t("routes.share.blocks", { count: pkg.blocks.length })}`
-      : t("routes.share.invalid");
+      : happRoutes.length
+        ? t("routes.share.happRouting", { count: happRoutes.length })
+        : link
+          ? t(linkInputText(link))
+          : link === null
+            ? t("routes.share.invalid")
+            : "";
+
+  const addRoute = async () => {
+    if (pkg) {
+      const id = await importRoutePackage(pkg);
+      notify(t("routes.share.imported", { name: pkg.name }));
+      onImported(id);
+    } else if (happRoutes.length) {
+      const ids: string[] = [];
+      for (const routing of happRoutes) ids.push(await importRoutingRoute(routing));
+      notify(t("routes.share.imported", { name: formatList(happRoutes.map((r) => r.name)) }));
+      onImported(ids[0]);
+    } else return;
+    onClose();
+  };
 
   const download = async () => {
     const name = `kasumi-route-${route.name.replace(/[^\p{L}\p{N}_-]+/gu, "-")}.json`;
@@ -128,7 +156,18 @@ export function RouteShareSheet({
           mono={false}
           hint={importHint}
         />
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {happRoutes.map((routing, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: the same profile may be pasted twice.
+          <RoutingImportCard key={i} routing={routing} />
+        ))}
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            marginTop: happRoutes.length ? 12 : 0,
+          }}
+        >
           {nativeDialogsAvailable() && (
             <Btn
               variant="outline"
@@ -148,17 +187,7 @@ export function RouteShareSheet({
           <Btn variant="outline" icon="qr_code_scanner" onClick={() => setScannerOpen(true)}>
             {t("backup.scanQr")}
           </Btn>
-          <Btn
-            icon="add"
-            disabled={!pkg}
-            onClick={async () => {
-              if (!pkg) return;
-              const id = await importRoutePackage(pkg);
-              notify(t("routes.share.imported", { name: pkg.name }));
-              onImported(id);
-              onClose();
-            }}
-          >
+          <Btn icon="add" disabled={!pkg && !happRoutes.length} onClick={() => void addRoute()}>
             {t("routes.share.add")}
           </Btn>
         </div>

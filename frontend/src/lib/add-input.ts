@@ -6,7 +6,7 @@
 // ============================================================
 
 import type { DictKey } from "../i18n";
-import type { Bridge, ResolvedImport, Subscription } from "./bridge";
+import type { Bridge, ResolvedImport, RoutingImport, Subscription } from "./bridge";
 import { hostOf } from "./groups";
 import { uid } from "./utils";
 
@@ -168,4 +168,44 @@ export async function checkSubscriptionUrl(
   if (r.subscriptions.length === 1 && !r.shareText.trim())
     return { kind: "url", ...r.subscriptions[0] };
   return { kind: "other" };
+}
+
+/** Links pasted where JSON is expected: routing profiles alone, a `happ://` link
+ *  Kasumi skips, or anything else the add sheet takes. */
+export type LinkInput =
+  | { kind: "routing"; routing: RoutingImport[] }
+  | { kind: "unsupported"; reason: UnsupportedKind }
+  | { kind: "add" };
+
+/** What resolved text amounts to as links, or `null` when it holds none. */
+export function linkInput({
+  value,
+  profileCount,
+}: {
+  value: ResolvedImport;
+  profileCount: number;
+}): LinkInput | null {
+  const others = value.subscriptions.length > 0 || profileCount > 0;
+  if (value.routing.length && !others && !value.unsupported.length)
+    return { kind: "routing", routing: value.routing.map((r) => r.routing) };
+  if (value.unsupported.length && !others && !value.routing.length)
+    return { kind: "unsupported", reason: value.unsupported[0].kind };
+  return others || value.routing.length || value.unsupported.length ? { kind: "add" } : null;
+}
+
+/** JSON is read as JSON: it never goes to the link parser. */
+export const looksLikeJson = (text: string) => /^\s*[[{]/.test(text);
+
+/** `text` read as links by the backend, or `null` for JSON and text with none. */
+export async function resolveLinkInput(
+  text: string,
+  b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
+): Promise<LinkInput | null> {
+  if (!text.trim() || looksLikeJson(text)) return null;
+  return linkInput(await resolveAddText(text.trim(), b));
+}
+
+/** Why a JSON import can't take these links. */
+export function linkInputText(link: LinkInput): DictKey {
+  return link.kind === "unsupported" ? UNSUPPORTED_TEXT[link.reason] : "add.linkUseAdd";
 }

@@ -1304,6 +1304,43 @@ describe("useAppStore", () => {
     expect(route).toMatchObject({ name: "Pasted", groups: ["g-main"], enabled: true });
   });
 
+  it("importRoutingRoute adds a route of its own that applies to nothing yet", async () => {
+    bridge.readState.mockResolvedValue(makeState());
+    await useAppStore.getState().hydrate();
+    const routing = {
+      name: "Scanned",
+      directSites: ["geosite:ru"],
+      directIp: [],
+      proxySites: [],
+      proxyIp: [],
+      blockSites: ["geosite:ads"],
+      blockIp: [],
+      globalProxy: false,
+      ignoredFields: [],
+    };
+
+    const id = await useAppStore.getState().importRoutingRoute(routing);
+
+    expect(bridge.mutate).toHaveBeenCalledWith({
+      kind: "importRoutingRoute",
+      routing,
+      routeId: id,
+    });
+    const { routes, ruleBlocks } = useAppStore.getState();
+    expect(routes.find((r) => r.id === id)).toMatchObject({
+      name: "Scanned",
+      enabled: true,
+      groups: [],
+      profiles: [],
+      blocks: [{ blockId: `${id}-block`, enabled: true }],
+      finalOutbound: "direct",
+    });
+    expect(ruleBlocks.find((b) => b.id === `${id}-block`)?.rules).toMatchObject([
+      { outboundTag: "block", domain: ["geosite:ads"] },
+      { outboundTag: "direct", domain: ["geosite:ru"] },
+    ]);
+  });
+
   it("a rejected request for full Xray configs fetches nothing", async () => {
     const ask = {
       key: "provider-configs",

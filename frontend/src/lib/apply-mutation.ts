@@ -120,7 +120,7 @@ function removeProviderRouting(state: AppState, subId: string): AppState {
 type RoutingTarget = {
   blockId: string;
   routeId: string;
-  group: string;
+  group: string | null;
   sourceSubId: string | null;
 };
 
@@ -137,6 +137,14 @@ const linkTarget = (group: string): RoutingTarget => ({
   blockId: `link-block-${group}`,
   routeId: `link-route-${group}`,
   group,
+  sourceSubId: null,
+});
+
+/** Mirrors `import_routing_route`. */
+const routeTarget = (routeId: string): RoutingTarget => ({
+  blockId: `${routeId}-block`,
+  routeId,
+  group: null,
   sourceSubId: null,
 });
 
@@ -171,7 +179,7 @@ function importRouting(
     name: r.name,
     enabled,
     profiles: [],
-    groups: [group],
+    groups: group ? [group] : [],
     blocks: [{ blockId, enabled: true }],
     finalOutbound: r.globalProxy === false ? "direct" : "proxy",
     sourceSubId,
@@ -444,6 +452,8 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         : { ...state, routes: state.routes.filter((r) => r.id !== intent.id) };
     case "importRoutingLink":
       return importRouting(state, linkTarget(intent.groupId), intent.routing, intent.activate);
+    case "importRoutingRoute":
+      return importRouting(state, routeTarget(intent.routeId), intent.routing, true);
     case "setProfileRoute":
       return {
         ...state,

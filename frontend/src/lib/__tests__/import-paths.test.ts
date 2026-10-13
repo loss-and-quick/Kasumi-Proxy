@@ -8,7 +8,9 @@ import {
   addInputFrom,
   appendScanned,
   checkSubscriptionUrl,
+  linkInputText,
   resolveAddText,
+  resolveLinkInput,
   withClipboard,
 } from "../add-input";
 import type { ResolvedImport } from "../bridge";
@@ -169,5 +171,61 @@ describe("subscription URL field", () => {
     expect(
       await checkSubscriptionUrl("https://a.example/s\nhttps://b.example/s", mockBridge),
     ).toEqual({ kind: "other" });
+  });
+});
+
+describe("links pasted where JSON is expected", () => {
+  const read = (text: string) => resolveLinkInput(text, mockBridge);
+
+  for (const [entry, feed] of Object.entries(ENTRY_POINTS)) {
+    it(`reads a happ://routing link as a route to import (${entry})`, async () => {
+      const link = await read(feed(SAMPLES.routing));
+      expect(link).toMatchObject({
+        kind: "routing",
+        routing: [{ name: "RU direct", directSites: ["geosite:category-ru"] }],
+      });
+    });
+  }
+
+  it("sends subscriptions and share links to the Add button", async () => {
+    for (const text of [SAMPLES.add, SAMPLES.crypt5, SAMPLES.vless, "https://a.example/s"]) {
+      const link = await read(text);
+      expect(link).toEqual({ kind: "add" });
+      expect(link && linkInputText(link)).toBe("add.linkUseAdd");
+    }
+  });
+
+  it("sends routing mixed with other links to the Add button", async () => {
+    expect(await read(`${SAMPLES.routing}\n${SAMPLES.vless}`)).toEqual({ kind: "add" });
+  });
+
+  it("gives a skipped Happ link its own reason", async () => {
+    const link = await read("happ://routing/off");
+    expect(link).toEqual({ kind: "unsupported", reason: "routingOff" });
+    expect(link && linkInputText(link)).toBe("add.unsupported.routingOff");
+    expect(await read(SAMPLES.control)).toEqual({ kind: "unsupported", reason: "control" });
+  });
+
+  it("leaves JSON and empty text to the JSON parser without asking the backend", async () => {
+    const asked = {
+      resolveImportInput: () => Promise.reject(new Error("asked")),
+      parseShareLinks: () => Promise.reject(new Error("asked")),
+    };
+    for (const text of ["", "  ", '{"kasumiRoute":1}', ' [{"outboundTag":"direct"}]', "{"]) {
+      expect(await resolveLinkInput(text, asked)).toBeNull();
+    }
+  });
+
+  it("finds nothing in text the backend sorts into no links", async () => {
+    const none = {
+      resolveImportInput: async (text: string) => ({
+        subscriptions: [],
+        routing: [],
+        unsupported: [],
+        shareText: text,
+      }),
+      parseShareLinks: async () => [],
+    };
+    expect(await resolveLinkInput("not a backup", none)).toBeNull();
   });
 });
