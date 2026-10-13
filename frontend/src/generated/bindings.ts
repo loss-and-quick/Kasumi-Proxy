@@ -516,7 +516,8 @@ export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: nev
 ({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  One connectivity check through the running core, on demand; replies with
- *  its round trip (`Ping`). Stateful: it updates the Service's verdict.
+ *  its round trip and the profile it measured (`Probe`). Stateful: it updates
+ *  the Service's verdict.
  */
 ({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**  Open a provider link (support, web page, renewal) in the system browser. */
@@ -558,7 +559,8 @@ export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never
 ({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  One connectivity check through the running core, on demand; replies with
- *  its round trip (`Ping`). Stateful: it updates the Service's verdict.
+ *  its round trip and the profile it measured (`Probe`). Stateful: it updates
+ *  the Service's verdict.
  */
 ({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**  Open a provider link (support, web page, renewal) in the system browser. */
@@ -571,6 +573,17 @@ export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never
 
 /**  TUIC / QUIC congestion control. */
 export type CongestionControl = "bbr" | "cubic" | "new_reno";
+
+/**
+ *  Reply to the on-demand connectivity probe. It names the profile whose core
+ *  answered, which can differ from the active one while a saved switch has not
+ *  been restarted into yet.
+ */
+export type ConnectionProbe = {
+	profileId: string | null,
+	/**  Round trip in ms; `null` when unreachable or nothing is running. */
+	latencyMs: number | null,
+};
 
 export type ContentHint = "yaml" | "html" | "unknown";
 
@@ -1211,7 +1224,7 @@ export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize 
 /**  Profile ids, in stored order. */
 { kind: "profileIds"; value: string[] } | 
 /**  Latency in ms (tcp-ping and real-ping); `null` when there is no result. */
-{ kind: "ping"; value: number | null } | 
+{ kind: "ping"; value: number | null } | { kind: "probe"; value: ConnectionProbe } | 
 /**  Throughput in bytes/sec; `null` when there is no result. */
 { kind: "speed"; value: number | null } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
@@ -1224,7 +1237,7 @@ export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | 
 /**  Profile ids, in stored order. */
 { kind: "profileIds"; value: string[] } | 
 /**  Latency in ms (tcp-ping and real-ping); `null` when there is no result. */
-{ kind: "ping"; value: number | null } | 
+{ kind: "ping"; value: number | null } | { kind: "probe"; value: ConnectionProbe } | 
 /**  Throughput in bytes/sec; `null` when there is no result. */
 { kind: "speed"; value: number | null } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
@@ -1458,7 +1471,8 @@ export type ServiceStatus_Deserialize = {
 	pendingRestart?: boolean,
 	/**
 	 *  Round trip of the latest successful connectivity probe through the running
-	 *  core, in ms; `null` until one lands, or while the check is off.
+	 *  core of `active_id`, in ms; `null` until one lands, while the check is off,
+	 *  or while a saved switch to `active_id` is not running yet.
 	 */
 	latencyMs?: number | null,
 } & ServiceState_Deserialize;
@@ -1475,7 +1489,8 @@ export type ServiceStatus_Serialize = {
 	pendingRestart: boolean,
 	/**
 	 *  Round trip of the latest successful connectivity probe through the running
-	 *  core, in ms; `null` until one lands, or while the check is off.
+	 *  core of `active_id`, in ms; `null` until one lands, while the check is off,
+	 *  or while a saved switch to `active_id` is not running yet.
 	 */
 	latencyMs: number | null,
 } & ServiceState_Serialize;

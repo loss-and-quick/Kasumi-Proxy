@@ -20,7 +20,13 @@ import type {
 import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION } from "../generated/defaults";
 import { AppStateSchema } from "../generated/schemas";
 import { applyMutation } from "./apply-mutation";
-import type { AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
+import type {
+  AppState,
+  Bridge,
+  ConnectionProbe,
+  ResourceUpdateMode,
+  ServiceStatus,
+} from "./bridge";
 import { emptyProfile, type ProfileOf, profileAddress, profilePort } from "./profile-utils";
 import { seedAppState } from "./seed";
 import { uid } from "./utils";
@@ -278,9 +284,12 @@ export const mockBridge: Bridge = {
     return ms;
   },
 
-  async probeConnection(): Promise<number> {
+  async probeConnection(): Promise<ConnectionProbe> {
     await new Promise((r) => setTimeout(r, 300 + Math.random() * 500));
-    return serviceState.state === "connected" ? simPing() : -1;
+    return {
+      profileId: serviceState.activeId,
+      latencyMs: serviceState.state === "connected" ? simPing() : null,
+    };
   },
 
   async realPingAll(

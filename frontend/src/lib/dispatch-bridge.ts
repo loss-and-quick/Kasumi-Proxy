@@ -14,7 +14,14 @@ import type {
   Profile,
   Response_Serialize,
 } from "../generated/bindings";
-import type { AppEntry, AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
+import type {
+  AppEntry,
+  AppState,
+  Bridge,
+  ConnectionProbe,
+  ResourceUpdateMode,
+  ServiceStatus,
+} from "./bridge";
 import { parseCapabilities, parseServiceStatus } from "./bridge";
 import { profileAddress, profilePort } from "./profile-utils";
 
@@ -54,6 +61,8 @@ const asPing = (r: Response_Serialize): number =>
   r.kind === "ping" ? (r.value ?? -1) : wrongKind(r, "ping");
 const asSpeed = (r: Response_Serialize): number =>
   r.kind === "speed" ? (r.value ?? -1) : wrongKind(r, "speed");
+const asProbe = (r: Response_Serialize): ConnectionProbe =>
+  r.kind === "probe" ? r.value : wrongKind(r, "probe");
 
 /** Build a Bridge over a dispatcher + push streams. The on-disk split (state file
  *  without profiles, profiles file) and the UI's status shaping live here. */
@@ -155,7 +164,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return asPing(await dispatch({ cmd: "realPing", profileId }));
     },
     async probeConnection() {
-      return asPing(await dispatch({ cmd: "probeConnection" }));
+      return asProbe(await dispatch({ cmd: "probeConnection" }));
     },
     async realPingAll(ids, onResult) {
       const out: Record<string, number> = {};

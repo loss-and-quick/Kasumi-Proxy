@@ -103,8 +103,20 @@ pub struct ServiceStatus {
     #[serde(default)]
     pub pending_restart: bool,
     /// Round trip of the latest successful connectivity probe through the running
-    /// core, in ms; `null` until one lands, or while the check is off.
+    /// core of `active_id`, in ms; `null` until one lands, while the check is off,
+    /// or while a saved switch to `active_id` is not running yet.
     #[serde(default)]
+    pub latency_ms: Option<u64>,
+}
+
+/// Reply to the on-demand connectivity probe. It names the profile whose core
+/// answered, which can differ from the active one while a saved switch has not
+/// been restarted into yet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionProbe {
+    pub profile_id: Option<String>,
+    /// Round trip in ms; `null` when unreachable or nothing is running.
     pub latency_ms: Option<u64>,
 }
 

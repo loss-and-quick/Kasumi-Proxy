@@ -22,15 +22,13 @@ use reqwest::cookie::Jar;
 use tokio::sync::{Mutex, broadcast};
 
 use kasumi_core::contract::PushFrame;
-use kasumi_core::core_config::CoreConfig;
-use kasumi_core::state::ProxyMode;
 
 use crate::commands::{self, Command, CommandError, Response};
 use crate::platform::Platform;
 use crate::sub_update;
 
-use self::lifecycle::LifecycleCmd;
-use self::status::Connectivity;
+use self::lifecycle::{LifecycleCmd, RunningPath};
+use self::status::ProbeVerdict;
 
 const EVENT_CHANNEL_CAP: usize = 64;
 
@@ -51,15 +49,15 @@ pub struct Service {
     auto_started: AtomicBool,
     /// Latest connectivity-probe result; the watchdog refreshes it, `current_status`
     /// overlays it onto a process-up state to tell Connected from NoInternet.
-    connectivity: StdMutex<Connectivity>,
+    connectivity: StdMutex<ProbeVerdict>,
     /// Bumped each time the data path stops or is replaced, so a probe that was in
     /// flight across the change drops its (now stale) verdict.
     data_path_generation: AtomicU64,
-    /// The exact post-tune build + proxy mode the running data path was started
-    /// with — the baseline settings mutations are diffed against. `None` while
+    /// The exact post-tune build, proxy mode and profile the running data path was
+    /// started with — the baseline settings mutations are diffed against. `None` while
     /// stopped. Deliberately in-memory (not the on-disk config): the start path
     /// may tune the written file further, so a disk diff would never settle.
-    running_config: StdMutex<Option<(CoreConfig, ProxyMode)>>,
+    running_config: StdMutex<Option<RunningPath>>,
     /// Whether the running data path no longer matches the saved settings (one
     /// restart applies them). Recomputed on mutations and lifecycle edges only;
     /// `current_status` just reports it.
@@ -86,7 +84,7 @@ impl Service {
             sub_attempts: Mutex::new(HashMap::new()),
             asset_attempts: Mutex::new(HashMap::new()),
             auto_started: AtomicBool::new(false),
-            connectivity: StdMutex::new(Connectivity::Unknown),
+            connectivity: StdMutex::new(ProbeVerdict::default()),
             data_path_generation: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
@@ -134,15 +132,12 @@ impl Service {
             }
             Command::ProbeConnection => {
                 // An explicit check through the running core — also when the
-                // background check is off. `None` = not running or unreachable.
+                // background check is off.
                 let (verdict, changed) = self.probe_and_store().await;
                 if changed {
                     self.emit_status().await;
                 }
-                Ok(Response::Ping(match verdict {
-                    Connectivity::Reachable { latency_ms } => Some(latency_ms as i64),
-                    _ => None,
-                }))
+                Ok(Response::Probe(verdict.into()))
             }
             other => commands::dispatch(&*self.platform, other).await,
         }

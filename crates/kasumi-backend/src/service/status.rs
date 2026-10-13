@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::broadcast;
 
-use kasumi_core::contract::{FetchMode, PushFrame, RunState, ServiceStatus};
+use kasumi_core::contract::{ConnectionProbe, FetchMode, PushFrame, RunState, ServiceStatus};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL};
 
 use crate::fsjson::read_json;
@@ -16,14 +16,36 @@ use super::Service;
 
 /// Result of the latest end-to-end connectivity probe (a fetch through the active
 /// core's SOCKS). `Unknown` until the first probe lands after the core comes up.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(super) enum Connectivity {
+    #[default]
     Unknown,
     /// Reached the test URL; the fetch's round trip in ms.
     Reachable {
         latency_ms: u64,
     },
     Unreachable(String),
+}
+
+/// A stored [`Connectivity`] and the profile whose core it measured. A profile
+/// switch is saved before the restart that runs it, so the active profile can
+/// briefly differ from the one the verdict describes.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(super) struct ProbeVerdict {
+    profile_id: Option<String>,
+    connectivity: Connectivity,
+}
+
+impl From<ProbeVerdict> for ConnectionProbe {
+    fn from(v: ProbeVerdict) -> Self {
+        Self {
+            profile_id: v.profile_id,
+            latency_ms: match v.connectivity {
+                Connectivity::Reachable { latency_ms } => Some(latency_ms),
+                _ => None,
+            },
+        }
+    }
 }
 
 impl Service {
@@ -39,30 +61,35 @@ impl Service {
         let mut service = self.platform.service_state().await.ok()?;
         let state = read_json::<AppState>(&self.platform.paths().app_state).await;
         let check = state.as_ref().is_none_or(|s| s.settings.connectivity_check);
+        let active_id = state.and_then(|s| s.active_id);
         let mut latency_ms = None;
         // The platform reports process-truth (Connecting once the core is up). Refine
-        // it with the latest connectivity probe: a running core that actually reaches
-        // the internet is Connected; one that can't is NoInternet; before the first
-        // probe lands it stays Connecting. With the check off there is no probe to
-        // wait for, so a running core counts as Connected.
+        // it with the latest connectivity probe of the active profile: a running core
+        // that actually reaches the internet is Connected; one that can't is
+        // NoInternet; before the first probe lands it stays Connecting. With the
+        // check off there is no probe to wait for, so a running core counts as
+        // Connected.
         if service.state == RunState::Connecting && service.engine.is_some() {
             if !check {
                 service.state = RunState::Connected;
             } else {
-                match &*self.connectivity.lock().unwrap() {
-                    Connectivity::Reachable { latency_ms: ms } => {
-                        service.state = RunState::Connected;
-                        latency_ms = Some(*ms);
+                let verdict = self.connectivity.lock().unwrap().clone();
+                // A verdict on another profile's core says nothing about this one.
+                if verdict.profile_id == active_id {
+                    match verdict.connectivity {
+                        Connectivity::Reachable { latency_ms: ms } => {
+                            service.state = RunState::Connected;
+                            latency_ms = Some(ms);
+                        }
+                        Connectivity::Unreachable(reason) => {
+                            service.state = RunState::NoInternet;
+                            service.error = Some(reason);
+                        }
+                        Connectivity::Unknown => {}
                     }
-                    Connectivity::Unreachable(reason) => {
-                        service.state = RunState::NoInternet;
-                        service.error = Some(reason.clone());
-                    }
-                    Connectivity::Unknown => {}
                 }
             }
         }
-        let active_id = state.and_then(|s| s.active_id);
         let core = match service.engine {
             Some(kasumi_core::enums::CoreEngine::Xray) => self.cores.xray.clone(),
             Some(kasumi_core::enums::CoreEngine::SingBox) => self.cores.singbox.clone(),
@@ -125,9 +152,12 @@ impl Service {
     /// restarted while the probe ran (its answer would describe the old core).
     /// Returns the verdict and whether the stored one changed, so a caller only
     /// re-emits status when there's something new.
-    pub(super) async fn probe_and_store(&self) -> (Connectivity, bool) {
+    pub(super) async fn probe_and_store(&self) -> (ProbeVerdict, bool) {
         let generation = self.data_path_generation.load(Ordering::SeqCst);
-        let verdict = self.probe_connectivity().await;
+        let verdict = ProbeVerdict {
+            profile_id: self.probed_profile().await,
+            connectivity: self.probe_connectivity().await,
+        };
         let mut guard = self.connectivity.lock().unwrap();
         if self.data_path_generation.load(Ordering::SeqCst) != generation || *guard == verdict {
             return (verdict, false);
@@ -136,17 +166,35 @@ impl Service {
         (verdict, true)
     }
 
+    /// The profile a probe started now measures: the one this process started the
+    /// running core with, else (a core still coming up, or one that outlived the
+    /// process that started it) the saved active one.
+    async fn probed_profile(&self) -> Option<String> {
+        let running = self
+            .running_config
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|r| r.profile_id.clone());
+        match running {
+            Some(id) => Some(id),
+            None => read_json::<AppState>(&self.platform.paths().app_state)
+                .await
+                .and_then(|s| s.active_id),
+        }
+    }
+
     /// Forget the last verdict (the data path went down or is being replaced). Bumps
     /// the generation so a probe still in flight can't store a stale answer.
     pub(super) fn reset_connectivity(&self) -> bool {
         self.data_path_generation.fetch_add(1, Ordering::SeqCst);
         let mut guard = self.connectivity.lock().unwrap();
-        let changed = *guard != Connectivity::Unknown;
-        *guard = Connectivity::Unknown;
+        let changed = guard.connectivity != Connectivity::Unknown;
+        *guard = ProbeVerdict::default();
         changed
     }
 
     pub(super) fn connectivity(&self) -> Connectivity {
-        self.connectivity.lock().unwrap().clone()
+        self.connectivity.lock().unwrap().connectivity.clone()
     }
 }
