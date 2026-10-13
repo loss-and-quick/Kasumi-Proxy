@@ -5,6 +5,7 @@ use crate::platform::{
 };
 use crate::testutil::sample_vless;
 use kasumi_core::contract::{ConnectionProbe, RunState, ServiceState};
+use kasumi_core::data_path_plan::DataPathPlan;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::state::{ProxyMode, default_app_state};
 use std::path::PathBuf;
@@ -26,6 +27,8 @@ struct RecordingPlatform {
     /// The running core's `force-in` port the connectivity probe goes through;
     /// 0 = no proxy to probe.
     core_socks: AtomicU16,
+    /// The plan of the last start.
+    started: StdMutex<Option<DataPathPlan>>,
 }
 
 impl RecordingPlatform {
@@ -54,6 +57,7 @@ impl RecordingPlatform {
                 entered: tokio::sync::Notify::new(),
                 release: tokio::sync::Notify::new(),
                 core_socks: AtomicU16::new(0),
+                started: StdMutex::new(None),
             }),
             dir,
         )
@@ -74,8 +78,12 @@ impl Platform for RecordingPlatform {
     async fn set_os_proxy(&self, mode: ProxyMode, _engine: Engine, _socks_port: u16) {
         self.log(&format!("os_proxy:{mode:?}"));
     }
-    async fn start_data_path(&self, opts: StartDataPath) -> anyhow::Result<()> {
-        self.log(&format!("start:{:?}", opts.engine));
+    async fn start_data_path(&self, _opts: StartDataPath) -> anyhow::Result<()> {
+        anyhow::bail!("the service starts from a plan")
+    }
+    async fn start_planned(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
+        self.log(&format!("start:{:?}", plan.engine));
+        *self.started.lock().unwrap() = Some(plan.clone());
         if self.hold_start.load(Ordering::SeqCst) {
             self.entered.notify_one();
             self.release.notified().await;
@@ -723,4 +731,62 @@ async fn status_request_carries_the_probe_verdict() {
     svc.dispatch(Command::ProbeConnection).await.unwrap();
     let r = svc.dispatch(Command::Status).await.unwrap();
     assert_eq!(state_of(r), RunState::Connected);
+}
+
+#[tokio::test]
+async fn start_hands_the_platform_the_baseline_plan() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    let started = platform.started.lock().unwrap().clone();
+    let baseline = svc
+        .running_config
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|r| r.config.plan.clone());
+    assert!(started.is_some());
+    assert_eq!(started, baseline);
+}
+
+#[tokio::test]
+async fn app_filter_reload_follows_the_running_plan() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    let starts = || {
+        platform
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|c| c.starts_with("start:"))
+            .count()
+    };
+
+    // Nothing running: the next start picks the filter up.
+    svc.dispatch(Command::ReloadAppFilter).await.unwrap();
+    assert_eq!(starts(), 0);
+
+    // xray routes the filter outside its config: no restart.
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    svc.dispatch(Command::ReloadAppFilter).await.unwrap();
+    assert_eq!(starts(), 1);
+
+    // sing-box bakes it into the config: a restart.
+    set_settings(&svc, |s| {
+        s.core_by_protocol
+            .insert(kasumi_core::profile::Protocol::Vless, CoreEngine::SingBox);
+    })
+    .await;
+    svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    svc.dispatch(Command::ReloadAppFilter).await.unwrap();
+    assert_eq!(starts(), 3);
 }

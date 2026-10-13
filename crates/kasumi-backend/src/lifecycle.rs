@@ -15,7 +15,6 @@ use kasumi_core::core_config::CoreConfig;
 use kasumi_core::enums::{CoreEngine, TunEngine};
 use kasumi_core::hev_config::build_hev_config;
 use kasumi_core::singbox_config::build_singbox_bridge_config;
-use kasumi_core::state::{DEFAULT_LOCAL_SOCKS_PORT, ProxyMode};
 use kasumi_core::tun2socks_config::build_tun2socks_config;
 // Aliased: `tun` alone would shadow the many `tun: TunEngine` params here.
 use kasumi_core::tun as tun_addr;
@@ -24,7 +23,7 @@ use kasumi_core::tun::TunOptions;
 use crate::commands::{CommandError, build_profile_config};
 use crate::fs::{exists, read_text, remove_file, write_text};
 use crate::fsjson::write_text_atomic;
-use crate::platform::{Platform, StartDataPath};
+use crate::platform::Platform;
 use crate::proc::{RunOpts, pid_matches_bin, run, spawn_logged};
 
 /// Map a hex digit to a consonant so the interface name starts with a letter
@@ -58,15 +57,14 @@ pub fn random_tun_iface() -> String {
 }
 
 /// Build the config for `profile_id` (else the active profile), write it and the
-/// engine marker, and return the resolved [`StartDataPath`] (engine, TUN engine,
-/// external-engine tuning, SOCKS port, proxy mode) together with the exact
-/// [`CoreConfig`] that was written — the in-memory baseline a running data path
-/// is later diffed against (the on-disk file may be tuned further after start) —
-/// and the id of the profile it was built from.
+/// engine marker, and return the exact [`CoreConfig`] that was written, whose plan
+/// the platform starts — the in-memory baseline a running data path is later
+/// diffed against (the on-disk file may be tuned further after start) — and the id
+/// of the profile it was built from.
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
-) -> Result<(StartDataPath, CoreConfig, String), CommandError> {
+) -> Result<(CoreConfig, String), CommandError> {
     let paths = platform.paths();
     let state = crate::state::read_state_shell(&paths.app_state).await;
     let id = profile_id
@@ -76,7 +74,6 @@ pub async fn resolve_and_write_config(
         .unwrap_or_default();
     let built = build_profile_config(platform, &id).await?;
     let engine = built.engine();
-    let tun = built.tun;
     let cfg_path = match engine {
         CoreEngine::SingBox => &paths.singbox_config,
         CoreEngine::Xray => &paths.xray_config,
@@ -89,34 +86,7 @@ pub async fn resolve_and_write_config(
     write_text(&paths.engine_file, engine_label(engine))
         .await
         .map_err(|e| CommandError(e.to_string()))?;
-    let settings = state.map(|s| s.settings).unwrap_or_default();
-    let socks_port = settings
-        .local_socks_port
-        .unwrap_or(DEFAULT_LOCAL_SOCKS_PORT);
-    // The engine starts with exactly the tuning the baseline records.
-    let tun_opts = built
-        .plan
-        .external()
-        .map(|e| e.opts.clone())
-        .unwrap_or_else(|| settings.tun_options());
-    // Same normalization as the config build: a platform without proxy-mode
-    // support always starts in tun mode.
-    let mode = if platform.supports_proxy_modes() {
-        settings.proxy_mode
-    } else {
-        ProxyMode::Tun
-    };
-    Ok((
-        StartDataPath {
-            engine,
-            tun,
-            tun_opts,
-            socks_port,
-            mode,
-        },
-        built,
-        id,
-    ))
+    Ok((built, id))
 }
 
 /// The core engine's on-disk label (written to `paths.engine_file` at config
@@ -470,7 +440,7 @@ mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
     use crate::testutil::{TestPlatform, sample_vless};
-    use kasumi_core::state::default_app_state;
+    use kasumi_core::state::{ProxyMode, default_app_state};
 
     #[test]
     fn random_iface_is_letter_then_hex() {
@@ -520,13 +490,17 @@ mod tests {
             .unwrap();
 
         // No explicit id → uses active_id.
-        let (opts, built, built_id) = resolve_and_write_config(&p, None).await.unwrap();
+        let (built, built_id) = resolve_and_write_config(&p, None).await.unwrap();
         assert_eq!(built_id, id);
-        assert_eq!(opts.engine, CoreEngine::Xray);
-        assert_eq!(opts.tun, TunEngine::Tun2socks);
-        assert_eq!(opts.socks_port, 11080);
+        let plan = &built.plan;
+        assert_eq!(plan.engine, CoreEngine::Xray);
+        assert_eq!(
+            plan.external().map(|e| e.engine),
+            Some(TunEngine::Tun2socks)
+        );
+        assert_eq!(plan.ports.socks, 11080);
         // TestPlatform doesn't support proxy modes → always normalized to tun.
-        assert_eq!(opts.mode, ProxyMode::Tun);
+        assert_eq!(plan.mode, ProxyMode::Tun);
         // The returned build mirrors what was written.
         assert_eq!(built.engine(), CoreEngine::Xray);
         assert!(built.config["outbounds"].is_array());

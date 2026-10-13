@@ -7,7 +7,6 @@ use kasumi_core::core_config::{CoreConfig, MutationEffect, mutation_effect};
 use kasumi_core::state::{AppState, DEFAULT_LOCAL_SOCKS_PORT};
 
 use crate::commands::{self, CommandError, Response};
-use crate::fs::read_text;
 use crate::lifecycle::resolve_and_write_config;
 use crate::platform::StopDataPath;
 use crate::updater::LifecycleControl;
@@ -56,12 +55,10 @@ impl Service {
                 // an edit made just before (a profile switch) or during this start
                 // must not raise "restart to apply" over the restart itself.
                 self.note_data_path_stopped();
-                let (opts, built, profile_id) =
-                    resolve_and_write_config(&*self.platform, id.as_deref())
-                        .await
-                        .map_err(|e| e.0)?;
-                let (mode, engine, socks_port) = (opts.mode, opts.engine, opts.socks_port);
-                if let Err(e) = self.platform.start_data_path(opts).await {
+                let (built, profile_id) = resolve_and_write_config(&*self.platform, id.as_deref())
+                    .await
+                    .map_err(|e| e.0)?;
+                if let Err(e) = self.platform.start_planned(&built.plan).await {
                     // A failed bring-up must not leave a previously-set OS proxy
                     // pointing at a dead port.
                     self.platform.clear_os_proxy().await;
@@ -70,7 +67,10 @@ impl Service {
                 }
                 // With the data-path up, align the OS proxy with the mode (set for
                 // system/pac, cleared otherwise — covers mode switches).
-                self.platform.set_os_proxy(mode, engine, socks_port).await;
+                let plan = &built.plan;
+                self.platform
+                    .set_os_proxy(plan.mode, plan.engine, plan.ports.socks)
+                    .await;
                 self.note_data_path_started(built, profile_id);
                 self.settle_pending_restart().await;
                 Ok(())
@@ -85,13 +85,20 @@ impl Service {
                     .map_err(|e| e.to_string())
             }
             LifecycleCmd::ReloadAppFilter => {
-                // xray reloads per-uid rules live; sing-box bakes them into the
-                // config and needs a full restart.
-                let engine = read_text(&self.platform.paths().engine_file)
-                    .await
-                    .map(|s| s.trim().to_owned())
-                    .unwrap_or_default();
-                if engine == "sing-box" {
+                let running = self
+                    .running_config
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|r| r.config.plan.app_filter_live());
+                let live = match running {
+                    Some(live) => live,
+                    // A data path another process started: a restart applies the
+                    // filter whatever that path is.
+                    None if self.data_path_up().await => false,
+                    None => return Ok(()),
+                };
+                if !live {
                     self.platform
                         .stop_data_path(StopDataPath {
                             keep_service_state: true,
@@ -99,10 +106,10 @@ impl Service {
                         .await
                         .map_err(|e| e.to_string())?;
                     self.note_data_path_stopped();
-                    let (opts, built, profile_id) = resolve_and_write_config(&*self.platform, None)
+                    let (built, profile_id) = resolve_and_write_config(&*self.platform, None)
                         .await
                         .map_err(|e| e.0)?;
-                    match self.platform.start_data_path(opts).await {
+                    match self.platform.start_planned(&built.plan).await {
                         Ok(()) => {
                             self.note_data_path_started(built, profile_id);
                             self.settle_pending_restart().await;
@@ -120,6 +127,13 @@ impl Service {
                 }
             }
         }
+    }
+
+    async fn data_path_up(&self) -> bool {
+        self.platform
+            .service_state()
+            .await
+            .is_ok_and(|s| s.engine.is_some())
     }
 
     /// Record a successful data-path start: the given build and profile
