@@ -863,7 +863,11 @@ export type MutationIntent_Deserialize =
 ({ kind: "removeGroup"; id: string }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; ids?: never; incoming?: never; message?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; routing?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Reorder by index; `g-main` stays pinned at 0. */
 ({ kind: "reorderGroups"; from: number; to: number }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; groupId?: never; id?: never; ids?: never; incoming?: never; message?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; routing?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
-/**  Add or replace a subscription (by `id`). */
+/**
+ *  Add a subscription, or replace the user's settings of the one with the
+ *  same `id`. Fetch results and the provider proposals with their answers
+ *  stay as stored.
+ */
 ({ kind: "upsertSub"; subscription: Subscription_Deserialize }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; message?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; routing?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; to?: never } | 
 /**
  *  Show `message` as the subscription's last error, for a failure the UI
@@ -963,7 +967,11 @@ export type MutationIntent_Serialize =
 ({ kind: "removeGroup"; id: string }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; ids?: never; incoming?: never; message?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; routing?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never; to?: never } | 
 /**  Reorder by index; `g-main` stays pinned at 0. */
 ({ kind: "reorderGroups"; from: number; to: number }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; groupId?: never; id?: never; ids?: never; incoming?: never; message?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; routing?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; subscription?: never } | 
-/**  Add or replace a subscription (by `id`). */
+/**
+ *  Add a subscription, or replace the user's settings of the one with the
+ *  same `id`. Fetch results and the provider proposals with their answers
+ *  stay as stored.
+ */
 ({ kind: "upsertSub"; subscription: Subscription_Serialize }) & { accept?: never; activate?: never; activeId?: never; asset?: never; at?: never; block?: never; blockId?: never; deleteGroup?: never; digests?: never; from?: never; groupId?: never; id?: never; ids?: never; incoming?: never; message?: never; mode?: never; name?: never; newId?: never; profile?: never; profileId?: never; profiles?: never; remarks?: never; route?: never; routeId?: never; routing?: never; rule?: never; rules?: never; settings?: never; state?: never; subId?: never; to?: never } | 
 /**
  *  Show `message` as the subscription's last error, for a failure the UI

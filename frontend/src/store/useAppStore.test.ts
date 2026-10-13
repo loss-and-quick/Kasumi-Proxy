@@ -1344,6 +1344,37 @@ describe("useAppStore", () => {
     await vi.waitFor(() => expect(bridge.applySubscription).toHaveBeenCalledWith("s1"));
   });
 
+  it("saving a copy from before a fetch keeps what the fetch wrote", async () => {
+    const before = makeSub({ id: "s1" });
+    const ask = {
+      key: "provider-configs",
+      value: "Xray JSON",
+      risk: "trustBoundary" as const,
+      action: { kind: "allowProviderConfigs" as const },
+      digest: "d-configs",
+      seenAt: "2026-10-13T00:00:00Z",
+    };
+    const fetched = {
+      ...before,
+      lastUpdated: "2026-10-13T10:00:00Z",
+      count: 7,
+      warnings: [{ kind: "legacyParser" as const }],
+      pendingChanges: [ask],
+    };
+    bridge.readState.mockResolvedValue(makeState({ subscriptions: [fetched] }));
+    await useAppStore.getState().hydrate();
+
+    await useAppStore.getState().upsertSub({ ...before, filter: "DE" });
+
+    expect(useAppStore.getState().subscriptions[0]).toMatchObject({
+      filter: "DE",
+      lastUpdated: "2026-10-13T10:00:00Z",
+      count: 7,
+      warnings: [{ kind: "legacyParser" }],
+      pendingChanges: [ask],
+    });
+  });
+
   it("updateSub shows a failure the backend never saw as the subscription's error", async () => {
     const sub = {
       ...makeSub({ id: "s1", lastError: "HTTP 404" }),

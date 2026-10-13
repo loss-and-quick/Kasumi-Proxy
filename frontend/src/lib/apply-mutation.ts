@@ -100,6 +100,27 @@ function mergeRoutes(state: AppState, raw: AppState): Pick<AppState, "ruleBlocks
   };
 }
 
+/** Mirrors `keep_fetch_results`: fetch results and provider proposals stay as stored. */
+function keepFetchResults(next: Subscription, stored: Subscription): Subscription {
+  return {
+    ...next,
+    lastUpdated: stored.lastUpdated,
+    count: stored.count,
+    lastError: stored.lastError,
+    lastErrorKind: stored.lastErrorKind,
+    prevProfile: stored.prevProfile,
+    nextProfile: stored.nextProfile,
+    provider: stored.provider,
+    providerIntervalHours: stored.providerIntervalHours,
+    requestTimeoutSecs: stored.requestTimeoutSecs,
+    bodyEncrypted: stored.bodyEncrypted,
+    warnings: stored.warnings,
+    pendingChanges: stored.pendingChanges,
+    decisions: stored.decisions,
+    audit: stored.audit,
+  };
+}
+
 type ResolveIntent = Extract<MutationIntent, { kind: "resolveSubChange" }>;
 
 const AUDIT_MAX = 50;
@@ -378,7 +399,10 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         ...state,
         groups,
         profiles,
-        subscriptions: upsertById(state.subscriptions, intent.subscription),
+        subscriptions: upsertById(
+          state.subscriptions,
+          old ? keepFetchResults(intent.subscription, old) : intent.subscription,
+        ),
       };
     }
     case "setSubError":

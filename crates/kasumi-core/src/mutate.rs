@@ -106,7 +106,9 @@ pub enum MutationIntent {
     },
 
     // ---- subscriptions ----
-    /// Add or replace a subscription (by `id`).
+    /// Add a subscription, or replace the user's settings of the one with the
+    /// same `id`. Fetch results and the provider proposals with their answers
+    /// stay as stored.
     UpsertSub {
         subscription: Box<Subscription>,
     },
@@ -432,7 +434,11 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                     _ => {}
                 }
             }
-            upsert_by_id(&mut state.subscriptions, (**subscription).clone());
+            let mut next = (**subscription).clone();
+            if let Some(stored) = state.subscriptions.iter().find(|s| s.id == next.id) {
+                keep_fetch_results(&mut next, stored);
+            }
+            upsert_by_id(&mut state.subscriptions, next);
         }
         MutationIntent::SetSubError { id, message } => {
             if let Some(sub) = state.subscriptions.iter_mut().find(|s| s.id == *id) {
@@ -644,6 +650,63 @@ pub fn rename_owned_group(state: &mut AppState, next: &Subscription) {
     }) {
         g.name = next.remarks.clone();
     }
+}
+
+/// Copy onto `next`, the UI's copy of a subscription, the fetch results and the
+/// provider proposals with their answers from `stored`: a fetch can land while the
+/// edit sheet is open, and saving the older copy must not undo it. The
+/// destructuring is exhaustive, so a new field has to be sorted to one side.
+fn keep_fetch_results(next: &mut Subscription, stored: &Subscription) {
+    let Subscription {
+        last_updated,
+        count,
+        last_error,
+        last_error_kind,
+        prev_profile,
+        next_profile,
+        provider,
+        provider_interval_hours,
+        request_timeout_secs,
+        body_encrypted,
+        warnings,
+        pending_changes,
+        decisions,
+        audit,
+        // The user's settings. Taking back an accepted provider setting
+        // (`fallback_url`, `insecure_by_provider`, `allow_provider_configs`)
+        // is an edit too.
+        id: _,
+        remarks: _,
+        url: _,
+        enabled: _,
+        group_id: _,
+        auto_update: _,
+        interval: _,
+        allow_insecure: _,
+        user_agent: _,
+        filter: _,
+        update_mode: _,
+        manual_title: _,
+        interval_override: _,
+        request: _,
+        fallback_url: _,
+        insecure_by_provider: _,
+        allow_provider_configs: _,
+    } = stored.clone();
+    next.last_updated = last_updated;
+    next.count = count;
+    next.last_error = last_error;
+    next.last_error_kind = last_error_kind;
+    next.prev_profile = prev_profile;
+    next.next_profile = next_profile;
+    next.provider = provider;
+    next.provider_interval_hours = provider_interval_hours;
+    next.request_timeout_secs = request_timeout_secs;
+    next.body_encrypted = body_encrypted;
+    next.warnings = warnings;
+    next.pending_changes = pending_changes;
+    next.decisions = decisions;
+    next.audit = audit;
 }
 
 /// Add `profile` at the front, or replace the existing one with the same `meta.id`.
@@ -1061,6 +1124,120 @@ mod tests {
         );
         assert_eq!(s.profiles[0].meta().group_id, "g-main");
         assert_eq!(s.subscriptions.len(), 1);
+    }
+
+    type SubField = (&'static str, fn(&mut Subscription));
+
+    /// Each field a fetch or a provider answer writes, set to a non-default value.
+    const FETCH_RESULTS: &[SubField] = &[
+        ("last_updated", |s| {
+            s.last_updated = "2026-10-13T10:00:00Z".into()
+        }),
+        ("count", |s| s.count = 7),
+        ("last_error", |s| s.last_error = Some("timed out".into())),
+        ("last_error_kind", |s| {
+            s.last_error_kind = Some(crate::state::SubErrorKind::Network);
+        }),
+        ("prev_profile", |s| s.prev_profile = Some("p0".into())),
+        ("next_profile", |s| s.next_profile = Some("p2".into())),
+        ("provider", |s| {
+            s.provider = Some(crate::state::ProviderInfo {
+                title: Some("Provider".into()),
+                ..Default::default()
+            });
+        }),
+        ("provider_interval_hours", |s| {
+            s.provider_interval_hours = Some(12);
+        }),
+        ("request_timeout_secs", |s| {
+            s.request_timeout_secs = Some(10)
+        }),
+        ("body_encrypted", |s| s.body_encrypted = true),
+        ("warnings", |s| {
+            s.warnings = vec![crate::state::SubWarning::LegacyParser];
+        }),
+        ("pending_changes", |s| {
+            crate::sub_changes::offer_provider_configs(s, "2026-10-13T10:00:00Z");
+        }),
+        ("decisions", |s| {
+            s.decisions = vec![crate::state::ChangeDecision {
+                key: "fallback-url".into(),
+                digest: "d".into(),
+                accepted: false,
+                at: "2026-10-13T10:00:00Z".into(),
+            }];
+        }),
+        ("audit", |s| {
+            s.audit = vec![crate::state::AuditEntry {
+                at: "2026-10-13T10:00:00Z".into(),
+                key: "profile-title".into(),
+                outcome: crate::state::AuditOutcome::AutoApplied,
+                summary: "Provider".into(),
+            }];
+        }),
+    ];
+
+    /// The edit sheet's copy, taken before the fetch, with the user's edits.
+    fn edited_copy() -> Subscription {
+        let mut s = mksub("s1", Some("g-main"));
+        s.remarks = "Mine".into();
+        s.manual_title = true;
+        s.filter = "DE".into();
+        s
+    }
+
+    #[test]
+    fn upsert_sub_keeps_each_fetch_result_a_stale_copy_lacks() {
+        for (field, set) in FETCH_RESULTS {
+            let mut s = base();
+            let mut fetched = mksub("s1", Some("g-main"));
+            set(&mut fetched);
+            s.subscriptions = vec![fetched];
+            apply_mutation(
+                &mut s,
+                &MutationIntent::UpsertSub {
+                    subscription: Box::new(edited_copy()),
+                },
+            );
+            let mut want = edited_copy();
+            set(&mut want);
+            assert_eq!(s.subscriptions[0], want, "{field}");
+        }
+    }
+
+    #[test]
+    fn upsert_sub_does_not_bring_back_what_a_fetch_cleared() {
+        for (field, set) in FETCH_RESULTS {
+            let mut s = base();
+            s.subscriptions = vec![mksub("s1", Some("g-main"))];
+            let mut stale = edited_copy();
+            set(&mut stale);
+            apply_mutation(
+                &mut s,
+                &MutationIntent::UpsertSub {
+                    subscription: Box::new(stale),
+                },
+            );
+            assert_eq!(s.subscriptions[0], edited_copy(), "{field}");
+        }
+    }
+
+    #[test]
+    fn upsert_sub_takes_back_accepted_provider_settings() {
+        let mut s = base();
+        let mut granted = mksub("s1", Some("g-main"));
+        granted.fallback_url = Some("https://backup.example/sub".into());
+        granted.allow_insecure = true;
+        granted.insecure_by_provider = true;
+        granted.allow_provider_configs = true;
+        s.subscriptions = vec![granted];
+        apply_mutation(
+            &mut s,
+            &MutationIntent::UpsertSub {
+                subscription: Box::new(mksub("s1", Some("g-main"))),
+            },
+        );
+        assert_eq!(s.subscriptions[0], mksub("s1", Some("g-main")));
     }
 
     #[test]
