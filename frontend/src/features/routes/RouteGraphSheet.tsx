@@ -28,6 +28,7 @@ import { useFormatters, useT } from "../../i18n";
 import { PROXY_OUTBOUND, refEnabled, routeBlocks } from "../../lib/routes";
 import { useIsWide } from "../../lib/useIsWide";
 import { useAppStore } from "../../store/useAppStore";
+import { useProfileLabels } from "../profiles/labels";
 import {
   blockNodeId,
   buildRouteGraph,
@@ -38,7 +39,7 @@ import {
   routeColor,
   routeNodeId,
 } from "./graph";
-import { outboundLabel, routeName, scopeSummary } from "./labels";
+import { outboundParts, routeName, scopeSummary } from "./labels";
 
 type NodeData = {
   title: string;
@@ -57,6 +58,8 @@ function GraphCard({ data }: NodeProps<Node<NodeData>>) {
   return (
     <div
       className={`route-graph-node ${data.kind}${data.dim ? " dim" : ""}${data.off ? " off" : ""}`}
+      // A truncated name and its disambiguator stay readable on hover.
+      title={data.sub ? `${data.title}\n${data.sub}` : data.title}
       style={{ borderColor: data.color, ...NODE_SIZE[data.kind] }}
     >
       {data.kind !== "route" && (
@@ -93,7 +96,7 @@ export function RouteGraphSheet({
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   const catchAllRules = useAppStore((s) => s.catchAllRules);
-  const profiles = useAppStore((s) => s.profiles);
+  const labels = useProfileLabels();
   const activeId = useAppStore((s) => s.activeId);
   const groups = useAppStore((s) => s.groups);
   const saveRoute = useAppStore((s) => s.saveRoute);
@@ -140,7 +143,7 @@ export function RouteGraphSheet({
             vertical,
             icon: "route",
             title: route ? routeName(route, t) : "",
-            sub: route ? scopeSummary(route, t, formatters, groups, profiles) : undefined,
+            sub: route ? scopeSummary(route, t, formatters, groups, labels) : undefined,
             color: colorOf(n.routeId),
             dim,
           },
@@ -168,7 +171,7 @@ export function RouteGraphSheet({
           kind: n.kind,
           vertical,
           icon: n.tag === "block" ? "block" : n.tag === "direct" ? "near_me" : "shield_moon",
-          title: outboundLabel(n.tag, t, profiles),
+          ...outboundParts(n.tag, t, labels),
           dim,
           hasSource: resolveEdge != null && n.id === resolveEdge.source,
         },
@@ -216,7 +219,7 @@ export function RouteGraphSheet({
     routes,
     ruleBlocks,
     catchAllRules,
-    profiles,
+    labels,
     groups,
     selectedId,
     isWide,

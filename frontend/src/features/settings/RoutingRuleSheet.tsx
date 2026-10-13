@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Btn, confirm, Field, RowToggle, Segmented, Select, Sheet } from "../../components";
+import { Btn, confirm, Field, RowToggle, Segmented, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { getRuntimeBridgeMode } from "../../lib/ksu-webui";
 import { normalizeList, toText, uid } from "../../lib/utils";
+import { useAppStore } from "../../store/useAppStore";
+import { useProfileLabels } from "../profiles/labels";
+import { ProfilePickerSheet, ProfilePickerTrigger } from "../profiles/ProfilePicker";
 
 type Draft = {
   remarks: string;
@@ -40,19 +43,20 @@ const BUILTIN_OUTBOUNDS = new Set(["proxy", "direct", "block"]);
 export function RoutingRuleSheet({
   open,
   rule,
-  profiles,
   onClose,
   onSave,
   onDelete,
 }: {
   open: boolean;
   rule: RoutingRule | null;
-  profiles: { id: string; remarks: string }[];
   onClose: () => void;
   onSave: (rule: RoutingRule) => void;
   onDelete: (id: string) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(makeDraft(rule));
+  const [picking, setPicking] = useState(false);
+  const hasProfiles = useAppStore((s) => s.profiles.length > 0);
+  const labels = useProfileLabels();
   // Built-in outbounds are one tap; a specific profile is picked from its own list.
   const outboundKind = BUILTIN_OUTBOUNDS.has(draft.outboundTag)
     ? (draft.outboundTag as "proxy" | "direct" | "block")
@@ -111,8 +115,9 @@ export function RoutingRuleSheet({
         ariaLabel={t("routingSheet.outbound")}
         value={outboundKind}
         onChange={(kind) => {
+          // The segment stays where it was until a profile is actually picked.
           if (kind === "profile") {
-            setDraft((current) => ({ ...current, outboundTag: profiles[0]?.id ?? "proxy" }));
+            setPicking(true);
           } else {
             setDraft((current) => ({ ...current, outboundTag: kind }));
           }
@@ -124,21 +129,27 @@ export function RoutingRuleSheet({
           {
             value: "profile",
             label: t("routingSheet.outbound.profiles"),
-            disabled: profiles.length === 0 && outboundKind !== "profile",
+            disabled: !hasProfiles && outboundKind !== "profile",
           },
         ]}
       />
       {outboundKind === "profile" && (
         <div style={{ marginTop: 10 }}>
-          <Select
+          <ProfilePickerTrigger
             value={draft.outboundTag}
-            onChange={(v) => setDraft((current) => ({ ...current, outboundTag: v }))}
-            placeholder={draft.outboundTag}
-            options={profiles.map((profile) => ({ value: profile.id, label: profile.remarks }))}
+            deletedLabel={t("routes.out.deleted")}
+            expanded={picking}
+            onClick={() => setPicking(true)}
           />
-          <div className="hint" style={{ marginTop: 6 }}>
-            {t("routingSheet.outboundProfileHint")}
-          </div>
+          {labels.has(draft.outboundTag) ? (
+            <div className="hint" style={{ marginTop: 6 }}>
+              {t("routingSheet.outboundProfileHint")}
+            </div>
+          ) : (
+            <div className="hint warn" style={{ marginTop: 6 }}>
+              {t("routingSheet.outboundDeletedHint")}
+            </div>
+          )}
         </div>
       )}
       <div style={{ height: 12 }} />
@@ -221,6 +232,13 @@ export function RoutingRuleSheet({
         placeholder={t("routingSheet.sourceIpsPh")}
         hint={t("routingSheet.sourceIpsHint")}
       />
+      {picking && (
+        <ProfilePickerSheet
+          value={draft.outboundTag}
+          onPick={(id) => setDraft((current) => ({ ...current, outboundTag: id }))}
+          onClose={() => setPicking(false)}
+        />
+      )}
       {rule && (
         <div style={{ marginTop: 16 }}>
           <Btn

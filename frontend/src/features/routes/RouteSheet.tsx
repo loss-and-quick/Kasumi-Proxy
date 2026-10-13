@@ -21,6 +21,7 @@ import {
 } from "../../components";
 import type { Route } from "../../generated/bindings";
 import { useFormatters, useT } from "../../i18n";
+import { profileEndpointLabel, profileSearchText } from "../../lib/profile-utils";
 import {
   isDefaultRoute,
   routeBlocks,
@@ -152,7 +153,11 @@ export function RouteSheet({
     const listed = pickedProfiles.has(p.meta.id);
     const other = owner.profilesOf.get(p.meta.id);
     const group = groups.find((g) => g.id === p.meta.groupId)?.name;
+    const server = profileEndpointLabel(p);
+    // Namesakes from one provider differ only in protocol and server.
     const sub = [
+      p.protocol,
+      server !== p.protocol ? server : undefined,
       showGroup ? group : undefined,
       !listed && viaGroup && !other ? t("routes.scope.viaGroup") : undefined,
       listed ? undefined : movesFrom(other),
@@ -236,7 +241,7 @@ export function RouteSheet({
 
       {q
         ? profiles
-            .filter((p) => p.meta.remarks.toLowerCase().includes(q))
+            .filter((p) => profileSearchText(p).includes(q))
             .map((p) => profileRow(p, pickedGroups.has(p.meta.groupId), true))
         : groups.map((g) => {
             const members = profilesOf(g.id);

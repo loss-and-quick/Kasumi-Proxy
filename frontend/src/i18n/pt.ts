@@ -1293,8 +1293,11 @@ const pt = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Direto",
   "routes.out.block": "Bloquear",
+  "routes.out.deleted": "Proxy (perfil excluído)",
   "profiles.label.deleted": "Perfil excluído",
   "profilePicker.title": "Escolha um perfil",
+  "routingSheet.outboundDeletedHint":
+    "O perfil desta regra foi excluído, então o tráfego dela passa pelo proxy. Escolha outro.",
   "routes.block.add": "Adicionar bloco",
   "routes.block.insertHere": "Inserir um bloco aqui",
   "routes.block.reorder": "Arraste para reordenar",

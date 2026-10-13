@@ -1280,8 +1280,11 @@ const en = {
   "routes.out.proxy": "Proxy",
   "routes.out.direct": "Direct",
   "routes.out.block": "Block",
+  "routes.out.deleted": "Proxy (profile deleted)",
   "profiles.label.deleted": "Deleted profile",
   "profilePicker.title": "Choose a profile",
+  "routingSheet.outboundDeletedHint":
+    "The profile this rule pointed at was deleted, so its traffic goes through the proxy. Pick another one.",
   "routes.block.add": "Add block",
   "routes.block.insertHere": "Insert a block here",
   "routes.block.reorder": "Drag to reorder",

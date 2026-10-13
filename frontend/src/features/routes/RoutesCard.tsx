@@ -15,7 +15,6 @@ import {
   Icon,
   IconBtn,
   ListRow,
-  Select,
   Sortable,
   Switch,
   useSortableSensors,
@@ -33,7 +32,12 @@ import {
   routesUsing,
 } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
-import { useOrderedProfiles } from "../profiles/order";
+import { profileRefText, useProfileLabels } from "../profiles/labels";
+import {
+  type PickerChoice,
+  ProfilePickerSheet,
+  ProfilePickerTrigger,
+} from "../profiles/ProfilePicker";
 import { routeName, scopeSummary } from "./labels";
 import { useRoutesView } from "./viewState";
 
@@ -60,7 +64,8 @@ export function RoutesCard() {
   const routes = useAppStore((s) => s.routes);
   const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   const catchAllRules = useAppStore((s) => s.catchAllRules);
-  const profiles = useOrderedProfiles();
+  const profiles = useAppStore((s) => s.profiles);
+  const labels = useProfileLabels();
   const groups = useAppStore((s) => s.groups);
   const saveRoute = useAppStore((s) => s.saveRoute);
   const activeId = useAppStore((s) => s.activeId);
@@ -72,6 +77,7 @@ export function RoutesCard() {
   const [routeSheet, setRouteSheet] = useState<{ routeId: string | null } | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
+  const [pickingFinal, setPickingFinal] = useState(false);
 
   const route = routes.find((r) => r.id === selectedId) ?? routes.find(isDefaultRoute);
   if (!route) return null;
@@ -94,22 +100,10 @@ export function RoutesCard() {
     update({ blocks: next });
   };
 
-  const finalOptions = [
-    { value: "proxy", label: t("routes.out.proxy") },
-    { value: "direct", label: t("routes.out.direct") },
-    { value: "block", label: t("routes.out.block") },
-    // Under each group's name, as on the Profiles screen.
-    ...groups.flatMap((g) => {
-      const members = profiles.filter((p) => p.meta.groupId === g.id);
-      return members.length
-        ? [
-            {
-              group: g.name,
-              options: members.map((p) => ({ value: p.meta.id, label: p.meta.remarks })),
-            },
-          ]
-        : [];
-    }),
+  const finalChoices: PickerChoice[] = [
+    { value: "proxy", label: t("routes.out.proxy"), icon: "shield_moon" },
+    { value: "direct", label: t("routes.out.direct"), icon: "near_me" },
+    { value: "block", label: t("routes.out.block"), icon: "block" },
   ];
 
   const insertButton = (index: number) => (
@@ -164,13 +158,15 @@ export function RoutesCard() {
           title={t("routes.scope.title")}
           sub={
             <>
-              {scopeSummary(route, t, formatters, groups, profiles)}
+              {scopeSummary(route, t, formatters, groups, labels)}
               {!isDefaultRoute(route) && !routeEnabled(route) && (
                 <div style={{ color: "var(--warn)", marginTop: 2 }}>{t("routes.offHint")}</div>
               )}
               {active && activeRoute?.id === route.id && (
                 <div style={{ color: "var(--primary)", marginTop: 2 }}>
-                  {t("routes.activeHere", { name: active.meta.remarks })}
+                  {t("routes.activeHere", {
+                    name: profileRefText(labels, active.meta.id, active.meta.remarks),
+                  })}
                 </div>
               )}
             </>
@@ -256,10 +252,12 @@ export function RoutesCard() {
               {!finalReachable && <div className="lr-sub">{t("routes.final.unreachable")}</div>}
             </div>
           </div>
-          <Select
+          <ProfilePickerTrigger
             value={routeFinal(route)}
-            onChange={(finalOutbound) => update({ finalOutbound })}
-            options={finalOptions}
+            choices={finalChoices}
+            deletedLabel={t("routes.out.deleted")}
+            expanded={pickingFinal}
+            onClick={() => setPickingFinal(true)}
           />
         </div>
       </div>
@@ -309,6 +307,15 @@ export function RoutesCard() {
             copyFrom={route}
             onClose={() => setRouteSheet(null)}
             onCreated={setRouteId}
+          />
+        )}
+        {pickingFinal && (
+          <ProfilePickerSheet
+            title={t("routes.final.title")}
+            value={routeFinal(route)}
+            choices={finalChoices}
+            onPick={(finalOutbound) => update({ finalOutbound })}
+            onClose={() => setPickingFinal(false)}
           />
         )}
         {shareOpen && (

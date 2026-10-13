@@ -11,7 +11,6 @@ import type { RoutingRule } from "../../generated/bindings";
 import { useFormatters, useT } from "../../i18n";
 import { routeBlocks, routesUsing } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
-import { useOrderedProfiles } from "../profiles/order";
 import { routeName } from "./labels";
 import { RuleList } from "./RuleList";
 
@@ -42,7 +41,6 @@ export function RuleBlockSheet({
   const formatters = useFormatters();
   const block = useAppStore((s) => s.ruleBlocks.find((b) => b.id === blockId));
   const routes = useAppStore((s) => s.routes);
-  const profiles = useOrderedProfiles();
   const renameRuleBlock = useAppStore((s) => s.renameRuleBlock);
   const removeRuleBlock = useAppStore((s) => s.removeRuleBlock);
   const forkRuleBlock = useAppStore((s) => s.forkRuleBlock);
@@ -54,7 +52,6 @@ export function RuleBlockSheet({
   const [ruleSheet, setRuleSheet] = useState<{ rule: RoutingRule | null } | null>(null);
   const [ioOpen, setIoOpen] = useState(false);
 
-  const profileOptions = profiles.map((p) => ({ id: p.meta.id, remarks: p.meta.remarks }));
   const route = routes.find((r) => r.id === routeId);
   const usedIn = block ? routesUsing(routes, block.id) : [];
   const elsewhere = usedIn.filter((r) => r.id !== routeId);
@@ -139,7 +136,6 @@ export function RuleBlockSheet({
 
         <RuleList
           block={block}
-          profiles={profileOptions}
           onEditRule={(rule) => setRuleSheet({ rule })}
           onAddRule={() => setRuleSheet({ rule: null })}
         />
@@ -161,7 +157,6 @@ export function RuleBlockSheet({
           <RoutingRuleSheet
             open
             rule={ruleSheet.rule}
-            profiles={profileOptions}
             onClose={() => setRuleSheet(null)}
             onSave={saveRule}
             onDelete={(id) => void removeRoutingRule(block.id, id)}
