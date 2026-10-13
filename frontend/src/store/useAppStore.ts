@@ -118,6 +118,13 @@ interface Store extends AppState {
   upsertSub: (s: Subscription) => Promise<void>;
   /** With `deleteGroup`, the group made for the subscription goes too when it's left empty. */
   removeSub: (id: string, deleteGroup?: boolean) => Promise<void>;
+  /** Accept or reject provider-proposed changes; `activate` answers a routing import. */
+  resolveSubChange: (
+    subId: string,
+    digests: string[],
+    accept: boolean,
+    activate?: boolean,
+  ) => Promise<void>;
   /** Save a subscription into its chosen group, creating the group if it's new. */
   saveSubscription: (sub: Subscription, group: GroupChoice) => Promise<void>;
   updateSub: (id: string) => Promise<void>;
@@ -933,6 +940,17 @@ export const useAppStore = create<Store>((set, get) => {
       if (activeProfile?.meta.subId === id)
         await stopServiceIfRunning(translateCurrent("store.service.stoppedSubRemoved"));
       await mutate({ kind: "removeSub", id, deleteGroup });
+    },
+    async resolveSubChange(subId, digests, accept, activate) {
+      if (!digests.length) return;
+      await mutate({
+        kind: "resolveSubChange",
+        subId,
+        digests,
+        accept,
+        activate: activate ?? null,
+        at: new Date().toISOString(),
+      });
     },
     async updateSub(id) {
       // One fetch per subscription at a time; a second tap waits for the first.

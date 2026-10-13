@@ -16,7 +16,7 @@ import type {
   Transport,
 } from "../generated/bindings";
 import { EMPTY_SETTINGS } from "../store/defaults";
-import type { AdvancedSettings, AppState, Subscription } from "./bridge";
+import type { AdvancedSettings, AppState, AuditEntry, PendingChange, Subscription } from "./bridge";
 import { emptyProfile, type ProfileOf } from "./profile-utils";
 import { DEFAULT_ROUTE_ID, newRoute, type RuleBlock } from "./routes";
 
@@ -53,6 +53,116 @@ export const GROUPS_SEED = [
 const inDays = (days: number) => Math.floor(Date.now() / 1000) + days * 86_400;
 const GB = 1024 ** 3;
 
+// What a provider proposes in the dev seed: one change of each kind the review shows.
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+const AURORA_PENDING: PendingChange[] = [
+  {
+    key: "new-domain",
+    value: "aurora-vpn.example.com",
+    previous:
+      "https://aurora.example.net/api/v1/client/subscribe?token=9f2c1ab7d4e8&flow=xtls-rprx-vision",
+    risk: "trustBoundary",
+    action: {
+      kind: "replaceDomain",
+      url: "https://aurora-vpn.example.com/api/v1/client/subscribe?token=9f2c1ab7d4e8&flow=xtls-rprx-vision",
+      fromHost: "aurora.example.net",
+      toHost: "aurora-vpn.example.com",
+      otherDomain: true,
+    },
+    digest: "seed-new-domain",
+    seenAt: daysAgo(1),
+  },
+  {
+    key: "fallback-url",
+    value: "https://mirror.aurora.example.net/api/v1/client/subscribe?token=9f2c1ab7d4e8",
+    previous: null,
+    risk: "trustBoundary",
+    action: {
+      kind: "setFallbackUrl",
+      url: "https://mirror.aurora.example.net/api/v1/client/subscribe?token=9f2c1ab7d4e8",
+      host: "mirror.aurora.example.net",
+    },
+    digest: "seed-fallback",
+    seenAt: daysAgo(1),
+  },
+  {
+    key: "routing",
+    value: "Aurora RU direct",
+    risk: "trustBoundary",
+    action: {
+      kind: "importRouting",
+      activate: true,
+      routing: {
+        name: "Aurora RU direct",
+        directSites: ["geosite:category-ru", "domain:gosuslugi.ru", "domain:yandex.ru"],
+        directIp: ["geoip:ru", "geoip:private"],
+        proxySites: [],
+        proxyIp: [],
+        blockSites: ["geosite:category-ads-all"],
+        blockIp: [],
+        globalProxy: null,
+        ignoredFields: ["DomainStrategy", "RemoteDnsType", "RemoteDnsDomain", "Geoipurl"],
+      },
+    },
+    digest: "seed-routing",
+    seenAt: daysAgo(2),
+  },
+  {
+    key: "mux-enable",
+    value: "true",
+    previous: "false",
+    risk: "tunnelBehaviour",
+    action: { kind: "tunnelSetting", setting: { kind: "mux", on: true } },
+    digest: "seed-mux",
+    seenAt: daysAgo(2),
+  },
+  {
+    key: "fragmentation-length",
+    value: "100-200",
+    risk: "tunnelBehaviour",
+    action: { kind: "tunnelSetting", setting: { kind: "fragmentLength", value: "100-200" } },
+    digest: "seed-fragment-length",
+    seenAt: daysAgo(2),
+  },
+  {
+    key: "noises-enable",
+    value: "true",
+    risk: "tunnelBehaviour",
+    action: { kind: "unsupported" },
+    digest: "seed-noises",
+    seenAt: daysAgo(2),
+  },
+  {
+    key: "per-app-proxy-list",
+    value: "com.android.chrome,org.telegram.messenger",
+    risk: "trustBoundary",
+    action: { kind: "unsupported" },
+    digest: "seed-per-app",
+    seenAt: daysAgo(2),
+  },
+];
+
+const AURORA_AUDIT: AuditEntry[] = [
+  { at: daysAgo(1), key: "new-domain", outcome: "offered", summary: "aurora-vpn.example.com" },
+  {
+    at: daysAgo(1),
+    key: "fallback-url",
+    outcome: "offered",
+    summary: "https://mirror.aurora.example.net/api/v1/client/subscribe?token=9f2c1ab7d4e8",
+  },
+  { at: daysAgo(2), key: "routing", outcome: "offered", summary: "Aurora RU direct" },
+  { at: daysAgo(2), key: "mux-enable", outcome: "offered", summary: "true" },
+  { at: daysAgo(4), key: "change-user-agent", outcome: "rejected", summary: "AuroraClient/2.1" },
+  {
+    at: daysAgo(6),
+    key: "new-url",
+    outcome: "ignored",
+    summary: "private, loopback or reserved IPv4 targets are rejected",
+  },
+  { at: daysAgo(9), key: "fragmentation-enable", outcome: "accepted", summary: "true" },
+  { at: daysAgo(12), key: "routing", outcome: "autoApplied", summary: "happ://routing/off" },
+];
+
 export const SUBS_SEED: Subscription[] = [
   {
     id: "s-aurora",
@@ -74,6 +184,9 @@ export const SUBS_SEED: Subscription[] = [
     providerIntervalHours: 1,
     intervalOverride: false,
     bodyEncrypted: true,
+    insecureByProvider: false,
+    pendingChanges: AURORA_PENDING,
+    audit: AURORA_AUDIT,
     provider: {
       title: "Aurora Net",
       announce:
@@ -101,6 +214,7 @@ export const SUBS_SEED: Subscription[] = [
     manualTitle: true,
     intervalOverride: false,
     bodyEncrypted: false,
+    insecureByProvider: false,
     warnings: [
       { kind: "skippedLines", count: 3, sample: "Remaining traffic: unlimited | Next reset: 1st" },
       { kind: "unsupportedLinks", count: 2 },
@@ -134,6 +248,7 @@ export const SUBS_SEED: Subscription[] = [
     manualTitle: true,
     intervalOverride: false,
     bodyEncrypted: true,
+    insecureByProvider: false,
     lastError: "subscription body could not be decrypted with key02",
     lastErrorKind: { kind: "decrypt", keyId: "key02" },
     provider: {

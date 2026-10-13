@@ -68,6 +68,7 @@ export function SubEditSheet({
       intervalOverride: false,
       bodyEncrypted: false,
       warnings: [],
+      insecureByProvider: false,
     });
   }, [open, sub]);
 
@@ -107,7 +108,8 @@ export function SubEditSheet({
           remarks: name,
           // A name the user typed survives the provider's title; the default does not.
           manualTitle: d.remarks.trim() !== "" && d.remarks.trim() !== defaultName,
-          allowInsecure: isLocalOrPrivateHost(d.url),
+          // An accepted provider `insecure` stays until the user turns it off below.
+          allowInsecure: d.insecureByProvider ? d.allowInsecure : isLocalOrPrivateHost(d.url),
         },
         group,
       );
@@ -216,6 +218,32 @@ export function SubEditSheet({
           )}
         </SettingGroup>
       )}
+      {(d.fallbackUrl || d.insecureByProvider) && (
+        <SettingGroup>
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--on-surface-variant)" }}>
+            {t("subs.edit.fromProvider")}
+          </div>
+          {d.fallbackUrl && (
+            <ProviderSetting
+              icon="link"
+              title={t("subs.changes.key.fallbackUrl")}
+              value={d.fallbackUrl}
+              action={t("subs.edit.remove")}
+              onAction={() => set("fallbackUrl", null)}
+            />
+          )}
+          {d.insecureByProvider && (
+            <ProviderSetting
+              icon="gpp_maybe"
+              title={t("subs.edit.insecureByProvider")}
+              action={t("subs.edit.checkTls")}
+              onAction={() =>
+                setD((s) => (s ? { ...s, insecureByProvider: false, allowInsecure: false } : s))
+              }
+            />
+          )}
+        </SettingGroup>
+      )}
       <Disclosure
         label={
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -240,5 +268,44 @@ export function SubEditSheet({
         </Btn>
       </div>
     </Sheet>
+  );
+}
+
+/** A setting an accepted provider change made, with the way to undo it. */
+function ProviderSetting({
+  icon,
+  title,
+  value,
+  action,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  value?: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
+      <Icon
+        name={icon}
+        style={{ fontSize: 20, color: "var(--on-surface-variant)", flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5 }}>{title}</div>
+        {value && (
+          <div
+            className="mono"
+            dir="auto"
+            style={{ fontSize: 11.5, color: "var(--on-surface-variant)", overflowWrap: "anywhere" }}
+          >
+            {value}
+          </div>
+        )}
+      </div>
+      <Btn variant="text" sm onClick={onAction}>
+        {action}
+      </Btn>
+    </div>
   );
 }

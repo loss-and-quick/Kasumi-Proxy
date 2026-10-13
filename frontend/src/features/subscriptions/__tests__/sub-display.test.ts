@@ -30,6 +30,7 @@ const sub = (o: Partial<Subscription> = {}): Subscription => ({
   manualTitle: false,
   intervalOverride: false,
   bodyEncrypted: false,
+  insecureByProvider: false,
   ...o,
 });
 

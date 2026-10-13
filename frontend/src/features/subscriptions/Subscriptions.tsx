@@ -3,7 +3,7 @@
 // Manage remote profile sources.
 // ============================================================
 import { lazy, Suspense, useMemo, useState } from "react";
-import { AppBar, Btn, Card, Dialog, Icon, IconBtn, Sheet } from "../../components";
+import { AppBar, Btn, Card, Dialog, Icon, IconBtn, Sheet, SheetAction } from "../../components";
 import type { SubWarning } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import type { Subscription } from "../../lib/bridge";
@@ -13,9 +13,12 @@ import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { AddSheet } from "../add/AddSheet";
 import { copyText } from "../profiles/clipboard";
+import { AuditSheet } from "./AuditSheet";
 import { IdentityNotice } from "./IdentityNotice";
+import { ProposedChangesSheet } from "./ProposedChangesSheet";
 import { SubCard, WarningsSheet } from "./SubCard";
 import { SubEditSheet } from "./SubEditSheet";
+import { displayTitle } from "./sub-display";
 
 const ManageGroupsSheet = lazy(() =>
   import("../profiles/ManageGroupsSheet").then((module) => ({
@@ -54,6 +57,12 @@ export default function Subscriptions({
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [exportOpen, setExportOpen] = useState(false);
   const [warningsOf, setWarningsOf] = useState<SubWarning[] | null>(null);
+  // Sheets hold an id, so they follow the subscription as answers update it.
+  const [changesOf, setChangesOf] = useState<string | null>(null);
+  const [auditOf, setAuditOf] = useState<string | null>(null);
+  const [menuOf, setMenuOf] = useState<string | null>(null);
+  const byId = (id: string | null) => (id ? (subs.find((s) => s.id === id) ?? null) : null);
+  const menuSub = byId(menuOf);
 
   const enabledCount = subs.filter((s) => s.enabled).length;
   const importedCount = subs.reduce((n, s) => n + s.count, 0);
@@ -147,13 +156,10 @@ export default function Subscriptions({
               updating={updatingSubs.has(s.id)}
               onUpdate={() => void updateSub(s.id)}
               onEdit={() => setEdit(s)}
-              onDelete={() => {
-                setDelGroupToo(true);
-                setConfirmDel(s);
-              }}
-              onCopyUrl={() => void copySubUrl(s)}
+              onMore={() => setMenuOf(s.id)}
               onOpenUrl={(url) => void openUrl(url)}
               onShowWarnings={() => setWarningsOf(s.warnings ?? [])}
+              onShowChanges={() => setChangesOf(s.id)}
             />
           ))}
         </div>
@@ -232,6 +238,47 @@ export default function Subscriptions({
       />
 
       <WarningsSheet warnings={warningsOf} onClose={() => setWarningsOf(null)} />
+
+      <ProposedChangesSheet sub={byId(changesOf)} onClose={() => setChangesOf(null)} />
+      <AuditSheet sub={byId(auditOf)} onClose={() => setAuditOf(null)} />
+
+      <Sheet
+        open={!!menuSub}
+        title={menuSub ? displayTitle(menuSub) : ""}
+        onClose={() => setMenuOf(null)}
+      >
+        {menuSub && (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <SheetAction
+              icon="content_copy"
+              label={t("subs.copyUrl")}
+              onClick={() => {
+                setMenuOf(null);
+                void copySubUrl(menuSub);
+              }}
+            />
+            <SheetAction
+              icon="history"
+              label={t("subs.menu.history")}
+              sub={t("subs.menu.historySub", { count: menuSub.audit?.length ?? 0 })}
+              onClick={() => {
+                setMenuOf(null);
+                setAuditOf(menuSub.id);
+              }}
+            />
+            <SheetAction
+              icon="delete"
+              label={t("subs.deleteAction")}
+              danger
+              onClick={() => {
+                setMenuOf(null);
+                setDelGroupToo(true);
+                setConfirmDel(menuSub);
+              }}
+            />
+          </div>
+        )}
+      </Sheet>
 
       <Dialog
         open={!!confirmDel}
