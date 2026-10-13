@@ -39,6 +39,7 @@ use kasumi_core::state::{
     SingboxFragment, SingboxStack,
 };
 use kasumi_core::sub_ingest::{IngestInput, ingest};
+use kasumi_core::xray_config::hijack_inbound_dns;
 
 // ── valid credential / crypto material (cores validate these) ──
 const UUID: &str = "11111111-1111-1111-1111-111111111111";
@@ -1745,8 +1746,10 @@ fn profile_target_cases() -> Vec<Case> {
 }
 
 /// The desktop's bridged mode binds every outbound that dials the network to the
-/// uplink. The cores must accept those binds on provider balancer members and
-/// relays, per-rule profile targets, chain hops and an XHTTP download leg.
+/// uplink, after an xray core gets its DNS module and `dns` outbound for DNS sent
+/// through the tun. The cores must accept those binds on provider balancer members,
+/// relays and `dns` outbounds, per-rule profile targets, chain hops and an XHTTP
+/// download leg.
 #[test]
 fn bridged_uplink_bind_validates_against_real_cores() {
     let mut xhttp = make(
@@ -1773,8 +1776,24 @@ fn bridged_uplink_bind_validates_against_real_cores() {
         needs_geo: false,
         others: vec![],
     };
+    // A provider `dns` outbound that forwards non-IP queries to its own server.
+    let mut provider_dns = provider_custom_cases().remove(0);
+    if let Profile::Custom(c) = &mut provider_dns.profile {
+        let mut raw: Value = serde_json::from_str(&c.raw).unwrap();
+        raw["outbounds"].as_array_mut().unwrap().push(json!({
+            "tag": "dns-fwd", "protocol": "dns",
+            "settings": { "address": "1.1.1.1", "port": 53, "nonIPQuery": "skip" },
+        }));
+        raw["routing"]["rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "type": "field", "port": "53", "outboundTag": "dns-fwd" }));
+        c.raw = raw.to_string();
+    }
+    provider_dns.name = "provider-custom/dns".into();
     let cases = provider_custom_cases()
         .into_iter()
+        .chain([provider_dns])
         .chain(chain_cases())
         .chain(profile_target_cases())
         .chain([xhttp])
@@ -1784,6 +1803,21 @@ fn bridged_uplink_bind_validates_against_real_cores() {
         })
         .collect();
     validate_all_with(cases, |engine, cfg| {
+        if engine == CoreEngine::Xray {
+            hijack_inbound_dns(cfg);
+        }
         bind_uplink_outbounds(engine, cfg, "eth0", Some("192.0.2.10"));
+        if engine == CoreEngine::Xray {
+            let dns = cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|o| o["protocol"] == "dns")
+                .collect::<Vec<_>>();
+            assert!(!dns.is_empty());
+            for ob in dns {
+                assert_eq!(ob["streamSettings"]["sockopt"]["interface"], "eth0", "{ob}");
+            }
+        }
     });
 }

@@ -25,10 +25,15 @@ use serde_json::{Map, Value, json};
 
 use crate::enums::CoreEngine;
 
-/// Outbound kinds that open no socket to the network: they drop traffic, answer
-/// DNS in-process, hand it back to routing, or pick another outbound.
-const XRAY_LOCAL_PROTOCOLS: [&str; 3] = ["blackhole", "dns", "loopback"];
-const SINGBOX_LOCAL_TYPES: [&str; 4] = ["block", "dns", "selector", "urltest"];
+/// Outbound kinds that open no socket to the network: they drop traffic, hand it
+/// back to routing, or pick another outbound. An xray `dns` outbound is not one of
+/// them: it forwards xray's own DNS queries, and non-IP queries under
+/// `nonIPQuery: "skip"`, to the target or its `address`/`port` override through
+/// its own dialer.
+/// https://github.com/XTLS/Xray-core/blob/v26.3.27/proxy/dns/dns.go#L116-L131
+/// https://github.com/XTLS/Xray-core/blob/v26.3.27/proxy/dns/dns.go#L193-L231
+const XRAY_LOCAL_PROTOCOLS: [&str; 2] = ["blackhole", "loopback"];
+const SINGBOX_LOCAL_TYPES: [&str; 3] = ["block", "selector", "urltest"];
 
 /// Bind every outbound that dials the network itself to `iface`, so the core's
 /// traffic to its servers *and* its direct (geo-`direct`) traffic egress the
@@ -402,7 +407,11 @@ mod tests {
             { "tag": "direct", "protocol": "freedom" },
             { "tag": "fragment", "protocol": "freedom", "settings": { "fragment": {} } },
             { "tag": "block", "protocol": "blackhole" },
-            { "tag": "dns-out", "protocol": "dns" },
+            { "tag": "dns-out", "protocol": "dns", "settings": { "nonIPQuery": "skip" } },
+            { "tag": "dns-fwd", "protocol": "dns",
+              "settings": { "address": "1.1.1.1", "port": 53 } },
+            { "tag": "dns-local", "protocol": "dns",
+              "settings": { "address": "127.0.0.53", "port": 53 } },
             { "tag": "back", "protocol": "loopback", "settings": { "inboundTag": "socks-in" } },
             { "tag": "local", "protocol": "socks",
               "settings": { "servers": [{ "address": "127.0.0.1", "port": 1080 }] } },
@@ -415,12 +424,14 @@ mod tests {
               "streamSettings": { "sockopt": { "dialerProxy": "proxy" } } },
         ] });
         bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", Some("192.168.1.5"));
-        for tag in ["proxy", "hy", "wg", "direct", "fragment"] {
+        for tag in [
+            "proxy", "hy", "wg", "direct", "fragment", "dns-out", "dns-fwd",
+        ] {
             assert!(xray_bound(&x, tag), "{tag} unbound");
             assert_eq!(by_tag(&x, "outbounds", tag)["sendThrough"], "192.168.1.5");
         }
-        // Service, loopback and relayed outbounds keep their shape.
-        for tag in ["block", "dns-out", "back", "local", "local-wg", "relayed"] {
+        // Drop, loopback and relayed outbounds keep their shape.
+        for tag in ["block", "back", "dns-local", "local", "local-wg", "relayed"] {
             let ob = by_tag(&x, "outbounds", tag);
             assert!(ob.get("streamSettings").is_none(), "{tag} touched: {ob}");
             assert!(ob.get("sendThrough").is_none(), "{tag} touched: {ob}");
@@ -440,7 +451,6 @@ mod tests {
                 { "tag": "proxy", "type": "vless", "server": "p.example" },
                 { "tag": "other", "type": "trojan", "server": "o.example" },
                 { "tag": "direct", "type": "direct" },
-                { "tag": "dns", "type": "dns" },
                 { "tag": "block", "type": "block" },
                 { "tag": "pick", "type": "selector", "outbounds": ["proxy", "other"] },
                 { "tag": "auto", "type": "urltest", "outbounds": ["proxy", "other"] },
@@ -462,7 +472,7 @@ mod tests {
             );
         }
         assert!(singbox_bound(&s, "endpoints", "wg"));
-        for tag in ["dns", "block", "pick", "auto", "local", "hop"] {
+        for tag in ["block", "pick", "auto", "local", "hop"] {
             let ob = by_tag(&s, "outbounds", tag);
             assert!(ob.get("bind_interface").is_none(), "{tag} bound");
             assert!(ob.get("inet4_bind_address").is_none(), "{tag} bound");
@@ -676,6 +686,28 @@ mod tests {
                 .is_none()
         );
         assert!(!xray_bound(&x, "chained"));
+    }
+
+    /// The `dns` outbound the desktop adds for DNS sent through the tun dials
+    /// whatever xray forwards rather than answers, so it is bound like `direct`.
+    #[test]
+    fn hijacked_dns_outbound_is_bound() {
+        let p = profile(
+            "vless://u@main.ex:443?security=tls&sni=main.ex",
+            "main",
+            None,
+        );
+        let mut x = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+        crate::xray_config::hijack_inbound_dns(&mut x);
+        bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", Some("192.168.1.5"));
+        let dns = x["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["protocol"] == "dns")
+            .expect("hijack adds a dns outbound");
+        assert_eq!(dns["streamSettings"]["sockopt"]["interface"], "eno1");
+        assert_eq!(dns["sendThrough"], "192.168.1.5");
     }
 
     #[test]

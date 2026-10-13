@@ -328,15 +328,17 @@ impl DesktopPlatform {
         // to the physical uplink so they escape the tun at the socket layer instead
         // of looping back through the external tun helper. Without this, the
         // `direct` outbound carrying geo-`direct` (e.g. RU) traffic, or a server
-        // other than `proxy`, is captured by the split-default and loops. Gated on CAP_NET_RAW (the privileged data-path owner); a
-        // harmless no-op in unprivileged in-process dev, where there's no managed
-        // tun to escape. (sing-box's native `auto_route` path escapes via its own
-        // `auto_detect_interface` and is bound elsewhere.)
-        if bound {
-            inject_uplink_bind(engine, Path::new(&cfg)).await;
-        }
+        // other than `proxy`, is captured by the split-default and loops. Gated on
+        // CAP_NET_RAW (the privileged data-path owner); a harmless no-op in
+        // unprivileged in-process dev, where there's no managed tun to escape.
+        // (sing-box's native `auto_route` path escapes via its own
+        // `auto_detect_interface` and is bound elsewhere.) It runs after the DNS
+        // pinning so the `dns` outbound that adds is bound too.
         if capture_dns {
             pin_xray_servers(Path::new(&cfg), &servers).await;
+        }
+        if bound {
+            inject_uplink_bind(engine, Path::new(&cfg)).await;
         }
 
         self.spawn_core_verify(&core_bin, &cfg, &log).await?;
