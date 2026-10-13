@@ -17,12 +17,10 @@ export const AppBar = ({
   actions?: ReactNode;
 }) => (
   <div className={`appbar${large ? " lg" : ""}`}>
-    {left}
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div className="appbar-title truncate">{title}</div>
-      {subtitle && <div className="appbar-sub">{subtitle}</div>}
-    </div>
-    <div style={{ display: "flex", gap: 2 }}>{actions}</div>
+    {left && <div className="appbar-left">{left}</div>}
+    <div className="appbar-title truncate">{title}</div>
+    {actions && <div className="appbar-actions">{actions}</div>}
+    {subtitle && <div className="appbar-sub">{subtitle}</div>}
   </div>
 );
 
