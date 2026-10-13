@@ -377,6 +377,8 @@ export const SubErrorKindSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("unsupportedPayload"),
 	payload: PayloadKindSchema,
+}), z.object({
+	kind: z.literal("urlDecrypt"),
 })]);
 export type SubErrorKind = z.infer<typeof SubErrorKindSchema>;
 
@@ -1210,6 +1212,11 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	incoming: AppState_SerializeSchema,
 	mode: ImportModeSchema,
 }), z.object({
+	kind: z.literal("importRoutingLink"),
+	routing: RoutingImport_SerializeSchema,
+	groupId: z.string(),
+	activate: z.boolean(),
+}), z.object({
 	kind: z.literal("importRoutingRules"),
 	blockId: z.string(),
 	rules: z.array(RoutingRule_SerializeSchema),
@@ -1425,6 +1432,11 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("importBackup"),
 	incoming: AppState_DeserializeSchema,
 	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("importRoutingLink"),
+	routing: RoutingImport_DeserializeSchema,
+	groupId: z.string(),
+	activate: z.boolean(),
 }), z.object({
 	kind: z.literal("importRoutingRules"),
 	blockId: z.string(),

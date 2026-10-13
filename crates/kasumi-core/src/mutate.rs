@@ -26,7 +26,8 @@ use crate::state::{
 use crate::sub_apply::{
     deduplicate_profiles_scoped, migrate_profiles_to_new_group, remove_profiles_by_sub_id,
 };
-use crate::sub_changes::{remove_provider_routing, resolve_changes};
+use crate::sub_changes::{import_routing_link, remove_provider_routing, resolve_changes};
+use crate::sub_meta_types::RoutingImport;
 
 /// Merge vs replace, shared by list-import and backup-restore intents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -172,6 +173,14 @@ pub enum MutationIntent {
     /// default. The default route stays.
     RemoveRoute {
         id: String,
+    },
+    /// Make a routing profile from a pasted `happ://routing` link the route of
+    /// `group_id`, switched on when `activate`.
+    #[serde(rename_all = "camelCase")]
+    ImportRoutingLink {
+        routing: Box<RoutingImport>,
+        group_id: String,
+        activate: bool,
     },
     /// Run profile `profile_id` with route `route_id` (`None` or the default:
     /// whatever its group gets).
@@ -425,6 +434,11 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
                 state.routes.retain(|r| r.id != *id);
             }
         }
+        MutationIntent::ImportRoutingLink {
+            routing,
+            group_id,
+            activate,
+        } => import_routing_link(state, group_id, routing, *activate),
         MutationIntent::SetProfileRoute {
             profile_id,
             route_id,
@@ -1369,5 +1383,20 @@ mod tests {
             intent,
             MutationIntent::ResolveSubChange { activate: None, .. }
         ));
+        let intent: MutationIntent = serde_json::from_value(serde_json::json!({
+            "kind": "importRoutingLink",
+            "routing": { "name": "R", "directSites": [], "directIp": [], "proxySites": [],
+                "proxyIp": [], "blockSites": ["geosite:ads"], "blockIp": [] },
+            "groupId": "g-main",
+            "activate": true
+        }))
+        .unwrap();
+        let mut s = default_app_state();
+        apply_mutation(&mut s, &intent);
+        assert!(
+            s.routes
+                .iter()
+                .any(|r| r.id == "link-route-g-main" && r.enabled)
+        );
     }
 }
