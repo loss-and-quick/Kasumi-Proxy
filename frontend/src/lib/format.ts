@@ -1,9 +1,20 @@
-export function formatBytes(bytes: number): string {
-  if (!bytes || bytes < 0) return "0.0 MB";
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  return `${(bytes / 1024).toFixed(1)} KB`;
+import type { I18nFormatters } from "../i18n/runtime";
+
+/** A byte count in binary steps, with the number and unit in the reader's locale. */
+export function formatBytes(bytes: number, formatNumber: I18nFormatters["formatNumber"]): string {
+  const kb = bytes > 0 ? bytes / 1024 : 0;
+  const mb = kb / 1024;
+  const unit = (value: number, name: string, digits: number) =>
+    formatNumber(value, {
+      style: "unit",
+      unit: name,
+      unitDisplay: "short",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  if (mb >= 1024) return unit(mb / 1024, "gigabyte", 2);
+  if (mb >= 1 || kb === 0) return unit(mb, "megabyte", 1);
+  return unit(kb, "kilobyte", 1);
 }
 
 export function formatRate(bytesPerSec: number): string {

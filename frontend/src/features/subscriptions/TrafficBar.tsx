@@ -1,11 +1,12 @@
 import type { TrafficInfo } from "../../generated/bindings";
-import { useT } from "../../i18n";
+import { useFormatters, useT } from "../../i18n";
 import { formatBytes } from "../../lib/format";
 import { trafficUsage } from "./sub-display";
 
 /** Used against the plan's quota; an unmetered plan shows the usage alone. */
 export function TrafficBar({ traffic }: { traffic: TrafficInfo }) {
   const t = useT();
+  const { formatNumber } = useFormatters();
   const { used, total, ratio } = trafficUsage(traffic);
   const fill =
     ratio != null && ratio >= 0.95
@@ -16,12 +17,19 @@ export function TrafficBar({ traffic }: { traffic: TrafficInfo }) {
   return (
     <div>
       <div
-        className="mono"
-        style={{ fontSize: 11.5, color: "var(--on-surface-variant)", marginBottom: 6 }}
+        style={{
+          fontSize: 11.5,
+          fontVariantNumeric: "tabular-nums",
+          color: "var(--on-surface-variant)",
+          marginBottom: 6,
+        }}
       >
         {ratio == null
-          ? t("subs.provider.trafficUnlimited", { used: formatBytes(used) })
-          : t("subs.provider.traffic", { used: formatBytes(used), total: formatBytes(total) })}
+          ? t("subs.provider.trafficUnlimited", { used: formatBytes(used, formatNumber) })
+          : t("subs.provider.traffic", {
+              used: formatBytes(used, formatNumber),
+              total: formatBytes(total, formatNumber),
+            })}
       </div>
       {ratio != null && (
         <div
