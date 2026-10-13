@@ -24,7 +24,12 @@ type MigrationStep = fn(&mut Value);
 
 /// The ordered migration ladder. Index `i` lifts version `i` to `i + 1`; append a
 /// new step (never reorder or delete) whenever the on-disk schema changes.
-const MIGRATIONS: &[MigrationStep] = &[migrate_v0_to_v1, migrate_v1_to_v2, migrate_v2_to_v3];
+const MIGRATIONS: &[MigrationStep] = &[
+    migrate_v0_to_v1,
+    migrate_v1_to_v2,
+    migrate_v2_to_v3,
+    migrate_v3_to_v4,
+];
 
 /// The schema version the current code writes (the length of the ladder).
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -96,6 +101,32 @@ fn migrate_v2_to_v3(v: &mut Value) {
         let request = obj.entry("request").or_insert_with(|| json!({}));
         if let Some(request) = request.as_object_mut() {
             request.entry("sendHwid").or_insert(Value::Bool(false));
+        }
+    }
+}
+
+/// v3 → v4: Shadowsocks TLS is v2ray-plugin's `tls` option, which rides on the
+/// plugin's websocket or QUIC transport. Profiles used to start with TLS on, so a
+/// plain or obfs-local profile (TCP transport) carries a TLS that its link never
+/// asked for; switch it off.
+fn migrate_v3_to_v4(v: &mut Value) {
+    let Some(profiles) = v.get_mut("profiles").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for p in profiles {
+        if p.get("protocol").and_then(Value::as_str) != Some("shadowsocks") {
+            continue;
+        }
+        let tcp = p
+            .get("transport")
+            .and_then(|t| t.get("kind"))
+            .and_then(Value::as_str)
+            .is_none_or(|kind| kind == "tcp");
+        if let Some(tls) = p.get_mut("tls").and_then(Value::as_object_mut)
+            && tcp
+            && tls.get("security").and_then(Value::as_str).unwrap_or("tls") == "tls"
+        {
+            tls.insert("security".into(), Value::from("none"));
         }
     }
 }
@@ -525,8 +556,8 @@ mod tests {
             }]
         });
         migrate_app_state(&mut doc);
-        assert_eq!(SCHEMA_VERSION, 3);
-        assert_eq!(doc["schemaVersion"], json!(3));
+        assert_eq!(SCHEMA_VERSION, 4);
+        assert_eq!(doc["schemaVersion"], json!(4));
         assert_eq!(doc["profiles"][0]["transport"]["kind"], "ws");
         assert!(doc["profiles"][0]["meta"].is_object());
 
@@ -548,7 +579,7 @@ mod tests {
             { "id": "c", "remarks": "", "url": "https://sub.example.org/s/3" },
         ]));
         migrate_app_state(&mut doc);
-        assert_eq!(doc["schemaVersion"], json!(3));
+        assert_eq!(doc["schemaVersion"], json!(4));
         let manual: Vec<&Value> = doc["subscriptions"]
             .as_array()
             .unwrap()
@@ -590,6 +621,51 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(sub.request.send_hwid, Some(false));
+    }
+
+    #[test]
+    fn v3_to_v4_drops_tls_from_shadowsocks_without_a_plugin_transport() {
+        let ss = |id: &str, transport: Value, security: &str| {
+            json!({
+                "protocol": "shadowsocks",
+                "meta": { "id": id, "remarks": id, "groupId": "g-main" },
+                "endpoint": { "address": "ss.example", "port": 8388 },
+                "transport": transport,
+                "tls": { "security": security, "sni": "cdn.example" },
+                "password": "pw", "method": "aes-256-gcm"
+            })
+        };
+        let mut doc = json!({ "schemaVersion": 3, "subscriptions": [], "profiles": [
+            ss("plain", json!({ "kind": "tcp", "headerType": "none" }), "tls"),
+            ss("obfs", json!({ "kind": "tcp", "headerType": "http", "host": "o.example" }), "tls"),
+            ss("ws-tls", json!({ "kind": "ws", "host": "cdn.example", "path": "/ws" }), "tls"),
+            ss("quic-tls", json!({ "kind": "quic" }), "tls"),
+            ss("ws", json!({ "kind": "ws", "path": "/ws" }), "none"),
+            {
+                "protocol": "trojan",
+                "meta": { "id": "trojan", "remarks": "t", "groupId": "g-main" },
+                "endpoint": { "address": "t.example", "port": 443 },
+                "transport": { "kind": "tcp" },
+                "tls": { "security": "tls" },
+                "password": "pw"
+            },
+        ] });
+        migrate_app_state(&mut doc);
+        let security: Vec<&str> = doc["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["tls"]["security"].as_str().unwrap())
+            .collect();
+        assert_eq!(security, ["none", "none", "tls", "tls", "none", "tls"]);
+        assert_eq!(doc["profiles"][0]["tls"]["sni"], "cdn.example");
+
+        let profiles: Vec<Profile> = serde_json::from_value(doc["profiles"].clone()).unwrap();
+        let Profile::Shadowsocks(plain) = &profiles[0] else {
+            panic!("not shadowsocks")
+        };
+        assert!(!crate::share::build_share_link(&profiles[0]).contains("plugin"));
+        assert_eq!(plain.tls.security, crate::enums::Security::None);
     }
 
     #[test]
