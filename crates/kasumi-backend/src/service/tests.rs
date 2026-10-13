@@ -707,3 +707,20 @@ async fn probe_connection_without_a_running_proxy_is_no_result() {
     let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
     assert_eq!(probe(&svc).await.latency_ms, None);
 }
+
+#[tokio::test]
+async fn status_request_carries_the_probe_verdict() {
+    let (_d, svc, _core) = running_first_of_two().await;
+    let state_of = |r: Response| match r {
+        Response::Status(s) => s.state,
+        other => panic!("expected status, got {other:?}"),
+    };
+
+    // No verdict yet: the core is up but connectivity is unknown.
+    let r = svc.dispatch(Command::Status).await.unwrap();
+    assert_eq!(state_of(r), RunState::Connecting);
+
+    svc.dispatch(Command::ProbeConnection).await.unwrap();
+    let r = svc.dispatch(Command::Status).await.unwrap();
+    assert_eq!(state_of(r), RunState::Connected);
+}
