@@ -8,9 +8,11 @@ import { lazy, Suspense, useMemo, useState } from "react";
 import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import { linkInputText } from "../../lib/add-input";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
+import { useLinkInput } from "../add/useLinkInput";
 import { copyText } from "../profiles/clipboard";
 import { parseRoutingRulesJson } from "./helpers";
 
@@ -46,6 +48,7 @@ export function RoutingRulesIOSheet({
   const [qrOpen, setQrOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const hasRules = routingRules.length > 0;
+  const link = useLinkInput(importText);
 
   const parsed = useMemo(() => {
     if (!importText.trim()) {
@@ -54,8 +57,9 @@ export function RoutingRulesIOSheet({
     const { ok, rules } = parseRoutingRulesJson(importText);
     if (ok)
       return { ok: true as const, rules, hint: t("rulesIo.summary", { count: rules.length }) };
-    return { ok: false as const, rules: [] as RoutingRule[], hint: t("rulesIo.invalid") };
-  }, [importText, t]);
+    const hint = link === undefined ? "" : t(link ? linkInputText(link) : "rulesIo.invalid");
+    return { ok: false as const, rules: [] as RoutingRule[], hint };
+  }, [importText, link, t]);
 
   const doImport = (mode: "merge" | "replace") => {
     void importRoutingRules(blockId, parsed.rules, mode);

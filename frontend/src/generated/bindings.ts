@@ -1065,6 +1065,20 @@ export type Naive = {
 
 export type NoticeColor = "red" | "blue" | "green" | "default";
 
+export type PackageBlock = PackageBlock_Serialize | PackageBlock_Deserialize;
+
+export type PackageBlock_Deserialize = {
+	name: string,
+	enabled: boolean,
+	rules: RoutingRule_Deserialize[],
+};
+
+export type PackageBlock_Serialize = {
+	name: string,
+	enabled: boolean,
+	rules: RoutingRule_Serialize[],
+};
+
 /**  VLESS/VMess UDP packet encoding. `""` means unset. */
 export type PacketEncoding = string;
 
@@ -1340,6 +1354,32 @@ export type RouteBlockRef = {
 	enabled?: boolean,
 };
 
+/**
+ *  A route as it travels between devices: its blocks come along, the profiles
+ *  and groups it applies to don't.
+ */
+export type RoutePackage = RoutePackage_Serialize | RoutePackage_Deserialize;
+
+/**
+ *  A route as it travels between devices: its blocks come along, the profiles
+ *  and groups it applies to don't.
+ */
+export type RoutePackage_Deserialize = {
+	name: string,
+	finalOutbound: string,
+	blocks: PackageBlock_Deserialize[],
+};
+
+/**
+ *  A route as it travels between devices: its blocks come along, the profiles
+ *  and groups it applies to don't.
+ */
+export type RoutePackage_Serialize = {
+	name: string,
+	finalOutbound: string,
+	blocks: PackageBlock_Serialize[],
+};
+
 /**  A Happ routing profile, cut down to what Kasumi's routes can express. */
 export type RoutingImport = RoutingImport_Serialize | RoutingImport_Deserialize;
 
@@ -1375,12 +1415,16 @@ export type RoutingLink = RoutingLink_Serialize | RoutingLink_Deserialize;
 
 export type RoutingLink_Deserialize = {
 	routing: RoutingImport_Deserialize,
+	/**  The same profile as a shared route, for the route import sheet. */
+	package: RoutePackage_Deserialize,
 	/**  `onadd` turns the route on; `add` only adds it. */
 	activate: boolean,
 };
 
 export type RoutingLink_Serialize = {
 	routing: RoutingImport_Serialize,
+	/**  The same profile as a shared route, for the route import sheet. */
+	package: RoutePackage_Serialize,
 	/**  `onadd` turns the route on; `add` only adds it. */
 	activate: boolean,
 };

@@ -155,6 +155,15 @@ pub fn render() -> String {
         ));
     }
 
+    let schemes =
+        serde_json::to_string(kasumi_core::share::SHARE_LINK_SCHEMES).expect("scheme list");
+    out.push_str(
+        "\n/** Proxy share-link schemes the backend reads; `http`/`https` count only with userinfo. */\n",
+    );
+    out.push_str(&format!(
+        "export const SHARE_LINK_SCHEMES: string[] = {schemes};\n"
+    ));
+
     // Per-core TUN-engine options (default + valid engines), derived from the
     // backend's own `resolve_tun`/`default_tun_for` so the settings UI never
     // re-encodes the per-core default or the SingboxTun-is-sing-box-only rule.

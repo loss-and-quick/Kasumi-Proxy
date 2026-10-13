@@ -16,9 +16,14 @@ import type {
   Tls,
   Transport,
 } from "../generated/bindings";
-import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION, SCHEMA_VERSION } from "../generated/defaults";
+import {
+  DEFAULT_CORE_BY_PROTOCOL,
+  HAPP_VERSION,
+  SCHEMA_VERSION,
+  SHARE_LINK_SCHEMES,
+} from "../generated/defaults";
 import { ProfileSchema } from "../generated/schemas";
-import { applyMutation } from "./apply-mutation";
+import { applyMutation, routingPackage } from "./apply-mutation";
 import type {
   AppState,
   Bridge,
@@ -152,6 +157,16 @@ function simResolveToken(token: string): MockInput {
   return { unsupported: "invalid" };
 }
 
+/** Dev stand-in for the backend's `extract_uris`: a link in one of its share-link
+ *  schemes, or `http`/`https` with userinfo (an HTTP proxy, not a subscription). */
+export function isShareLink(line: string): boolean {
+  const m = /^([a-z0-9+]+):\/\/(\S*)/i.exec(line.trim());
+  if (!m) return false;
+  const scheme = m[1].toLowerCase();
+  if (scheme === "http" || scheme === "https") return /^[^/@]*@/.test(m[2]);
+  return SHARE_LINK_SCHEMES.includes(scheme);
+}
+
 type MockInput =
   | { sub: string; encrypted: boolean }
   | { routing: ResolvedImport["routing"][number]["routing"]; activate: boolean }
@@ -172,7 +187,12 @@ function simResolveImport(text: string): ResolvedImport {
     inputs.forEach((x, i) => {
       if (!x) return;
       if ("sub" in x) out.subscriptions.push({ url: x.sub, encrypted: x.encrypted });
-      else if ("routing" in x) out.routing.push({ routing: x.routing, activate: x.activate });
+      else if ("routing" in x)
+        out.routing.push({
+          routing: x.routing,
+          package: routingPackage(x.routing),
+          activate: x.activate,
+        });
       else out.unsupported.push({ text: tokens[i], kind: x.unsupported });
     });
   }
@@ -520,13 +540,13 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return state.profiles.filter((p) => p.meta.id !== profile.meta.id).map((p) => p.meta.id);
   },
 
-  // Dev stub: emit one nested placeholder profile per non-empty line.
+  // Dev stub: one nested placeholder profile per line that holds a share link.
   async parseShareLinks(text: string): Promise<Profile[]> {
     await new Promise((r) => setTimeout(r, 150));
     return text
       .split(/\r?\n/)
       .map((line) => line.trim())
-      .filter(Boolean)
+      .filter(isShareLink)
       .map((_line, i) =>
         mk("vless", {
           meta: { remarks: `Imported #${i + 1}` },

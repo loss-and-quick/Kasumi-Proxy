@@ -55,7 +55,6 @@ export function AddSheet({
   onClose,
   defaultGroup,
   inGroup = false,
-  scanOnOpen = false,
   onManualProfile,
   onManualSub,
   onDone,
@@ -67,8 +66,6 @@ export function AddSheet({
   /** Added from inside a group: everything, subscriptions too, goes there by
    *  default instead of each subscription getting a group of its own. */
   inGroup?: boolean;
-  /** Open the camera straight away (the "Scan QR" entry). */
-  scanOnOpen?: boolean;
   onManualProfile?: () => void;
   onManualSub?: () => void;
   onDone: (result: AddResult) => void;
@@ -95,8 +92,8 @@ export function AddSheet({
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   // Read when the sheet opens, not on every render that hands in a new object.
-  const openDefaults = useRef({ defaultGroup, inGroup, scanOnOpen });
-  openDefaults.current = { defaultGroup, inGroup, scanOnOpen };
+  const openDefaults = useRef({ defaultGroup, inGroup });
+  openDefaults.current = { defaultGroup, inGroup };
 
   // Each opening starts fresh, from the clipboard when it holds something.
   useEffect(() => {
@@ -104,7 +101,7 @@ export function AddSheet({
     setText("");
     setGroup(openDefaults.current.defaultGroup);
     setGroupEach(!openDefaults.current.inGroup);
-    setScanning(openDefaults.current.scanOnOpen);
+    setScanning(false);
     readText().then((clip) => setText((cur) => withClipboard(cur, clip)));
   }, [open]);
 

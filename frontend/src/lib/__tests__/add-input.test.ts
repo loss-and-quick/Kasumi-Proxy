@@ -55,6 +55,7 @@ describe("addInputFrom", () => {
         blockIp: [],
         ignoredFields: [],
       },
+      package: { name: "R", finalOutbound: "proxy", blocks: [] },
       activate: true,
     };
     const unsupported = [{ text: "happ://toggle", kind: "control" as const }];

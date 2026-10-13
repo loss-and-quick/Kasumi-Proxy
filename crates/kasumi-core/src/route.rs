@@ -46,6 +46,24 @@ pub struct RuleBlock {
     pub source_sub_id: Option<String>,
 }
 
+/// A route as it travels between devices: its blocks come along, the profiles
+/// and groups it applies to don't.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutePackage {
+    pub name: String,
+    pub final_outbound: String,
+    pub blocks: Vec<PackageBlock>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageBlock {
+    pub name: String,
+    pub enabled: bool,
+    pub rules: Vec<RoutingRule>,
+}
+
 /// One block's place in a route. Turning it off keeps it in place (and in
 /// other routes) while this route skips its rules.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]

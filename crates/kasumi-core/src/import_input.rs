@@ -8,7 +8,8 @@ use happ_sub::deeplink::{Deeplink, parse_deeplink};
 use happ_sub::url_crypt::{UrlCryptError, builtin_keyring, decrypt_url};
 use serde::{Deserialize, Serialize};
 
-use crate::sub_changes::routing_import;
+use crate::route::RoutePackage;
+use crate::sub_changes::{routing_import, routing_package};
 use crate::sub_meta_types::RoutingImport;
 
 /// What one token of an import is.
@@ -168,6 +169,8 @@ pub struct SubscriptionLink {
 #[serde(rename_all = "camelCase")]
 pub struct RoutingLink {
     pub routing: RoutingImport,
+    /// The same profile as a shared route, for the route import sheet.
+    pub package: RoutePackage,
     /// `onadd` turns the route on; `add` only adds it.
     pub activate: bool,
 }
@@ -201,8 +204,10 @@ pub fn resolve_import_text(text: &str) -> ResolvedImport {
                 }
                 ImportInput::Routing(action) => {
                     if let Some(profile) = action.profile() {
+                        let routing = routing_import(profile);
                         out.routing.push(RoutingLink {
-                            routing: routing_import(profile),
+                            package: routing_package(&routing),
+                            routing,
                             activate: matches!(*action, RoutingAction::OnAdd(_)),
                         });
                     }

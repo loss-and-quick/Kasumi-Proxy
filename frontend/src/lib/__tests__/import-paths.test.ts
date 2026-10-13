@@ -4,15 +4,19 @@
 // same thing whatever brought it in.
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { SHARE_LINK_SCHEMES } from "../../generated/defaults";
 import {
   addInputFrom,
   appendScanned,
   checkSubscriptionUrl,
+  linkInputText,
   resolveAddText,
+  resolveLinkInput,
+  subscriptionNameFrom,
   withClipboard,
 } from "../add-input";
 import type { ResolvedImport } from "../bridge";
-import { mockBridge } from "../mock-bridge";
+import { isShareLink, mockBridge } from "../mock-bridge";
 
 const crypt5 = (
   JSON.parse(
@@ -169,5 +173,123 @@ describe("subscription URL field", () => {
     expect(
       await checkSubscriptionUrl("https://a.example/s\nhttps://b.example/s", mockBridge),
     ).toEqual({ kind: "other" });
+  });
+});
+
+describe("links pasted where JSON is expected", () => {
+  const read = (text: string) => resolveLinkInput(text, mockBridge);
+
+  for (const [entry, feed] of Object.entries(ENTRY_POINTS)) {
+    it(`reads a happ://routing link as a route to import (${entry})`, async () => {
+      const link = await read(feed(SAMPLES.routing));
+      expect(link).toMatchObject({
+        kind: "routing",
+        links: [
+          {
+            routing: { name: "RU direct", directSites: ["geosite:category-ru"] },
+            // GlobalProxy true keeps the proxy as the final outbound.
+            package: {
+              name: "RU direct",
+              finalOutbound: "proxy",
+              blocks: [
+                {
+                  name: "RU direct",
+                  enabled: true,
+                  rules: [
+                    { outboundTag: "block", domain: ["geosite:category-ads"] },
+                    { outboundTag: "direct", domain: ["geosite:category-ru"] },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+    });
+  }
+
+  it("sends subscriptions and share links to the Add button", async () => {
+    for (const text of [SAMPLES.add, SAMPLES.crypt5, SAMPLES.vless, "https://a.example/s"]) {
+      const link = await read(text);
+      expect(link).toEqual({ kind: "add" });
+      expect(link && linkInputText(link)).toBe("add.linkUseAdd");
+    }
+  });
+
+  it("sends routing mixed with other links to the Add button", async () => {
+    expect(await read(`${SAMPLES.routing}\n${SAMPLES.vless}`)).toEqual({ kind: "add" });
+  });
+
+  it("gives a skipped Happ link its own reason", async () => {
+    const link = await read("happ://routing/off");
+    expect(link).toEqual({ kind: "unsupported", reason: "routingOff" });
+    expect(link && linkInputText(link)).toBe("add.unsupported.routingOff");
+    expect(await read(SAMPLES.control)).toEqual({ kind: "unsupported", reason: "control" });
+  });
+
+  it("leaves JSON and empty text to the JSON parser without asking the backend", async () => {
+    const asked = {
+      resolveImportInput: () => Promise.reject(new Error("asked")),
+      parseShareLinks: () => Promise.reject(new Error("asked")),
+    };
+    for (const text of ["", "  ", '{"kasumiRoute":1}', ' [{"outboundTag":"direct"}]', "{"]) {
+      expect(await resolveLinkInput(text, asked)).toBeNull();
+    }
+  });
+
+  it("finds nothing in text the backend sorts into no links", async () => {
+    const none = {
+      resolveImportInput: async (text: string) => ({
+        subscriptions: [],
+        routing: [],
+        unsupported: [],
+        shareText: text,
+      }),
+      parseShareLinks: async () => [],
+    };
+    expect(await resolveLinkInput("not a backup", none)).toBeNull();
+  });
+});
+
+describe("name a typed subscription URL suggests", () => {
+  const enc = "Encrypted subscription";
+  const nameOf = async (url: string) =>
+    subscriptionNameFrom(url, await checkSubscriptionUrl(url, mockBridge), enc);
+
+  it("names a happ:// link after what it resolves to, never its scheme word", async () => {
+    expect(await nameOf(SAMPLES.add)).toBe("sub.provider.example");
+    expect(await nameOf(SAMPLES.crypt5)).toBe(enc);
+    expect(await nameOf(SAMPLES.routing)).toBe("");
+    expect(await nameOf(SAMPLES.control)).toBe("");
+  });
+
+  it("suggests nothing for a happ:// link the backend hasn't read yet", () => {
+    expect(subscriptionNameFrom(SAMPLES.add, null, enc)).toBe("");
+    expect(subscriptionNameFrom(` ${SAMPLES.routing}`, null, enc)).toBe("");
+  });
+
+  it("names a plain URL after its host before and after the check", async () => {
+    expect(subscriptionNameFrom("https://a.example/s", null, enc)).toBe("a.example");
+    expect(await nameOf("https://a.example/s")).toBe("a.example");
+  });
+});
+
+describe("mock bridge share-link sorting", () => {
+  it("counts only links in the backend's share-link schemes", async () => {
+    for (const scheme of SHARE_LINK_SCHEMES)
+      expect(isShareLink(`${scheme}://u@h.example:443#n`)).toBe(true);
+    expect(isShareLink("https://u:p@proxy.example:8080")).toBe(true);
+    expect(isShareLink("https://sub.example/s")).toBe(false);
+    expect(isShareLink("not a backup")).toBe(false);
+    expect(isShareLink("ftp://u@h.example")).toBe(false);
+    const parsed = await mockBridge.parseShareLinks(`${SAMPLES.vless}\nhello\n{"a":1}`);
+    expect(parsed).toHaveLength(1);
+  });
+
+  it("leaves plain text in a JSON import as broken JSON, not a link", async () => {
+    expect(await resolveLinkInput("not a backup", mockBridge)).toBeNull();
+    expect(await resolveLinkInput("https://u:p@proxy.example:8080", mockBridge)).toEqual({
+      kind: "add",
+    });
   });
 });

@@ -167,7 +167,7 @@ interface Store extends AppState {
   removeRoute: (id: string) => Promise<void>;
   /** Run a profile with `routeId`; `null` leaves it to its group's route or the default. */
   setProfileRoute: (profileId: string, routeId: string | null) => Promise<void>;
-  /** Add a route shared as a package; blocks identical to existing ones are reused. */
+  /** Add a route shared as a package; blocks identical to the user's own are reused. */
   importRoutePackage: (pkg: RoutePackage) => Promise<string>;
 
   // asset files
@@ -1094,7 +1094,9 @@ export const useAppStore = create<Store>((set, get) => {
     async importRoutePackage(pkg) {
       const blocks: RouteBlockRef[] = [];
       for (const incoming of pkg.blocks) {
-        const same = get().ruleBlocks.find((b) => sameBlock(b, incoming));
+        // A provider's block is rewritten or dropped with its subscription, so it
+        // is never shared with a route the user brought in.
+        const same = get().ruleBlocks.find((b) => !b.sourceSubId && sameBlock(b, incoming));
         const blockId = same?.id ?? (await get().addRuleBlock(incoming.name, incoming.rules));
         blocks.push({ blockId, enabled: incoming.enabled });
       }

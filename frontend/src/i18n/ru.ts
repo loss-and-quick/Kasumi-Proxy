@@ -471,6 +471,7 @@ const ru = {
     "Отключает маршрутизацию провайдера. Маршруты выключаются в «Настройки → Маршрутизация».",
   "add.unsupported.urlDecrypt": "Для этой зашифрованной ссылки у Kasumi нет ключа.",
   "add.unsupported.invalid": "Это не ссылка Happ или она повреждена.",
+  "add.linkUseAdd": "Это ссылка, а не JSON. Добавьте её кнопкой «Добавить».",
   "groups.picker.new": "Новая группа…",
   "groups.picker.newNamed": "Новая группа «{name}»",
   "groups.picker.nameLabel": "Название новой группы",
@@ -1023,6 +1024,8 @@ const ru = {
   "subs.routing.final.proxy": "Всё остальное идёт через прокси.",
   "subs.routing.final.direct": "Всё остальное идёт напрямую.",
   "subs.routing.appliesTo": "Станет маршрутом для профилей группы {group}.",
+  "subs.routing.standalone":
+    "Добавится как отдельный новый маршрут. Он заработает, когда его выберет группа или профиль.",
   "subs.routing.conflict": "Заменит для этой группы маршрут «{route}».",
   "subs.routing.ignored": "Не применяется, в Kasumi это общие настройки для всех профилей:",
   "subs.routing.modeNote": "Маршруты работают в режиме маршрутизации «Редактор правил».",
@@ -1477,7 +1480,13 @@ const ru = {
   "routes.share.profilesNote": "Правила с выходом через профиль экспортируются как «Прокси».",
   "routes.share.import": "Импорт маршрута",
   "routes.share.importLabel": "Маршрут для импорта",
-  "routes.share.importHint": "Вставьте JSON маршрута",
+  "routes.share.importHint": "Вставьте JSON маршрута или ссылку happ://routing",
+  "routes.share.happRouting": plural("count", {
+    one: "# профиль маршрутизации Happ",
+    few: "# профиля маршрутизации Happ",
+    many: "# профилей маршрутизации Happ",
+    other: "# профиля маршрутизации Happ",
+  }),
   "routes.share.blocks": plural("count", {
     one: "# блок",
     few: "# блока",

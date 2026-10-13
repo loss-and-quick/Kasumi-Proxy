@@ -606,6 +606,9 @@ export const PACKET_ENCODING_OPTS: PacketEncoding[] = ["","xudp","packetaddr"];
 export const HYSTERIA2_OBFS_OPTS: Hysteria2Obfs[] = ["","salamander"];
 export const SINGBOX_FRAGMENT_OPTS: SingboxFragment[] = ["record","segment","both"];
 
+/** Proxy share-link schemes the backend reads; `http`/`https` count only with userinfo. */
+export const SHARE_LINK_SCHEMES: string[] = ["vless","vmess","trojan","ss","hysteria2","hy2","tuic","anytls","naive+https","naive+quic","shadowtls","wireguard","socks5","socks"];
+
 /** Per-core TUN engine options (default + selectable), single-sourced from Rust `resolve_tun`. */
 export const TUN_BY_CORE = {
   "sing-box": {

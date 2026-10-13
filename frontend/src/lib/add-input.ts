@@ -169,3 +169,59 @@ export async function checkSubscriptionUrl(
     return { kind: "url", ...r.subscriptions[0] };
   return { kind: "other" };
 }
+
+/** The name a subscription gets from its address when none is typed: the host it
+ *  fetches from, or the encrypted-link name. A `happ://` link that isn't read yet,
+ *  or isn't a subscription, gives none: its scheme words (`add`, `routing`) are no
+ *  name. */
+export function subscriptionNameFrom(
+  url: string,
+  check: SubscriptionUrlCheck | null,
+  encryptedName: string,
+): string {
+  if (check?.kind === "url") return check.encrypted ? encryptedName : hostOf(check.url);
+  if (check?.kind === "routing" || check?.kind === "unsupported") return "";
+  return isHappLink(url) ? "" : hostOf(url);
+}
+
+export const isHappLink = (text: string) => /^\s*happ:\/\//i.test(text);
+
+/** Links pasted where JSON is expected: routing profiles alone, a `happ://` link
+ *  Kasumi skips, or anything else the add sheet takes. */
+export type LinkInput =
+  | { kind: "routing"; links: ResolvedImport["routing"] }
+  | { kind: "unsupported"; reason: UnsupportedKind }
+  | { kind: "add" };
+
+/** What resolved text amounts to as links, or `null` when it holds none. */
+export function linkInput({
+  value,
+  profileCount,
+}: {
+  value: ResolvedImport;
+  profileCount: number;
+}): LinkInput | null {
+  const others = value.subscriptions.length > 0 || profileCount > 0;
+  if (value.routing.length && !others && !value.unsupported.length)
+    return { kind: "routing", links: value.routing };
+  if (value.unsupported.length && !others && !value.routing.length)
+    return { kind: "unsupported", reason: value.unsupported[0].kind };
+  return others || value.routing.length || value.unsupported.length ? { kind: "add" } : null;
+}
+
+/** JSON is read as JSON: it never goes to the link parser. */
+export const looksLikeJson = (text: string) => /^\s*[[{]/.test(text);
+
+/** `text` read as links by the backend, or `null` for JSON and text with none. */
+export async function resolveLinkInput(
+  text: string,
+  b: Pick<Bridge, "resolveImportInput" | "parseShareLinks">,
+): Promise<LinkInput | null> {
+  if (!text.trim() || looksLikeJson(text)) return null;
+  return linkInput(await resolveAddText(text.trim(), b));
+}
+
+/** Why a JSON import can't take these links. */
+export function linkInputText(link: LinkInput): DictKey {
+  return link.kind === "unsupported" ? UNSUPPORTED_TEXT[link.reason] : "add.linkUseAdd";
+}
