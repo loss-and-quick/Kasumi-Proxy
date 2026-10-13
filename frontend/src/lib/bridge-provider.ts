@@ -115,6 +115,9 @@ export const bridge: Bridge = {
   async openUrl(url) {
     return (await loadBridge()).openUrl(url);
   },
+  async resolveRequestIdentity(req) {
+    return (await loadBridge()).resolveRequestIdentity(req);
+  },
   onSubApplied(cb) {
     let unsubscribed = false;
     let dispose: (() => void) | null = null;

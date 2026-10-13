@@ -99,6 +99,10 @@ fn parse_cli(args: &[String]) -> Option<Command> {
         "listApps" => Command::ListApps,
         "clearLogs" => Command::ClearLogs,
         "rotateLogs" => Command::RotateLogs { max_kb: None },
+        "requestIdentity" => Command::ResolveRequestIdentity {
+            sub_id: args.get(1).cloned(),
+            input: None,
+        },
         "log" => Command::Log {
             target: None,
             lines: None,

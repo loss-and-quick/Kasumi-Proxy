@@ -5,16 +5,20 @@
 //! a `subApplied` push and reloads.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{SecondsFormat, Utc};
 use happ_sub::MergeMode;
+use happ_sub::request::{RequestProfile, RetryCause};
+use reqwest::cookie::Jar;
 use tokio::sync::Mutex;
 
 use kasumi_core::contract::SubAppliedEvent;
 use kasumi_core::core_config::{active_config_changed, build_core_config};
 use kasumi_core::mutate::rename_owned_group;
 use kasumi_core::profile::Profile;
+use kasumi_core::request_identity::{IdentityInput, RequestIdentityDefaults};
 use kasumi_core::route::{repoint_profile_ids, resolve_route};
 use kasumi_core::state::{AppState, SubErrorKind, SubWarning, Subscription};
 use kasumi_core::sub_apply::{
@@ -26,7 +30,8 @@ use kasumi_core::sub_ingest::{
 };
 use kasumi_core::sub_policy::{apply_auto, effective_interval_minutes};
 
-use crate::net::{BodyTooLarge, FetchUrlOptions, HttpStatusError, fetch};
+use crate::identity::resolve_request;
+use crate::net::{BodyTooLarge, FetchResponse, FetchUrlOptions, HttpStatusError, fetch};
 use crate::platform::Platform;
 use crate::state::read_app_state;
 use crate::sub_meta;
@@ -64,10 +69,12 @@ fn fetch_timeout(sub: &Subscription) -> Duration {
 /// One pass: fetch and apply every due subscription. `last_attempt` is the caller's
 /// persistent map so a failed fetch backs off; `serialize` is the lifecycle lock
 /// shared with the command path so applies never interleave with a start/stop.
+/// `cookies` is the jar every subscription fetch shares.
 pub async fn tick(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
     serialize: &Mutex<()>,
+    cookies: &Arc<Jar>,
     last_attempt: &mut HashMap<String, i64>,
     on_applied: &(dyn Fn(SubAppliedEvent) + Send + Sync),
 ) {
@@ -93,7 +100,17 @@ pub async fn tick(
         }
         log::info!("sub-update {}: fetching", sub.remarks);
         // Happ's background update keeps meta keys a response omits.
-        match fetch_and_map(platform, &sub, &filter, MergeMode::Partial).await {
+        let identity = &state.settings.request_identity;
+        match fetch_and_map(
+            platform,
+            identity,
+            cookies,
+            &sub,
+            &filter,
+            MergeMode::Partial,
+        )
+        .await
+        {
             Ok(fetched) => {
                 let count = fetched.mapped.len() as u32;
                 let _g = serialize.lock().await;
@@ -143,6 +160,7 @@ pub async fn update_subscription(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
     serialize: &Mutex<()>,
+    cookies: &Arc<Jar>,
     sub_id: &str,
 ) -> Result<AppState, String> {
     let Some(state) = read_app_state(platform).await else {
@@ -162,7 +180,8 @@ pub async fn update_subscription(
         return record_and_reload(platform, serialize, sub_id, e).await;
     }
 
-    match fetch_and_map(platform, &sub, &filter, MergeMode::Full).await {
+    let identity = &state.settings.request_identity;
+    match fetch_and_map(platform, identity, cookies, &sub, &filter, MergeMode::Full).await {
         Ok(fetched) => {
             let _g = serialize.lock().await;
             // The user explicitly triggered this, so apply even to a disabled sub.
@@ -258,6 +277,8 @@ struct Outcome {
 /// a subscription (possibly stopping the tunnel).
 async fn fetch_and_map(
     platform: &dyn Platform,
+    identity: &RequestIdentityDefaults,
+    cookies: &Arc<Jar>,
     sub: &Subscription,
     filter: &ProfileFilter,
     merge: MergeMode,
@@ -266,22 +287,29 @@ async fn fetch_and_map(
         .proxy_status()
         .await
         .map_err(|e| SubFetchError::plain(&e.to_string()))?;
-    // The fragment carries provider directives for the import and never goes on
-    // the wire.
-    let res = match fetch(
-        happ_sub::meta::fetch_url(&sub.url),
-        FetchUrlOptions {
-            mode: sub.update_mode,
-            proxy: Some(proxy),
-            user_agent: (!sub.user_agent.is_empty()).then(|| sub.user_agent.clone()),
-            allow_insecure: sub.allow_insecure,
-            timeout: Some(fetch_timeout(sub)),
-            max_body_bytes: Some(limits().max_body_bytes),
-            ..Default::default()
-        },
+    let stored = sub_meta::read_all(platform).await;
+    let stored = stored_for_url(stored.get(&sub.id), &sub.url);
+    let request = resolve_request(
+        platform,
+        &IdentityInput::stored(identity, Some(sub)),
+        stored.map(|s| &s.meta),
     )
     .await
-    {
+    .profile;
+    let opts = FetchUrlOptions {
+        mode: sub.update_mode,
+        proxy: Some(proxy),
+        allow_insecure: sub.allow_insecure,
+        timeout: Some(fetch_timeout(sub)),
+        headers: request.headers.clone(),
+        max_body_bytes: Some(limits().max_body_bytes),
+        cookie_jar: (identity.cookie_jar && request.use_cookie_jar).then(|| cookies.clone()),
+        gzip_only: true,
+        ..Default::default()
+    };
+    // The fragment carries provider directives for the import and never goes on
+    // the wire.
+    let res = match fetch_like_happ(happ_sub::meta::fetch_url(&sub.url), opts, &request).await {
         Ok(res) => res,
         Err(e) => {
             // Full cause chain (with the URL) to the log — the manual "update now"
@@ -293,8 +321,6 @@ async fn fetch_and_map(
             });
         }
     };
-    let stored = sub_meta::read_all(platform).await;
-    let stored = stored_for_url(stored.get(&sub.id), &sub.url);
     let ingested = ingest(&IngestInput {
         url: &sub.url,
         headers: &res.headers,
@@ -317,6 +343,48 @@ async fn fetch_and_map(
             warnings: ingested.warnings,
             imported: stored.is_none(),
         },
+    })
+}
+
+/// Fetch with Happ's retries. A reply with any status is final; a failed attempt is
+/// retried as [`RequestProfile::retry`] says.
+async fn fetch_like_happ(
+    url: &str,
+    opts: FetchUrlOptions,
+    request: &RequestProfile,
+) -> anyhow::Result<FetchResponse> {
+    let mut result = fetch(url, opts.clone()).await;
+    for _ in 0..request.retries {
+        let Some(cause) = result.as_ref().err().and_then(retry_cause) else {
+            break;
+        };
+        log::info!("subscription fetch failed ({cause:?}), retrying");
+        let retry = request.retry(cause);
+        let opts = FetchUrlOptions {
+            headers: retry.headers,
+            ipv4_only: retry.ipv4_only,
+            ..opts.clone()
+        };
+        result = fetch(url, opts).await;
+    }
+    result
+}
+
+/// How a transport failure maps onto Happ's retry rule. Errors raised after a reply
+/// (a status, the body limit) or before any attempt (no proxy) are not retried.
+fn retry_cause(e: &anyhow::Error) -> Option<RetryCause> {
+    if !e.chain().any(|c| c.is::<reqwest::Error>()) {
+        return None;
+    }
+    let reset = e.chain().any(|c| {
+        c.downcast_ref::<std::io::Error>()
+            .is_some_and(|io| io.kind() == std::io::ErrorKind::ConnectionReset)
+            || c.to_string().to_ascii_lowercase().contains("reset")
+    });
+    Some(if reset {
+        RetryCause::ConnectionReset
+    } else {
+        RetryCause::TimeoutOrIo
     })
 }
 
@@ -554,7 +622,7 @@ mod tests {
         };
         let serialize = Mutex::new(());
         let mut last = HashMap::new();
-        tick(&p, &lc, &serialize, &mut last, &|_| {}).await;
+        tick(&p, &lc, &serialize, &jar(), &mut last, &|_| {}).await;
 
         let after = read_app_state(&p).await.unwrap();
         assert!(after.subscriptions[0].last_error.is_some());
@@ -635,7 +703,7 @@ mod tests {
             calls: StdMutex::new(vec![]),
         };
         let serialize = Mutex::new(());
-        let err = update_subscription(&p, &lc, &serialize, "nope")
+        let err = update_subscription(&p, &lc, &serialize, &jar(), "nope")
             .await
             .unwrap_err();
         assert!(err.contains("subscription not found"));
@@ -652,7 +720,7 @@ mod tests {
             calls: StdMutex::new(vec![]),
         };
         let serialize = Mutex::new(());
-        let returned = update_subscription(&p, &lc, &serialize, "s1")
+        let returned = update_subscription(&p, &lc, &serialize, &jar(), "s1")
             .await
             .unwrap();
         assert!(returned.subscriptions[0].last_error.is_some());
@@ -669,7 +737,7 @@ mod tests {
             calls: StdMutex::new(vec![]),
         };
         let serialize = Mutex::new(());
-        let returned = update_subscription(&p, &lc, &serialize, "s1")
+        let returned = update_subscription(&p, &lc, &serialize, &jar(), "s1")
             .await
             .unwrap();
         assert_eq!(
@@ -697,6 +765,160 @@ mod tests {
         }
     }
 
+    fn jar() -> Arc<Jar> {
+        Arc::new(Jar::default())
+    }
+
+    /// Lower-cased header lines of request `i`.
+    fn sent(requests: &crate::testutil::Requests, i: usize) -> Vec<(String, String)> {
+        requests.lock().unwrap()[i]
+            .lines()
+            .skip(1)
+            .filter_map(|l| l.split_once(": "))
+            .map(|(n, v)| (n.to_ascii_lowercase(), v.to_owned()))
+            .collect()
+    }
+
+    fn sent_header(requests: &crate::testutil::Requests, i: usize, name: &str) -> Option<String> {
+        sent(requests, i)
+            .into_iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v)
+    }
+
+    fn phone(p: &TestPlatform) {
+        p.identity(|i| {
+            i.facts = kasumi_core::request_identity::DeviceFacts {
+                os: "Android".into(),
+                os_version: "16".into(),
+                model: "Pixel 9".into(),
+                locale: "ru-RU".into(),
+            };
+            i.user_key =
+                Some("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F".into());
+        });
+    }
+
+    #[tokio::test]
+    async fn default_fetch_sends_happ_identity() {
+        let (p, _d) = TestPlatform::new();
+        phone(&p);
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+
+        let names: Vec<String> = sent(&requests, 0).into_iter().map(|(n, _)| n).collect();
+        let at = |n: &str| names.iter().position(|x| x == n).unwrap();
+        let order = [
+            "connection",
+            "user-agent",
+            "x-device-locale",
+            "x-hwid",
+            "x-device-os",
+            "x-ver-os",
+            "x-device-model",
+        ];
+        assert!(order.windows(2).all(|w| at(w[0]) < at(w[1])), "{names:?}");
+        let ua = sent_header(&requests, 0, "user-agent").unwrap();
+        assert!(ua.starts_with("Happ/4."), "{ua}");
+        // The SSAID happ-sub computes for the synthetic key 00..1f.
+        assert_eq!(
+            sent_header(&requests, 0, "x-hwid").as_deref(),
+            Some("013b86e99e8dce53")
+        );
+        assert_eq!(
+            sent_header(&requests, 0, "x-device-locale").as_deref(),
+            Some("ru")
+        );
+        assert_eq!(
+            sent_header(&requests, 0, "accept-encoding").as_deref(),
+            Some("gzip")
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_user_agent_is_kept() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].user_agent = "v2rayNG/1.10.16".into();
+        state.subscriptions[0].request.send_hwid = Some(false);
+        write_app_state(&p, &state).await.unwrap();
+        update(&p).await;
+        assert_eq!(
+            sent_header(&requests, 0, "user-agent").as_deref(),
+            Some("v2rayNG/1.10.16")
+        );
+        assert_eq!(sent_header(&requests, 0, "x-hwid"), None);
+        assert_eq!(sent_header(&requests, 0, "x-device-os"), None);
+    }
+
+    #[tokio::test]
+    async fn reset_is_retried_without_connection_close() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![
+            crate::testutil::RESET.to_vec(),
+            http_response(200, &[], LINK),
+        ])
+        .await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let next = update(&p).await;
+        assert_eq!(next.subscriptions[0].last_error, None);
+        assert_eq!(requests.lock().unwrap().len(), 2);
+        assert_eq!(
+            sent_header(&requests, 0, "connection").as_deref(),
+            Some("close")
+        );
+        assert_eq!(sent_header(&requests, 1, "connection"), None);
+    }
+
+    #[tokio::test]
+    async fn other_failures_are_retried_once_with_the_same_headers() {
+        let (p, _d) = TestPlatform::new();
+        // Closing without a reply is an I/O error, not a reset.
+        let (base, requests) = serve(vec![Vec::new(), Vec::new(), Vec::new()]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let next = update(&p).await;
+        assert!(next.subscriptions[0].last_error.is_some());
+        assert_eq!(requests.lock().unwrap().len(), 2, "one retry");
+        assert_eq!(sent(&requests, 0), sent(&requests, 1));
+
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![http_response(503, &[], b"busy")]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        update(&p).await;
+        assert_eq!(requests.lock().unwrap().len(), 1, "a reply is final");
+    }
+
+    #[tokio::test]
+    async fn subscriptions_share_one_cookie_jar() {
+        for enabled in [true, false] {
+            let (p, _d) = TestPlatform::new();
+            let set = [("set-cookie", "cf=1; Path=/")];
+            let (base, requests) = serve(vec![
+                http_response(200, &set, LINK),
+                http_response(200, &[], LINK),
+            ])
+            .await;
+            let mut state = default_app_state();
+            state.settings.request_identity.cookie_jar = enabled;
+            state.subscriptions = vec![
+                sub("s1", &format!("{base}/a")),
+                sub("s2", &format!("{base}/b")),
+            ];
+            write_app_state(&p, &state).await.unwrap();
+            let cookies = jar();
+            for id in ["s1", "s2"] {
+                update_subscription(&p, &lifecycle(), &Mutex::new(()), &cookies, id)
+                    .await
+                    .unwrap();
+            }
+            let expect = enabled.then(|| "cf=1".to_owned());
+            assert_eq!(sent_header(&requests, 1, "cookie"), expect);
+        }
+    }
+
     /// State with subscription `s1` at `url` that already owns profile `old`.
     async fn with_old_profile(p: &TestPlatform, url: &str) {
         let mut old = sample_vless();
@@ -709,7 +931,7 @@ mod tests {
     }
 
     async fn update(p: &TestPlatform) -> AppState {
-        update_subscription(p, &lifecycle(), &Mutex::new(()), "s1")
+        update_subscription(p, &lifecycle(), &Mutex::new(()), &jar(), "s1")
             .await
             .unwrap()
     }
@@ -814,6 +1036,7 @@ mod tests {
             &p,
             &lifecycle(),
             &Mutex::new(()),
+            &jar(),
             &mut HashMap::new(),
             &|_| {},
         )
@@ -1002,7 +1225,7 @@ mod tests {
         write_app_state(&p, &state).await.unwrap();
 
         let lc = lifecycle();
-        update_subscription(&p, &lc, &Mutex::new(()), "s1")
+        update_subscription(&p, &lc, &Mutex::new(()), &jar(), "s1")
             .await
             .unwrap();
         lc.calls.lock().unwrap().clone()

@@ -16,7 +16,7 @@ import type {
   Tls,
   Transport,
 } from "../generated/bindings";
-import { DEFAULT_CORE_BY_PROTOCOL } from "../generated/defaults";
+import { DEFAULT_CORE_BY_PROTOCOL, HAPP_VERSION } from "../generated/defaults";
 import { AppStateSchema } from "../generated/schemas";
 import { applyMutation } from "./apply-mutation";
 import type { AppState, Bridge, ResourceUpdateMode, ServiceStatus } from "./bridge";
@@ -322,6 +322,63 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
 
   async openUrl(url: string): Promise<void> {
     window.open(url, "_blank", "noopener,noreferrer");
+  },
+
+  // A rough stand-in for happ-sub's request builder, enough for the identity UI.
+  async resolveRequestIdentity({ subId, input }) {
+    const sub = subId ? state.subscriptions.find((x) => x.id === subId) : undefined;
+    const defaults = input?.defaults ?? state.settings.requestIdentity;
+    const request = input?.request ?? sub?.request ?? {};
+    const ownUa = input ? input.userAgent : (sub?.userAgent ?? "");
+    const facts = { os: "Android", osVersion: "16", model: "Pixel 9", locale: "ru-RU" };
+    const autoHwid = "3f9c2a7be1d04c58";
+    const pick = (...v: (string | null | undefined)[]) => v.find((x) => x?.trim()) ?? "";
+    const hwid = pick(request.hwid, defaults.hwid, autoHwid);
+    const hwidSource = request.hwid?.trim()
+      ? "subscription"
+      : defaults.hwid?.trim()
+        ? "settings"
+        : "happComputed";
+    // NodeHub pretends its provider sent `subscription-always-hwid-enable`.
+    const always = sub?.id === "s-nodes";
+    const send = always || (request.sendHwid ?? defaults.sendHwid);
+    const cookie = request.hwidInCookie ?? defaults.hwidInCookie;
+    const os = pick(request.deviceOs, defaults.deviceOs, facts.os);
+    const ua = pick(ownUa, defaults.userAgent) || `Happ/${HAPP_VERSION}/${os}/mock`;
+    const headers = [
+      { name: "Connection", value: "close" },
+      { name: "User-agent", value: ua },
+      {
+        name: "X-Device-Locale",
+        value: pick(request.locale, defaults.locale, facts.locale)
+          .split(/[-_.@]/)[0]
+          .toLowerCase(),
+      },
+    ];
+    if (send) {
+      if (!cookie) headers.push({ name: "X-HWID", value: hwid });
+      headers.push(
+        { name: "X-Device-OS", value: os },
+        { name: "X-Ver-OS", value: pick(request.osVersion, defaults.osVersion, facts.osVersion) },
+        {
+          name: "X-Device-model",
+          value: pick(request.deviceModel, defaults.deviceModel, facts.model),
+        },
+      );
+      if (cookie) headers.push({ name: "Cookie", value: hwid });
+    }
+    return {
+      hwid,
+      hwidSource,
+      autoHwid,
+      autoHwidSource: "happComputed",
+      facts,
+      headers,
+      cookieJar: defaults.cookieJar,
+      locks: { userAgent: false, sendHwid: always, hwidInCookie: false },
+      providerHidesDevice: false,
+      providerHwidCookie: false,
+    };
   },
 
   // No backend daemon in dev, so headless sub-applies / asset refreshes never happen.

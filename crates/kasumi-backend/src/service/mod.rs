@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex as StdMutex};
 
+use reqwest::cookie::Jar;
 use tokio::sync::{Mutex, broadcast};
 
 use kasumi_core::contract::PushFrame;
@@ -63,6 +64,8 @@ pub struct Service {
     /// restart applies them). Recomputed on mutations and lifecycle edges only;
     /// `current_status` just reports it.
     pending_restart: AtomicBool,
+    /// Cookies providers set, shared by every subscription fetch and nothing else.
+    sub_cookies: Arc<Jar>,
 }
 
 impl Service {
@@ -87,6 +90,7 @@ impl Service {
             data_path_generation: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
+            sub_cookies: Arc::new(Jar::default()),
         })
     }
 
@@ -120,6 +124,7 @@ impl Service {
                     &*self.platform,
                     self,
                     &self.serialize,
+                    &self.sub_cookies,
                     &sub_id,
                 )
                 .await

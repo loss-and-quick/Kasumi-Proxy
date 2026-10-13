@@ -128,10 +128,12 @@ pub fn render() -> String {
     for (name, value) in nums {
         out.push_str(&format!("export const {name} = {value};\n"));
     }
-    let strs: [(&str, &str); 3] = [
+    let strs: [(&str, &str); 4] = [
         ("DEFAULT_DELAY_TEST_URL", state::DEFAULT_DELAY_TEST_URL),
         ("DEFAULT_SPEED_TEST_URL", state::DEFAULT_SPEED_TEST_URL),
         ("DEFAULT_ROUTE_ID", kasumi_core::route::DEFAULT_ROUTE_ID),
+        // The Happ release whose request identity happ-sub reproduces.
+        ("HAPP_VERSION", kasumi_core::request_identity::HAPP_VERSION),
     ];
     for (name, value) in strs {
         let json = serde_json::to_string(value).expect("string const");

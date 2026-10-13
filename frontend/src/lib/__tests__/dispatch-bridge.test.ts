@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Profile, Response_Serialize } from "../../generated/bindings";
+import type { Profile, ResolvedIdentity, Response_Serialize } from "../../generated/bindings";
+import { DEFAULT_ADVANCED_SETTINGS } from "../../generated/defaults";
 import type { AppState } from "../bridge";
 import { createBridge, type Dispatch, type PushStreams } from "../dispatch-bridge";
 
@@ -207,5 +208,40 @@ describe("dispatch-bridge provider links", () => {
     });
     const bridge = createBridge(dispatch, noPush);
     await expect(bridge.openUrl("javascript:alert(1)")).rejects.toThrow("refusing");
+  });
+});
+
+describe("dispatch-bridge request identity", () => {
+  const view: ResolvedIdentity = {
+    hwid: "0123456789abcdef",
+    hwidSource: "happComputed",
+    autoHwid: "0123456789abcdef",
+    autoHwidSource: "happComputed",
+    facts: { os: "Android", osVersion: "16", model: "Pixel 9", locale: "ru-RU" },
+    headers: [{ name: "Connection", value: "close" }],
+    cookieJar: true,
+    locks: { userAgent: false, sendHwid: false, hwidInCookie: false },
+    providerHidesDevice: false,
+    providerHwidCookie: false,
+  };
+
+  it("resolveRequestIdentity sends the sub id and the unsaved input", async () => {
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "requestIdentity", value: view }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    const input = {
+      defaults: DEFAULT_ADVANCED_SETTINGS.requestIdentity,
+      request: { sendHwid: false },
+      userAgent: "",
+    };
+    expect(await bridge.resolveRequestIdentity({ subId: "s1", input })).toEqual(view);
+    expect(dispatch).toHaveBeenCalledWith({ cmd: "resolveRequestIdentity", subId: "s1", input });
+    await bridge.resolveRequestIdentity({});
+    expect(dispatch).toHaveBeenLastCalledWith({
+      cmd: "resolveRequestIdentity",
+      subId: null,
+      input: null,
+    });
   });
 });

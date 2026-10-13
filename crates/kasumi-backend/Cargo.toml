@@ -8,7 +8,7 @@ description = "Transport-neutral orchestration (Platform trait, RPC commands, li
 [dependencies]
 specta = { version = "2.0.0-rc.25", features = ["derive"] }
 kasumi-core = { path = "../kasumi-core" }
-happ-sub = { workspace = true }
+happ-sub = { workspace = true, features = ["device"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = [
@@ -28,12 +28,15 @@ log = "0.4"
 regex = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+hmac = "0.12"
+sha2 = "0.10"
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
     "socks",
     "gzip",
     "brotli",
     "deflate",
+    "cookies",
 ] }
 
 # Process identity is OS-specific: POSIX reads /proc + kill(2) (libc); Windows

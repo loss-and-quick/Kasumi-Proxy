@@ -65,6 +65,8 @@ export const SUBS_SEED: Subscription[] = [
     lastUpdated: "2026-06-05 09:14",
     count: 14,
     userAgent: "v2rayNG/1.10.7",
+    // What the upgrade gives a subscription with its own User-Agent.
+    request: { sendHwid: false },
     filter: "",
     allowInsecure: false,
     updateMode: "auto",

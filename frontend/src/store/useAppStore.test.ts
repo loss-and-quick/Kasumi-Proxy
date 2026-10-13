@@ -158,6 +158,9 @@ function createBridgeMock(): BridgeMock {
     ),
     applySubscription: vi.fn(async (_subId: string) => makeState()),
     openUrl: vi.fn(async (_url: string) => {}),
+    resolveRequestIdentity: vi.fn(async (): Promise<never> => {
+      throw new Error("not used by the store");
+    }),
     onSubApplied: vi.fn((_cb: (info: SubAppliedEvent) => void) => () => {}),
     onAssetsUpdated: vi.fn((_cb: (info: AssetsUpdatedEvent) => void) => () => {}),
     downloadAsset: vi.fn(

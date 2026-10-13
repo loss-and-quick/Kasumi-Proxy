@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use kasumi_core::contract::{LogTarget, ServiceState};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::ProxyMode;
 use kasumi_core::tun::TunOptions;
 
@@ -102,6 +103,11 @@ impl BackendPaths {
     /// Provider meta per subscription; see [`crate::sub_meta`].
     pub fn sub_meta(&self) -> PathBuf {
         self.data_dir.join("sub-meta.json")
+    }
+
+    /// The random HWID used when the device yields none; see [`crate::identity`].
+    pub fn device_id(&self) -> PathBuf {
+        self.data_dir.join("device-id")
     }
 }
 
@@ -240,6 +246,26 @@ pub trait Platform: Send + Sync {
     /// Open an already-validated http(s) URL in the user's browser.
     async fn open_url(&self, _url: &str) -> anyhow::Result<()> {
         anyhow::bail!("opening links is not supported here")
+    }
+
+    /// What this device reports in a subscription request (OS, version, model, locale).
+    async fn device_facts(&self) -> DeviceFacts {
+        DeviceFacts::default()
+    }
+
+    /// The SSAID Android stored for `package` under `user`, when it is installed.
+    async fn stored_ssaid(&self, _user: u32, _package: &str) -> Option<String> {
+        None
+    }
+
+    /// The hex SSAID key of Android `user` (`userkey` in `settings_ssaid.xml`).
+    async fn ssaid_user_key(&self, _user: u32) -> Option<String> {
+        None
+    }
+
+    /// A stable host id (Linux `/etc/machine-id`, Windows `MachineGuid`), raw.
+    async fn machine_id(&self) -> Option<String> {
+        None
     }
 
     /// Post-process a downloaded asset (geoip/geosite → `.srs` for sing-box).

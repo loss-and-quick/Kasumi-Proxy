@@ -156,6 +156,9 @@ export type AdvancedSettings_Deserialize = {
 	 *  host-routes — so the same setting works on every engine.
 	 */
 	tunExcludeAddresses?: string | null,
+	requestIdentity?: RequestIdentityDefaults_Deserialize,
+	/**  The notice about the Happ-style request identity was dismissed. */
+	identityNoticeDismissed?: boolean,
 };
 
 /**
@@ -256,6 +259,9 @@ export type AdvancedSettings_Serialize = {
 	 *  host-routes — so the same setting works on every engine.
 	 */
 	tunExcludeAddresses?: string | null,
+	requestIdentity: RequestIdentityDefaults_Serialize,
+	/**  The notice about the Happ-style request identity was dismissed. */
+	identityNoticeDismissed: boolean,
 };
 
 export type Anytls = {
@@ -424,7 +430,7 @@ export type Capabilities = {
 export type Command = Command_Serialize | Command_Deserialize;
 
 /**  One client request. The tag `cmd` selects the variant; fields are its inputs. */
-export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  The single write path: apply one domain intent to the persisted state. The
  *  handler reads the current state, applies the intent (pure
@@ -432,29 +438,34 @@ export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: nev
  *  returns the new canonical `AppState`. Routed through the `Service` so it runs
  *  under the state-write lock; the stateless `dispatch` rejects it.
  */
-({ cmd: "mutate"; intent: MutationIntent_Deserialize }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "fetchSubscription"; url: string; mode?: FetchMode; userAgent?: string | null; allowInsecure?: boolean }) & { count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never } | ({ cmd: "downloadAsset"; filename: string; url: string; mode?: FetchMode }) & { allowInsecure?: never; count?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never } | ({ cmd: "freePorts"; start?: number | null; count?: number | null; span?: number | null }) & { allowInsecure?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listAssets" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "capabilities" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listApps" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "log"; target?: LogTarget | null; lines?: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "clearLogs" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "rotateLogs"; maxKb?: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "status" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "wsInfo" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "dumpConfig"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "testLog"; profileId: string; kind: TestKind }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "parseShareLinks"; text: string; groupId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; url?: never; userAgent?: never } | ({ cmd: "buildShareLink"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "mutate"; intent: MutationIntent_Deserialize }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "fetchSubscription"; url: string; mode?: FetchMode; userAgent?: string | null; allowInsecure?: boolean }) & { count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never } | ({ cmd: "downloadAsset"; filename: string; url: string; mode?: FetchMode }) & { allowInsecure?: never; count?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never } | ({ cmd: "freePorts"; start?: number | null; count?: number | null; span?: number | null }) & { allowInsecure?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listAssets" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "capabilities" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listApps" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "log"; target?: LogTarget | null; lines?: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "clearLogs" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "rotateLogs"; maxKb?: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "status" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "wsInfo" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "dumpConfig"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "testLog"; profileId: string; kind: TestKind }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "parseShareLinks"; text: string; groupId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; url?: never; userAgent?: never } | ({ cmd: "buildShareLink"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  Resolve which core each profile runs on (`core::resolve_core` under the
  *  persisted settings) plus its capability force, so the UI never re-implements
  *  the resolution matrix. Batch: one call covers a whole profile list.
  */
-({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  Which stored profiles the given (possibly unsaved) profile can dial through,
  *  by `chain::chain_candidates` — the same check the config builders make, so
  *  the UI never re-implements chain validity.
  */
-({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  One connectivity check through the running core, on demand; replies with
  *  its round trip (`Ping`). Stateful: it updates the Service's verdict.
  */
-({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId?: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**  Open a provider link (support, web page, renewal) in the system browser. */
-({ cmd: "openUrl"; url: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never };
+({ cmd: "openUrl"; url: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never } | 
+/**
+ *  The request identity a subscription fetch sends. `input` previews unsaved
+ *  settings; without it the stored ones are used. No `subId` = Settings alone.
+ */
+({ cmd: "resolveRequestIdentity"; subId?: string | null; input?: IdentityInput_Deserialize | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
 
 /**  One client request. The tag `cmd` selects the variant; fields are its inputs. */
-export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  The single write path: apply one domain intent to the persisted state. The
  *  handler reads the current state, applies the intent (pure
@@ -462,26 +473,31 @@ export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never
  *  returns the new canonical `AppState`. Routed through the `Service` so it runs
  *  under the state-write lock; the stateless `dispatch` rejects it.
  */
-({ cmd: "mutate"; intent: MutationIntent_Serialize }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "fetchSubscription"; url: string; mode: FetchMode; userAgent: string | null; allowInsecure: boolean }) & { count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never } | ({ cmd: "downloadAsset"; filename: string; url: string; mode: FetchMode }) & { allowInsecure?: never; count?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never } | ({ cmd: "freePorts"; start: number | null; count: number | null; span: number | null }) & { allowInsecure?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listAssets" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "capabilities" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listApps" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "log"; target: LogTarget | null; lines: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "clearLogs" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "rotateLogs"; maxKb: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "status" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "wsInfo" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "dumpConfig"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "testLog"; profileId: string; kind: TestKind }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "parseShareLinks"; text: string; groupId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; url?: never; userAgent?: never } | ({ cmd: "buildShareLink"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "mutate"; intent: MutationIntent_Serialize }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "fetchSubscription"; url: string; mode: FetchMode; userAgent: string | null; allowInsecure: boolean }) & { count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never } | ({ cmd: "downloadAsset"; filename: string; url: string; mode: FetchMode }) & { allowInsecure?: never; count?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never } | ({ cmd: "freePorts"; start: number | null; count: number | null; span: number | null }) & { allowInsecure?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listAssets" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "capabilities" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "listApps" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "log"; target: LogTarget | null; lines: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "clearLogs" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "rotateLogs"; maxKb: number | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "status" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "wsInfo" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "dumpConfig"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "testLog"; profileId: string; kind: TestKind }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "parseShareLinks"; text: string; groupId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; url?: never; userAgent?: never } | ({ cmd: "buildShareLink"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  Resolve which core each profile runs on (`core::resolve_core` under the
  *  persisted settings) plus its capability force, so the UI never re-implements
  *  the resolution matrix. Batch: one call covers a whole profile list.
  */
-({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "resolveCores"; profiles: Profile[] }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  Which stored profiles the given (possibly unsaved) profile can dial through,
  *  by `chain::chain_candidates` — the same check the config builders make, so
  *  the UI never re-implements chain validity.
  */
-({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "ping"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "realPing"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "speedTest"; profileId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  One connectivity check through the running core, on demand; replies with
  *  its round trip (`Ping`). Stateful: it updates the Service's verdict.
  */
-({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+({ cmd: "probeConnection" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "start"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "stop" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "restart"; profileId: string | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "reloadAppFilter" }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | ({ cmd: "applySubscription"; subId: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**  Open a provider link (support, web page, renewal) in the system browser. */
-({ cmd: "openUrl"; url: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never };
+({ cmd: "openUrl"; url: string }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; userAgent?: never } | 
+/**
+ *  The request identity a subscription fetch sends. `input` previews unsaved
+ *  settings; without it the stored ones are used. No `subId` = Settings alone.
+ */
+({ cmd: "resolveRequestIdentity"; subId: string | null; input: IdentityInput_Serialize | null }) & { allowInsecure?: never; count?: never; filename?: never; groupId?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profile?: never; profileId?: never; profiles?: never; span?: never; start?: never; target?: never; text?: never; url?: never; userAgent?: never };
 
 /**  TUIC / QUIC congestion control. */
 export type CongestionControl = "bbr" | "cubic" | "new_reno";
@@ -516,6 +532,14 @@ export type Custom = {
 
 /**  Who wrote a custom profile's raw config: a provider's runs only after sanitising. */
 export type CustomOrigin = "user" | "provider";
+
+/**  What the device reports about itself, before any override. */
+export type DeviceFacts = {
+	os: string,
+	osVersion: string,
+	model: string,
+	locale: string,
+};
 
 /**  Xray domain resolution strategy. */
 export type DomainStrategy = "AsIs" | "IPIfNonMatch" | "IPOnDemand";
@@ -576,6 +600,12 @@ export type H2Transport = {
 	pingTimeout?: number,
 };
 
+/**  One request header, in wire order. */
+export type HeaderPreview = {
+	name: string,
+	value: string,
+};
+
 /**  Fake-packet header obfuscation (mKCP / QUIC). */
 export type HeaderType = "none" | "http" | "srtp" | "utp" | "wechat-video" | "dtls" | "wireguard" | "dns";
 
@@ -596,6 +626,21 @@ export type HttpUpgradeTransport = {
 	acceptProxyProtocol?: boolean,
 };
 
+/**  Where the HWID a request carries comes from. */
+export type HwidSource = 
+/**  Typed for this subscription. */
+"subscription" | 
+/**  Typed in Settings. */
+"settings" | 
+/**  The SSAID Android stored for an installed Happ. */
+"happStored" | 
+/**  The SSAID Android would give Happ, from the user's SSAID key. */
+"happComputed" | 
+/**  Derived from the host's machine id. */
+"machineId" | 
+/**  Random, kept in the data directory. */
+"deviceId";
+
 export type Hysteria2 = {
 	meta: Meta,
 	endpoint: Endpoint,
@@ -612,6 +657,23 @@ export type Hysteria2 = {
 
 /**  Hysteria2 obfuscation. `""` means none. */
 export type Hysteria2Obfs = string;
+
+/**  The identity settings one fetch uses: the Settings defaults and the subscription's own. */
+export type IdentityInput = IdentityInput_Serialize | IdentityInput_Deserialize;
+
+/**  The identity settings one fetch uses: the Settings defaults and the subscription's own. */
+export type IdentityInput_Deserialize = {
+	defaults: RequestIdentityDefaults_Deserialize,
+	request?: SubRequestOverrides_Deserialize,
+	userAgent?: string,
+};
+
+/**  The identity settings one fetch uses: the Settings defaults and the subscription's own. */
+export type IdentityInput_Serialize = {
+	defaults: RequestIdentityDefaults_Serialize,
+	request: SubRequestOverrides_Serialize,
+	userAgent: string,
+};
 
 /**  Merge vs replace, shared by list-import and backup-restore intents. */
 export type ImportMode = "merge" | "replace";
@@ -896,6 +958,13 @@ export type ProviderInfo_Serialize = {
 	renewUrl?: string | null,
 };
 
+/**  Switches the provider locks in Happ's UI. */
+export type ProviderLocks = {
+	userAgent: boolean,
+	sendHwid: boolean,
+	hwidInCookie: boolean,
+};
+
 /**  The `sub-info-*` banner. */
 export type ProviderNotice = ProviderNotice_Serialize | ProviderNotice_Deserialize;
 
@@ -931,6 +1000,60 @@ export type QuicTransport = {
 	headerType?: HeaderType,
 };
 
+/**  Settings-wide request identity; each subscription may override any part of it. */
+export type RequestIdentityDefaults = RequestIdentityDefaults_Serialize | RequestIdentityDefaults_Deserialize;
+
+/**  Settings-wide request identity; each subscription may override any part of it. */
+export type RequestIdentityDefaults_Deserialize = {
+	/**  Empty sends Happ's User-Agent. */
+	userAgent?: string,
+	sendHwid?: boolean,
+	hwidInCookie?: boolean,
+	/**  Keep the cookies providers set, per host, across subscription fetches. */
+	cookieJar?: boolean,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+	/**  Android user whose SSAID key derives the HWID; each user has its own. */
+	androidUser?: number,
+};
+
+/**  Settings-wide request identity; each subscription may override any part of it. */
+export type RequestIdentityDefaults_Serialize = {
+	/**  Empty sends Happ's User-Agent. */
+	userAgent: string,
+	sendHwid: boolean,
+	hwidInCookie: boolean,
+	/**  Keep the cookies providers set, per host, across subscription fetches. */
+	cookieJar: boolean,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+	/**  Android user whose SSAID key derives the HWID; each user has its own. */
+	androidUser: number,
+};
+
+/**  The request a subscription fetch sends, and where its values come from. */
+export type ResolvedIdentity = {
+	hwid: string,
+	hwidSource: HwidSource,
+	autoHwid: string,
+	autoHwidSource: HwidSource,
+	/**  Detected, before overrides. */
+	facts: DeviceFacts,
+	headers: HeaderPreview[],
+	cookieJar: boolean,
+	locks: ProviderLocks,
+	/**  The provider's keys alone turn the device headers off. */
+	providerHidesDevice: boolean,
+	/**  The provider's keys alone move the HWID into a cookie. */
+	providerHwidCookie: boolean,
+};
+
 /**  One reply. The tag `kind` selects the payload shape under `value`. */
 export type Response = Response_Serialize | Response_Deserialize;
 
@@ -945,7 +1068,7 @@ export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize 
 /**  Throughput in bytes/sec; `null` when there is no result. */
 { kind: "speed"; value: number | null } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
-({ kind: "ok" }) & { value?: never };
+({ kind: "ok" }) & { value?: never } | { kind: "requestIdentity"; value: ResolvedIdentity };
 
 /**  One reply. The tag `kind` selects the payload shape under `value`. */
 export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo_Serialize[] } | { kind: "status"; value: ServiceState_Serialize } | { kind: "wsInfo"; value: WsInfo | null } | 
@@ -958,7 +1081,7 @@ export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | 
 /**  Throughput in bytes/sec; `null` when there is no result. */
 { kind: "speed"; value: number | null } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
-({ kind: "ok" }) & { value?: never };
+({ kind: "ok" }) & { value?: never } | { kind: "requestIdentity"; value: ResolvedIdentity };
 
 /**  Which blocks, in what order, a set of profiles runs with. */
 export type Route = {
@@ -1215,6 +1338,40 @@ export type SubErrorKind = { kind: "network" } | { kind: "http"; status: number 
 /**  A malformed envelope (server JSON, routing or deeplink). */
 { kind: "invalid" };
 
+/**
+ *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
+ *  `Subscription::user_agent`.
+ */
+export type SubRequestOverrides = SubRequestOverrides_Serialize | SubRequestOverrides_Deserialize;
+
+/**
+ *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
+ *  `Subscription::user_agent`.
+ */
+export type SubRequestOverrides_Deserialize = {
+	sendHwid?: boolean | null,
+	hwidInCookie?: boolean | null,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+};
+
+/**
+ *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
+ *  `Subscription::user_agent`.
+ */
+export type SubRequestOverrides_Serialize = {
+	sendHwid?: boolean | null,
+	hwidInCookie?: boolean | null,
+	hwid?: string | null,
+	deviceOs?: string | null,
+	osVersion?: string | null,
+	deviceModel?: string | null,
+	locale?: string | null,
+};
+
 /**  Something skipped while ingesting; the rest of the body was used. */
 export type SubWarning = { kind: "skippedLines"; count: number; sample: string } | { kind: "unsupportedLinks"; count: number } | { kind: "invalidRouting"; message: string } | { kind: "invalidFragment" } | { kind: "legacyParser" };
 
@@ -1255,6 +1412,8 @@ export type Subscription_Deserialize = {
 	bodyEncrypted?: boolean,
 	warnings?: SubWarning[],
 	lastErrorKind?: SubErrorKind | null,
+	/**  Where this subscription's request identity departs from the Settings one. */
+	request?: SubRequestOverrides_Deserialize,
 };
 
 /**  A subscription source (`SubscriptionSchema`). */
@@ -1288,6 +1447,8 @@ export type Subscription_Serialize = {
 	bodyEncrypted: boolean,
 	warnings?: SubWarning[],
 	lastErrorKind?: SubErrorKind | null,
+	/**  Where this subscription's request identity departs from the Settings one. */
+	request?: SubRequestOverrides_Serialize,
 };
 
 /**  Plain TCP, optionally wearing the HTTP fake-header obfuscation. */
