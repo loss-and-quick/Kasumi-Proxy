@@ -255,6 +255,14 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
     async openUrl(url) {
       await dispatch({ cmd: "openUrl", url });
     },
+    async resolveRequestIdentity({ subId, input }) {
+      const r = await dispatch({
+        cmd: "resolveRequestIdentity",
+        subId: subId ?? null,
+        input: input ?? null,
+      });
+      return r.kind === "requestIdentity" ? r.value : wrongKind(r, "requestIdentity");
+    },
     onSubApplied(cb) {
       return push.subscribeSubApplied((raw) => {
         const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;

@@ -11,8 +11,10 @@ import type {
   Capabilities,
   CoreResolution,
   FetchMode,
+  IdentityInput_Serialize as IdentityInput,
   LogTarget,
   Profile,
+  ResolvedIdentity,
   RunState,
   SubAppliedEvent,
   TestKind,
@@ -29,10 +31,15 @@ export type {
   Capabilities,
   CoreResolution,
   Group,
+  HwidSource,
+  IdentityInput_Serialize as IdentityInput,
   LogTarget,
   MutationIntent_Serialize as MutationIntent,
+  RequestIdentityDefaults_Serialize as RequestIdentityDefaults,
+  ResolvedIdentity,
   RoutingRule,
   SubAppliedEvent,
+  SubRequestOverrides_Serialize as SubRequestOverrides,
   Subscription_Serialize as Subscription,
   TestKind,
 } from "../generated/bindings";
@@ -134,6 +141,10 @@ export interface Bridge {
   // Open a provider link (support, website, renewal) in the system browser. The
   // backend checks it first; the Android WebUI cannot open one by itself.
   openUrl(url: string): Promise<void>;
+
+  // The request identity a subscription fetch sends (headers in order, HWID and where
+  // it comes from). `input` previews unsaved edits; no `subId` = the Settings defaults.
+  resolveRequestIdentity(req: { subId?: string; input?: IdentityInput }): Promise<ResolvedIdentity>;
 
   // Same, for the headless geo-asset refresh: it stamps each asset's `lastUpdated`
   // (and may restart the core), so the UI reloads. Returns an unsubscribe.
