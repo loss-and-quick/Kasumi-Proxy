@@ -115,6 +115,11 @@ pub enum PrivReply {
     Err {
         message: String,
     },
+    /// The data-path belongs to another GUI, in Windows session `owner` (see
+    /// [`super::session`]); sent instead of any reply, then the helper hangs up.
+    OtherSession {
+        owner: Option<u32>,
+    },
 }
 
 /// The helper answered the handshake with another protocol version, or with none
@@ -296,6 +301,8 @@ mod tests {
             PrivReply::Err {
                 message: "boom".into(),
             },
+            PrivReply::OtherSession { owner: Some(2) },
+            PrivReply::OtherSession { owner: None },
         ] {
             reply_roundtrip(&r);
         }
