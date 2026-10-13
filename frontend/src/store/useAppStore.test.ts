@@ -92,6 +92,7 @@ function makeSub(overrides: Partial<Subscription> = {}): Subscription {
     intervalOverride: overrides.intervalOverride ?? false,
     bodyEncrypted: overrides.bodyEncrypted ?? false,
     insecureByProvider: overrides.insecureByProvider ?? false,
+    allowProviderConfigs: overrides.allowProviderConfigs ?? false,
     pendingChanges: overrides.pendingChanges,
   };
 }
@@ -1153,5 +1154,45 @@ describe("useAppStore", () => {
     expect(s.settings.mux).toBe(true);
     expect(s.subscriptions[0].pendingChanges).toEqual([]);
     expect(s.subscriptions[0].decisions?.[0]).toMatchObject({ digest: "d1", accepted: true });
+  });
+
+  it("a rejected request for full Xray configs fetches nothing", async () => {
+    const ask = {
+      key: "provider-configs",
+      value: "Xray JSON",
+      risk: "trustBoundary" as const,
+      action: { kind: "allowProviderConfigs" as const },
+      digest: "d-configs",
+      seenAt: "2026-10-13T00:00:00Z",
+    };
+    bridge.readState.mockResolvedValue(
+      makeState({ subscriptions: [makeSub({ id: "s1", pendingChanges: [ask] })] }),
+    );
+    await useAppStore.getState().hydrate();
+
+    await useAppStore.getState().resolveSubChange("s1", ["d-configs"], false);
+    expect(bridge.applySubscription).not.toHaveBeenCalled();
+    expect(useAppStore.getState().subscriptions[0].allowProviderConfigs).toBeFalsy();
+  });
+
+  it("allowing the full Xray configs sets the flag and fetches", async () => {
+    const ask = {
+      key: "provider-configs",
+      value: "Xray JSON",
+      risk: "trustBoundary" as const,
+      action: { kind: "allowProviderConfigs" as const },
+      digest: "d-configs",
+      seenAt: "2026-10-13T00:00:00Z",
+    };
+    bridge.readState.mockResolvedValue(
+      makeState({ subscriptions: [makeSub({ id: "s1", pendingChanges: [ask] })] }),
+    );
+    await useAppStore.getState().hydrate();
+
+    await useAppStore.getState().resolveSubChange("s1", ["d-configs"], true);
+    const i = bridge.mutate.mock.calls.findIndex(([x]) => x.kind === "resolveSubChange");
+    const written = await bridge.mutate.mock.results[i].value;
+    expect(written.subscriptions[0].allowProviderConfigs).toBe(true);
+    await vi.waitFor(() => expect(bridge.applySubscription).toHaveBeenCalledWith("s1"));
   });
 });

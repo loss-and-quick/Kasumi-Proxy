@@ -778,6 +778,8 @@ const ar = {
   "profiles.row.select": "تحديد",
   "profiles.row.edit": "تعديل",
   "profiles.row.more": "المزيد",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "إعداد Xray كامل من الاشتراك، بعد تنقيته",
   // subscriptions extra
   "subs.saved": "تم حفظ الاشتراك",
   "subs.deleted": "تم حذف الاشتراك",
@@ -852,7 +854,8 @@ const ar = {
   "subs.error.yaml": "أرسل المزوّد إعداد Clash بصيغة YAML. اختر User-Agent آخر.",
   "subs.error.html": "أعاد الرابط صفحة ويب وليس اشتراكًا.",
   "subs.error.unknown": "الاستجابة ليست بتنسيق اشتراك يستطيع Kasumi قراءته.",
-  "subs.error.unsupportedJson": "اشتراكات JSON غير مدعومة بعد.",
+  "subs.error.jsonConsent":
+    "يرسل المزوّد إعدادات Xray كاملة. اسمح بها من التغييرات المقترحة أو من التعديل. تم الإبقاء على الخوادم السابقة.",
   "subs.error.noProfiles": "لا توجد خوادم مدعومة في الاستجابة. تم الإبقاء على الخوادم السابقة.",
   "subs.error.limit": "استجابة المزوّد كبيرة جدًا.",
   "subs.error.invalid": "استجابة المزوّد تالفة.",
@@ -905,6 +908,23 @@ const ar = {
   "subs.identityNotice.dismiss": "حسنًا",
   "subs.warnings.usedFallback":
     "لم يستجب رابط الاشتراك، لذا جُلبت الخوادم من الرابط الاحتياطي على {host}.",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    zero: "لم يُتخطَّ أي إعداد Xray",
+    one: "تعذّر استخدام إعداد Xray واحد من المزوّد فتم تخطيه",
+    two: "تعذّر استخدام إعدادَي Xray من المزوّد فتم تخطيهما",
+    few: "تعذّر استخدام # إعدادات Xray من المزوّد فتم تخطيها",
+    many: "تعذّر استخدام # إعدادًا لـ Xray من المزوّد فتم تخطيها",
+    other: "تعذّر استخدام # إعداد Xray من المزوّد فتم تخطيها",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    zero: "لم يُتخطَّ أي outbound من sing-box",
+    one: "تم تخطي outbound واحد من sing-box ليس خادمًا يمكن لـ Kasumi استيراده (مجموعة أو direct أو block أو نوع غير معروف)",
+    two: "تم تخطي outbound اثنين من sing-box ليسا خادمين يمكن لـ Kasumi استيرادهما (مجموعات أو direct أو block أو أنواع غير معروفة)",
+    few: "تم تخطي # outbound من sing-box ليست خوادم يمكن لـ Kasumi استيرادها (مجموعات أو direct أو block أو أنواع غير معروفة)",
+    many: "تم تخطي # outbound من sing-box ليست خوادم يمكن لـ Kasumi استيرادها (مجموعات أو direct أو block أو أنواع غير معروفة)",
+    other:
+      "تم تخطي # outbound من sing-box ليست خوادم يمكن لـ Kasumi استيرادها (مجموعات أو direct أو block أو أنواع غير معروفة)",
+  }),
   "subs.menu.more": "المزيد",
   "subs.menu.history": "تغييرات المزوّد",
   "subs.menu.historySub": plural("count", {
@@ -967,6 +987,9 @@ const ar = {
   "subs.changes.domainMoveBody": "ستُجلب التحديثات من العنوان الجديد من الآن.",
   "subs.changes.otherDomain": "هذا نطاق مختلف. اقبله فقط إن أعلن مزوّدك عن الانتقال.",
   "subs.changes.hint.fallback": "يُستخدم فقط عند فشل رابط الاشتراك.",
+  "subs.changes.providerConfigs": "يرسل هذا المزوّد إعدادات Xray كاملة بدلًا من روابط الخوادم.",
+  "subs.changes.providerConfigsKept":
+    "يحتفظ Kasumi بالـ outbounds والتوجيه فقط ويبني الباقي بنفسه: تُحذف السجلات والمنافذ المستمعة وباقي إعدادات المزوّد.",
   "subs.changes.hint.userAgent":
     "يُستخدم ما لم يكن لهذا الاشتراك User-Agent خاص به. بعض المزوّدين يرسلون تنسيقًا مختلفًا لـ User-Agent مختلف.",
   "subs.changes.hint.lockUserAgent":
@@ -975,6 +998,7 @@ const ar = {
   "subs.changes.key.newUrl": "رابط اشتراك جديد",
   "subs.changes.key.newDomain": "نطاق اشتراك جديد",
   "subs.changes.key.fallbackUrl": "رابط احتياطي",
+  "subs.changes.key.providerConfigs": "إعدادات Xray الكاملة",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "تثبيت User-Agent",
   "subs.changes.key.insecure": "تخطي التحقق من الشهادة",
@@ -1042,6 +1066,10 @@ const ar = {
   "subs.edit.remove": "إزالة",
   "subs.edit.insecureByProvider": "التحقق من الشهادة متوقف",
   "subs.edit.checkTls": "تفعيل",
+  "subs.edit.providerConfigs": "تُستخدم إعدادات Xray الكاملة",
+  "subs.edit.providerConfigsOff": "إعدادات Xray الكاملة من المزوّد غير مسموح بها",
+  "subs.edit.stopUsing": "إيقاف الاستخدام",
+  "subs.edit.allow": "السماح",
   "settings.identity.title": "طلبات الاشتراكات",
   "settings.identity.sub":
     "ما ترسله تحديثات الاشتراكات إلى المزوّدين. يمكن لكل اشتراك تغيير أي جزء منه.",

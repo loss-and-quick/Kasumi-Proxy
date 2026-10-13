@@ -40,6 +40,7 @@ export function makeSubscription(
     bodyEncrypted: false,
     warnings: [],
     insecureByProvider: false,
+    allowProviderConfigs: false,
   };
 }
 

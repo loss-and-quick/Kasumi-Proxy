@@ -667,6 +667,8 @@ const pt = {
   "profiles.row.select": "Selecionar",
   "profiles.row.edit": "Editar",
   "profiles.row.more": "Mais",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "Uma configuração completa do Xray vinda da assinatura, higienizada",
   // subscriptions extra
   "subs.saved": "Assinatura salva",
   "subs.deleted": "Assinatura excluída",
@@ -724,7 +726,8 @@ const pt = {
   "subs.error.yaml": "O provedor enviou uma configuração Clash em YAML. Escolha outro User-Agent.",
   "subs.error.html": "A URL retornou uma página da web, não uma assinatura.",
   "subs.error.unknown": "A resposta não está em um formato de assinatura que o Kasumi consiga ler.",
-  "subs.error.unsupportedJson": "Assinaturas em JSON ainda não são suportadas.",
+  "subs.error.jsonConsent":
+    "O provedor envia configurações completas do Xray. Permita-as nas mudanças propostas ou em Editar. Os servidores anteriores foram mantidos.",
   "subs.error.noProfiles":
     "Nenhum servidor compatível na resposta. Os servidores anteriores foram mantidos.",
   "subs.error.limit": "A resposta do provedor é grande demais.",
@@ -780,6 +783,15 @@ const pt = {
   "subs.identityNotice.dismiss": "Entendi",
   "subs.warnings.usedFallback":
     "A URL da assinatura não respondeu, então os servidores vieram da URL reserva em {host}.",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "# configuração do Xray do provedor não pôde ser usada e foi ignorada",
+    other: "# configurações do Xray do provedor não puderam ser usadas e foram ignoradas",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "# outbound do sing-box não é um servidor que o Kasumi possa importar (um grupo, direct, block ou um tipo desconhecido) e foi ignorado",
+    other:
+      "# outbounds do sing-box não são servidores que o Kasumi possa importar (grupos, direct, block ou tipos desconhecidos) e foram ignorados",
+  }),
   "subs.menu.more": "Mais",
   "subs.menu.history": "Mudanças do provedor",
   "subs.menu.historySub": plural("count", {
@@ -826,6 +838,10 @@ const pt = {
   "subs.changes.domainMoveBody": "A partir de agora as atualizações virão do novo endereço.",
   "subs.changes.otherDomain": "É outro domínio. Aceite só se o seu provedor anunciou a mudança.",
   "subs.changes.hint.fallback": "Usada só quando a URL da assinatura falha.",
+  "subs.changes.providerConfigs":
+    "Este provedor envia configurações completas do Xray em vez de links de servidores.",
+  "subs.changes.providerConfigsKept":
+    "O Kasumi mantém só os outbounds e o roteamento e monta o resto sozinho: logs, portas de escuta e outras configurações do provedor são descartados.",
   "subs.changes.hint.userAgent":
     "Usado a menos que esta assinatura tenha User-Agent próprio. Alguns provedores enviam outro formato para outro User-Agent.",
   "subs.changes.hint.lockUserAgent":
@@ -835,6 +851,7 @@ const pt = {
   "subs.changes.key.newUrl": "Nova URL da assinatura",
   "subs.changes.key.newDomain": "Novo domínio da assinatura",
   "subs.changes.key.fallbackUrl": "URL reserva",
+  "subs.changes.key.providerConfigs": "Configurações completas do Xray",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "Fixar o User-Agent",
   "subs.changes.key.insecure": "Ignorar a verificação do certificado",
@@ -884,6 +901,11 @@ const pt = {
   "subs.edit.remove": "Remover",
   "subs.edit.insecureByProvider": "A verificação do certificado está desligada",
   "subs.edit.checkTls": "Ligar",
+  "subs.edit.providerConfigs": "As configurações completas do Xray estão em uso",
+  "subs.edit.providerConfigsOff":
+    "As configurações completas do Xray do provedor não estão permitidas",
+  "subs.edit.stopUsing": "Parar de usar",
+  "subs.edit.allow": "Permitir",
   "settings.identity.title": "Requisições de assinaturas",
   "settings.identity.sub":
     "O que as atualizações de assinaturas enviam aos provedores. Cada assinatura pode mudar qualquer parte.",

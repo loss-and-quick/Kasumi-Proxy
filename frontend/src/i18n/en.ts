@@ -674,6 +674,8 @@ const en = {
   "profiles.row.select": "Select",
   "profiles.row.edit": "Edit",
   "profiles.row.more": "More",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "A full Xray config from the subscription, sanitised",
   // subscriptions extra
   "subs.saved": "Subscription saved",
   "subs.deleted": "Subscription deleted",
@@ -729,7 +731,8 @@ const en = {
   "subs.error.yaml": "The provider sent a Clash YAML config. Choose another User-Agent.",
   "subs.error.html": "The URL returned a web page, not a subscription.",
   "subs.error.unknown": "The response isn't a subscription format Kasumi can read.",
-  "subs.error.unsupportedJson": "JSON subscriptions aren't supported yet.",
+  "subs.error.jsonConsent":
+    "The provider sends full Xray configs. Allow them in the proposed changes or under Edit. Kept the previous servers.",
   "subs.error.noProfiles": "No supported servers in the response. Kept the previous servers.",
   "subs.error.limit": "The provider's response is too large.",
   "subs.error.invalid": "The provider's response is malformed.",
@@ -782,6 +785,15 @@ const en = {
   "subs.identityNotice.dismiss": "Got it",
   "subs.warnings.usedFallback":
     "The subscription URL didn't answer, so the servers came from the fallback URL on {host}.",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "# Xray config from the provider couldn't be used and was skipped",
+    other: "# Xray configs from the provider couldn't be used and were skipped",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "# sing-box outbound isn't a server Kasumi can import (a group, direct, block or an unknown type) and was skipped",
+    other:
+      "# sing-box outbounds aren't servers Kasumi can import (groups, direct, block or unknown types) and were skipped",
+  }),
   "subs.menu.more": "More",
   "subs.menu.history": "Provider changes",
   "subs.menu.historySub": plural("count", {
@@ -830,6 +842,10 @@ const en = {
   "subs.changes.otherDomain":
     "This is a different domain. Accept only if your provider announced the move.",
   "subs.changes.hint.fallback": "Fetched only when the subscription URL fails.",
+  "subs.changes.providerConfigs":
+    "This provider sends complete Xray configs instead of server links.",
+  "subs.changes.providerConfigsKept":
+    "Kasumi keeps only their outbounds and routing and builds the rest itself: logs, listeners and other settings from the provider are dropped.",
   "subs.changes.hint.userAgent":
     "Used unless this subscription has its own User-Agent. Some providers send another format to another User-Agent.",
   "subs.changes.hint.lockUserAgent":
@@ -839,6 +855,7 @@ const en = {
   "subs.changes.key.newUrl": "New subscription URL",
   "subs.changes.key.newDomain": "New subscription domain",
   "subs.changes.key.fallbackUrl": "Fallback URL",
+  "subs.changes.key.providerConfigs": "Full Xray configs",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "Lock the User-Agent",
   "subs.changes.key.insecure": "Skip certificate checks",
@@ -888,6 +905,10 @@ const en = {
   "subs.edit.remove": "Remove",
   "subs.edit.insecureByProvider": "Certificate checks are off",
   "subs.edit.checkTls": "Turn on",
+  "subs.edit.providerConfigs": "Full Xray configs are used",
+  "subs.edit.providerConfigsOff": "The provider's full Xray configs aren't allowed",
+  "subs.edit.stopUsing": "Stop using",
+  "subs.edit.allow": "Allow",
   "settings.identity.title": "Subscription requests",
   "settings.identity.sub":
     "What subscription updates send to providers. Each subscription can change any of it.",

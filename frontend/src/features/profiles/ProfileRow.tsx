@@ -2,7 +2,12 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { Card, EngineTag, Icon, Ping, ProtoTag, Speed, Spinner } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
-import { profileEndpointLabel, profileNetwork, profileSecurity } from "../../lib/profile-utils";
+import {
+  isProviderCustom,
+  profileEndpointLabel,
+  profileNetwork,
+  profileSecurity,
+} from "../../lib/profile-utils";
 import { useAppStore } from "../../store/useAppStore";
 
 export function ProfileRow({
@@ -118,6 +123,15 @@ export function ProfileRow({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6 }}>
             <ProtoTag protocol={profile.protocol} />
+            {isProviderCustom(profile) && (
+              <span
+                className="tag tag-json"
+                title={t("profiles.row.jsonHint")}
+                style={active ? { color: "var(--on-primary-container-variant)" } : undefined}
+              >
+                {t("profiles.row.json")}
+              </span>
+            )}
             {engine === "sing-box" && <EngineTag engine={engine} />}
             <span
               className="mono truncate"

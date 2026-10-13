@@ -657,6 +657,8 @@ const vi = {
   "profiles.row.select": "Chọn",
   "profiles.row.edit": "Chỉnh sửa",
   "profiles.row.more": "Thêm",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "Cấu hình Xray đầy đủ từ gói đăng ký, đã được làm sạch",
   // subscriptions extra
   "subs.saved": "Đã lưu đăng ký",
   "subs.deleted": "Đã xóa đăng ký",
@@ -713,7 +715,8 @@ const vi = {
   "subs.error.yaml": "Nhà cung cấp gửi cấu hình Clash YAML. Hãy chọn User-Agent khác.",
   "subs.error.html": "URL trả về một trang web, không phải đăng ký.",
   "subs.error.unknown": "Phản hồi không ở định dạng đăng ký mà Kasumi đọc được.",
-  "subs.error.unsupportedJson": "Chưa hỗ trợ đăng ký dạng JSON.",
+  "subs.error.jsonConsent":
+    "Nhà cung cấp gửi cấu hình Xray đầy đủ. Hãy cho phép trong các thay đổi đề xuất hoặc trong phần Sửa. Đã giữ các máy chủ trước đó.",
   "subs.error.noProfiles": "Phản hồi không có máy chủ được hỗ trợ. Đã giữ các máy chủ trước đó.",
   "subs.error.limit": "Phản hồi của nhà cung cấp quá lớn.",
   "subs.error.invalid": "Phản hồi của nhà cung cấp bị lỗi định dạng.",
@@ -766,6 +769,15 @@ const vi = {
   "subs.identityNotice.dismiss": "Đã hiểu",
   "subs.warnings.usedFallback":
     "URL đăng ký không phản hồi, nên máy chủ được lấy từ URL dự phòng trên {host}.",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "# cấu hình Xray từ nhà cung cấp không dùng được và đã bị bỏ qua",
+    other: "# cấu hình Xray từ nhà cung cấp không dùng được và đã bị bỏ qua",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "# outbound sing-box không phải máy chủ mà Kasumi có thể nhập (nhóm, direct, block hoặc loại không rõ) và đã bị bỏ qua",
+    other:
+      "# outbound sing-box không phải máy chủ mà Kasumi có thể nhập (nhóm, direct, block hoặc loại không rõ) và đã bị bỏ qua",
+  }),
   "subs.menu.more": "Thêm",
   "subs.menu.history": "Thay đổi từ nhà cung cấp",
   "subs.menu.historySub": plural("count", {
@@ -811,6 +823,10 @@ const vi = {
   "subs.changes.otherDomain":
     "Đây là tên miền khác. Chỉ chấp nhận nếu nhà cung cấp đã thông báo việc chuyển.",
   "subs.changes.hint.fallback": "Chỉ dùng khi URL đăng ký bị lỗi.",
+  "subs.changes.providerConfigs":
+    "Nhà cung cấp này gửi cấu hình Xray hoàn chỉnh thay vì liên kết máy chủ.",
+  "subs.changes.providerConfigsKept":
+    "Kasumi chỉ giữ outbound và định tuyến, phần còn lại tự dựng: nhật ký, cổng lắng nghe và các thiết lập khác của nhà cung cấp đều bị loại bỏ.",
   "subs.changes.hint.userAgent":
     "Được dùng trừ khi đăng ký này có User-Agent riêng. Một số nhà cung cấp gửi định dạng khác cho User-Agent khác.",
   "subs.changes.hint.lockUserAgent":
@@ -820,6 +836,7 @@ const vi = {
   "subs.changes.key.newUrl": "URL đăng ký mới",
   "subs.changes.key.newDomain": "Tên miền đăng ký mới",
   "subs.changes.key.fallbackUrl": "URL dự phòng",
+  "subs.changes.key.providerConfigs": "Cấu hình Xray đầy đủ",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "Khóa User-Agent",
   "subs.changes.key.insecure": "Bỏ qua kiểm tra chứng chỉ",
@@ -863,6 +880,10 @@ const vi = {
   "subs.edit.remove": "Xóa",
   "subs.edit.insecureByProvider": "Đã tắt kiểm tra chứng chỉ",
   "subs.edit.checkTls": "Bật",
+  "subs.edit.providerConfigs": "Đang dùng cấu hình Xray đầy đủ",
+  "subs.edit.providerConfigsOff": "Chưa cho phép cấu hình Xray đầy đủ của nhà cung cấp",
+  "subs.edit.stopUsing": "Ngừng dùng",
+  "subs.edit.allow": "Cho phép",
   "settings.identity.title": "Yêu cầu gói đăng ký",
   "settings.identity.sub":
     "Những gì việc cập nhật gói đăng ký gửi cho nhà cung cấp. Mỗi gói có thể thay đổi bất kỳ phần nào.",

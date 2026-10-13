@@ -651,6 +651,8 @@ const hi = {
   "profiles.row.select": "चयन करें",
   "profiles.row.edit": "संपादित करें",
   "profiles.row.more": "और",
+  "profiles.row.json": "JSON",
+  "profiles.row.jsonHint": "सब्सक्रिप्शन से मिला पूरा Xray कॉन्फ़िग, साफ़ किया हुआ",
   // subscriptions extra
   "subs.saved": "सदस्यता सहेज दी गई",
   "subs.deleted": "सदस्यता हटा दी गई",
@@ -705,7 +707,8 @@ const hi = {
   "subs.error.yaml": "प्रदाता ने Clash YAML कॉन्फ़िग भेजा। कोई दूसरा User-Agent चुनें।",
   "subs.error.html": "URL ने सदस्यता की जगह एक वेब पेज लौटाया।",
   "subs.error.unknown": "जवाब ऐसे सदस्यता फ़ॉर्मेट में नहीं है जिसे Kasumi पढ़ सके।",
-  "subs.error.unsupportedJson": "JSON सदस्यताएँ अभी सपोर्ट नहीं हैं।",
+  "subs.error.jsonConsent":
+    "प्रोवाइडर पूरे Xray कॉन्फ़िग भेजता है। उन्हें प्रस्तावित बदलावों में या Edit में अनुमति दें। पिछले सर्वर रखे गए।",
   "subs.error.noProfiles": "जवाब में कोई समर्थित सर्वर नहीं है। पिछले सर्वर रखे गए।",
   "subs.error.limit": "प्रदाता का जवाब बहुत बड़ा है।",
   "subs.error.invalid": "प्रदाता का जवाब खराब है।",
@@ -758,6 +761,15 @@ const hi = {
   "subs.identityNotice.dismiss": "समझ गया",
   "subs.warnings.usedFallback":
     "सब्सक्रिप्शन URL ने जवाब नहीं दिया, इसलिए सर्वर {host} पर मौजूद बैकअप URL से लिए गए।",
+  "subs.warnings.rejectedConfigs": plural("count", {
+    one: "प्रोवाइडर का # Xray कॉन्फ़िग इस्तेमाल नहीं हो सका और छोड़ दिया गया",
+    other: "प्रोवाइडर के # Xray कॉन्फ़िग इस्तेमाल नहीं हो सके और छोड़ दिए गए",
+  }),
+  "subs.warnings.skippedOutbounds": plural("count", {
+    one: "sing-box का # outbound ऐसा सर्वर नहीं है जिसे Kasumi इम्पोर्ट कर सके (ग्रुप, direct, block या अनजान टाइप), इसलिए छोड़ दिया गया",
+    other:
+      "sing-box के # outbound ऐसे सर्वर नहीं हैं जिन्हें Kasumi इम्पोर्ट कर सके (ग्रुप, direct, block या अनजान टाइप), इसलिए छोड़ दिए गए",
+  }),
   "subs.menu.more": "और",
   "subs.menu.history": "प्रदाता के बदलाव",
   "subs.menu.historySub": plural("count", {
@@ -805,6 +817,9 @@ const hi = {
   "subs.changes.domainMoveBody": "अब से अपडेट नए पते से लिए जाएँगे।",
   "subs.changes.otherDomain": "यह दूसरा डोमेन है। तभी स्वीकार करें जब प्रदाता ने इस बदलाव की घोषणा की हो।",
   "subs.changes.hint.fallback": "सिर्फ़ तब इस्तेमाल होता है जब सब्सक्रिप्शन URL विफल हो।",
+  "subs.changes.providerConfigs": "यह प्रोवाइडर सर्वर लिंक की जगह पूरे Xray कॉन्फ़िग भेजता है।",
+  "subs.changes.providerConfigsKept":
+    "Kasumi उनसे सिर्फ़ outbound और रूटिंग रखता है और बाकी खुद बनाता है: प्रोवाइडर के लॉग, लिसनर और दूसरी सेटिंग्स हटा दी जाती हैं।",
   "subs.changes.hint.userAgent":
     "तब इस्तेमाल होता है जब इस सब्सक्रिप्शन का अपना User-Agent न हो। कुछ प्रदाता अलग User-Agent को अलग फ़ॉर्मेट भेजते हैं।",
   "subs.changes.hint.lockUserAgent":
@@ -813,6 +828,7 @@ const hi = {
   "subs.changes.key.newUrl": "नया सब्सक्रिप्शन URL",
   "subs.changes.key.newDomain": "नया सब्सक्रिप्शन डोमेन",
   "subs.changes.key.fallbackUrl": "बैकअप URL",
+  "subs.changes.key.providerConfigs": "पूरे Xray कॉन्फ़िग",
   "subs.changes.key.changeUserAgent": "User-Agent",
   "subs.changes.key.lockUserAgent": "User-Agent लॉक करें",
   "subs.changes.key.insecure": "सर्टिफ़िकेट जाँच छोड़ें",
@@ -862,6 +878,10 @@ const hi = {
   "subs.edit.remove": "हटाएँ",
   "subs.edit.insecureByProvider": "सर्टिफ़िकेट जाँच बंद है",
   "subs.edit.checkTls": "चालू करें",
+  "subs.edit.providerConfigs": "पूरे Xray कॉन्फ़िग इस्तेमाल हो रहे हैं",
+  "subs.edit.providerConfigsOff": "प्रोवाइडर के पूरे Xray कॉन्फ़िग की अनुमति नहीं है",
+  "subs.edit.stopUsing": "इस्तेमाल बंद करें",
+  "subs.edit.allow": "अनुमति दें",
   "settings.identity.title": "सब्सक्रिप्शन अनुरोध",
   "settings.identity.sub":
     "सब्सक्रिप्शन अपडेट प्रोवाइडर को क्या भेजते हैं। हर सब्सक्रिप्शन इसमें से कुछ भी बदल सकता है।",

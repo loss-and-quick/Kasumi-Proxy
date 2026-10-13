@@ -188,6 +188,33 @@ function DomainMoveCard({ from, to, other }: { from: string; to: string; other: 
   );
 }
 
+/** What allowing a provider's full Xray configs lets through, and what it doesn't. */
+function ProviderConfigsCard() {
+  const t = useT();
+  return (
+    <div
+      role="note"
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start",
+        marginTop: 10,
+        padding: "10px 12px",
+        background: "var(--sc-high)",
+        borderRadius: 12,
+      }}
+    >
+      <Icon name="data_object" style={{ fontSize: 20, color: "var(--primary)", flexShrink: 0 }} />
+      <div style={{ minWidth: 0, fontSize: 13, lineHeight: 1.45, color: "var(--on-surface)" }}>
+        <div>{t("subs.changes.providerConfigs")}</div>
+        <div style={{ marginTop: 4, color: "var(--on-surface-variant)" }}>
+          {t("subs.changes.providerConfigsKept")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChangeRow({
   sub,
   change,
@@ -237,6 +264,8 @@ function ChangeRow({
           activate={activate}
           onActivate={setActivate}
         />
+      ) : action.kind === "allowProviderConfigs" ? (
+        <ProviderConfigsCard />
       ) : (
         <Values change={change} wide={wide} />
       )}
