@@ -681,6 +681,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_wholesale_replace_is_stored_at_the_current_schema() {
+        let (p, _d) = TestPlatform::new();
+        // The UI's hydrate sends its state without `schemaVersion`.
+        let mut sent = serde_json::to_value(default_app_state()).unwrap();
+        sent.as_object_mut().unwrap().remove("schemaVersion");
+        let intent: MutationIntent =
+            serde_json::from_value(serde_json::json!({ "kind": "replaceState", "state": sent }))
+                .unwrap();
+        run_mutation(&p, &intent).await.unwrap();
+        let doc: serde_json::Value = crate::fsjson::read_json(&p.paths().app_state)
+            .await
+            .unwrap();
+        assert_eq!(doc["schemaVersion"], kasumi_core::migrate::SCHEMA_VERSION);
+    }
+
+    #[tokio::test]
     async fn open_url_rejects_non_http() {
         let (p, _d) = TestPlatform::new();
         let open = |url: &str| {

@@ -37,6 +37,10 @@ pub async fn write_app_state(platform: &dyn Platform, state: &AppState) -> std::
     write_json_atomic(&paths.profiles, &state.profiles).await?;
     let mut shell = state.clone();
     shell.profiles = Vec::new();
+    // A typed state has the current shape whatever version it was handed over
+    // with (the UI's wholesale replace carries none), and a lower stamp would
+    // run the migrations over it again on the next read.
+    shell.schema_version = kasumi_core::migrate::SCHEMA_VERSION;
     write_json_atomic(&paths.app_state, &shell).await
 }
 
@@ -71,6 +75,20 @@ mod tests {
         let merged = read_app_state(&p).await.unwrap();
         assert_eq!(merged.profiles.len(), 1);
         assert_eq!(merged.active_id, state.active_id);
+    }
+
+    #[tokio::test]
+    async fn write_stamps_the_current_schema_version() {
+        let (p, _d) = TestPlatform::new();
+        let mut state = default_app_state();
+        state.schema_version = 0;
+        write_app_state(&p, &state).await.unwrap();
+        let doc: Value = read_json(&p.paths().app_state).await.unwrap();
+        assert_eq!(
+            doc["schemaVersion"],
+            kasumi_core::migrate::SCHEMA_VERSION,
+            "{doc}"
+        );
     }
 
     #[tokio::test]
