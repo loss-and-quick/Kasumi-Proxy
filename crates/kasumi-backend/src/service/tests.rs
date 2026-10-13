@@ -734,6 +734,25 @@ async fn status_request_carries_the_probe_verdict() {
 }
 
 #[tokio::test]
+async fn start_hands_the_platform_the_baseline_plan() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    let started = platform.started.lock().unwrap().clone();
+    let baseline = svc
+        .running_config
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|r| r.config.plan.clone());
+    assert!(started.is_some());
+    assert_eq!(started, baseline);
+}
+
+#[tokio::test]
 async fn app_filter_reload_follows_the_running_plan() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;
