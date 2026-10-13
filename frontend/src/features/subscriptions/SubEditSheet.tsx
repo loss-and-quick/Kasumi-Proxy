@@ -12,12 +12,12 @@ import {
   Sheet,
   UpdateModeControl,
 } from "../../components";
+import { NEW_SUB_DEFAULTS } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import {
   checkSubscriptionUrl,
   isHappLink,
   makeSubscription,
-  NEW_SUB_DEFAULTS,
   type SubDraft,
   type SubscriptionUrlCheck,
   subscriptionNameFrom,
