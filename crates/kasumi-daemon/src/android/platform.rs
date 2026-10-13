@@ -25,6 +25,7 @@ use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, re
 use kasumi_core::contract::{RunState, ServiceState};
 use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, TunEngine};
+use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
     AdvancedSettings, AppState, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, force_socks_port,
 };
@@ -42,7 +43,7 @@ use super::routing::{
     has_force_proxy, reload_app_filter_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
-use super::{run_out, silent};
+use super::{run_out, silent, ssaid};
 
 pub struct AndroidPlatform {
     paths: BackendPaths,
@@ -122,6 +123,11 @@ async fn running_helper_bin() -> &'static str {
         .await
         .map(tun_helper_bin)
         .unwrap_or(TUN2SOCKS_BIN)
+}
+
+/// One system property, trimmed; empty when unset.
+async fn getprop(name: &str) -> String {
+    run_out(&["getprop", name]).await.1.trim().to_owned()
 }
 
 fn app_state_path() -> String {
@@ -693,6 +699,40 @@ impl Platform for AndroidPlatform {
             anyhow::bail!("could not open the link: {}", out.trim());
         }
         Ok(())
+    }
+
+    async fn device_facts(&self) -> DeviceFacts {
+        let mut locale = getprop("persist.sys.locale").await;
+        if locale.is_empty() {
+            locale = getprop("ro.product.locale").await;
+        }
+        // Happ reports TV builds as their own OS.
+        let tv = getprop("ro.build.characteristics")
+            .await
+            .split(',')
+            .any(|c| c.trim() == "tv");
+        DeviceFacts {
+            os: if tv { "AndroidTV" } else { "Android" }.into(),
+            os_version: getprop("ro.build.version.release").await,
+            model: getprop("ro.product.model").await,
+            locale,
+        }
+    }
+
+    async fn stored_ssaid(&self, user: u32, package: &str) -> Option<String> {
+        ssaid::read(user)
+            .await?
+            .into_iter()
+            .find(|e| e.package.as_deref() == Some(package))
+            .and_then(|e| e.value)
+    }
+
+    async fn ssaid_user_key(&self, user: u32) -> Option<String> {
+        ssaid::read(user)
+            .await?
+            .into_iter()
+            .find(|e| e.name == "userkey")
+            .and_then(|e| e.value)
     }
 
     // No convert_asset: a downloaded geoip/geosite.dat is converted to .srs lazily

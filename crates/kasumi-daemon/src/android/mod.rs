@@ -8,6 +8,7 @@ pub mod network;
 pub mod paths;
 pub mod platform;
 pub mod routing;
+pub mod ssaid;
 pub mod sysctl;
 
 pub use platform::AndroidPlatform;
