@@ -1382,12 +1382,18 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("resolveCores"),
 	profiles: z.array(ProfileSchema),
 }), z.object({
+	cmd: z.literal("resolveImportInput"),
+	text: z.string(),
+}), z.object({
 	cmd: z.literal("resolveRequestIdentity"),
 	subId: z.string().nullable(),
 	input: IdentityInput_SerializeSchema.nullable(),
 }), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable(),
+}), z.object({
+	cmd: z.literal("revealSubscriptionUrl"),
+	url: z.string(),
 }), z.object({
 	cmd: z.literal("rotateLogs"),
 	maxKb: z.number().nullable(),
@@ -1599,12 +1605,18 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("resolveCores"),
 	profiles: z.array(ProfileSchema),
 }), z.object({
+	cmd: z.literal("resolveImportInput"),
+	text: z.string(),
+}), z.object({
 	cmd: z.literal("resolveRequestIdentity"),
 	subId: z.string().nullable().optional(),
 	input: IdentityInput_DeserializeSchema.nullable().optional(),
 }), z.object({
 	cmd: z.literal("restart"),
 	profileId: z.string().nullable().optional(),
+}), z.object({
+	cmd: z.literal("revealSubscriptionUrl"),
+	url: z.string(),
 }), z.object({
 	cmd: z.literal("rotateLogs"),
 	maxKb: z.number().nullable().optional(),
@@ -1711,6 +1723,60 @@ export const ResolvedIdentitySchema = z.object({
 export type ResolvedIdentity = z.infer<typeof ResolvedIdentitySchema>;
 
 
+export const UnsupportedInputSchema = z.union([z.literal("control"), z.literal("invalid"), z.literal("routingOff"), z.literal("sendToDevice"), z.literal("urlDecrypt")]);
+export type UnsupportedInput = z.infer<typeof UnsupportedInputSchema>;
+
+
+export const UnsupportedLinkSchema = z.object({
+	text: z.string(),
+	kind: UnsupportedInputSchema,
+});
+export type UnsupportedLink = z.infer<typeof UnsupportedLinkSchema>;
+
+
+export const SubscriptionLinkSchema = z.object({
+	url: z.string(),
+	encrypted: z.boolean(),
+});
+export type SubscriptionLink = z.infer<typeof SubscriptionLinkSchema>;
+
+
+export const RoutingLink_SerializeSchema = z.object({
+	routing: RoutingImport_SerializeSchema,
+	activate: z.boolean(),
+});
+export type RoutingLink_Serialize = z.infer<typeof RoutingLink_SerializeSchema>;
+
+
+export const ResolvedImport_SerializeSchema = z.object({
+	subscriptions: z.array(SubscriptionLinkSchema),
+	routing: z.array(RoutingLink_SerializeSchema),
+	unsupported: z.array(UnsupportedLinkSchema),
+	shareText: z.string(),
+});
+export type ResolvedImport_Serialize = z.infer<typeof ResolvedImport_SerializeSchema>;
+
+
+export const RoutingLink_DeserializeSchema = z.object({
+	routing: RoutingImport_DeserializeSchema,
+	activate: z.boolean(),
+});
+export type RoutingLink_Deserialize = z.infer<typeof RoutingLink_DeserializeSchema>;
+
+
+export const ResolvedImport_DeserializeSchema = z.object({
+	subscriptions: z.array(SubscriptionLinkSchema),
+	routing: z.array(RoutingLink_DeserializeSchema),
+	unsupported: z.array(UnsupportedLinkSchema),
+	shareText: z.string(),
+});
+export type ResolvedImport_Deserialize = z.infer<typeof ResolvedImport_DeserializeSchema>;
+
+
+export const ResolvedImportSchema = z.union([ResolvedImport_DeserializeSchema, ResolvedImport_SerializeSchema]);
+export type ResolvedImport = z.infer<typeof ResolvedImportSchema>;
+
+
 export const WsInfoSchema = z.object({
 	port: z.number(),
 	token: z.string(),
@@ -1746,6 +1812,9 @@ export const Response_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("coreResolutions"),
 	value: z.array(CoreResolutionSchema),
+}), z.object({
+	kind: z.literal("importInput"),
+	value: ResolvedImport_SerializeSchema,
 }), z.object({
 	kind: z.literal("ok"),
 }), z.object({
@@ -1807,6 +1876,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 	kind: z.literal("coreResolutions"),
 	value: z.array(CoreResolutionSchema),
 }), z.object({
+	kind: z.literal("importInput"),
+	value: ResolvedImport_DeserializeSchema,
+}), z.object({
 	kind: z.literal("ok"),
 }), z.object({
 	kind: z.literal("ping"),
@@ -1848,6 +1920,10 @@ export type Response = z.infer<typeof ResponseSchema>;
 
 export const RoutingImportSchema = z.union([RoutingImport_DeserializeSchema, RoutingImport_SerializeSchema]);
 export type RoutingImport = z.infer<typeof RoutingImportSchema>;
+
+
+export const RoutingLinkSchema = z.union([RoutingLink_DeserializeSchema, RoutingLink_SerializeSchema]);
+export type RoutingLink = z.infer<typeof RoutingLinkSchema>;
 
 
 export const RoutingModeSchema = z.union([RoutingMode_DeserializeSchema, RoutingMode_SerializeSchema]);
