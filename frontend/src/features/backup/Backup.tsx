@@ -7,10 +7,12 @@ import { lazy, Suspense, useMemo, useState } from "react";
 import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import { SCHEMA_VERSION } from "../../generated/defaults";
 import { useT } from "../../i18n";
+import { linkInputText } from "../../lib/add-input";
 import { BackupSchema } from "../../lib/backup-schema";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
+import { useLinkInput } from "../add/useLinkInput";
 import { copyText } from "../profiles/clipboard";
 
 const JSON_FILTER = [{ name: "JSON", extensions: ["json"] }];
@@ -60,6 +62,7 @@ export default function Backup({ onClose }: { onClose: () => void }) {
   const [importText, setImportText] = useState("");
   const [qrOpen, setQrOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const link = useLinkInput(importText);
 
   const importValidation = useMemo(() => {
     try {
@@ -76,9 +79,10 @@ export default function Backup({ onClose }: { onClose: () => void }) {
           }
         : { ok: false as const, hint: t("backup.invalidStructure") };
     } catch {
-      return { ok: false as const, hint: t("backup.invalidJson") };
+      const hint = link === undefined ? "" : t(link ? linkInputText(link) : "backup.invalidJson");
+      return { ok: false as const, hint };
     }
-  }, [importText, t]);
+  }, [importText, link, t]);
 
   return (
     <Sheet open title={t("backup.title")} onClose={onClose}>
