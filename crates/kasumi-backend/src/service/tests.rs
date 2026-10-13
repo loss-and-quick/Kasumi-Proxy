@@ -41,7 +41,6 @@ impl RecordingPlatform {
             profiles: d.join("profiles.json"),
             xray_config: d.join("xray.json"),
             singbox_config: d.join("singbox.json"),
-            engine_file: d.join("engine"),
             run_dir: d.join("run"),
             ws_info: d.join("ws.json"),
             webroot: None,
@@ -166,11 +165,8 @@ async fn start_stops_first_then_writes_config_and_starts() {
         assert_eq!(calls[0], "stop:keep=true");
         assert!(calls.iter().any(|c| c.starts_with("start:")));
     }
-    // Config + engine marker were written.
-    assert_eq!(
-        read_text(&platform.paths.engine_file).await.as_deref(),
-        Some("xray")
-    );
+    let cfg = read_text(&platform.paths.xray_config).await.unwrap();
+    assert!(cfg.contains("outbounds"));
 }
 
 #[tokio::test]

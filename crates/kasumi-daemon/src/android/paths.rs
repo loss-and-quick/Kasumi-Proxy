@@ -18,7 +18,6 @@ pub const PIDFILE: &str = "/data/adb/kasumi-proxy/run/core.pid";
 pub const TUN2SOCKS_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks.pid";
 pub const TUN2SOCKS2_PIDFILE: &str = "/data/adb/kasumi-proxy/run/tun2socks2.pid";
 
-pub const ENGINE_FILE: &str = "/data/adb/kasumi-proxy/engine";
 pub const TUN_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun-iface";
 pub const TUN2_IFACE_FILE: &str = "/data/adb/kasumi-proxy/tun2-iface";
 /// The single persisted record of the running data-path (run state, engine, TUN
@@ -63,7 +62,6 @@ pub fn backend_paths() -> BackendPaths {
         profiles: d.join("profiles.json"),
         xray_config: d.join("config.json"),
         singbox_config: d.join("singbox.json"),
-        engine_file: PathBuf::from(ENGINE_FILE),
         run_dir: PathBuf::from(RUN_DIR),
         ws_info: PathBuf::from(RUN_DIR).join("ws.json"),
         // The KSU manager renders this bundle natively; the daemon also serves it

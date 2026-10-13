@@ -61,7 +61,6 @@ pub struct DesktopPaths {
     /// Records the routes we installed (server bypass + split-default) so teardown
     /// is exact and idempotent.
     pub route_state_file: String,
-    pub engine_file: String,
     /// The single persisted record of the running data-path (run state, engine, TUN
     /// selection, socks port, start time), written helper-side in run_dir.
     pub data_path_state_file: String,
@@ -114,8 +113,8 @@ impl DesktopPaths {
 /// over the same paths. Every entry is a regular file derived from a
 /// [`DesktopPaths`]/[`BackendPaths`] field — the ephemeral run-dir state and engine
 /// configs the data-path writes, the core logs its children write under datadir, and
-/// the helper's own log. Excludes GUI-written inputs (`engine_file`, the built core
-/// configs, `daemon.log`); the containing directories are handed over separately
+/// the helper's own log. Excludes GUI-written inputs (the built core configs,
+/// `daemon.log`); the containing directories are handed over separately
 /// (see [`DesktopPaths::helper_owned_dirs`]).
 #[cfg(target_os = "linux")]
 impl DesktopPaths {
@@ -246,7 +245,6 @@ impl DesktopPaths {
             profiles: PathBuf::from(format!("{datadir}/profiles.json")),
             xray_config: PathBuf::from(format!("{datadir}/config.json")),
             singbox_config: PathBuf::from(format!("{datadir}/singbox.json")),
-            engine_file: PathBuf::from(format!("{datadir}/engine")),
             run_dir: PathBuf::from(&run_dir),
             ws_info: PathBuf::from(format!("{run_dir}/ws.json")),
             // The Tauri webview loads the UI natively (no loopback HTTP server), so
@@ -265,10 +263,9 @@ impl DesktopPaths {
             // Ephemeral data-path runtime state, written only by the data-path owner
             // (the privileged helper under privilege separation) — keep it in run_dir,
             // not the user's datadir, so it never lands as root-owned files there and
-            // resets between sessions. `engine_file` and the configs stay in datadir:
-            // the unprivileged GUI builds them, the helper only reads them.
+            // resets between sessions. The configs stay in datadir: the unprivileged
+            // GUI builds them, the helper only reads them.
             data_path_state_file: format!("{run_dir}/data-path.json"),
-            engine_file: format!("{datadir}/engine"),
             tun_iface_file: format!("{run_dir}/tun-iface"),
             tun2_iface_file: format!("{run_dir}/tun2-iface"),
             xray_bin: format!("{bin}/xray"),
@@ -351,7 +348,6 @@ impl DesktopPaths {
             profiles: PathBuf::from(format!(r"{datadir}\profiles.json")),
             xray_config: PathBuf::from(format!(r"{datadir}\config.json")),
             singbox_config: PathBuf::from(format!(r"{datadir}\singbox.json")),
-            engine_file: PathBuf::from(format!(r"{datadir}\engine")),
             run_dir: PathBuf::from(&run_dir),
             ws_info: PathBuf::from(format!(r"{run_dir}\ws.json")),
             // The Tauri webview loads the UI natively (no loopback HTTP server), so
@@ -368,9 +364,8 @@ impl DesktopPaths {
             tun2socks_pidfile: format!(r"{run_dir}\tun2socks.pid"),
             route_state_file: format!(r"{run_dir}\desktop-route.json"),
             // Ephemeral data-path runtime state lives in run_dir (see the Linux
-            // resolve for the rationale); engine_file + configs stay in datadir.
+            // resolve for the rationale); the configs stay in datadir.
             data_path_state_file: format!(r"{run_dir}\data-path.json"),
-            engine_file: format!(r"{datadir}\engine"),
             tun_iface_file: format!(r"{run_dir}\tun-iface"),
             tun2_iface_file: format!(r"{run_dir}\tun2-iface"),
             xray_bin: format!(r"{bin}\xray.exe"),
@@ -423,7 +418,6 @@ mod tests {
         ] {
             assert!(f.starts_with(&p.run_dir), "{f} should live under run_dir");
         }
-        assert!(p.engine_file.starts_with(&p.datadir));
         assert!(p.backend.xray_config.starts_with(&p.datadir));
 
         // The owner hand-off list: only regular files under run_dir/datadir covering
@@ -458,7 +452,6 @@ mod tests {
             assert!(names.contains(expected), "hand-off list missing {expected}");
         }
         // GUI-written inputs stay out — they are already the user's.
-        assert!(!names.contains("engine"), "engine marker is GUI-written");
         assert!(!names.contains("daemon.log"), "daemon.log is GUI-written");
         assert!(!names.contains("config.json"), "config.json is GUI-written");
 
@@ -499,7 +492,6 @@ mod tests {
         assert_eq!(p.datadir, "/var/lib/kasumi-proxy");
         assert_eq!(p.run_dir, "/run/kasumi-proxy/run");
         assert!(p.data_path_state_file.starts_with("/run/kasumi-proxy/run"));
-        assert!(p.engine_file.starts_with("/var/lib/kasumi-proxy"));
         // SAFETY: see the note on the first `set_var` in this test.
         unsafe {
             std::env::remove_var("KASUMI_DATADIR");

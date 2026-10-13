@@ -37,10 +37,10 @@ use kasumi_core::tun::TunOptions;
 
 use super::network::run_watcher;
 use super::paths::{
-    CORE_BINS, DATA_PATH_STATE_FILE, DATADIR, ENGINE_FILE, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG,
-    HEV2_CONFIG, IP, PIDFILE, RUN_DIR, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG, SINGBOX_BRIDGE2_CONFIG,
-    TUN_IFACE_FILE, TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE,
-    TUN2SOCKS2_CONFIG, TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
+    CORE_BINS, DATA_PATH_STATE_FILE, DATADIR, GEODAT2SRS_BIN, HEV_BIN, HEV_CONFIG, HEV2_CONFIG, IP,
+    PIDFILE, RUN_DIR, SINGBOX_BIN, SINGBOX_BRIDGE_CONFIG, SINGBOX_BRIDGE2_CONFIG, TUN_IFACE_FILE,
+    TUN2_IFACE_FILE, TUN2SOCKS_BIN, TUN2SOCKS_CONFIG, TUN2SOCKS_PIDFILE, TUN2SOCKS2_CONFIG,
+    TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
     AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards, clear_routing_rules,
@@ -594,6 +594,8 @@ impl Platform for AndroidPlatform {
         // before the first command. Drop the pre-document `service-started` marker.
         write_state(&DataPathState::default()).await;
         remove_file("/data/adb/kasumi-proxy/service-started").await;
+        // Older versions recorded the core engine in a marker file.
+        remove_file("/data/adb/kasumi-proxy/engine").await;
         Ok(())
     }
 
@@ -894,12 +896,7 @@ impl AppFilterCapability for AndroidPlatform {
         }
         // sing-box bakes the filter into its config and needs a restart (the Service
         // handles that); only xray reloads live here.
-        if read_text(ENGINE_FILE)
-            .await
-            .map(|s| s.trim().to_string())
-            .as_deref()
-            == Some("sing-box")
-        {
+        if read_state().await.and_then(|s| s.engine) == Some(CoreEngine::SingBox) {
             return Ok(());
         }
         reload_app_filter_rules(&read_app_filter().await).await;

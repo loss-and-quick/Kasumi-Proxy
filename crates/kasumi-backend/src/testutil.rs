@@ -85,7 +85,6 @@ impl TestPlatform {
             profiles: d.join("profiles.json"),
             xray_config: d.join("xray.json"),
             singbox_config: d.join("singbox.json"),
-            engine_file: d.join("engine"),
             run_dir: d.join("run"),
             ws_info: d.join("ws.json"),
             webroot: None,

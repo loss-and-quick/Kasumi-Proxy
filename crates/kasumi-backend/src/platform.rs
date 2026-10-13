@@ -74,8 +74,6 @@ pub struct BackendPaths {
     pub profiles: PathBuf,
     pub xray_config: PathBuf,
     pub singbox_config: PathBuf,
-    /// Marker recording which engine the active config was built for.
-    pub engine_file: PathBuf,
     pub run_dir: PathBuf,
     /// JSON file the daemon writes its WS `{port, token}` to, for the UI to read.
     pub ws_info: PathBuf,
@@ -338,7 +336,6 @@ mod tests {
             profiles: d.join("profiles.json"),
             xray_config: d.join("xray.json"),
             singbox_config: d.join("singbox.json"),
-            engine_file: d.join("engine"),
             run_dir: d.join("run"),
             ws_info: d.join("ws.json"),
             webroot: None,

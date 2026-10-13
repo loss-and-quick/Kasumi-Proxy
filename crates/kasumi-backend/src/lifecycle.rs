@@ -55,11 +55,10 @@ pub fn random_tun_iface() -> String {
     format!("{lead}{}", &hex[1..9])
 }
 
-/// Build the config for `profile_id` (else the active profile), write it and the
-/// engine marker, and return the exact [`CoreConfig`] that was written, whose plan
-/// the platform starts — the in-memory baseline a running data path is later
-/// diffed against (the on-disk file may be tuned further after start) — and the id
-/// of the profile it was built from.
+/// Build the config for `profile_id` (else the active profile), write it, and return
+/// the exact [`CoreConfig`] that was written, whose plan the platform starts — the
+/// in-memory baseline a running data path is later diffed against (the on-disk file
+/// may be tuned further after start) — and the id of the profile it was built from.
 pub async fn resolve_and_write_config(
     platform: &dyn Platform,
     profile_id: Option<&str>,
@@ -82,19 +81,7 @@ pub async fn resolve_and_write_config(
     write_text_atomic(cfg_path, &cfg_text)
         .await
         .map_err(|e| CommandError(e.to_string()))?;
-    write_text(&paths.engine_file, engine_label(engine))
-        .await
-        .map_err(|e| CommandError(e.to_string()))?;
     Ok((built, id))
-}
-
-/// The core engine's on-disk label (written to `paths.engine_file` at config
-/// resolution).
-pub fn engine_label(engine: CoreEngine) -> &'static str {
-    match engine {
-        CoreEngine::Xray => "xray",
-        CoreEngine::SingBox => "sing-box",
-    }
 }
 
 // ---------- geo assets (geodat2srs) ----------
@@ -491,10 +478,6 @@ mod tests {
         // The returned build mirrors what was written.
         assert_eq!(built.engine(), CoreEngine::Xray);
         assert!(built.config["outbounds"].is_array());
-        assert_eq!(
-            read_text(&p.paths().engine_file).await.as_deref(),
-            Some("xray")
-        );
         let cfg = read_text(&p.paths().xray_config).await.unwrap();
         assert!(cfg.contains("outbounds"));
     }
