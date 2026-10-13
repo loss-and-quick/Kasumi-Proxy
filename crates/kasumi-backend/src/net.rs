@@ -355,11 +355,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tcp_ping_fails_on_unreachable_host() {
-        // TEST-NET-1 (RFC 5737) is guaranteed unroutable, so the connect can't
-        // succeed — it errors or times out, either way `None`. (A freed loopback
-        // port would race a concurrent test that rebinds it.)
-        let ms = tcp_ping("192.0.2.1", 80, Duration::from_millis(300)).await;
+    async fn tcp_ping_fails_when_nothing_accepts() {
+        // A socket bound but never put into listen() refuses connections, and
+        // holding it keeps the port from being rebound by a concurrent test.
+        // Refusal and timeout both map to `None`, and neither needs the network.
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = socket.local_addr().unwrap().port();
+        let ms = tcp_ping("127.0.0.1", port, Duration::from_millis(300)).await;
         assert!(ms.is_none());
     }
 
