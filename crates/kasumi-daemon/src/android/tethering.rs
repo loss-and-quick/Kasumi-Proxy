@@ -263,10 +263,9 @@ pub fn tether_ifaces(rules_out: &str, addr_out: &str, exclude: &[&str]) -> Vec<T
         .collect()
 }
 
-/// The downstreams Android is tethering right now.
-async fn detect(tuns: &[&str]) -> Vec<TetherIface> {
-    let (_, rules) = run_out(&[IP, "-4", "rule", "show"]).await;
-    if parse_tether_downstreams(&rules).is_empty() {
+/// The downstreams Android is tethering right now, given `ip -4 rule show`.
+async fn detect(rules: &str, tuns: &[&str]) -> Vec<TetherIface> {
+    if parse_tether_downstreams(rules).is_empty() {
         return Vec::new();
     }
     let uplink = default_uplink().await;
@@ -275,7 +274,46 @@ async fn detect(tuns: &[&str]) -> Vec<TetherIface> {
         exclude.push(u);
     }
     let (_, addrs) = run_out(&[IP, "-o", "-4", "addr", "show"]).await;
-    tether_ifaces(&rules, &addrs, &exclude)
+    tether_ifaces(rules, &addrs, &exclude)
+}
+
+/// Whether the rules [`install`] put in for `ifaces` are all still there, judged
+/// from `ip -4 rule show`, `ip -4 route show table 1102` and whether the `FORWARD`
+/// jump exists. The kernel drops a device's routes when the device goes away, so a
+/// downstream recreated under the same name and subnet (tethering switched off and
+/// on) comes back with the rules in place but table 1102 empty.
+fn plan_in_place(
+    ifaces: &[TetherIface],
+    tun: &str,
+    rules_out: &str,
+    routes_out: &str,
+    hooked: bool,
+) -> bool {
+    let rule_lines: Vec<(&str, Vec<&str>)> = rules_out
+        .lines()
+        .filter_map(|l| l.split_once(':'))
+        .map(|(pref, rest)| (pref.trim(), rest.split_whitespace().collect()))
+        .collect();
+    let has_rule = |pref: &str, pairs: &[[&str; 2]]| {
+        rule_lines.iter().any(|(p, toks)| {
+            *p == pref
+                && pairs
+                    .iter()
+                    .all(|pair| toks.windows(2).any(|w| w == pair.as_slice()))
+        })
+    };
+    let has_route = |t: &TetherIface| {
+        routes_out.lines().any(|l| {
+            let toks: Vec<&str> = l.split_whitespace().collect();
+            toks.starts_with(&[t.net.as_str(), "dev", t.name.as_str()])
+        })
+    };
+    hooked
+        && ifaces.iter().all(|t| {
+            has_route(t)
+                && has_rule(PRIO_STEER, &[["iif", &t.name]])
+                && has_rule(PRIO_REPLY, &[["iif", tun], ["to", &t.net]])
+        })
 }
 
 async fn ipt(bin: &str, table: Option<&str>, rest: &[&str]) -> i32 {
@@ -347,13 +385,18 @@ async fn watch(path: TetherPath) {
     loop {
         let enabled = read_settings().await.is_some_and(|s| s.proxy_tethering);
         let tun = read_iface(TUN_IFACE_FILE).await;
-        let want = match (enabled, tun.as_deref()) {
-            (true, Some(tun)) => wanted(true, detect(&[tun]).await),
-            _ => Vec::new(),
+        let tun = tun.as_deref().filter(|_| enabled);
+        let rules = match tun {
+            Some(_) => run_out(&[IP, "-4", "rule", "show"]).await.1,
+            None => String::new(),
+        };
+        let want = match tun {
+            Some(tun) => wanted(true, detect(&rules, &[tun]).await),
+            None => Vec::new(),
         };
         // Kept off whenever the option is on, so a hotspot started later comes up
         // without hardware offload.
-        if enabled && tun.is_some() {
+        if tun.is_some() {
             if suppress_hw_offload().await && !want.is_empty() {
                 log::warn!(
                     "tethering: hardware offload stays on for the running tethering \
@@ -363,9 +406,17 @@ async fn watch(path: TetherPath) {
         } else {
             restore_hw_offload().await;
         }
-        if want != applied {
+        let intact = match tun {
+            Some(tun) if want == applied && !applied.is_empty() => {
+                let (_, routes) = run_out(&[IP, "-4", "route", "show", "table", REPLY_TABLE]).await;
+                let hooked = ipt(IPTABLES, None, &["-C", "FORWARD", "-j", CHAIN]).await == 0;
+                plan_in_place(&applied, tun, &rules, &routes, hooked)
+            }
+            _ => want == applied,
+        };
+        if !intact {
             clear_rules().await;
-            if let Some(tun) = tun.as_deref()
+            if let Some(tun) = tun
                 && !want.is_empty()
             {
                 // A native sing-box tun is not rp_filter-locked at bring-up.
@@ -623,5 +674,72 @@ mod tests {
                 "-i rndis0 -p tcp --dport 53 -j DNAT --to-destination 1.1.1.1",
             ]
         );
+    }
+
+    // USB tethering switched off and on with the option on (reported from the
+    // device): rndis0 came back with the same name and subnet, the rules stayed,
+    // but the kernel had dropped its route from table 1102.
+    const RECREATED_RULES: &str = "\
+1015:\tfrom all iif rndis0 lookup 2022 
+1016:\tfrom all iif p2fbf546d to 10.173.7.0/24 lookup 1102 
+9000:\tfrom all uidrange 0-0 goto 9010 
+9001:\tfrom all iif p2fbf546d goto 9010 
+21000:\tfrom all iif rndis0 lookup rmnet_data3 
+";
+    const REPLY_ROUTES: &str = "10.173.7.0/24 dev rndis0 scope link \n";
+
+    #[test]
+    fn a_recreated_downstream_is_reinstalled() {
+        let applied = [iface("rndis0", "10.173.7.0/24")];
+        assert!(!plan_in_place(
+            &applied,
+            "p2fbf546d",
+            RECREATED_RULES,
+            "",
+            true
+        ));
+        assert!(plan_in_place(
+            &applied,
+            "p2fbf546d",
+            RECREATED_RULES,
+            REPLY_ROUTES,
+            true
+        ));
+    }
+
+    #[test]
+    fn a_missing_rule_or_forward_jump_is_reinstalled() {
+        let applied = [iface("rndis0", "10.173.7.0/24")];
+        let no_reply = RECREATED_RULES.replace("1016:", "1017:");
+        let no_steer = RECREATED_RULES.replace("1015:", "1014:");
+        for rules in [no_reply.as_str(), no_steer.as_str()] {
+            assert!(!plan_in_place(
+                &applied,
+                "p2fbf546d",
+                rules,
+                REPLY_ROUTES,
+                true
+            ));
+        }
+        assert!(!plan_in_place(
+            &applied,
+            "p2fbf546d",
+            RECREATED_RULES,
+            REPLY_ROUTES,
+            false
+        ));
+    }
+
+    #[test]
+    fn the_route_must_point_at_the_downstream() {
+        let applied = [iface("rndis0", "10.173.7.0/24")];
+        let elsewhere = "10.173.7.0/24 dev wlan0 scope link \n";
+        assert!(!plan_in_place(
+            &applied,
+            "p2fbf546d",
+            RECREATED_RULES,
+            elsewhere,
+            true
+        ));
     }
 }
