@@ -217,6 +217,9 @@ const hi = {
   "editor.viaHint":
     "इस सर्वर तक किसी दूसरी प्रोफ़ाइल के ज़रिए पहुँचें (प्रॉक्सी चेन)। चेन इसी प्रोफ़ाइल के कोर पर चलती है।",
   "editor.engineForced": "यह प्रोफ़ाइल केवल {core} पर चल सकती है",
+  "editor.engineForcedByHop": "चेन में “{hop}” केवल {core} पर चलता है, इसलिए यह प्रोफ़ाइल भी",
+  "editor.engineChainConflict":
+    "यह चेन शुरू नहीं हो सकती: “{xray}” केवल xray पर और “{singBox}” केवल sing-box पर चलता है। कोई दूसरा हॉप चुनें।",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Obfs पासवर्ड",

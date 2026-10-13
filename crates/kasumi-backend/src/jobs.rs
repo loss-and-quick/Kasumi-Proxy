@@ -314,7 +314,8 @@ pub async fn run_real_ping(
     let loaded = load_profile(platform, profile_id)
         .await
         .ok_or_else(|| "profile not found".to_string())?;
-    let engine = resolve_core(&loaded.profile, &loaded.state.settings);
+    let engine = resolve_core(&loaded.profile, &loaded.state.settings, &loaded.profiles)
+        .map_err(|e| e.to_string())?;
     // Hold a concurrency permit for the whole test (released on drop).
     let _permit = ping_limiter(loaded.state.settings.ping_concurrency as usize)
         .acquire_owned()
@@ -382,7 +383,8 @@ pub async fn run_speed_test(
     let loaded = load_profile(platform, profile_id)
         .await
         .ok_or_else(|| "profile not found".to_string())?;
-    let engine = resolve_core(&loaded.profile, &loaded.state.settings);
+    let engine = resolve_core(&loaded.profile, &loaded.state.settings, &loaded.profiles)
+        .map_err(|e| e.to_string())?;
     let _permit = speed_limiter(loaded.state.settings.speed_concurrency as usize)
         .acquire_owned()
         .await

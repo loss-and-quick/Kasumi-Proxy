@@ -1,6 +1,7 @@
 //! Core-engine resolution — profile override + per-protocol defaults, with
 //! capability guards for transports/protocols only one core can build.
 
+use crate::chain::chain_hops;
 use crate::contract::CoreConflict;
 use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
@@ -143,11 +144,37 @@ fn capability_core(p: &Profile) -> Option<CoreEngine> {
     None
 }
 
-/// Resolve the actual core for a profile (capabilities > override > table > fallback).
-pub fn resolve_core(p: &Profile, s: &AdvancedSettings) -> CoreEngine {
-    if let Some(forced) = forced_core(p) {
-        return forced;
+/// The core a profile's proxy chain must run on, and the profile (`p` itself or
+/// one of its hops) that needs it. Every hop is an outbound of the same config, so
+/// one hop only a single core can run pins the whole chain. A broken chain counts
+/// as no hops here; the config builders report it.
+pub fn chain_forced_core<'a>(
+    p: &'a Profile,
+    profiles: &'a [Profile],
+) -> Result<Option<(CoreEngine, &'a Profile)>, CoreConflict> {
+    let hops = chain_hops(p, profiles).unwrap_or_default();
+    let (mut xray, mut sing_box) = (None, None);
+    for q in std::iter::once(p).chain(hops) {
+        match forced_core(q) {
+            Some(CoreEngine::Xray) => xray = xray.or(Some(q)),
+            Some(CoreEngine::SingBox) => sing_box = sing_box.or(Some(q)),
+            None => {}
+        }
     }
+    match (xray, sing_box) {
+        (Some(x), Some(s)) => Err(CoreConflict::ChainCoreConflict {
+            xray: x.meta().remarks.clone(),
+            sing_box: s.meta().remarks.clone(),
+        }),
+        (Some(x), None) => Ok(Some((CoreEngine::Xray, x))),
+        (None, Some(s)) => Ok(Some((CoreEngine::SingBox, s))),
+        (None, None) => Ok(None),
+    }
+}
+
+/// The core a profile runs on when nothing forces it: its override, else the
+/// per-protocol table, else the protocol default.
+pub fn preferred_core(p: &Profile, s: &AdvancedSettings) -> CoreEngine {
     if let Some(engine) = p.meta().core_type {
         return engine;
     }
@@ -155,6 +182,19 @@ pub fn resolve_core(p: &Profile, s: &AdvancedSettings) -> CoreEngine {
         .get(&p.protocol())
         .copied()
         .unwrap_or_else(|| default_core_for(p.protocol()))
+}
+
+/// Resolve the actual core for a profile (capabilities of the profile and its
+/// chain > override > table > fallback).
+pub fn resolve_core(
+    p: &Profile,
+    s: &AdvancedSettings,
+    profiles: &[Profile],
+) -> Result<CoreEngine, CoreConflict> {
+    Ok(match chain_forced_core(p, profiles)? {
+        Some((engine, _)) => engine,
+        None => preferred_core(p, s),
+    })
 }
 
 /// TUN engine a core uses when nothing overrides it: sing-box owns a native TUN,
@@ -319,7 +359,10 @@ mod tests {
         // It outranks the user's own pick of xray.
         let mut picked = ws.clone();
         picked.meta_mut().core_type = Some(CoreEngine::Xray);
-        assert_eq!(resolve_core(&picked, &AdvancedSettings::default()), SingBox);
+        assert_eq!(
+            resolve_core(&picked, &AdvancedSettings::default(), &[]).unwrap(),
+            SingBox
+        );
         assert_eq!(
             forced_core(&p("hysteria2://pw@h.x:443?sni=h.x&insecure=1")),
             Some(SingBox)
@@ -462,7 +505,7 @@ mod tests {
             t.meta.core_type = Some(CoreEngine::Xray);
         }
         let s = AdvancedSettings::default();
-        assert_eq!(resolve_core(&prof, &s), CoreEngine::SingBox);
+        assert_eq!(resolve_core(&prof, &s, &[]).unwrap(), CoreEngine::SingBox);
     }
 
     #[test]
@@ -471,13 +514,13 @@ mod tests {
         let mut prof = p("vless://u@e.x:443?type=tcp&security=tls");
         assert_eq!(forced_core(&prof), None);
         let s = AdvancedSettings::default();
-        assert_eq!(resolve_core(&prof, &s), CoreEngine::Xray); // default table
+        assert_eq!(resolve_core(&prof, &s, &[]).unwrap(), CoreEngine::Xray); // default table
 
         // per-profile override wins over the table.
         if let Profile::Vless(v) = &mut prof {
             v.meta.core_type = Some(CoreEngine::SingBox);
         }
-        assert_eq!(resolve_core(&prof, &s), CoreEngine::SingBox);
+        assert_eq!(resolve_core(&prof, &s, &[]).unwrap(), CoreEngine::SingBox);
 
         // coreByProtocol table applies when there is no per-profile override.
         if let Profile::Vless(v) = &mut prof {
@@ -486,7 +529,101 @@ mod tests {
         let mut s2 = AdvancedSettings::default();
         s2.core_by_protocol
             .insert(Protocol::Vless, CoreEngine::SingBox);
-        assert_eq!(resolve_core(&prof, &s2), CoreEngine::SingBox);
+        assert_eq!(resolve_core(&prof, &s2, &[]).unwrap(), CoreEngine::SingBox);
+    }
+
+    fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {
+        let mut prof = p(uri);
+        prof.meta_mut().id = id.into();
+        prof.meta_mut().remarks = id.into();
+        prof.meta_mut().via = via.map(str::to_owned);
+        prof
+    }
+
+    #[test]
+    fn a_hop_only_one_core_runs_pins_the_chain() {
+        let s = AdvancedSettings::default();
+        let mut exit = chained(
+            "vless://u@e.x:443?type=tcp&security=tls",
+            "exit",
+            Some("mid"),
+        );
+        exit.meta_mut().core_type = Some(CoreEngine::Xray);
+        let all = vec![
+            exit.clone(),
+            chained("tuic://u:pw@t.ex:443?sni=t.ex", "mid", Some("entry")),
+            chained("vless://u@n.x:443?type=tcp&security=tls", "entry", None),
+        ];
+        // The tuic hop outranks the exit's own xray override.
+        assert_eq!(resolve_core(&exit, &s, &all).unwrap(), CoreEngine::SingBox);
+        let (engine, by) = chain_forced_core(&exit, &all).unwrap().unwrap();
+        assert_eq!(
+            (engine, by.meta().id.as_str()),
+            (CoreEngine::SingBox, "mid")
+        );
+
+        // An xray-only entry hop pins xray the same way.
+        let all = vec![
+            chained(
+                "vless://u@e.x:443?type=tcp&security=tls",
+                "exit",
+                Some("entry"),
+            ),
+            chained("vless://u@n.x:443?type=xhttp&security=tls", "entry", None),
+        ];
+        assert_eq!(resolve_core(&all[0], &s, &all).unwrap(), CoreEngine::Xray);
+    }
+
+    #[test]
+    fn hops_that_need_different_cores_conflict() {
+        let s = AdvancedSettings::default();
+        let all = vec![
+            chained(
+                "vless://u@e.x:443?type=xhttp&security=tls",
+                "exit",
+                Some("mid"),
+            ),
+            chained("tuic://u:pw@t.ex:443?sni=t.ex", "mid", None),
+        ];
+        let conflict = resolve_core(&all[0], &s, &all).unwrap_err();
+        assert_eq!(
+            conflict,
+            CoreConflict::ChainCoreConflict {
+                xray: "exit".into(),
+                sing_box: "mid".into(),
+            }
+        );
+        // The hop alone, without the exit, is fine.
+        assert_eq!(
+            resolve_core(&all[1], &s, &all).unwrap(),
+            CoreEngine::SingBox
+        );
+    }
+
+    #[test]
+    fn unforced_chain_keeps_the_profiles_own_choice() {
+        let mut s = AdvancedSettings::default();
+        s.core_by_protocol
+            .insert(Protocol::Vless, CoreEngine::SingBox);
+        let all = vec![
+            chained(
+                "vless://u@e.x:443?type=tcp&security=tls",
+                "exit",
+                Some("hop"),
+            ),
+            chained("trojan://pw@h.x:443?security=tls", "hop", None),
+        ];
+        assert_eq!(chain_forced_core(&all[0], &all).unwrap(), None);
+        assert_eq!(
+            resolve_core(&all[0], &s, &all).unwrap(),
+            CoreEngine::SingBox
+        );
+        // A broken chain doesn't force anything; the builders report it.
+        let looped = vec![chained("tuic://u:pw@t.ex:443?sni=t.ex", "a", Some("a"))];
+        assert_eq!(
+            resolve_core(&looped[0], &s, &looped).unwrap(),
+            CoreEngine::SingBox
+        );
     }
 
     #[test]
@@ -509,17 +646,21 @@ mod tests {
         for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
             let mut prof = p(&format!("ss://{m}:pw@h.ex:8388#x"));
             assert_eq!(
-                resolve_core(&prof, &AdvancedSettings::default()),
+                resolve_core(&prof, &AdvancedSettings::default(), &[]).unwrap(),
                 CoreEngine::Xray,
                 "{m}"
             );
             let mut s = AdvancedSettings::default();
             s.core_by_protocol
                 .insert(Protocol::Shadowsocks, CoreEngine::SingBox);
-            assert_eq!(resolve_core(&prof, &s), CoreEngine::SingBox, "{m}");
+            assert_eq!(
+                resolve_core(&prof, &s, &[]).unwrap(),
+                CoreEngine::SingBox,
+                "{m}"
+            );
             prof.meta_mut().core_type = Some(CoreEngine::SingBox);
             assert_eq!(
-                resolve_core(&prof, &AdvancedSettings::default()),
+                resolve_core(&prof, &AdvancedSettings::default(), &[]).unwrap(),
                 CoreEngine::SingBox,
                 "{m}"
             );

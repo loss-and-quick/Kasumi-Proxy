@@ -24,11 +24,15 @@ pub enum LogTarget {
 /// backend will actually run it on, and the engine a capability pins it to
 /// (`None` when the profile is freely selectable). The UI renders these instead
 /// of re-implementing the resolution matrix (`core::resolve_core`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CoreResolution {
     pub resolved: CoreEngine,
     pub forced: Option<CoreEngine>,
+    /// Remarks of the chain hop that pins `forced`, when a hop rather than the
+    /// profile itself needs that core.
+    #[serde(default)]
+    pub forced_by_hop: Option<String>,
     /// Set when no core can run the profile as configured; it can't start.
     #[serde(default)]
     pub conflict: Option<CoreConflict>,
@@ -40,12 +44,21 @@ pub struct CoreResolution {
 }
 
 /// Why no core can run a profile (`core::core_conflict`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CoreConflict {
     /// TLS without a certificate check or a pinned certificate, on a profile only
     /// xray runs: xray has dropped `allowInsecure`, so only a pin gets past its check.
     UnpinnedInsecureTls,
+    /// A proxy chain that no single core can build: every hop is an outbound of the
+    /// one config, and these two profiles of it each run on a different core only.
+    ChainCoreConflict {
+        /// Remarks of the profile that runs only on xray.
+        xray: String,
+        /// Remarks of the profile that runs only on sing-box.
+        #[serde(rename = "singBox")]
+        sing_box: String,
+    },
 }
 
 impl std::fmt::Display for CoreConflict {
@@ -54,6 +67,10 @@ impl std::fmt::Display for CoreConflict {
             Self::UnpinnedInsecureTls => f.write_str(
                 "this profile runs only on xray, which no longer skips certificate checks: \
                  pin the server certificate (SHA-256) or turn off \"Allow insecure\"",
+            ),
+            Self::ChainCoreConflict { xray, sing_box } => write!(
+                f,
+                "proxy chain needs two cores: \"{xray}\" runs only on xray, \"{sing_box}\" only on sing-box",
             ),
         }
     }

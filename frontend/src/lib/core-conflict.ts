@@ -9,5 +9,10 @@ export function coreConflictText(t: Translate, conflict: CoreConflict): string {
         pin: t("settings.pinnedCert"),
         insecure: t("editor.allowInsecure"),
       });
+    case "chainCoreConflict":
+      return t("editor.engineChainConflict", {
+        xray: conflict.xray,
+        singBox: conflict.singBox,
+      });
   }
 }

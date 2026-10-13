@@ -38,7 +38,7 @@ pub fn build_core_config(
     profiles: &[Profile],
     srs_dir: &str,
 ) -> Result<CoreConfig, String> {
-    let engine = resolve_core(profile, settings);
+    let engine = resolve_core(profile, settings, profiles).map_err(|e| e.to_string())?;
     let tun = resolve_tun(engine, settings);
     let config = match engine {
         CoreEngine::SingBox => build_singbox_config(

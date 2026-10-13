@@ -221,6 +221,9 @@ const pt = {
   "editor.viaHint":
     "Alcançar este servidor através de outro perfil (cadeia de proxies). A cadeia usa o núcleo deste perfil.",
   "editor.engineForced": "Este perfil só pode ser executado no {core}",
+  "editor.engineForcedByHop": "“{hop}” na cadeia só roda no {core}, então este perfil também",
+  "editor.engineChainConflict":
+    "Esta cadeia não pode iniciar: “{xray}” só roda no xray e “{singBox}” só no sing-box. Escolha outro salto.",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Ofuscação",
   "editor.obfsPassword": "Senha do obfs",
