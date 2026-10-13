@@ -1297,6 +1297,7 @@ const vi = {
     "Tuyến được thêm mà không có hồ sơ: hãy chọn áp dụng cho ai sau đó. Các khối giống hệt sẵn có sẽ được dùng lại.",
   "editor.route": "Tuyến",
   "editor.routeFollow": "Như nhóm: {route}",
+  "editor.routePinDefault": "Luôn “{route}”, không theo tuyến của nhóm",
   "editor.routeHint": "Hồ sơ này dùng quy tắc định tuyến nào ở chế độ quy tắc.",
   "overview.route": "Tuyến: {route}",
   "overview.routeOpen": "Mở tuyến",

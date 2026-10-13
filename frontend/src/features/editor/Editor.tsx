@@ -176,6 +176,11 @@ export default function Editor({
   const groupRoute =
     routes.find((r) => routeEnabled(r) && groupId !== null && routeGroups(r).includes(groupId)) ??
     routes.find(isDefaultRoute);
+  // Pinning to the default route matters only against a group route of its own.
+  const defaultRoute = routes.find(isDefaultRoute);
+  const pinDefault =
+    defaultRoute &&
+    (route === defaultRoute.id || (groupRoute !== undefined && !isDefaultRoute(groupRoute)));
   const routeOpts =
     routes.length > 1
       ? [
@@ -183,6 +188,14 @@ export default function Editor({
             value: "",
             label: t("editor.routeFollow", { route: groupRoute ? routeName(groupRoute, t) : "" }),
           },
+          ...(pinDefault
+            ? [
+                {
+                  value: defaultRoute.id,
+                  label: t("editor.routePinDefault", { route: routeName(defaultRoute, t) }),
+                },
+              ]
+            : []),
           ...routes
             .filter((r) => !isDefaultRoute(r))
             .map((r) => ({

@@ -11,6 +11,7 @@ import {
   parseRoutePackage,
   type RuleBlock,
   routeFor,
+  setProfileRoute,
 } from "../routes";
 
 const rule = (id: string, fields: Partial<RoutingRule> = {}): RoutingRule => ({
@@ -73,6 +74,25 @@ describe("routes", () => {
     expect(next.routes[1].blocks).toEqual([{ blockId: "b", enabled: true }]);
     expect(next.routes[1].profiles).toEqual(["p"]);
     expect(next.routingRules).toBeUndefined();
+  });
+
+  it("a profile pinned to the default route leaves its group's route", () => {
+    const routes = setProfileRoute(
+      [route(DEFAULT_ROUTE_ID, []), route("team", [], { groups: ["g2"], profiles: ["b"] })],
+      "b",
+      DEFAULT_ROUTE_ID,
+    );
+    expect(routes.map((r) => r.profiles)).toEqual([["b"], []]);
+    expect(routeFor(routes, profile("b", "g2"))?.id).toBe(DEFAULT_ROUTE_ID);
+    expect(routeFor(routes, profile("c", "g2"))?.id).toBe("team");
+    const state = {
+      routes,
+      ruleBlocks: [],
+      profiles: [profile("b", "g2")],
+      groups: [{ id: "g2" }],
+    };
+    expect(normalizeRoutes(state, () => "x").routes[0].profiles).toEqual(["b"]);
+    expect(setProfileRoute(routes, "b", null)[0].profiles).toEqual([]);
   });
 
   it("a shared route keeps its blocks and loses its profiles", () => {
