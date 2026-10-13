@@ -1,9 +1,7 @@
 //! Core-engine resolution — profile override + per-protocol defaults, with
 //! capability guards for transports/protocols only one core can build.
 
-use crate::enums::{
-    CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, SsMethod, TunEngine,
-};
+use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
 use crate::profile::{Profile, Protocol};
 use crate::state::AdvancedSettings;
@@ -66,25 +64,10 @@ pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
             if matches!(ss.transport, Transport::Quic(_)) {
                 return Some(SingBox);
             }
-            // Xray's spellings of none / chacha20-ietf-poly1305 /
-            // xchacha20-ietf-poly1305: a profile naming them stays on Xray unless
-            // its transport needs sing-box.
-            if matches!(
-                ss.method,
-                SsMethod::Plain | SsMethod::Chacha20Poly1305 | SsMethod::Xchacha20Poly1305
-            ) {
-                return Some(Xray);
-            }
-            // The 2022 AEAD ciphers and the IETF chacha variant route to sing-box.
-            if matches!(
-                ss.method,
-                SsMethod::Chacha20IetfPoly1305
-                    | SsMethod::Blake3Aes128Gcm
-                    | SsMethod::Blake3Aes256Gcm
-                    | SsMethod::Blake3Chacha20Poly1305
-            ) {
-                return Some(SingBox);
-            }
+            // Every cipher runs on both cores (sing-box under its own names for
+            // Xray's `plain` / `chacha20-poly1305` / `xchacha20-poly1305`), so
+            // only a v2ray-plugin or obfs-local transport, or the plugin's TLS,
+            // pins sing-box.
             if ss.tls.security == Security::Tls
                 || ss.transport.network() != Network::Tcp
                 || ss.transport.header_type() == HeaderType::Http
@@ -223,6 +206,7 @@ pub struct TunCoreOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::enums::SsMethod;
     use crate::share::parse_share_link;
 
     fn p(uri: &str) -> Profile {
@@ -308,28 +292,34 @@ mod tests {
     }
 
     #[test]
-    fn shadowsocks_method_routing_splits_by_core() {
-        use CoreEngine::{SingBox, Xray};
-        // Xray's own cipher names stay on Xray.
-        for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
+    fn every_shadowsocks_cipher_is_selectable_on_plain_tcp() {
+        use strum::IntoEnumIterator;
+        for method in SsMethod::iter() {
+            let with = |uri: &str| {
+                let Profile::Shadowsocks(mut ss) = p(uri) else {
+                    panic!("not shadowsocks")
+                };
+                ss.method = method;
+                Profile::Shadowsocks(ss)
+            };
             assert_eq!(
-                forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
-                Some(Xray),
-                "{m} must route to xray"
+                forced_core(&with("ss://YWVzLTI1Ni1nY206cHc=@h.ex:8388#x")),
+                None,
+                "{method:?} on plain TCP"
             );
-        }
-        // The 2022 AEAD ciphers and the IETF chacha variant route to sing-box.
-        for m in [
-            "chacha20-ietf-poly1305",
-            "2022-blake3-aes-128-gcm",
-            "2022-blake3-aes-256-gcm",
-            "2022-blake3-chacha20-poly1305",
-        ] {
-            assert_eq!(
-                forced_core(&p(&format!("ss://{m}:pw@h.ex:443#x"))),
-                Some(SingBox),
-                "{m} must route to sing-box"
-            );
+            for plugin in [
+                "v2ray-plugin%3Bmode%3Dwebsocket",
+                "v2ray-plugin%3Btls",
+                "obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dh.ex",
+            ] {
+                assert_eq!(
+                    forced_core(&with(&format!(
+                        "ss://YWVzLTI1Ni1nY206cHc=@h.ex:8388?plugin={plugin}#x"
+                    ))),
+                    Some(CoreEngine::SingBox),
+                    "{method:?} with {plugin}"
+                );
+            }
         }
     }
 
@@ -369,11 +359,6 @@ mod tests {
                 "vless://u@e.x:443?type=ws&security=tls&acceptProxyProtocol=1"
             )),
             Some(Xray)
-        );
-        // A 2022 shadowsocks AEAD method only sing-box implements.
-        assert_eq!(
-            forced_core(&p("ss://2022-blake3-aes-128-gcm:pw@e.x:443#X")),
-            Some(SingBox)
         );
     }
 
@@ -454,6 +439,36 @@ mod tests {
             ss.method = method;
             let prof = Profile::Shadowsocks(ss);
             assert_eq!(forced_core(&prof), Some(CoreEngine::SingBox), "{method:?}");
+        }
+    }
+
+    #[test]
+    fn xray_cipher_spellings_follow_the_core_choice() {
+        for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
+            let mut prof = p(&format!("ss://{m}:pw@h.ex:8388#x"));
+            assert_eq!(
+                resolve_core(&prof, &AdvancedSettings::default()),
+                CoreEngine::Xray,
+                "{m}"
+            );
+            let mut s = AdvancedSettings::default();
+            s.core_by_protocol
+                .insert(Protocol::Shadowsocks, CoreEngine::SingBox);
+            assert_eq!(resolve_core(&prof, &s), CoreEngine::SingBox, "{m}");
+            prof.meta_mut().core_type = Some(CoreEngine::SingBox);
+            assert_eq!(
+                resolve_core(&prof, &AdvancedSettings::default()),
+                CoreEngine::SingBox,
+                "{m}"
+            );
+            // A v2ray-plugin transport pins sing-box, as for every cipher.
+            assert_eq!(
+                forced_core(&p(&format!(
+                    "ss://{m}:pw@h.ex:8388?plugin=v2ray-plugin%3Bmode%3Dwebsocket#ws"
+                ))),
+                Some(CoreEngine::SingBox),
+                "{m}"
+            );
         }
     }
 

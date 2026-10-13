@@ -1821,3 +1821,39 @@ fn bridged_uplink_bind_validates_against_real_cores() {
         }
     });
 }
+
+/// Every Shadowsocks cipher on a plain TCP link, pinned to each core in turn:
+/// both must run them all, sing-box under its own names for Xray's aliases.
+#[test]
+fn every_shadowsocks_cipher_validates_on_both_cores() {
+    let mut cases = Vec::new();
+    for method in SsMethod::iter() {
+        for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+            let name = format!("ss-core/{}/{}", wire(&method), wire(&engine));
+            let Some(Profile::Shadowsocks(mut s)) =
+                make(Protocol::Shadowsocks, None, Security::None, &name)
+            else {
+                panic!("{name}: shadowsocks seed builds");
+            };
+            s.method = method;
+            s.password = ss_key(method).to_string();
+            s.meta.core_type = Some(engine);
+            let profile = Profile::Shadowsocks(s);
+            let settings = AdvancedSettings::default();
+            assert_eq!(
+                kasumi_core::core::resolve_core(&profile, &settings),
+                engine,
+                "{name} runs on the pinned core"
+            );
+            cases.push(Case {
+                name,
+                profile,
+                settings,
+                rules: vec![],
+                needs_geo: false,
+                others: vec![],
+            });
+        }
+    }
+    validate_all(cases);
+}
