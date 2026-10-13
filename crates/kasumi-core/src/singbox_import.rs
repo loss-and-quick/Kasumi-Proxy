@@ -649,6 +649,18 @@ mod tests {
     }
 
     #[test]
+    fn a_tailscale_endpoint_counts_as_a_server_kasumi_cannot_import() {
+        // It joins a tailnet rather than naming a `server`, but it is still a way
+        // out the provider offers that Kasumi leaves out, so the user hears of it.
+        let imported = import_singbox(&json!({
+            "endpoints": [{ "type": "tailscale", "tag": "ts", "auth_key": "tskey-x" }],
+            "outbounds": [{ "type": "direct", "tag": "direct" }],
+        }));
+        assert!(imported.profiles.is_empty());
+        assert_eq!(imported.skipped, 1);
+    }
+
+    #[test]
     fn only_servers_kasumi_cannot_import_are_counted() {
         let imported = import_singbox(&json!({
             "inbounds": [{ "type": "mixed", "listen": "0.0.0.0", "listen_port": 1080 }],
