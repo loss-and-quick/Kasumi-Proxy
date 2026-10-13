@@ -1300,6 +1300,9 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("upsertSub"),
 	subscription: Subscription_SerializeSchema,
+}), z.object({
+	kind: z.literal("withdrawProviderConfigs"),
+	subId: z.string(),
 })]);
 export type MutationIntent_Serialize = z.infer<typeof MutationIntent_SerializeSchema>;
 
@@ -1527,6 +1530,9 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("upsertSub"),
 	subscription: Subscription_DeserializeSchema,
+}), z.object({
+	kind: z.literal("withdrawProviderConfigs"),
+	subId: z.string(),
 })]);
 export type MutationIntent_Deserialize = z.infer<typeof MutationIntent_DeserializeSchema>;
 

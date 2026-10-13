@@ -8,13 +8,16 @@
 use happ_sub::meta::{changes, classify_key, single_line, validate_url_safety};
 use happ_sub::{MetaMap, RiskClass, RoutingAction, RoutingProfile};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 
 use crate::import_input::is_encrypted_url;
+use crate::profile::{CustomOrigin, Profile};
 use crate::route::{Route, RouteBlockRef, RuleBlock, upsert_route};
 use crate::state::{
     AdvancedSettings, AppState, AuditEntry, AuditOutcome, BASE_GROUP_ID, ChangeAction,
     ChangeDecision, PendingChange, RoutingImport, RoutingRule, Subscription, TunnelSetting,
 };
+use crate::sub_apply::{next_active_id_after_subscription_update, owned_by_sub};
 
 /// Audit entries kept per subscription.
 pub const AUDIT_MAX: usize = 50;
@@ -550,6 +553,42 @@ pub fn offer_provider_configs(sub: &mut Subscription, now: &str) -> bool {
     );
     push_audit(sub, vec![entry]);
     true
+}
+
+/// The full Xray configs `sub` imported that withdrawing the permission removes.
+fn provider_configs_of<'a>(
+    profiles: &'a [Profile],
+    sub: &'a Subscription,
+) -> impl Iterator<Item = &'a Profile> {
+    profiles.iter().filter(|p| {
+        matches!(p, Profile::Custom(c) if c.origin == CustomOrigin::Provider)
+            && owned_by_sub(p, &sub.id, sub.group_id.as_deref())
+    })
+}
+
+/// Take back the permission to import `sub_id`'s full Xray configs and remove the
+/// ones it imported. The active selection moves on as after a refresh that no
+/// longer carries them.
+pub fn withdraw_provider_configs(state: &mut AppState, sub_id: &str) {
+    let Some(sub) = state.subscriptions.iter_mut().find(|s| s.id == sub_id) else {
+        return;
+    };
+    sub.allow_provider_configs = false;
+    let sub = sub.clone();
+    let gone: HashSet<String> = provider_configs_of(&state.profiles, &sub)
+        .map(|p| p.meta().id.clone())
+        .collect();
+    if let Some(active) = state.active_id.as_deref().filter(|id| gone.contains(*id)) {
+        let left: Vec<Profile> = state
+            .profiles
+            .iter()
+            .filter(|p| p.meta().sub_id.as_deref() == Some(sub_id) && !gone.contains(&p.meta().id))
+            .cloned()
+            .collect();
+        state.active_id =
+            next_active_id_after_subscription_update(&state.profiles, Some(active), sub_id, &left);
+    }
+    state.profiles.retain(|p| !gone.contains(&p.meta().id));
 }
 
 /// Prepend `entries` to `sub`'s audit, keeping [`AUDIT_MAX`].
@@ -1421,6 +1460,78 @@ mod tests {
         assert!(!s.allow_provider_configs);
         assert!(!offer_provider_configs(s, LATER));
         assert!(s.pending_changes.is_empty());
+    }
+
+    fn provider_config(id: &str, host: &str, group: &str) -> Profile {
+        let raw = serde_json::json!({ "outbounds": [{ "protocol": "trojan",
+            "settings": { "servers": [{ "address": host, "port": 443, "password": "pw" }] } }] });
+        serde_json::from_value(serde_json::json!({
+            "protocol": "custom",
+            "meta": { "id": id, "remarks": id, "groupId": group, "subId": "s1" },
+            "raw": raw.to_string(),
+            "origin": "provider",
+        }))
+        .unwrap()
+    }
+
+    fn withdrawn(profiles: Vec<Profile>, active: &str) -> AppState {
+        let mut st = state();
+        st.subscriptions[0].allow_provider_configs = true;
+        st.profiles = profiles;
+        st.active_id = Some(active.into());
+        withdraw_provider_configs(&mut st, "s1");
+        assert!(!st.subscriptions[0].allow_provider_configs);
+        st
+    }
+
+    fn ids(st: &AppState) -> Vec<&str> {
+        st.profiles.iter().map(|p| p.meta().id.as_str()).collect()
+    }
+
+    #[test]
+    fn withdrawing_provider_configs_removes_only_the_imported_ones() {
+        let mut typed =
+            crate::share::parse_share_link("trojan://pw@t.example:443#T", None).unwrap();
+        typed.meta_mut().id = "typed".into();
+        typed.meta_mut().sub_id = Some("s1".into());
+        typed.meta_mut().group_id = "g-s1".into();
+        let mut own = provider_config("own", "o.example", "g-s1");
+        if let Profile::Custom(c) = &mut own {
+            c.origin = CustomOrigin::User;
+            c.meta.sub_id = None;
+        }
+        let mut other_sub = provider_config("other", "x.example", "g-s1");
+        other_sub.meta_mut().sub_id = Some("s2".into());
+        let st = withdrawn(
+            vec![
+                provider_config("a", "a.example", "g-s1"),
+                provider_config("moved", "m.example", BASE_GROUP_ID),
+                typed,
+                own,
+                other_sub,
+            ],
+            "typed",
+        );
+        assert_eq!(ids(&st), ["moved", "typed", "own", "other"]);
+        assert_eq!(st.active_id.as_deref(), Some("typed"));
+    }
+
+    #[test]
+    fn withdrawing_the_active_config_moves_the_selection_as_a_refresh_would() {
+        let gone = withdrawn(vec![provider_config("a", "a.example", "g-s1")], "a");
+        assert!(gone.profiles.is_empty());
+        assert_eq!(gone.active_id, None);
+
+        // The copy the user moved out of the group is the same server.
+        let st = withdrawn(
+            vec![
+                provider_config("a", "a.example", "g-s1"),
+                provider_config("moved", "a.example", BASE_GROUP_ID),
+            ],
+            "a",
+        );
+        assert_eq!(ids(&st), ["moved"]);
+        assert_eq!(st.active_id.as_deref(), Some("moved"));
     }
 
     #[test]
