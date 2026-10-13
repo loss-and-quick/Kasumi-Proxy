@@ -64,13 +64,8 @@ impl Platform for RemotePlatform {
     // Deliberately answered by the local half, NOT forwarded: the OS proxy lives in
     // the logged-in user's session (gsettings/D-Bus/HKCU) — the GUI's, not the
     // helper's root/LocalSystem one.
-    async fn set_os_proxy(
-        &self,
-        mode: kasumi_core::state::ProxyMode,
-        engine: Engine,
-        socks_port: u16,
-    ) {
-        self.local.set_os_proxy(mode, engine, socks_port).await;
+    async fn set_os_proxy(&self, mode: kasumi_core::state::ProxyMode, plan: &DataPathPlan) {
+        self.local.set_os_proxy(mode, plan).await;
     }
 
     async fn clear_os_proxy(&self) {

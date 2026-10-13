@@ -32,8 +32,7 @@ use kasumi_core::data_path_state::DataPathState;
 use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{
-    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_PAC_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode,
-    SingboxStack, force_socks_port,
+    DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT, ProxyMode, SingboxStack, force_socks_port,
 };
 
 use crate::desktop::paths::DesktopPaths;
@@ -150,13 +149,6 @@ impl DesktopPlatform {
             .await
             .and_then(|s| s.settings.local_http_port)
             .unwrap_or(DEFAULT_LOCAL_HTTP_PORT)
-    }
-
-    async fn pac_port(&self) -> u16 {
-        kasumi_backend::state::read_state_shell(&self.p.backend.app_state)
-            .await
-            .and_then(|s| s.settings.local_pac_port)
-            .unwrap_or(DEFAULT_LOCAL_PAC_PORT)
     }
 
     /// The user's TUN-exclude CIDRs (e.g. docker bridge networks) from the saved
@@ -452,15 +444,10 @@ impl Platform for DesktopPlatform {
         }
     }
 
-    async fn set_os_proxy(&self, mode: ProxyMode, engine: CoreEngine, socks_port: u16) {
-        // sing-box's mixed inbound serves http on the socks port; xray has a
-        // separate http inbound on the configured http port.
-        let http = if engine == CoreEngine::SingBox {
-            socks_port
-        } else {
-            self.http_port().await
-        };
-        crate::desktop::apply_os_proxy(mode, socks_port, http, self.pac_port().await).await;
+    async fn set_os_proxy(&self, mode: ProxyMode, plan: &DataPathPlan) {
+        let ports = &plan.ports;
+        crate::desktop::apply_os_proxy(mode, ports.socks, plan.os_proxy_http_port(), ports.pac)
+            .await;
     }
 
     async fn clear_os_proxy(&self) {
