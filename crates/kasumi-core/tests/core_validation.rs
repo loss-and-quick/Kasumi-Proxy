@@ -31,6 +31,7 @@ use kasumi_core::enums::{
     PacketEncoding, Security, SsMethod, VmessEnc,
 };
 use kasumi_core::mixins::Transport;
+use kasumi_core::outbound_bind::bind_uplink_outbounds;
 use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::singbox_config::apply_singbox_cache_file;
 use kasumi_core::state::{
@@ -38,6 +39,7 @@ use kasumi_core::state::{
     SingboxFragment, SingboxStack,
 };
 use kasumi_core::sub_ingest::{IngestInput, ingest};
+use kasumi_core::xray_config::hijack_inbound_dns;
 
 // ── valid credential / crypto material (cores validate these) ──
 const UUID: &str = "11111111-1111-1111-1111-111111111111";
@@ -1228,6 +1230,12 @@ fn validate(engine: CoreEngine, bin: &Path, cfg: &Path, asset_dir: &Path) -> (bo
 /// is static, so it also runs where no core is staged (plain CI) and on cases
 /// the missing geo data would otherwise skip.
 fn validate_all(cases: Vec<Case>) {
+    validate_all_with(cases, |_, _| {});
+}
+
+/// [`validate_all`], with `adjust` applied to each built config the way the
+/// backend rewrites it before launch.
+fn validate_all_with(cases: Vec<Case>, adjust: impl Fn(CoreEngine, &mut Value)) {
     let xray = find_core("KASUMI_XRAY_BIN", "xray");
     let singbox = find_core("KASUMI_SINGBOX_BIN", "sing-box");
     let cores_staged = xray.is_some() || singbox.is_some();
@@ -1260,11 +1268,12 @@ fn validate_all(cases: Vec<Case>) {
         others,
     } in cases
     {
-        let Some((cfg_value, engine)) =
+        let Some((mut cfg_value, engine)) =
             build_config(&profile, &others, &settings, &rules, srs_dir.path())
         else {
             continue; // our builder declined this combo — not a core problem.
         };
+        adjust(engine, &mut cfg_value);
         built += 1;
         if engine == CoreEngine::SingBox {
             for violation in singbox_legacy_dns_violations(&cfg_value) {
@@ -1663,4 +1672,152 @@ fn singbox_body_cases() -> Vec<Case> {
 #[test]
 fn singbox_body_profiles_validate_against_real_cores() {
     validate_all(singbox_body_cases());
+}
+
+/// Per-rule profile targets on both cores: a stream server, a wireguard target
+/// (a sing-box endpoint), and one that dials through a chain of its own.
+fn profile_target_cases() -> Vec<Case> {
+    let with_id = |mut p: Profile, id: &str, via: Option<&str>| {
+        p.meta_mut().id = id.into();
+        p.meta_mut().via = via.map(str::to_string);
+        p
+    };
+    let rule = |id: &str, outbound: &str| RoutingRule {
+        id: id.into(),
+        remarks: id.into(),
+        enabled: true,
+        outbound_tag: outbound.into(),
+        domain: Some(vec![format!("{id}.example")]),
+        ip: None,
+        port: None,
+        network: None,
+        protocol: None,
+        process: None,
+        package_name: None,
+        source_ip: None,
+    };
+    let active = make(Protocol::Vless, Some(Network::Ws), Security::Tls, "active").unwrap();
+    let others = vec![
+        with_id(
+            make(Protocol::Trojan, Some(Network::Tcp), Security::Tls, "t").unwrap(),
+            "t-trojan",
+            None,
+        ),
+        with_id(
+            make(Protocol::Wireguard, None, Security::Tls, "wg").unwrap(),
+            "t-wg",
+            None,
+        ),
+        with_id(
+            make(Protocol::Vmess, Some(Network::Grpc), Security::Tls, "c").unwrap(),
+            "t-chained",
+            Some("t-entry"),
+        ),
+        with_id(
+            make(Protocol::Shadowsocks, None, Security::None, "e").unwrap(),
+            "t-entry",
+            None,
+        ),
+    ];
+    let settings = AdvancedSettings {
+        routing_mode: RoutingMode::Rules,
+        ..AdvancedSettings::default()
+    };
+    let rules = vec![
+        rule("trojan", "t-trojan"),
+        rule("wg", "t-wg"),
+        rule("chained", "t-chained"),
+    ];
+    [CoreEngine::Xray, CoreEngine::SingBox]
+        .into_iter()
+        .map(|engine| {
+            let mut profile = with_id(active.clone(), "active", None);
+            profile.meta_mut().core_type = Some(engine);
+            Case {
+                name: format!("profile-targets/{}", wire(&engine)),
+                profile,
+                settings: settings.clone(),
+                rules: rules.clone(),
+                needs_geo: false,
+                others: others.clone(),
+            }
+        })
+        .collect()
+}
+
+/// The desktop's bridged mode binds every outbound that dials the network to the
+/// uplink, after an xray core gets its DNS module and `dns` outbound for DNS sent
+/// through the tun. The cores must accept those binds on provider balancer members,
+/// relays and `dns` outbounds, per-rule profile targets, chain hops and an XHTTP
+/// download leg.
+#[test]
+fn bridged_uplink_bind_validates_against_real_cores() {
+    let mut xhttp = make(
+        Protocol::Vless,
+        Some(Network::Xhttp),
+        Security::Tls,
+        "xhttp",
+    )
+    .unwrap();
+    if let Profile::Vless(v) = &mut xhttp
+        && let Transport::Xhttp(x) = &mut v.transport
+    {
+        x.extra = json!({ "downloadSettings": {
+            "address": "down.example", "port": 443, "network": "xhttp",
+            "security": "tls", "tlsSettings": { "serverName": "down.example" },
+        }})
+        .to_string();
+    }
+    let xhttp = Case {
+        name: "xhttp-download-leg".into(),
+        profile: xhttp,
+        settings: AdvancedSettings::default(),
+        rules: vec![],
+        needs_geo: false,
+        others: vec![],
+    };
+    // A provider `dns` outbound that forwards non-IP queries to its own server.
+    let mut provider_dns = provider_custom_cases().remove(0);
+    if let Profile::Custom(c) = &mut provider_dns.profile {
+        let mut raw: Value = serde_json::from_str(&c.raw).unwrap();
+        raw["outbounds"].as_array_mut().unwrap().push(json!({
+            "tag": "dns-fwd", "protocol": "dns",
+            "settings": { "address": "1.1.1.1", "port": 53, "nonIPQuery": "skip" },
+        }));
+        raw["routing"]["rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "type": "field", "port": "53", "outboundTag": "dns-fwd" }));
+        c.raw = raw.to_string();
+    }
+    provider_dns.name = "provider-custom/dns".into();
+    let cases = provider_custom_cases()
+        .into_iter()
+        .chain([provider_dns])
+        .chain(chain_cases())
+        .chain(profile_target_cases())
+        .chain([xhttp])
+        .map(|c| Case {
+            name: format!("bridged/{}", c.name),
+            ..c
+        })
+        .collect();
+    validate_all_with(cases, |engine, cfg| {
+        if engine == CoreEngine::Xray {
+            hijack_inbound_dns(cfg);
+        }
+        bind_uplink_outbounds(engine, cfg, "eth0", Some("192.0.2.10"));
+        if engine == CoreEngine::Xray {
+            let dns = cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|o| o["protocol"] == "dns")
+                .collect::<Vec<_>>();
+            assert!(!dns.is_empty());
+            for ob in dns {
+                assert_eq!(ob["streamSettings"]["sockopt"]["interface"], "eth0", "{ob}");
+            }
+        }
+    });
 }
