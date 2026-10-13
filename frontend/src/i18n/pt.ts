@@ -156,6 +156,8 @@ const pt = {
   "editor.editTitle": "Editar perfil",
   "editor.save": "Salvar",
   "editor.basics": "Básico",
+  "editor.protocolUnavailable":
+    "O Naive não está disponível no Android: o sing-box incluído é compilado sem ele.",
   "editor.protocol": "Protocolo",
   "editor.remarks": "Nome",
   "editor.address": "Endereço",

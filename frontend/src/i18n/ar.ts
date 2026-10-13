@@ -192,6 +192,7 @@ const ar = {
   "editor.editTitle": "تعديل الملف التعريفي",
   "editor.save": "حفظ",
   "editor.basics": "الأساسيات",
+  "editor.protocolUnavailable": "Naive غير متاح على Android: تم بناء sing-box المرفق بدونه.",
   "editor.protocol": "البروتوكول",
   "editor.remarks": "الاسم",
   "editor.address": "العنوان",

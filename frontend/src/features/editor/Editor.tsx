@@ -34,6 +34,8 @@ import { SharePreview } from "./sections/SharePreview";
 import { TransportSection } from "./sections/TransportSection";
 import type { FieldErrors } from "./types";
 
+const NO_PROTOCOLS: readonly Protocol[] = [];
+
 export default function Editor({
   profileId,
   newGroupId,
@@ -45,6 +47,7 @@ export default function Editor({
   onClose: () => void;
 }) {
   const groups = useAppStore((s) => s.groups);
+  const unavailable = useAppStore((s) => s.caps?.unavailableProtocols) ?? NO_PROTOCOLS;
   // Hops are offered in the Profiles screen's order.
   const ordered = useOrderedProfiles();
   const existing = useAppStore((s) => s.profiles.find((p) => p.meta.id === profileId));
@@ -238,6 +241,7 @@ export default function Editor({
       <BasicsSection
         draft={draft}
         setMeta={setMeta}
+        unavailable={unavailable}
         setEndpoint={setEndpoint}
         errors={errors}
         groups={groups}

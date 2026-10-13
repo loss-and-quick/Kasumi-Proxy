@@ -157,6 +157,8 @@ const en = {
   "editor.editTitle": "Edit profile",
   "editor.save": "Save",
   "editor.basics": "Basics",
+  "editor.protocolUnavailable":
+    "Naive isn't available on Android: the bundled sing-box is built without it.",
   "editor.protocol": "Protocol",
   "editor.remarks": "Remarks",
   "editor.address": "Address",

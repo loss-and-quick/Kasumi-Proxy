@@ -153,6 +153,8 @@ const vi = {
   "editor.editTitle": "Chỉnh sửa hồ sơ",
   "editor.save": "Lưu",
   "editor.basics": "Cơ bản",
+  "editor.protocolUnavailable":
+    "Naive không khả dụng trên Android: sing-box đi kèm được biên dịch không có nó.",
   "editor.protocol": "Giao thức",
   "editor.remarks": "Ghi chú",
   "editor.address": "Địa chỉ",

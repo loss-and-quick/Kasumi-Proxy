@@ -152,6 +152,7 @@ const zh = {
   "editor.editTitle": "编辑配置",
   "editor.save": "保存",
   "editor.basics": "基础",
+  "editor.protocolUnavailable": "Android 上不支持 Naive：内置的 sing-box 编译时未包含它。",
   "editor.protocol": "协议",
   "editor.remarks": "备注",
   "editor.address": "地址",

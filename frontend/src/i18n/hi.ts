@@ -152,6 +152,8 @@ const hi = {
   "editor.editTitle": "प्रोफ़ाइल संपादित करें",
   "editor.save": "सहेजें",
   "editor.basics": "मूल बातें",
+  "editor.protocolUnavailable":
+    "Android पर Naive उपलब्ध नहीं है: साथ आया sing-box इसके बिना बनाया गया है।",
   "editor.protocol": "प्रोटोकॉल",
   "editor.remarks": "टिप्पणी",
   "editor.address": "पता",

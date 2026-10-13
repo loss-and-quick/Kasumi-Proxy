@@ -167,6 +167,7 @@ const ru = {
   "editor.editTitle": "Редактировать профиль",
   "editor.save": "Сохранить",
   "editor.basics": "Основное",
+  "editor.protocolUnavailable": "Naive недоступен на Android: встроенный sing-box собран без него.",
   "editor.protocol": "Протокол",
   "editor.remarks": "Название",
   "editor.address": "Адрес",
