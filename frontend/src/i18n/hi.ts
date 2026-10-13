@@ -908,6 +908,11 @@ const hi = {
   "subs.edit.providerConfigsOff": "प्रोवाइडर के पूरे Xray कॉन्फ़िग की अनुमति नहीं है",
   "subs.edit.stopUsing": "इस्तेमाल बंद करें",
   "subs.edit.allow": "अनुमति दें",
+  "subs.edit.withdrawConfigsTitle": "पूरे Xray कॉन्फ़िग का इस्तेमाल बंद करें?",
+  "subs.edit.withdrawConfigsBody": plural("count", {
+    one: "सेव करने पर इस प्रोवाइडर का # पूरा Xray कॉन्फ़िग हटा दिया जाएगा।",
+    other: "सेव करने पर इस प्रोवाइडर के # पूरे Xray कॉन्फ़िग हटा दिए जाएँगे।",
+  }),
   "settings.identity.title": "सब्सक्रिप्शन अनुरोध",
   "settings.identity.sub":
     "सब्सक्रिप्शन अपडेट प्रोवाइडर को क्या भेजते हैं। हर सब्सक्रिप्शन इसमें से कुछ भी बदल सकता है।",
@@ -1094,6 +1099,8 @@ const hi = {
   "store.service.stoppedProfileRemoved": "सेवा रोक दी गई क्योंकि सक्रिय प्रोफ़ाइल हटा दी गई थी",
   "store.service.stoppedProfileDeleted": "सेवा रोक दी गई क्योंकि सक्रिय प्रोफ़ाइल मिटा दी गई थी",
   "store.service.stoppedSubRemoved": "सेवा रोक दी गई क्योंकि सक्रिय प्रोफ़ाइल की सदस्यता हटा दी गई थी",
+  "store.service.stoppedProviderConfigs":
+    "सेवा रोक दी गई क्योंकि सक्रिय प्रोफ़ाइल प्रोवाइडर के हटाए गए Xray कॉन्फ़िग में से एक थी",
   "store.service.stoppedBeforeBackupRestore": "बैकअप पुनर्स्थापना से पहले सेवा रोक दी गई",
   "store.profile.copySuffix": "कॉपी",
   "store.profile.imported": plural("count", {

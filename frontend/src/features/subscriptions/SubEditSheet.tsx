@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Btn,
+  confirm,
   Disclosure,
   Field,
   GroupPicker,
@@ -15,7 +16,13 @@ import { useT } from "../../i18n";
 import { checkSubscriptionUrl, UNSUPPORTED_TEXT } from "../../lib/add-input";
 import type { Subscription } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
-import { BASE_GROUP_ID, type GroupChoice, groupChoiceReady, hostOf } from "../../lib/groups";
+import {
+  BASE_GROUP_ID,
+  type GroupChoice,
+  groupChoiceReady,
+  hostOf,
+  providerConfigsOf,
+} from "../../lib/groups";
 import { isInsecureHttpUrl, isLocalOrPrivateHost, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { SubIdentitySection } from "./SubIdentitySection";
@@ -33,6 +40,7 @@ export function SubEditSheet({
 }) {
   const t = useT();
   const groups = useAppStore((s) => s.groups);
+  const profiles = useAppStore((s) => s.profiles);
   const identityDefaults = useAppStore((s) => s.settings.requestIdentity);
   const [d, setD] = useState<Subscription | null>(null);
   const [group, setGroup] = useState<GroupChoice>({ newName: "" });
@@ -167,6 +175,19 @@ export function SubEditSheet({
     !d.allowProviderConfigs &&
     d.lastErrorKind?.kind === "unsupportedPayload" &&
     !(d.pendingChanges ?? []).some((p) => p.action.kind === "allowProviderConfigs");
+  // Saving the withdrawal removes the configs the provider already sent.
+  const withdrawConfigs = async () => {
+    const count = sub ? providerConfigsOf(profiles, sub).length : 0;
+    const ok =
+      count === 0 ||
+      (await confirm({
+        icon: "data_object",
+        title: t("subs.edit.withdrawConfigsTitle"),
+        body: t("subs.edit.withdrawConfigsBody", { count }),
+        confirmLabel: t("subs.edit.stopUsing"),
+      }));
+    if (ok) set("allowProviderConfigs", false);
+  };
   const reveal = async () => {
     if (!sub) return;
     try {
@@ -317,7 +338,7 @@ export function SubEditSheet({
               icon="data_object"
               title={t("subs.edit.providerConfigs")}
               action={t("subs.edit.stopUsing")}
-              onAction={() => set("allowProviderConfigs", false)}
+              onAction={() => void withdrawConfigs()}
             />
           )}
         </SettingGroup>

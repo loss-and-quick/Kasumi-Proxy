@@ -1099,6 +1099,14 @@ const ar = {
   "subs.edit.providerConfigsOff": "إعدادات Xray الكاملة من المزوّد غير مسموح بها",
   "subs.edit.stopUsing": "إيقاف الاستخدام",
   "subs.edit.allow": "السماح",
+  "subs.edit.withdrawConfigsTitle": "إيقاف استخدام إعدادات Xray الكاملة؟",
+  "subs.edit.withdrawConfigsBody": plural("count", {
+    one: "عند الحفظ سيُحذف إعداد Xray كامل واحد من هذا المزوّد.",
+    two: "عند الحفظ سيُحذف إعدادا Xray كاملان من هذا المزوّد.",
+    few: "عند الحفظ ستُحذف # إعدادات Xray كاملة من هذا المزوّد.",
+    many: "عند الحفظ سيُحذف من هذا المزوّد # إعدادًا كاملًا لـ Xray.",
+    other: "عند الحفظ سيُحذف من هذا المزوّد # إعداد Xray كامل.",
+  }),
   "settings.identity.title": "طلبات الاشتراكات",
   "settings.identity.sub":
     "ما ترسله تحديثات الاشتراكات إلى المزوّدين. يمكن لكل اشتراك تغيير أي جزء منه.",
@@ -1320,6 +1328,8 @@ const ar = {
   "store.service.stoppedProfileRemoved": "تم إيقاف الخدمة لأن الملف التعريفي النشط تمت إزالته",
   "store.service.stoppedProfileDeleted": "تم إيقاف الخدمة لأن الملف التعريفي النشط تم حذفه",
   "store.service.stoppedSubRemoved": "تم إيقاف الخدمة لأن اشتراك الملف التعريفي النشط تمت إزالته",
+  "store.service.stoppedProviderConfigs":
+    "تم إيقاف الخدمة لأن الملف التعريفي النشط كان أحد إعدادات Xray المحذوفة من المزوّد",
   "store.service.stoppedBeforeBackupRestore": "تم إيقاف الخدمة قبل استعادة النسخة الاحتياطية",
   "store.profile.copySuffix": "copy",
   "store.profile.imported": plural("count", {

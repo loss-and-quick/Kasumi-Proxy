@@ -3,7 +3,8 @@
 // Picking a group in a form, where the group may not exist yet.
 // ============================================================
 
-import type { AppState, Group } from "./bridge";
+import type { Profile } from "../generated/bindings";
+import type { AppState, Group, Subscription } from "./bridge";
 
 export const BASE_GROUP_ID = "g-main";
 
@@ -49,4 +50,19 @@ export function ownedGroupLeftEmpty(
   );
   const sharedWithSub = state.subscriptions.some((s) => s.id !== subId && s.groupId === group.id);
   return othersInGroup || sharedWithSub ? undefined : group;
+}
+
+/** The full Xray configs `sub` imported that withdrawing its permission removes.
+ *  Mirrors the backend's `provider_configs_of`: one moved out of the group stays. */
+export function providerConfigsOf(
+  profiles: Profile[],
+  sub: Pick<Subscription, "id" | "groupId">,
+): Profile[] {
+  return profiles.filter(
+    (p) =>
+      p.protocol === "custom" &&
+      p.origin === "provider" &&
+      p.meta.subId === sub.id &&
+      (sub.groupId == null || p.meta.groupId === sub.groupId),
+  );
 }

@@ -493,6 +493,17 @@ export const useAppStore = create<Store>((set, get) => {
     }
   };
 
+  // The backend removes the configs and picks the next active profile; the data
+  // path only changes when the active one was among them.
+  const withdrawProviderConfigs = async (subId: string) => {
+    const before = get().activeId;
+    await mutate({ kind: "withdrawProviderConfigs", subId });
+    const after = get().activeId;
+    if (after === before || !isServiceUp(get().service.state)) return;
+    if (after) await get().setActive(after);
+    else await stopServiceIfRunning(translateCurrent("store.service.stoppedProviderConfigs"));
+  };
+
   return {
     profiles: [],
     groups: [],
@@ -937,7 +948,11 @@ export const useAppStore = create<Store>((set, get) => {
     },
     async saveSubscription(sub, group) {
       const groupId = await get().resolveGroup(group, sub.remarks, sub.id);
+      const withdrawn =
+        !sub.allowProviderConfigs &&
+        get().subscriptions.some((s) => s.id === sub.id && s.allowProviderConfigs);
       await mutate({ kind: "upsertSub", subscription: { ...sub, groupId } });
+      if (withdrawn) await withdrawProviderConfigs(sub.id);
     },
     async removeSub(id, deleteGroup = false) {
       const { profiles, activeId } = get();

@@ -948,6 +948,11 @@ const es = {
     "Las configuraciones completas de Xray del proveedor no están permitidas",
   "subs.edit.stopUsing": "Dejar de usar",
   "subs.edit.allow": "Permitir",
+  "subs.edit.withdrawConfigsTitle": "¿Dejar de usar las configuraciones completas de Xray?",
+  "subs.edit.withdrawConfigsBody": plural("count", {
+    one: "Al guardar se eliminará # configuración completa de Xray de este proveedor.",
+    other: "Al guardar se eliminarán # configuraciones completas de Xray de este proveedor.",
+  }),
   "settings.identity.title": "Solicitudes de suscripción",
   "settings.identity.sub":
     "Lo que envían las actualizaciones de suscripciones a los proveedores. Cada suscripción puede cambiar cualquier parte.",
@@ -1141,6 +1146,8 @@ const es = {
   "store.service.stoppedProfileDeleted": "El servicio se detuvo porque se borró el perfil activo",
   "store.service.stoppedSubRemoved":
     "El servicio se detuvo porque se eliminó la suscripción del perfil activo",
+  "store.service.stoppedProviderConfigs":
+    "El servicio se detuvo porque el perfil activo era una de las configuraciones de Xray del proveedor que se eliminaron",
   "store.service.stoppedBeforeBackupRestore": "El servicio se detuvo antes de restaurar la copia",
   "store.profile.copySuffix": "copia",
   "store.profile.imported": plural("count", {
