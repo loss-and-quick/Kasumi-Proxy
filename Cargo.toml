@@ -4,6 +4,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/kasumi-log",
   "crates/kasumi-core",
   "crates/kasumi-backend",
   "crates/kasumi-daemon",

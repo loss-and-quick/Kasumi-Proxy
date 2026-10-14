@@ -1,0 +1,17 @@
+[package]
+name = "kasumi-log"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared logging facade for every Kasumi process: one record format, one area taxonomy, redaction, an in-memory tail and in-place rotation."
+
+[dependencies]
+log = "0.4"
+fern = "0.7"
+# Same directive syntax as RUST_LOG (`info,kasumi::lifecycle=debug`), so one
+# expression covers both the level and the per-area overrides.
+env_filter = "0.1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[dev-dependencies]
+tempfile = "3"
