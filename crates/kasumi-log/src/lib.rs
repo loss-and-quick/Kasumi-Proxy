@@ -100,12 +100,18 @@ impl Area {
 /// runaway record must not cost more than a screenful of the log viewer.
 pub const MAX_MESSAGE_CHARS: usize = 4096;
 
+/// What a process logs when nothing says otherwise: our own areas loud enough to be
+/// useful in a bug report, dependencies quiet. A user's daemon.log is the main
+/// artefact we get from the field, and "which profile did it start" written at debug
+/// costs nothing; a dependency's debug output is nobody's business. `RUST_LOG`
+/// overrides it, and the app's log-level setting overrides both.
+pub const DEFAULT_DIRECTIVES: &str = "info,kasumi=debug";
+
 /// How one process wants to log.
 #[derive(Debug, Clone)]
 pub struct LogConfig {
-    /// Baseline level, used when neither `directives` nor `RUST_LOG` says otherwise.
-    pub level: LevelFilter,
-    /// Full directive string (`info,kasumi::lifecycle=debug`). Overrides `level`.
+    /// Directive string (`info,kasumi::lifecycle=debug`). Falls back to `RUST_LOG`
+    /// and then to [`DEFAULT_DIRECTIVES`].
     pub directives: Option<String>,
     /// Mirror records to stderr. The Android daemon keeps this on: the module's
     /// shell redirects stderr into `daemon.log`, which also captures panics and
@@ -122,7 +128,6 @@ pub struct LogConfig {
 impl Default for LogConfig {
     fn default() -> Self {
         Self {
-            level: LevelFilter::Info,
             directives: None,
             to_stderr: true,
             file: None,
@@ -133,6 +138,13 @@ impl Default for LogConfig {
 }
 
 impl LogConfig {
+    /// Speak at `level` and nothing else — what the app's log-level setting asks
+    /// for, including our own areas, unlike the default.
+    pub fn with_level(mut self, level: LevelFilter) -> Self {
+        self.directives = Some(level_directives(level));
+        self
+    }
+
     /// Append to `path` in addition to whatever sinks are already configured.
     pub fn with_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.file = Some(path.into());
@@ -206,7 +218,7 @@ fn install(config: &LogConfig) {
     }
 }
 
-/// Directives in effect: explicit config, then `RUST_LOG`, then the configured level.
+/// Directives in effect: explicit config, then `RUST_LOG`, then the facade default.
 fn directives_for(config: &LogConfig) -> String {
     config
         .directives
@@ -214,7 +226,7 @@ fn directives_for(config: &LogConfig) -> String {
         .or_else(|| std::env::var("RUST_LOG").ok())
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| level_directives(config.level))
+        .unwrap_or_else(|| DEFAULT_DIRECTIVES.to_string())
 }
 
 /// Directives are written lowercase so the effective configuration reads the same
@@ -517,22 +529,20 @@ mod tests {
     }
 
     #[test]
-    fn directives_default_to_the_configured_level() {
-        let config = LogConfig {
-            level: LevelFilter::Warn,
-            directives: None,
-            ..LogConfig::default()
-        };
+    fn falls_back_to_the_facade_default() {
+        let config = LogConfig::default();
+        assert_eq!(directives_for(&config), DEFAULT_DIRECTIVES);
+    }
+
+    #[test]
+    fn an_explicit_level_speaks_at_that_level_only() {
+        let config = LogConfig::default().with_level(LevelFilter::Warn);
         assert_eq!(directives_for(&config), "warn");
     }
 
     #[test]
-    fn explicit_directives_beat_the_level() {
-        let config = LogConfig {
-            level: LevelFilter::Warn,
-            directives: Some("info,kasumi::lifecycle=debug".into()),
-            ..LogConfig::default()
-        };
+    fn explicit_directives_beat_the_default() {
+        let config = LogConfig::default().with_directives("info,kasumi::lifecycle=debug");
         assert_eq!(directives_for(&config), "info,kasumi::lifecycle=debug");
     }
 
