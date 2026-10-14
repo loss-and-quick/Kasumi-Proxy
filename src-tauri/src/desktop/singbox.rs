@@ -14,7 +14,7 @@
 //! geo-`direct` hosts whose IPs can't be pre-resolved into that exclude list, so
 //! every egress socket is stamped with `route.default_mark` and a fwmark ip-rule
 //! installed above the `auto_route` rules diverts it to the main table (see
-//! `routing::apply_singbox_escape_rule`). Everything unmarked — any uid, root
+//! `routing::apply_escape_rules`). Everything unmarked — any uid, root
 //! included — stays captured by the tun.
 
 use std::collections::HashSet;
@@ -63,7 +63,7 @@ fn collect_bypass_hosts(cfg: &Value) -> HashSet<String> {
 /// Stamp every egress socket of the core with the escape fwmark (Linux only; the
 /// option is rejected by sing-box elsewhere, and Windows needs no mark — its tun
 /// escape is route-based). The matching ip-rule is installed by
-/// `routing::apply_singbox_escape_rule`.
+/// `routing::apply_escape_rules`.
 #[cfg(target_os = "linux")]
 fn inject_escape_mark(cfg: &mut Value) -> bool {
     let Some(route) = cfg.get_mut("route").and_then(Value::as_object_mut) else {

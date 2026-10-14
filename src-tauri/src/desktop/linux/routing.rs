@@ -1,15 +1,16 @@
 //! Linux desktop routing for an external-tun data-path. The core exposes a local SOCKS;
-//! tun2socks bridges a userspace tun to it. To put all traffic through the tun
-//! while keeping the core's own connection to the VPN server (and DNS bring-up) off it:
-//!   - host-route the resolved server IPs (+ the /etc/resolv.conf nameservers, for
-//!     a core that resolves through them itself) via the real uplink gateway, and
-//!   - install a split-default (0.0.0.0/1 + 128.0.0.0/1) into the tun, which
-//!     overrides the existing `default` without deleting it (classic VPN trick).
-//!   - With `capture_dns`, steer every DNS query into the tun as well: a resolver
-//!     on the LAN (the router) has a connected route more specific than the
-//!     split-default and would otherwise be asked directly, past the core.
+//! tun2socks bridges a userspace tun to it. Policy routing puts all traffic through
+//! the tun while the core's own dials leave by the main table:
+//!   - the core marks its egress sockets with `SINGBOX_ESCAPE_MARK` (as a native
+//!     sing-box tun does), and the escape rules send marked traffic to the main
+//!     table, whose default route follows the uplink by itself;
+//!   - the LAN rule keeps more specific main-table routes (the LAN, docker,
+//!     other VPNs) off the tun, except for DNS, which the core answers;
+//!   - user exclusions, and the system's resolvers for a core that resolves
+//!     through them itself, look up the main table;
+//!   - everything else looks up a table whose only route is the tun.
 //!
-//! The exact set of installed routes is persisted so teardown is idempotent.
+//! Nothing here names the uplink, so an uplink change needs nothing rebuilt.
 
 use serde::{Deserialize, Serialize};
 
@@ -22,21 +23,25 @@ use crate::desktop::{run_out, silent};
 
 use super::os::{IP, TUN_ADDR};
 
-/// Route table + ip-rule priority of the external tun's DNS capture
-/// (`dport 53 lookup <table>`, the table holding one `default dev <tun>`). Next to
-/// the native sing-box ones (`kasumi_core::singbox_config`) without overlapping
-/// them, so either teardown leaves the other alone. The core's own DNS dials are
-/// bound to the uplink (`SO_BINDTODEVICE`), so the tun route doesn't match their
-/// lookup and they fall through to the main table.
-const DNS_TABLE: &str = "2024";
-const DNS_RULE_PRIO: &str = "8995";
+/// Route table + ip-rule priority of the external tun's capture (`lookup <table>`,
+/// the table holding one `default dev <tun>`), and the priority of the exclusions
+/// ahead of it. After the escape and LAN rules (`kasumi_core::singbox_config`),
+/// before the native sing-box ones. Older versions captured only DNS at the same
+/// table and priority, so one teardown clears either.
+const TUN_TABLE: &str = "2024";
+
+/// An external tun's core escapes by the fwmark the escape rules route past the
+/// tun, not by binding the uplink.
+pub const CORE_ESCAPES_BY_MARK: bool = true;
+const TUN_RULE_PRIO: &str = "8995";
+const EXCLUDE_RULE_PRIO: &str = "8994";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteState {
     tun: String,
-    gw: String,
-    dev: String,
-    /// Bypass host-routes we added (CIDR strings), to delete on teardown.
+    /// The bypass host-routes an older version added to the main table, next to
+    /// a split default into the tun; deleted on teardown after an upgrade.
+    #[serde(default)]
     bypass: Vec<String>,
 }
 
@@ -82,13 +87,14 @@ async fn read_resolvers() -> Vec<String> {
     ips
 }
 
-/// The tun bypass set for the resolved proxy servers and the user's TUN-exclude
-/// CIDRs (e.g. docker networks). `keep_resolvers` also routes the system's DNS
-/// servers (/etc/resolv.conf) off the tun, for a core that resolves through them itself
-/// (a socks-only sing-box); an xray core reaches its servers through pinned
-/// `dns.hosts` instead, so its system DNS goes through the tun.
+/// What stays off the tun besides the core's marked dials: the user's TUN-exclude
+/// CIDRs (e.g. docker networks) and, with `keep_resolvers`, the system's DNS
+/// servers (/etc/resolv.conf), for a core that may resolve through them with a
+/// socket it doesn't mark (a socks-only sing-box). An xray core reaches its servers
+/// through pinned `dns.hosts` instead, so its system DNS goes through the tun. The
+/// proxy servers need no entry: only the core dials them, and its dials are marked.
 pub async fn bypass_cidrs(
-    servers: &std::collections::BTreeMap<String, Vec<String>>,
+    _servers: &std::collections::BTreeMap<String, Vec<String>>,
     tun_exclude: &[String],
     keep_resolvers: bool,
 ) -> Vec<String> {
@@ -97,60 +103,63 @@ pub async fn bypass_cidrs(
     } else {
         Vec::new()
     };
-    crate::desktop::net::bypass_cidrs(servers, &resolvers, tun_exclude)
+    crate::desktop::net::bypass_cidrs(&Default::default(), &resolvers, tun_exclude)
 }
 
-/// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address + up
-/// the tun, and split-default into it. Persists the installed set.
+/// Bring up external-tun routing: the escape and LAN rules, address + up the tun,
+/// the exclusions, and the capture of everything else into the tun's table.
 pub async fn apply_external_tun_routing(
     tun: &str,
     bypass: &[String],
-    capture_dns: bool,
-    // Windows-seam signature match: the core's uplink-bound DNS already falls past
-    // the capture rule (see [`DNS_TABLE`]).
+    // Windows-seam signature match: DNS is captured here whatever this says, since
+    // the LAN rule leaves port 53 to the capture. A core that resolves through the
+    // system's resolvers gets them in `bypass`.
+    _capture_dns: bool,
     _core_bin: &str,
     route_state_file: &str,
 ) -> anyhow::Result<()> {
-    let Some((gw, dev)) = read_default_route().await else {
-        anyhow::bail!("no default route — cannot set up tun bypass");
-    };
-
-    for c in bypass {
-        silent(&[IP, "route", "replace", c, "via", &gw, "dev", &dev]).await;
-    }
+    clear_tun_capture().await;
+    // The core's first dials already carry the mark, so the escape goes in first.
+    apply_escape_rules().await;
 
     // `replace` (not `add`) so re-runs are idempotent and a tun that already has
     // its address (engines that self-assign) doesn't make this fail.
     silent(&[IP, "addr", "replace", TUN_ADDR, "dev", tun]).await;
     silent(&[IP, "link", "set", tun, "up"]).await;
-    silent(&[IP, "route", "replace", "0.0.0.0/1", "dev", tun]).await;
-    silent(&[IP, "route", "replace", "128.0.0.0/1", "dev", tun]).await;
-
-    clear_dns_capture().await;
-    if capture_dns {
-        silent(&[
-            IP, "route", "replace", "default", "dev", tun, "table", DNS_TABLE,
-        ])
-        .await;
+    silent(&[
+        IP, "route", "replace", "default", "dev", tun, "table", TUN_TABLE,
+    ])
+    .await;
+    for c in bypass {
+        let family = if c.contains(':') { "-6" } else { "-4" };
         silent(&[
             IP,
+            family,
             "rule",
             "add",
             "priority",
-            DNS_RULE_PRIO,
-            "dport",
-            "53",
+            EXCLUDE_RULE_PRIO,
+            "to",
+            c,
             "lookup",
-            DNS_TABLE,
+            "main",
         ])
         .await;
     }
+    silent(&[
+        IP,
+        "rule",
+        "add",
+        "priority",
+        TUN_RULE_PRIO,
+        "lookup",
+        TUN_TABLE,
+    ])
+    .await;
 
     let state = RouteState {
         tun: tun.to_string(),
-        gw,
-        dev,
-        bypass: bypass.to_vec(),
+        bypass: Vec::new(),
     };
     let json = serde_json::to_string(&state)?;
     write_text_atomic(route_state_file, &json).await?;
@@ -159,12 +168,14 @@ pub async fn apply_external_tun_routing(
 
 /// Tear down everything `apply_external_tun_routing` installed. Idempotent.
 pub async fn clear_external_tun_routing(route_state_file: &str) {
-    // Not part of the persisted state: swept unconditionally, so a capture left
-    // by an unclean exit can't keep sending DNS into a dead tun.
-    clear_dns_capture().await;
+    // Swept by priority whatever the state file says, so rules left by an unclean
+    // exit can't keep capturing traffic into a dead tun.
+    clear_tun_capture().await;
+    clear_escape_rules().await;
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };
+    // What an older version put in the main table.
     silent(&[IP, "route", "del", "0.0.0.0/1", "dev", &state.tun]).await;
     silent(&[IP, "route", "del", "128.0.0.0/1", "dev", &state.tun]).await;
     for c in &state.bypass {
@@ -173,22 +184,25 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
-/// Remove the DNS capture rule and its table. Idempotent.
-async fn clear_dns_capture() {
-    while silent(&[IP, "rule", "del", "priority", DNS_RULE_PRIO]).await == 0 {}
-    silent(&[IP, "route", "flush", "table", DNS_TABLE]).await;
+/// Remove the capture and exclusion rules and the tun's table. Idempotent.
+async fn clear_tun_capture() {
+    for prio in [TUN_RULE_PRIO, EXCLUDE_RULE_PRIO] {
+        while silent(&[IP, "rule", "del", "priority", prio]).await == 0 {}
+        while silent(&[IP, "-6", "rule", "del", "priority", prio]).await == 0 {}
+    }
+    silent(&[IP, "route", "flush", "table", TUN_TABLE]).await;
 }
 
-/// Install the fwmark escape rule for a native sing-box tun. The core stamps its
-/// own egress sockets with `SINGBOX_ESCAPE_MARK` (`route.default_mark`, injected by
-/// `prepare_singbox_config`); this rule — evaluated ahead of every `auto_route`
-/// rule — jumps marked traffic straight to the system's main-table rule (32766),
-/// so the core's uplink and geo-`direct` dials leave via the physical default
-/// route while everything unmarked (any uid, root included) is captured by the
-/// tun. `goto 32766` rather than `lookup main`: were the main lookup to fail
-/// (uplink flap), evaluation must not fall through into the auto_route rules
-/// below and loop the marked traffic. A host may lack the 32766 main rule
-/// altogether (some VPNs delete it), which leaves the `goto` unresolved and the
+/// Install the fwmark escape rules for a tun the core escapes by mark: a native
+/// sing-box tun or the external one. The core stamps its own egress sockets with
+/// `SINGBOX_ESCAPE_MARK` (sing-box `route.default_mark`, xray `sockopt.mark`); this
+/// rule — evaluated ahead of every capture rule — jumps marked traffic straight to
+/// the system's main-table rule (32766), so the core's uplink and geo-`direct` dials
+/// leave via the physical default route while everything unmarked (any uid, root
+/// included) is captured by the tun. `goto 32766` rather than `lookup main`: were
+/// the main lookup to fail (uplink flap), evaluation must not fall through into the
+/// capture rules below and loop the marked traffic. A host may lack the 32766 main
+/// rule altogether (some VPNs delete it), which leaves the `goto` unresolved and the
 /// kernel skips it — the `unreachable` backstop right behind then hard-fails
 /// marked traffic instead of letting it loop.
 ///
@@ -196,7 +210,7 @@ async fn clear_dns_capture() {
 /// takes a specific main-table route when one exists, so the LAN and replies to
 /// connections opened from it stay off the tun. Idempotent — sweeps the
 /// priorities first.
-pub async fn apply_singbox_escape_rule() {
+pub async fn apply_escape_rules() {
     use kasumi_core::singbox_config::{
         SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_MARK, SINGBOX_ESCAPE_RULE_PRIO,
         SINGBOX_LAN_RULE_PRIO,
@@ -250,6 +264,23 @@ pub async fn apply_singbox_escape_rule() {
     }
 }
 
+/// Remove what [`apply_escape_rules`] installs, both families. Idempotent.
+async fn clear_escape_rules() {
+    use kasumi_core::singbox_config::{
+        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_RULE_PRIO, SINGBOX_LAN_RULE_PRIO,
+    };
+
+    for prio in [
+        SINGBOX_ESCAPE_RULE_PRIO,
+        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO,
+        SINGBOX_LAN_RULE_PRIO,
+    ] {
+        let p = prio.to_string();
+        while silent(&[IP, "rule", "del", "priority", &p]).await == 0 {}
+        while silent(&[IP, "-6", "rule", "del", "priority", &p]).await == 0 {}
+    }
+}
+
 /// Tear down orphaned native-sing-box `auto_route` artifacts (policy ip-rules, route
 /// tables, split-default) that a core left behind when it didn't exit cleanly — a
 /// crash or a SIGKILL after the graceful window. sing-box removes these itself on a
@@ -262,22 +293,13 @@ pub async fn apply_singbox_escape_rule() {
 /// untouched. Safe to call in xray mode (no rules at these priorities exist there).
 pub async fn clear_singbox_autoroute(tun_iface_file: &str, tun2_iface_file: &str) {
     use kasumi_core::singbox_config::{
-        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO, SINGBOX_ESCAPE_RULE_PRIO, SINGBOX_FORCE_RULE_PRIO,
-        SINGBOX_FORCE_TABLE, SINGBOX_LAN_RULE_PRIO, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
+        SINGBOX_FORCE_RULE_PRIO, SINGBOX_FORCE_TABLE, SINGBOX_MAIN_RULE_PRIO, SINGBOX_MAIN_TABLE,
     };
 
     // The fwmark escape rules (goto + unreachable backstop) and the LAN rule are
     // ours, not sing-box's, but they orphan the same way when the data-path dies
-    // uncleanly (both families; v6 exists when installed).
-    for prio in [
-        SINGBOX_ESCAPE_RULE_PRIO,
-        SINGBOX_ESCAPE_BACKSTOP_RULE_PRIO,
-        SINGBOX_LAN_RULE_PRIO,
-    ] {
-        let p = prio.to_string();
-        while silent(&[IP, "rule", "del", "priority", &p]).await == 0 {}
-        while silent(&[IP, "-6", "rule", "del", "priority", &p]).await == 0 {}
-    }
+    // uncleanly.
+    clear_escape_rules().await;
 
     // Policy ip-rules: a single priority can carry more than one rule, so loop on
     // `del` until it reports there's nothing left at that priority.

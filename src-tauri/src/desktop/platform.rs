@@ -291,7 +291,7 @@ impl DesktopPlatform {
                 // first connections (DNS bring-up, the server uplink) already carry the
                 // egress mark. Everything unmarked — any uid, root included — stays
                 // captured by the tun.
-                routing::apply_singbox_escape_rule().await;
+                routing::apply_escape_rules().await;
 
                 return self.spawn_core_verify(&core_bin, &cfg, &log).await;
             }
@@ -304,32 +304,38 @@ impl DesktopPlatform {
         // plus the user's TUN-exclude CIDRs (e.g. docker networks), route straight
         // out instead of through the proxy.
         let servers = crate::desktop::net::resolve_servers(&cfg_text).await;
-        // An xray core whose egress is bound to the uplink takes the system's DNS
-        // through the tun too, so it follows the core's DNS settings instead of
-        // going straight to the network's resolver. It reaches its own servers
-        // through the addresses pinned below, not through that DNS. A socks-only
-        // sing-box resolves server names through the system resolver itself, so its
+        // An xray core whose egress escapes the tun takes the system's DNS through
+        // the tun too, so it follows the core's DNS settings instead of going
+        // straight to the network's resolver. It reaches its own servers through
+        // the addresses pinned below, not through that DNS. A socks-only sing-box
+        // resolves server names through the system resolver itself, so its
         // resolvers stay off the tun.
-        let bound = can_bind_uplink();
-        let capture_dns = bound && engine == CoreEngine::Xray;
+        let escapes = can_escape_tun();
+        let capture_dns = escapes && engine == CoreEngine::Xray;
         let bypass =
             routing::bypass_cidrs(&servers, &self.tun_exclude_cidrs().await, !capture_dns).await;
 
-        // Bind every outbound the core dials the network with (servers + direct)
-        // to the physical uplink so they escape the tun at the socket layer instead
-        // of looping back through the external tun helper. Without this, the
-        // `direct` outbound carrying geo-`direct` (e.g. RU) traffic, or a server
-        // other than `proxy`, is captured by the split-default and loops. Gated on
-        // CAP_NET_RAW (the privileged data-path owner); a harmless no-op in
-        // unprivileged in-process dev, where there's no managed tun to escape.
-        // (sing-box's native `auto_route` path escapes via its own
-        // `auto_detect_interface` and is bound elsewhere.) It runs after the DNS
-        // pinning so the `dns` outbound that adds is bound too.
+        // Every outbound the core dials the network with (servers + direct) must
+        // escape the tun instead of looping back through the external tun helper.
+        // Without this, the `direct` outbound carrying geo-`direct` (e.g. RU)
+        // traffic, or a server other than `proxy`, is captured and loops. On Linux
+        // the outbounds carry the escape mark and the main table picks the uplink,
+        // so they follow an uplink change; elsewhere they are bound to the uplink.
+        // A harmless no-op in unprivileged in-process dev, where there's no managed
+        // tun to escape. (sing-box's native `auto_route` path escapes on its own.)
+        // It runs after the DNS pinning so the `dns` outbound that adds escapes too.
         if capture_dns {
             pin_xray_servers(Path::new(&cfg), &servers).await;
         }
-        if bound {
-            inject_uplink_bind(engine, Path::new(&cfg)).await;
+        if escapes {
+            if routing::CORE_ESCAPES_BY_MARK {
+                // Nothing else keeps an unmarked core off the tun: it would loop.
+                if !inject_escape_mark(engine, Path::new(&cfg)).await {
+                    return self.fail("could not mark the core's egress").await;
+                }
+            } else {
+                inject_uplink_bind(engine, Path::new(&cfg)).await;
+            }
         }
 
         self.spawn_core_verify(&core_bin, &cfg, &log).await?;
@@ -337,10 +343,9 @@ impl DesktopPlatform {
         let iface = random_tun_iface();
         let _ = write_text(&self.p.tun_iface_file, &iface).await;
         let helper_log = self.p.backend.log(LogTarget::TunEngine);
-        // Desktop binds the core's own outbounds to the uplink (see above) to escape
-        // the tun, so the helper needs no fwmark — its upstream is loopback (the
-        // core's SOCKS) and never hits routing anyway. (Android still marks it; that
-        // param is load-bearing there, not here.)
+        // The core's own outbounds escape the tun (see above), so the helper needs no
+        // fwmark — its upstream is loopback (the core's SOCKS) and never hits routing
+        // anyway.
         let helper = tun_engine::spawn(
             ext.engine,
             &self.p,
@@ -378,7 +383,7 @@ impl Default for DesktopPlatform {
 
 /// Whether a core spawned from *this* process will hold an effective `CAP_NET_RAW`,
 /// so its uplink bind (`SO_BINDTODEVICE` / `bind_interface`) can escape an active tun.
-/// Gates both the main bridged core's bind and the test-core bind. Only the
+/// Gates the test-core bind, and the main bridged core's where it binds. Only the
 /// privileged data-path owner qualifies: the root helper on Linux, the LocalSystem
 /// service on Windows. In-process dev on unix is unprivileged and skips the bind
 /// (there's no managed tun to escape there anyway).
@@ -731,14 +736,29 @@ impl Platform for DesktopPlatform {
     }
 }
 
-/// Whether an uplink change must rebuild the data path `plan` started. Only the
-/// external tun names the uplink: the core's outbounds are bound to its device and
-/// source address, and the server bypass routes go through its gateway. A native
+/// Whether an uplink change must rebuild the data path `plan` started. Only an
+/// external tun whose core escapes by binding names the uplink: its outbounds are
+/// bound to the uplink's device and source address (Windows). Where the core
+/// escapes by mark (Linux), the main table picks the uplink per dial. A native
 /// sing-box tun escapes by fwmark and follows the uplink itself
 /// (`auto_detect_interface`), and without a tun the core rides the default route.
 /// A data path this process didn't start is rebuilt to be safe.
 fn rebuild_on_uplink_change(plan: Option<&DataPathPlan>) -> bool {
-    plan.is_none_or(|p| matches!(p.tun, TunPlan::External(_)))
+    plan.is_none_or(|p| matches!(p.tun, TunPlan::External(_)) && !routing::CORE_ESCAPES_BY_MARK)
+}
+
+/// Whether the main bridged core can escape the tun: by mark where the core
+/// escapes that way (`SO_MARK` needs `CAP_NET_ADMIN`, the privileged data-path
+/// owner's), by binding elsewhere (see [`can_bind_uplink`]).
+fn can_escape_tun() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::desktop::capabilities::is_privileged_data_path()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        can_bind_uplink()
+    }
 }
 
 /// Rewrite a core's config to bind every outbound that dials the network (see
@@ -763,6 +783,27 @@ async fn inject_uplink_bind(engine: Engine, cfg_path: &Path) -> bool {
         return false;
     };
     kasumi_core::outbound_bind::bind_uplink_outbounds(engine, &mut cfg, &dev, &source);
+    match serde_json::to_string(&cfg) {
+        Ok(s) => write_text(cfg_path, &s).await.is_ok(),
+        Err(_) => false,
+    }
+}
+
+/// Mark every outbound a bind would bind (see `mark_egress_outbounds`) so the
+/// escape rules send its dials past the tun to the main table. Returns whether the
+/// mark was written.
+async fn inject_escape_mark(engine: Engine, cfg_path: &Path) -> bool {
+    let Some(text) = read_text(cfg_path).await else {
+        return false;
+    };
+    let Ok(mut cfg) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
+    kasumi_core::outbound_bind::mark_egress_outbounds(
+        engine,
+        &mut cfg,
+        kasumi_core::singbox_config::SINGBOX_ESCAPE_MARK,
+    );
     match serde_json::to_string(&cfg) {
         Ok(s) => write_text(cfg_path, &s).await.is_ok(),
         Err(_) => false,
@@ -803,8 +844,30 @@ mod tests {
         assert!(now_secs() > 0);
     }
 
+    /// A start must not go on with a core it could not mark (it would loop).
+    #[tokio::test]
+    async fn escape_mark_reports_a_config_it_cannot_mark() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("config.json");
+        assert!(!inject_escape_mark(CoreEngine::Xray, &cfg).await);
+        std::fs::write(&cfg, "not json").unwrap();
+        assert!(!inject_escape_mark(CoreEngine::Xray, &cfg).await);
+
+        std::fs::write(
+            &cfg,
+            r#"{"outbounds":[{"tag":"direct","protocol":"freedom"}]}"#,
+        )
+        .unwrap();
+        assert!(inject_escape_mark(CoreEngine::Xray, &cfg).await);
+        let marked: Value = serde_json::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
+        assert_eq!(
+            marked["outbounds"][0]["streamSettings"]["sockopt"]["mark"],
+            kasumi_core::singbox_config::SINGBOX_ESCAPE_MARK
+        );
+    }
+
     #[test]
-    fn only_a_bridged_tun_is_rebuilt_on_an_uplink_change() {
+    fn only_a_bound_bridge_is_rebuilt_on_an_uplink_change() {
         use kasumi_core::state::AdvancedSettings;
 
         let host = HostTraits {
@@ -820,10 +883,16 @@ mod tests {
             DataPathPlan::resolve(engine, &s, host)
         };
 
-        // xray can't own a tun, so its tun mode is bridged.
+        // xray can't own a tun, so its tun mode is bridged: rebuilt only where its
+        // core is bound to the uplink rather than marked.
         let bridged = plan(CoreEngine::Xray, ProxyMode::Tun);
         assert!(matches!(bridged.tun, TunPlan::External(_)));
-        assert!(rebuild_on_uplink_change(Some(&bridged)));
+        assert_eq!(
+            rebuild_on_uplink_change(Some(&bridged)),
+            !routing::CORE_ESCAPES_BY_MARK
+        );
+        #[cfg(target_os = "linux")]
+        assert!(!rebuild_on_uplink_change(Some(&bridged)));
 
         let native = plan(CoreEngine::SingBox, ProxyMode::Tun);
         assert!(matches!(native.tun, TunPlan::Native { .. }));

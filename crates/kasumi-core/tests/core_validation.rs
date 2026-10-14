@@ -34,10 +34,10 @@ use kasumi_core::enums::{
     PacketEncoding, Security, SsMethod, VmessEnc,
 };
 use kasumi_core::mixins::Transport;
-use kasumi_core::outbound_bind::{UplinkSource, bind_uplink_outbounds};
+use kasumi_core::outbound_bind::{UplinkSource, bind_uplink_outbounds, mark_egress_outbounds};
 use kasumi_core::profile::{Profile, Protocol};
 use kasumi_core::share::parse_share_link;
-use kasumi_core::singbox_config::apply_singbox_cache_file;
+use kasumi_core::singbox_config::{SINGBOX_ESCAPE_MARK, apply_singbox_cache_file};
 use kasumi_core::state::{
     AdvancedSettings, DomainStrategy, LogLevel, MuxXudp443, RoutingMode, RoutingRule,
     SingboxFragment, SingboxStack,
@@ -1985,13 +1985,10 @@ fn profile_target_cases() -> Vec<Case> {
         .collect()
 }
 
-/// The desktop's bridged mode binds every outbound that dials the network to the
-/// uplink, after an xray core gets its DNS module and `dns` outbound for DNS sent
-/// through the tun. The cores must accept those binds on provider balancer members,
-/// relays and `dns` outbounds, per-rule profile targets, chain hops and an XHTTP
-/// download leg.
-#[test]
-fn bridged_uplink_bind_validates_against_real_cores() {
+/// Configs the desktop's bridged mode escapes the tun from: provider balancer
+/// members, relays and `dns` outbounds, per-rule profile targets, chain hops and an
+/// XHTTP download leg.
+fn bridged_cases() -> Vec<Case> {
     let mut xhttp = make(
         Protocol::Vless,
         Some(Network::Xhttp),
@@ -2031,7 +2028,7 @@ fn bridged_uplink_bind_validates_against_real_cores() {
         c.raw = raw.to_string();
     }
     provider_dns.name = "provider-custom/dns".into();
-    let cases = provider_custom_cases()
+    provider_custom_cases()
         .into_iter()
         .chain([provider_dns])
         .chain(chain_cases())
@@ -2041,8 +2038,15 @@ fn bridged_uplink_bind_validates_against_real_cores() {
             name: format!("bridged/{}", c.name),
             ..c
         })
-        .collect();
-    validate_all_with(cases, |engine, cfg| {
+        .collect()
+}
+
+/// Where the bridged mode binds every outbound that dials the network to the
+/// uplink (Windows), after an xray core gets its DNS module and `dns` outbound for
+/// DNS sent through the tun, the cores must accept those binds.
+#[test]
+fn bridged_uplink_bind_validates_against_real_cores() {
+    validate_all_with(bridged_cases(), |engine, cfg| {
         if engine == CoreEngine::Xray {
             hijack_inbound_dns(cfg);
         }
@@ -2063,6 +2067,35 @@ fn bridged_uplink_bind_validates_against_real_cores() {
             for ob in dns {
                 assert_eq!(ob["streamSettings"]["sockopt"]["interface"], "eth0", "{ob}");
             }
+        }
+    });
+}
+
+/// Where the bridged mode marks those outbounds instead (Linux), the cores must
+/// accept the marks: xray per outbound, sing-box as its default mark.
+#[test]
+fn bridged_escape_mark_validates_against_real_cores() {
+    validate_all_with(bridged_cases(), |engine, cfg| {
+        if engine == CoreEngine::Xray {
+            hijack_inbound_dns(cfg);
+        }
+        mark_egress_outbounds(engine, cfg, SINGBOX_ESCAPE_MARK);
+        if engine == CoreEngine::Xray {
+            let dns = cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|o| o["protocol"] == "dns")
+                .collect::<Vec<_>>();
+            assert!(!dns.is_empty());
+            for ob in dns {
+                assert_eq!(
+                    ob["streamSettings"]["sockopt"]["mark"], SINGBOX_ESCAPE_MARK,
+                    "{ob}"
+                );
+            }
+        } else {
+            assert_eq!(cfg["route"]["default_mark"], SINGBOX_ESCAPE_MARK);
         }
     });
 }
