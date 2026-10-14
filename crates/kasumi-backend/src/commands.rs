@@ -42,6 +42,7 @@ use kasumi_core::state::{
 use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::stored_for_url;
 use kasumi_core::sub_policy::safe_provider_link;
+use kasumi_log::{Area, ks_warn};
 
 use crate::fs::{read_text, write_text};
 use crate::fsjson::read_json;
@@ -540,15 +541,15 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             let limit = kb.max(0) as usize * 1024;
             for target in LOG_TARGETS {
                 let path = paths.log(target);
-                if let Some(txt) = read_text(&path).await
-                    && txt.len() > limit
-                {
-                    // Keep roughly the second half, cut on a char boundary.
-                    let mut start = txt.len() - limit / 2;
-                    while start < txt.len() && !txt.is_char_boundary(start) {
-                        start += 1;
+                // The shared trimmer, not a second implementation: it is the one the
+                // boot path and the periodic tick use, so "how a log shrinks" is a
+                // single answer. It cuts on a record boundary, which the old
+                // char-boundary cut was free to break mid-record.
+                match kasumi_log::rotate::trim_in_place(&path, limit as u64) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        ks_warn!(Area::Sys, "could not trim {}: {e}", path.display());
                     }
-                    let _ = crate::fsjson::write_text_atomic(&path, &txt[start..]).await;
                 }
             }
             Ok(Response::Ok)
@@ -781,7 +782,8 @@ pub(crate) async fn persist_with_chain(
     Ok(())
 }
 
-const LOG_TARGETS: [LogTarget; 4] = [
+/// Every log file the app keeps, in the order the viewer lists them.
+pub const LOG_TARGETS: [LogTarget; 4] = [
     LogTarget::Daemon,
     LogTarget::Xray,
     LogTarget::Singbox,

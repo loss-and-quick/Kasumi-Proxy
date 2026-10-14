@@ -23,6 +23,10 @@ const WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 /// server is a traffic pattern of its own and keeps a phone's radio awake.
 const PROBE_INTERVAL: Duration = Duration::from_secs(60);
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
+/// How often the log files are trimmed to `settings.log_rotate_max_kb`. A phone can
+/// run for days between app launches, and nothing else bounds a log that only this
+/// process writes.
+const TRIM_INTERVAL: Duration = Duration::from_secs(300);
 
 impl Service {
     /// Start the active profile once on boot, if `autoStart` allows. Caller holds
@@ -235,6 +239,28 @@ impl Service {
                 {
                     last = json;
                     let _ = this.events.send(PushFrame::Status { value: status });
+                }
+            }
+        });
+    }
+
+    /// Trim the log files to the configured cap on a slow tick. `Command::Log` and
+    /// the shell scripts do the same, but only when someone looks — a log nobody
+    /// opens still has to stay inside its cap.
+    pub(super) fn spawn_log_trim(self: &Arc<Self>) {
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(TRIM_INTERVAL).await;
+                let Some(state) = crate::state::read_app_state(&*this.platform).await else {
+                    continue;
+                };
+                let limit = u64::try_from(state.settings.log_rotate_max_kb).unwrap_or(0) * 1024;
+                for target in crate::commands::LOG_TARGETS {
+                    let path = this.platform.paths().log(target);
+                    if let Err(e) = kasumi_log::rotate::trim_in_place(&path, limit) {
+                        ks_warn!(Area::Sys, "could not trim {}: {e}", path.display());
+                    }
                 }
             }
         });
