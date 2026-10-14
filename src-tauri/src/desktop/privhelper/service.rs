@@ -37,6 +37,7 @@ use crate::desktop::DesktopPlatform;
 use crate::desktop::paths::{
     ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
 };
+use kasumi_log::{Area, ks_error, ks_info, ks_warn};
 
 /// SCM identifier; shared with the GUI client ([`super::connect`]).
 pub(crate) const SERVICE_NAME: &str = "KasumiProxyHelper";
@@ -72,7 +73,7 @@ pub fn run_dispatcher() -> ! {
 
 fn service_main(arguments: Vec<OsString>) {
     if let Err(e) = run_service(arguments) {
-        log::error!("service error: {e}");
+        ks_error!(Area::Helper, "service error: {e}");
     }
 }
 
@@ -82,7 +83,7 @@ fn service_main(arguments: Vec<OsString>) {
 pub fn run_transient() -> ! {
     if let Err(e) = run_transient_inner() {
         eprintln!("kasumi-helper: {e}");
-        log::error!("transient helper exited with error: {e}");
+        ks_error!(Area::Helper, "transient helper exited with error: {e}");
         std::process::exit(1);
     }
     std::process::exit(0);
@@ -100,7 +101,7 @@ fn run_transient_inner() -> anyhow::Result<()> {
     tokio::runtime::Runtime::new()?.block_on(async {
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
         super::hlog::init(&platform.paths().run_dir);
-        log::info!("transient helper starting: pipe={pipe}");
+        ks_info!(Area::Helper, "transient helper starting: pipe={pipe}");
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
         serve_transient(platform, &pipe).await
     })
@@ -172,7 +173,7 @@ fn run_service(arguments: Vec<OsString>) -> anyhow::Result<()> {
     let result = tokio::runtime::Runtime::new()?.block_on(async {
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
         super::hlog::init(&platform.paths().run_dir);
-        log::info!("service starting");
+        ks_info!(Area::Helper, "service starting");
         // The run dir holds the helper-owned data-path state; create it as SYSTEM.
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
         serve_pipe(platform, shutdown, owner, PIPE_NAME).await
@@ -240,7 +241,7 @@ async fn serve_pipe(
                 continue;
             }
             _ = &mut first_client, if owner.is_some() && !served_any => {
-                log::warn!("no GUI connected within 60s; exiting");
+                ks_warn!(Area::Helper, "no GUI connected within 60s; exiting");
                 break;
             }
         }
@@ -254,13 +255,16 @@ async fn serve_pipe(
                 let task = tokio::spawn(serve_conn(srv.clone(), Box::new(read), Box::new(write)));
                 let task = tokio::spawn(async move {
                     if let Ok(Err(e)) = task.await {
-                        log::warn!("connection ended: {e}");
+                        ks_warn!(Area::Helper, "connection ended: {e}");
                     }
                 });
                 active = Some((task, client));
             }
             super::session::Admission::Refuse { owner } => {
-                log::warn!("refusing a GUI in session {client:?}: the data-path is held");
+                ks_warn!(
+                    Area::Helper,
+                    "refusing a GUI in session {client:?}: the data-path is held"
+                );
                 tokio::spawn(refuse(server, owner));
             }
         }
@@ -328,16 +332,16 @@ async fn serve_transient(platform: Arc<dyn Platform>, pipe_name: &str) -> anyhow
     tokio::select! {
         res = server.connect() => res.context("await pipe client")?,
         _ = tokio::time::sleep(Duration::from_secs(60)) => {
-            log::warn!("no GUI connected within 60s; exiting");
+            ks_warn!(Area::Helper, "no GUI connected within 60s; exiting");
             return Ok(());
         }
     }
-    log::info!("GUI connected; serving data-path");
+    ks_info!(Area::Helper, "GUI connected; serving data-path");
 
     let srv = Server::new(platform.clone(), None);
     let (read, write) = tokio::io::split(server);
     if let Err(e) = serve_conn(srv, Box::new(read), Box::new(write)).await {
-        log::warn!("connection ended: {e}");
+        ks_warn!(Area::Helper, "connection ended: {e}");
     }
     teardown(&platform).await;
     Ok(())

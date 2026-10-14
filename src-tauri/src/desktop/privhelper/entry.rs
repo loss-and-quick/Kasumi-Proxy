@@ -17,6 +17,7 @@ use crate::desktop::DesktopPlatform;
 use crate::desktop::paths::{
     ARG_BIN_DIR, ARG_DATADIR, ARG_RUNDIR, ENV_BIN_DIR, ENV_DATADIR, ENV_RUNDIR,
 };
+use kasumi_log::{Area, ks_error, ks_info, ks_warn};
 
 struct Args {
     socket: String,
@@ -84,7 +85,7 @@ pub fn run_helper() -> ! {
     if let Err(e) = run() {
         // The logger may not be up yet (arg parse failed before init), so use stderr.
         eprintln!("kasumi-helper: {e}");
-        log::error!("helper exited with error: {e}");
+        ks_error!(Area::Helper, "helper exited with error: {e}");
         std::process::exit(1);
     }
     std::process::exit(0);
@@ -93,7 +94,8 @@ pub fn run_helper() -> ! {
 fn run() -> anyhow::Result<()> {
     let args = parse_args()?;
     super::hlog::init(Path::new(&args.rundir));
-    log::info!(
+    ks_info!(
+        Area::Helper,
         "helper starting: datadir={} rundir={} bin_dir={} gui_pid={}",
         args.datadir,
         args.rundir,
@@ -101,7 +103,10 @@ fn run() -> anyhow::Result<()> {
         args.gui_pid
     );
     if !crate::desktop::capabilities::is_privileged_data_path() {
-        log::warn!("not holding the data-path caps (CAP_NET_ADMIN) — tun/routing will fail");
+        ks_warn!(
+            Area::Helper,
+            "not holding the data-path caps (CAP_NET_ADMIN) — tun/routing will fail"
+        );
     }
 
     // Least privilege: stop *holding* more privilege than the data-path needs.
@@ -114,11 +119,15 @@ fn run() -> anyhow::Result<()> {
     // A failure is non-fatal — the worst case is running with full caps.
     if crate::desktop::capabilities::is_privileged_data_path() {
         match crate::desktop::capabilities::drop_unneeded_bounding() {
-            Ok(dropped) => log::info!(
+            Ok(dropped) => ks_info!(
+                Area::Helper,
                 "dropped {} caps from the bounding set (kept the data-path set)",
                 dropped.len()
             ),
-            Err(e) => log::warn!("could not drop the bounding set ({e}); running with full caps"),
+            Err(e) => ks_warn!(
+                Area::Helper,
+                "could not drop the bounding set ({e}); running with full caps"
+            ),
         }
         // Seed CAP_NET_RAW + CAP_NET_ADMIN into the inheritable set — the precondition
         // for raising either into an ambient set (PR_CAP_AMBIENT_RAISE needs the cap in
@@ -126,7 +135,10 @@ fn run() -> anyhow::Result<()> {
         // begin with an empty inheritable set). A failure is non-fatal but the ambient
         // raises below then fail too.
         if let Err(e) = crate::desktop::capabilities::seed_child_inheritable() {
-            log::warn!("could not seed child caps into the inheritable set ({e})");
+            ks_warn!(
+                Area::Helper,
+                "could not seed child caps into the inheritable set ({e})"
+            );
         }
         // Raise the data-path caps (NET_ADMIN + NET_RAW) into our own ambient set now,
         // on the main thread before the tokio runtime starts, so every core /
@@ -136,7 +148,10 @@ fn run() -> anyhow::Result<()> {
         // tun/fwmark/`ip`, NET_RAW the `SO_BINDTODEVICE`/`bind_interface` escape.
         // Non-fatal: a failure just leaves the data path broken, as before.
         if let Err(e) = crate::desktop::capabilities::raise_data_path_caps_ambient() {
-            log::warn!("could not raise the data-path caps into the ambient set ({e})");
+            ks_warn!(
+                Area::Helper,
+                "could not raise the data-path caps into the ambient set ({e})"
+            );
         }
     }
 

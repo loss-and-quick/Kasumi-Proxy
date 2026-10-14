@@ -24,6 +24,7 @@ use kasumi_core::contract::{
 };
 use kasumi_core::enums::wire_value;
 use kasumi_core::state::RoutingMode;
+use kasumi_log::{Area, ks_error, ks_info, ks_warn};
 
 pub mod defaults;
 pub mod desktop;
@@ -491,7 +492,7 @@ fn tray_icon(state: RunState) -> Option<tauri::image::Image<'static>> {
 /// on the app's async runtime during setup.
 async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
     if let Err(e) = platform.boot_init().await {
-        log::error!("boot init failed: {e}");
+        ks_error!(Area::Service, "boot init failed: {e}");
     }
     let service = Service::new(platform).await;
     service.spawn_background();
@@ -507,7 +508,10 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     use desktop::privhelper::RemotePlatform;
     use kasumi_core::state::ProxyMode;
     if std::env::var_os("KASUMI_SKIP_ELEVATION").is_some() {
-        log::info!("KASUMI_SKIP_ELEVATION set; running the data-path in-process");
+        ks_info!(
+            Area::Service,
+            "KASUMI_SKIP_ELEVATION set; running the data-path in-process"
+        );
         return Ok(Arc::new(DesktopPlatform::new()?));
     }
     // Only tun mode needs the privileged data-path. When the saved mode is a non-tun
@@ -517,13 +521,15 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     // saved mode defaults to tun, keeping the privileged path.
     let mode = desktop::saved_proxy_mode();
     if mode != ProxyMode::Tun {
-        log::info!(
+        ks_info!(
+            Area::Service,
             "saved proxy mode {mode:?} needs no privileges; running the data-path in-process"
         );
         return Ok(Arc::new(DesktopPlatform::new_gated()?));
     }
     let paths = desktop::paths::DesktopPaths::resolve()?;
-    log::info!(
+    ks_info!(
+        Area::Service,
         "bringing up privileged data-path: portable={} datadir={} run_dir={}",
         paths.portable,
         paths.datadir,
@@ -533,7 +539,7 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     let client = desktop::privhelper::spawn_and_connect(&paths).await?;
     #[cfg(target_os = "windows")]
     let client = desktop::privhelper::connect_service(&paths).await?;
-    log::info!("privileged helper connected");
+    ks_info!(Area::Service, "privileged helper connected");
     Ok(Arc::new(RemotePlatform::new(client)?))
 }
 
@@ -681,7 +687,7 @@ pub fn run() {
             }
             #[cfg(target_os = "linux")]
             if let Err(e) = desktop::autostart::heal() {
-                log::warn!("autostart entry: {e}");
+                ks_warn!(Area::Service, "autostart entry: {e}");
             }
 
             // Publish the Service through a watch channel and bring it up off-thread:
@@ -718,7 +724,7 @@ pub fn run() {
                         if let Some(outdated) =
                             e.downcast_ref::<desktop::privhelper::proto::HelperOutdated>()
                         {
-                            log::error!("startup failed: {e}");
+                            ks_error!(Area::Service, "startup failed: {e}");
                             let _ = tx.send(Startup::Failed(StartupProblem::HelperOutdated {
                                 app_protocol: desktop::privhelper::proto::PROTOCOL_VERSION,
                                 helper_protocol: outdated.helper,
@@ -728,7 +734,7 @@ pub fn run() {
                             return;
                         }
                         let msg = e.to_string();
-                        log::error!("startup failed: {msg}");
+                        ks_error!(Area::Service, "startup failed: {msg}");
                         // Surface the reason in a native modal, then quit on dismissal.
                         #[cfg(desktop)]
                         {

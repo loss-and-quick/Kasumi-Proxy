@@ -36,6 +36,7 @@ use kasumi_core::state::{DEFAULT_LOCAL_HTTP_PORT, ProxyMode, SingboxStack};
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::singbox::prepare_singbox_config;
 use crate::desktop::{OsSeam, network, resume, routing, tun_engine};
+use kasumi_log::{Area, ks_error, ks_info};
 
 /// The per-OS seam: only the parts of the data-path that genuinely differ between
 /// Linux and Windows. Everything else lives in the shared [`DesktopPlatform`].
@@ -137,7 +138,7 @@ impl DesktopPlatform {
     }
 
     async fn fail(&self, reason: &str) -> anyhow::Result<()> {
-        log::error!("data-path start failed: {reason}");
+        ks_error!(Area::Platform, "data-path start failed: {reason}");
         self.set_failed(reason).await;
         anyhow::bail!("{reason}")
     }
@@ -471,7 +472,8 @@ impl Platform for DesktopPlatform {
 
     async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         let engine = plan.engine;
-        log::info!(
+        ks_info!(
+            Area::Platform,
             "starting data-path: engine={engine:?} tun={:?} ports={:?} mode={:?}",
             plan.tun,
             plan.ports,
@@ -500,7 +502,7 @@ impl Platform for DesktopPlatform {
                 // connectivity probe refines it to Connected / NoInternet.
                 state.started_at = Some(now_secs());
                 self.write_state(&state).await;
-                log::info!("data-path running ({engine:?})");
+                ks_info!(Area::Platform, "data-path running ({engine:?})");
                 Ok(())
             }
             Err(e) => {
@@ -523,7 +525,8 @@ impl Platform for DesktopPlatform {
     }
 
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {
-        log::info!(
+        ks_info!(
+            Area::Platform,
             "stopping data-path (keep_state={})",
             opts.keep_service_state
         );

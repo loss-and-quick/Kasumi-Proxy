@@ -42,6 +42,7 @@ pub(crate) use windows::{WindowsOs as OsSeam, apps, network, resume, routing};
 
 use kasumi_backend::proc::{RunOpts, run};
 use kasumi_core::state::ProxyMode;
+use kasumi_log::{Area, ks_debug, ks_error};
 
 /// Align the OS-level proxy with the active `mode`: `system` points the OS proxy at
 /// the core's local inbound, `pac` starts the PAC server and points the OS at it;
@@ -63,7 +64,10 @@ pub async fn apply_os_proxy(mode: ProxyMode, socks_port: u16, http_port: u16, pa
             } else {
                 // The PAC port is taken — leave the OS un-proxied rather than
                 // pointed at someone else's server.
-                log::error!("pac server failed to bind; OS proxy left cleared");
+                ks_error!(
+                    Area::Platform,
+                    "pac server failed to bind; OS proxy left cleared"
+                );
                 sysproxy::clear_system_proxy().await;
             }
         }
@@ -122,7 +126,7 @@ pub(crate) async fn silent(args: &[&str]) -> i32 {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let code = kasumi_backend::proc::silent(&argv).await;
     if code != 0 {
-        log::debug!("command exited {code}: {}", argv.join(" "));
+        ks_debug!(Area::Proc, "command exited {code}: {}", argv.join(" "));
     }
     code
 }
@@ -133,7 +137,11 @@ pub(crate) async fn run_out(args: &[&str]) -> (i32, String) {
     match run(&argv, RunOpts::default()).await {
         Ok(r) => (r.code, r.stdout),
         Err(e) => {
-            log::debug!("command failed to run ({e}): {}", argv.join(" "));
+            ks_debug!(
+                Area::Proc,
+                "command failed to run ({e}): {}",
+                argv.join(" ")
+            );
             (-1, String::new())
         }
     }

@@ -19,6 +19,7 @@ use windows_service::service::{ServiceAccess, ServiceState};
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 
 use crate::desktop::paths::{DesktopPaths, path_args};
+use kasumi_log::{Area, ks_debug, ks_info, ks_warn};
 
 use super::client::Client;
 use super::proto::{HelperOutdated, PrivReply, PrivRequest, check_handshake};
@@ -42,21 +43,24 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
     // Portable: no installed service — run the helper transiently under UAC (the
     // mirror of the Linux pkexec helper), leaving nothing behind.
     if paths.portable {
-        log::info!("portable build: starting transient elevated helper");
+        ks_info!(
+            Area::Helper,
+            "portable build: starting transient elevated helper"
+        );
         return connect_transient(paths).await;
     }
 
     // Fast path: a previous session left the service up — just connect.
     match connect_and_ping(PIPE_NAME).await {
         Ok(client) => {
-            log::info!("reusing already-running data-path service");
+            ks_info!(Area::Helper, "reusing already-running data-path service");
             return Ok(client);
         }
         // A service still running the build from before an update. The user holds
         // stop/start rights, so restart it once; a second mismatch means the
         // installed binary itself is another build.
         Err(e) if e.is::<HelperOutdated>() => {
-            log::warn!("{e:#}; restarting the data-path service");
+            ks_warn!(Area::Helper, "{e:#}; restarting the data-path service");
             stop_service().context("stop the outdated data-path service")?;
             start_if_stopped(paths).context("restart the data-path service")?;
             return connect_with_retry(PIPE_NAME).await;
@@ -66,7 +70,10 @@ pub async fn connect_service(paths: &DesktopPaths) -> anyhow::Result<Client> {
     }
     if !is_installed() {
         // One-time elevated install (UAC). Registers + grants the user start rights.
-        log::info!("data-path service not installed; requesting elevated install");
+        ks_info!(
+            Area::Helper,
+            "data-path service not installed; requesting elevated install"
+        );
         let helper = helper_bin()?;
         if !run_elevated(&helper, &[OsStr::new("--install")]) {
             anyhow::bail!("service install was declined — the data-path needs it to run");
@@ -105,7 +112,11 @@ async fn connect_installed(paths: &DesktopPaths) -> anyhow::Result<Client> {
 async fn connect_transient(paths: &DesktopPaths) -> anyhow::Result<Client> {
     let pipe = format!(r"\\.\pipe\kasumi-proxy-helper-{}", std::process::id());
     let helper = helper_bin()?;
-    log::info!("transient helper {} over pipe {pipe}", helper.display());
+    ks_info!(
+        Area::Helper,
+        "transient helper {} over pipe {pipe}",
+        helper.display()
+    );
     let pairs = path_args(paths);
     let mut args: Vec<&OsStr> = vec![
         OsStr::new("--serve"),
@@ -117,13 +128,17 @@ async fn connect_transient(paths: &DesktopPaths) -> anyhow::Result<Client> {
         args.push(OsStr::new(value));
     }
     if !run_elevated(&helper, &args) {
-        log::warn!(
+        ks_warn!(
+            Area::Helper,
             "ShellExecuteW runas failed or was declined for {}",
             helper.display()
         );
         anyhow::bail!("elevation declined — the data-path needs admin");
     }
-    log::info!("elevated helper launched; connecting to its pipe");
+    ks_info!(
+        Area::Helper,
+        "elevated helper launched; connecting to its pipe"
+    );
     connect_with_retry(&pipe).await
 }
 
@@ -152,7 +167,7 @@ fn start_if_stopped(paths: &DesktopPaths) -> anyhow::Result<()> {
     if state != ServiceState::Stopped {
         return Ok(());
     }
-    log::info!("demand-starting the data-path service");
+    ks_info!(Area::Helper, "demand-starting the data-path service");
     let mut args: Vec<OsString> = path_args(paths)
         .into_iter()
         .flat_map(|(flag, value)| [OsString::from(flag), OsString::from(value)])
@@ -227,7 +242,7 @@ async fn connect_with_retry(pipe: &str) -> anyhow::Result<Client> {
             Err(e) => {
                 let s = format!("{e:#}");
                 if s != last_err {
-                    log::debug!("pipe {pipe} not ready: {s}");
+                    ks_debug!(Area::Helper, "pipe {pipe} not ready: {s}");
                 }
                 last_err = s;
             }

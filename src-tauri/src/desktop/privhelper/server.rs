@@ -17,6 +17,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex as AsyncMutex;
 
 use kasumi_backend::platform::{Platform, StopDataPath, TestCore};
+use kasumi_log::{Area, ks_debug, ks_warn};
 
 use super::proto::{PROTOCOL_VERSION, PrivReply, PrivRequest};
 use super::transport::{BoxRead, BoxWrite};
@@ -114,7 +115,10 @@ impl Server {
                     tokio::spawn(async move {
                         tokio::time::sleep(TEST_CORE_MAX_LIFETIME).await;
                         if let Some(mut c) = server.test_cores.lock().await.remove(&handle) {
-                            log::warn!("orphan test core {handle} swept after timeout");
+                            ks_warn!(
+                                Area::Helper,
+                                "orphan test core {handle} swept after timeout"
+                            );
                             c.kill().await;
                         }
                     });
@@ -205,7 +209,10 @@ impl Server {
                     all
                 }
                 Err(e) => {
-                    log::warn!("could not resolve paths to hand files to the owner: {e}");
+                    ks_warn!(
+                        Area::Helper,
+                        "could not resolve paths to hand files to the owner: {e}"
+                    );
                     return;
                 }
             },
@@ -260,7 +267,7 @@ pub async fn serve(
         let server = server.clone();
         tokio::spawn(async move {
             if let Err(e) = serve_conn(server, Box::new(read), Box::new(write)).await {
-                log::warn!("connection ended: {e}");
+                ks_warn!(Area::Helper, "connection ended: {e}");
             }
         });
     }
@@ -296,18 +303,18 @@ pub(crate) async fn serve_conn(
         }
         let reply = match serde_json::from_str::<PrivRequest>(&line) {
             Ok(req) => {
-                log::debug!("request: {req:?}");
+                ks_debug!(Area::Helper, "request: {req:?}");
                 server.dispatch(req).await
             }
             Err(e) => {
-                log::warn!("malformed request: {e}");
+                ks_warn!(Area::Helper, "malformed request: {e}");
                 PrivReply::Err {
                     message: format!("malformed request: {e}"),
                 }
             }
         };
         if let PrivReply::Err { message } = &reply {
-            log::warn!("reply error: {message}");
+            ks_warn!(Area::Helper, "reply error: {message}");
         }
         let mut buf = serde_json::to_vec(&reply)?;
         buf.push(b'\n');
