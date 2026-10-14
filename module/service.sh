@@ -5,7 +5,10 @@
 MODDIR=${0%/*}
 DATADIR="/data/adb/kasumi-proxy"
 mkdir -p "$DATADIR"
+# shellcheck disable=SC2034 # read by the sourced log.sh
 KASUMI_SCRIPT="service.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=log.sh
 . "$MODDIR/log.sh"
 
 # Trimming before the daemon starts is what keeps yesterday's log from still

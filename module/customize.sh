@@ -41,10 +41,13 @@ ui_print "- Setup /data/adb/kasumi-proxy directory"
 mkdir -p "/data/adb/kasumi-proxy"
 
 ui_print "Kasumi Proxy configuration deployment complete!"
+# shellcheck disable=SC2034 # read by the sourced log.sh
 KASUMI_SCRIPT="customize.sh"
 # The payload is unpacked by now, so the module's own logger is on disk. Only the
 # tail of the install is recorded: earlier steps print to the installer's own
 # output, which the user is already looking at.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=log.sh
 . "$MODPATH/log.sh"
 klog INFO "installed: arch=$ARCH datadir=$KASUMI_DATADIR"
 

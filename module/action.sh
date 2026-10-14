@@ -4,7 +4,10 @@
 # on startup. (`am start ksu://…` is not a thing — manager WebUIs can only be
 # entered by hand, so the action button goes through the browser instead.)
 WS_INFO="/data/adb/kasumi-proxy/run/ws.json"
+# shellcheck disable=SC2034 # read by the sourced log.sh
 KASUMI_SCRIPT="action.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=log.sh
 . "${0%/*}/log.sh"
 
 if [ ! -f "$WS_INFO" ]; then
