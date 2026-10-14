@@ -14,9 +14,10 @@
 //!
 //! The binaries are NOT committed; stage them with `scripts/fetch-binaries.sh desktop`
 //! (pinned versions in `scripts/binary-versions.sh`). When they're absent — as in a
-//! plain CI checkout — every case is skipped and the test passes, so this never
-//! blocks the normal `cargo test --workspace` path. Point at custom binaries with
-//! `KASUMI_XRAY_BIN` / `KASUMI_SINGBOX_BIN`.
+//! plain CI checkout — only the static checks run (sing-box legacy DNS fields, Xray
+//! rules with no condition), so the normal `cargo test --workspace` path still
+//! catches what needs no core. Point at custom binaries with `KASUMI_XRAY_BIN` /
+//! `KASUMI_SINGBOX_BIN`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -42,7 +43,7 @@ use kasumi_core::state::{
     SingboxFragment, SingboxStack,
 };
 use kasumi_core::sub_ingest::{IngestInput, ingest};
-use kasumi_core::xray_config::hijack_inbound_dns;
+use kasumi_core::xray_config::{hijack_inbound_dns, xray_rule_has_condition};
 
 // ── valid credential / crypto material (cores validate these) ──
 const UUID: &str = "11111111-1111-1111-1111-111111111111";
@@ -655,6 +656,44 @@ fn match_field_rules() -> Vec<RoutingRule> {
     }]
 }
 
+/// Rules left with nothing to match on, next to one real rule: the builders must
+/// leave them out rather than emit a rule Xray refuses or sing-box widens.
+fn conditionless_rules() -> Vec<RoutingRule> {
+    let rule = |id: &str| RoutingRule {
+        id: id.into(),
+        remarks: id.into(),
+        enabled: true,
+        outbound_tag: "block".into(),
+        domain: None,
+        ip: None,
+        port: None,
+        network: None,
+        protocol: None,
+        process: None,
+        package_name: None,
+        source_ip: None,
+    };
+    vec![
+        rule("blank"),
+        RoutingRule {
+            domain: Some(vec![]),
+            ip: Some(vec![]),
+            port: Some("  ".into()),
+            ..rule("empty-lists")
+        },
+        RoutingRule {
+            domain: Some(vec!["# domain:ads.example".into()]),
+            port: Some("443".into()),
+            ..rule("commented-domains")
+        },
+        RoutingRule {
+            domain: Some(vec!["domain:real.example".into()]),
+            outbound_tag: "direct".into(),
+            ..rule("real")
+        },
+    ]
+}
+
 /// Rules scoped by where the connection came from: every process form (name,
 /// path, directory), an Android package, and a source CIDR, alone and next to a
 /// domain (which sing-box also turns into a scoped DNS rule).
@@ -755,6 +794,35 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
                 ..Default::default()
             },
             source_match_rules(),
+            false,
+        ),
+        // Rules that end up with nothing to match on: blank, empty lists, a
+        // whitespace port, domains that are all comments.
+        (
+            "rules-without-conditions",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                ..Default::default()
+            },
+            conditionless_rules(),
+            false,
+        ),
+        // A custom routing JSON with a bare rule beside a real one.
+        (
+            "custom-routing-bare-rule",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Custom,
+                custom_routing: Some(
+                    json!([
+                        { "type": "field", "outboundTag": "block" },
+                        { "type": "field", "domain": [], "outboundTag": "block" },
+                        { "type": "field", "port": "443", "outboundTag": "direct" },
+                    ])
+                    .to_string(),
+                ),
+                ..Default::default()
+            },
+            vec![],
             false,
         ),
         // A route whose unmatched traffic goes direct: its blocks' rules, then
@@ -1292,6 +1360,20 @@ fn validate_all_with(cases: Vec<Case>, adjust: impl Fn(CoreEngine, &mut Value)) 
                 lint_failures.push(format!("[{name}] {violation}"));
             }
         }
+        // Xray refuses a rule with no condition at start; caught here without cores.
+        if engine == CoreEngine::Xray {
+            let rules = cfg_value["routing"]["rules"]
+                .as_array()
+                .into_iter()
+                .flatten();
+            for (i, rule) in rules.enumerate() {
+                if !rule.as_object().is_some_and(xray_rule_has_condition) {
+                    lint_failures.push(format!(
+                        "[{name}] routing.rules[{i}] has no condition: {rule}"
+                    ));
+                }
+            }
+        }
         if !cores_staged {
             continue;
         }
@@ -1677,6 +1759,9 @@ fn provider_custom_cases() -> Vec<Case> {
                 { "type": "field", "domain": ["domain:nl.example"], "outboundTag": "block" },
                 { "type": "field", "domain": ["domain:de.example"], "balancerTag": "de" },
                 { "type": "field", "ip": ["10.0.0.0/8"], "outboundTag": "fragment" },
+                // Tied only to the provider's own inbounds, which Kasumi drops.
+                { "type": "field", "inboundTag": ["lb-in"], "balancerTag": "de" },
+                { "type": "field", "user": ["u@example"], "outboundTag": "direct" },
             ],
         },
     });

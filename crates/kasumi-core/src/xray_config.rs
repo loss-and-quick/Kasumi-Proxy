@@ -547,7 +547,7 @@ const XRAY_RULE_CONDITIONS: [&str; 17] = [
 ];
 
 /// Whether an Xray field rule has a condition Xray accepts.
-pub(crate) fn xray_rule_has_condition(rule: &Map<String, Value>) -> bool {
+pub fn xray_rule_has_condition(rule: &Map<String, Value>) -> bool {
     let set = |v: &Value| match v {
         Value::Null => false,
         Value::String(s) => !s.trim().is_empty(),
