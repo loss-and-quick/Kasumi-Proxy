@@ -13,9 +13,6 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 
 use crate::fs::{read_text, remove_file};
-// The job-object helpers below are the only Windows-only records in this crate.
-#[cfg(windows)]
-use kasumi_log::{Area, ks_warn};
 
 #[derive(Debug, Clone)]
 pub struct RunResult {
@@ -262,6 +259,8 @@ pub async fn spawn_logged(
 #[cfg(windows)]
 mod job {
     use std::sync::OnceLock;
+
+    use kasumi_log::{Area, ks_warn};
 
     use tokio::process::{Child, Command};
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
