@@ -29,6 +29,18 @@ function consoleWorthy(level: LogLevel): boolean {
   return level === "error" || level === "warn" || Boolean(import.meta.env?.DEV);
 }
 
+function redactFields(fields: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === "string") {
+      result[k] = redactInText(v);
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
 /** Record one event. Never throws: a logger that breaks the app is worse than none. */
 export function logEvent(
   level: LogLevel,
@@ -39,8 +51,9 @@ export function logEvent(
   try {
     const cleanMessage = redactInText(message);
     const cleanStack = stack ? redactInText(stack) : undefined;
+    const cleanFields = fields && Object.keys(fields).length > 0 ? redactFields(fields) : undefined;
     const record: LogRecord = { at: new Date().toISOString(), level, message: cleanMessage };
-    if (fields && Object.keys(fields).length > 0) record.fields = fields;
+    if (cleanFields) record.fields = cleanFields;
     if (cleanStack) record.stack = cleanStack;
     records.push(record);
     if (records.length > LIMIT) records.shift();

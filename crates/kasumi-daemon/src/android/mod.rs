@@ -29,7 +29,11 @@ pub(crate) async fn silent(args: &[&str]) -> i32 {
         // and the routing layer leans on that. But a rule that should have been
         // added and wasn't looks exactly like one that was, so a failed invocation
         // gets a record — visible whenever debugging is on.
-        ks_debug!(Area::Platform, "{} exited {code}", args.join(" "));
+        ks_debug!(
+            Area::Platform,
+            "{} exited {code}",
+            kasumi_log::redact::in_text(&args.join(" "))
+        );
     }
     code
 }
@@ -41,7 +45,11 @@ pub(crate) async fn run_out(args: &[&str]) -> (i32, String) {
         Ok(r) => (r.code, r.stdout),
         // -1 is read as "no output", which is how a missing binary hides.
         Err(e) => {
-            ks_warn!(Area::Platform, "{} could not run: {e}", args.join(" "));
+            ks_warn!(
+                Area::Platform,
+                "{} could not run: {e}",
+                kasumi_log::redact::in_text(&args.join(" "))
+            );
             (-1, String::new())
         }
     }
