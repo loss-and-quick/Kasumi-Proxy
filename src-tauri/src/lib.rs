@@ -30,6 +30,11 @@ pub mod desktop;
 pub mod schemas;
 
 use desktop::DesktopPlatform;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use desktop::paths::APP_LOG_FILE;
+
+/// A dependency whose debug output carries credentials, so no directive may raise it.
+const COOKIE_STORE: &str = "cookie_store";
 
 /// Live service status pushed to the UI (the 1 Hz + on-change stream).
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
@@ -650,26 +655,20 @@ pub fn run() {
         .setup(move |app| {
             builder.mount_events(app);
 
-            #[allow(unused_mut)]
-            let mut log_builder = tauri_plugin_log::Builder::default()
-                .level(log::LevelFilter::Info)
-                .level_for("kasumi_desktop_lib", log::LevelFilter::Debug);
+            let mut log_config = kasumi_log::LogConfig::default();
+            // The same sink the daemon and the helper install: stdout for a terminal
+            // run, <datadir>/daemon.log for the in-app viewer. Desktop has no
+            // separate daemon process, so without the file the viewer's `Daemon`
+            // target would show nothing at all.
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             if let Ok(paths) = desktop::paths::DesktopPaths::resolve() {
-                use tauri_plugin_log::{Target, TargetKind};
-                // Write the app log to <datadir>/daemon.log, beside the core logs.
-                // Desktop has no separate daemon process, so the in-app log viewer's
-                // `Daemon` target — which reads <datadir>/daemon.log — would otherwise
-                // show an empty file while these lines went to the OS log dir.
-                log_builder = log_builder.targets([
-                    Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::Folder {
-                        path: std::path::PathBuf::from(&paths.datadir),
-                        file_name: Some("daemon".into()),
-                    }),
-                ]);
+                log_config = log_config
+                    .with_file(std::path::PathBuf::from(&paths.datadir).join(APP_LOG_FILE));
             }
-            app.handle().plugin(log_builder.build())?;
+            // The GUI runs the same fetch path as the daemon, so the dependency that
+            // prints provider cookies stays pinned here too.
+            kasumi_log::pin_module(COOKIE_STORE, log::LevelFilter::Info);
+            kasumi_log::init(&log_config);
 
             #[cfg(desktop)]
             {

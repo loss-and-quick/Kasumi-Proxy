@@ -31,9 +31,14 @@ pub(crate) const ARG_RUNDIR: &str = "--rundir";
 pub(crate) const ARG_BIN_DIR: &str = "--bin-dir";
 
 /// Leaf name of the privilege helper's own log, under `run_dir`. One source so the
-/// helper's logger and the owner hand-off (which chowns it back to the GUI user)
+/// helper's logger and the owner hand-handoff (which chowns it back to the GUI user)
 /// name the same file.
 pub(crate) const HELPER_LOG_FILE: &str = "kasumi-helper.log";
+
+/// Leaf name of the app's own log, under the datadir. Named for the log viewer's
+/// `Daemon` target, which reads `<datadir>/daemon.log` on both platforms — on Android
+/// the daemon writes it through the module's stderr redirect, here the GUI does.
+pub(crate) const APP_LOG_FILE: &str = "daemon.log";
 
 /// The `(flag, value)` triple every privilege-boundary launch passes so the helper
 /// resolves the GUI's exact dirs. Producer-side single source (the bin dir is the
