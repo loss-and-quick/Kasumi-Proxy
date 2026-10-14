@@ -91,22 +91,32 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
             .kill_on_drop(true)
             .spawn();
         let Ok(mut child) = monitor else {
-            loop {
-                tokio::time::sleep(POLL).await;
-                check(&mut last, &tx).await;
-            }
+            poll(&mut last, &tx).await;
         };
         // A switch may have happened while the monitor was down.
         check(&mut last, &tx).await;
+        let mut heard = false;
         if let Some(stdout) = child.stdout.take() {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(_)) = lines.next_line().await {
+                heard = true;
                 while let Ok(Ok(Some(_))) = tokio::time::timeout(SETTLE, lines.next_line()).await {}
                 check(&mut last, &tx).await;
             }
         }
         let _ = child.kill().await;
+        // An `ip` without `monitor rule` exits at once; respawning it would churn.
+        if !heard {
+            poll(&mut last, &tx).await;
+        }
         tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+async fn poll(last: &mut Option<String>, tx: &mpsc::Sender<()>) -> ! {
+    loop {
+        tokio::time::sleep(POLL).await;
+        check(last, tx).await;
     }
 }
 
