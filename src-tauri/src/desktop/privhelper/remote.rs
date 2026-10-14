@@ -151,6 +151,11 @@ impl Platform for RemotePlatform {
         self.local.watch_network_change()
     }
 
+    // Decided from the plan alone; the helper runs the same `DesktopPlatform`.
+    fn uplink_change_restarts(&self, plan: Option<&DataPathPlan>) -> bool {
+        self.local.uplink_change_restarts(plan)
+    }
+
     async fn data_path_healthy(&self) -> Option<bool> {
         match self.call(PrivRequest::DataPathHealthy).await {
             Ok(PrivReply::Healthy { healthy }) => healthy,
