@@ -38,7 +38,10 @@ use kasumi_core::sub_ingest::{
 use kasumi_core::sub_policy::{apply_auto, effective_interval_minutes};
 
 use crate::identity::resolve_request;
-use crate::net::{BodyTooLarge, FetchResponse, FetchUrlOptions, HttpStatusError, fetch};
+use crate::net::{
+    BodyTooLarge, FetchResponse, FetchUrlOptions, HttpStatusError, fetch, fetch_deadline,
+    out_of_time,
+};
 use crate::platform::Platform;
 use crate::state::read_app_state;
 use crate::sub_cookies::SubCookies;
@@ -346,6 +349,8 @@ async fn fetch_and_map(
         // which no client or request option removes. Incy spells its `x-` headers in
         // lower case; one case has to win, and theirs is the one a server can tell.
         title_case_headers: sub.client.is_happ(),
+        // The retry and the fallback URL fit in the same time as one fetch.
+        deadline: Some(fetch_deadline()),
         ..Default::default()
     };
     // The fragment carries provider directives for the import and never goes on
@@ -463,6 +468,10 @@ async fn fetch_like_happ(
         let Some(cause) = result.as_ref().err().and_then(retry_cause) else {
             break;
         };
+        // A retry with no time left would only replace the real error.
+        if out_of_time(opts.deadline) {
+            break;
+        }
         ks_info!(Area::Sub, "subscription fetch failed ({cause:?}), retrying");
         let retry = request.retry(cause);
         let opts = FetchUrlOptions {
@@ -1826,5 +1835,25 @@ mod tests {
             .find(|x| Some(&x.meta().id) == next.active_id.as_ref())
             .unwrap();
         assert_eq!(active.meta().remarks, "B1");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_silent_provider_fails_within_one_fetch_budget() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![crate::testutil::STALL.to_vec()]).await;
+        let (fb, fb_requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].request_timeout_secs = Some(50);
+        state.subscriptions[0].fallback_url = Some(format!("{fb}/backup"));
+        write_app_state(&p, &state).await.unwrap();
+
+        let start = tokio::time::Instant::now();
+        let s = update(&p).await.subscriptions.remove(0);
+        // The retry gets what the first attempt left; the fallback gets nothing.
+        assert_eq!(start.elapsed(), crate::net::FETCH_BUDGET);
+        assert_eq!(requests.lock().unwrap().len(), 2);
+        assert!(fb_requests.lock().unwrap().is_empty());
+        assert_eq!(s.last_error_kind, Some(SubErrorKind::Network));
     }
 }

@@ -210,6 +210,9 @@ pub fn vless_at(port: u16) -> Profile {
 /// A [`serve`] response that resets the connection instead of answering.
 pub const RESET: &[u8] = b"\0reset";
 
+/// A [`serve`] response that keeps the connection open and never answers.
+pub const STALL: &[u8] = b"\0stall";
+
 /// Raw request heads [`serve`] received, in arrival order.
 pub type Requests = std::sync::Arc<Mutex<Vec<String>>>;
 
@@ -244,6 +247,13 @@ pub async fn serve(responses: Vec<Vec<u8>>) -> (String, Requests) {
                 // SO_LINGER 0 turns the close into a TCP reset.
                 let _ = sock.set_zero_linger();
                 drop(sock);
+                continue;
+            }
+            if res.as_slice() == STALL {
+                tokio::spawn(async move {
+                    let _held = sock;
+                    std::future::pending::<()>().await;
+                });
                 continue;
             }
             let _ = sock.write_all(res).await;
