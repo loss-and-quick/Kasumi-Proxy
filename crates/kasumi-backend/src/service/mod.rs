@@ -63,6 +63,9 @@ pub struct Service {
     /// restart applies them). Recomputed on mutations and lifecycle edges only;
     /// `current_status` just reports it.
     pending_restart: AtomicBool,
+    /// Geo data the running core loaded at start changed on disk since; reported
+    /// as a pending restart until the next start or stop.
+    assets_stale: AtomicBool,
     /// Cookies providers set, shared by every subscription fetch and nothing else.
     sub_cookies: Arc<SubCookies>,
 }
@@ -89,6 +92,7 @@ impl Service {
             data_path_generation: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
+            assets_stale: AtomicBool::new(false),
             sub_cookies: Arc::default(),
         })
     }

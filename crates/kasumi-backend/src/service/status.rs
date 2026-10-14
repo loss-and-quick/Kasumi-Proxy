@@ -99,7 +99,8 @@ impl Service {
             service,
             active_id,
             core,
-            pending_restart: self.pending_restart.load(Ordering::SeqCst),
+            pending_restart: self.pending_restart.load(Ordering::SeqCst)
+                || self.assets_stale.load(Ordering::SeqCst),
             latency_ms,
         })
     }

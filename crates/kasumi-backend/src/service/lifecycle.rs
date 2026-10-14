@@ -108,6 +108,7 @@ impl Service {
     fn note_data_path_started(&self, config: CoreConfig, profile_id: String) {
         *self.running_config.lock().unwrap() = Some(RunningPath { config, profile_id });
         self.pending_restart.store(false, Ordering::SeqCst);
+        self.assets_stale.store(false, Ordering::SeqCst);
     }
 
     /// Drop the running-config baseline: with nothing running there is nothing
@@ -117,6 +118,7 @@ impl Service {
         // The old core's verdict (and its latency) says nothing about the next one.
         self.reset_connectivity();
         self.pending_restart.store(false, Ordering::SeqCst);
+        self.assets_stale.store(false, Ordering::SeqCst);
     }
 
     /// Re-diff the fresh baseline against the saved state. The start built its
@@ -176,5 +178,10 @@ impl LifecycleControl for Service {
     }
     async fn reload_app_filter(&self) -> Result<(), String> {
         self.run_lifecycle(LifecycleCmd::ReloadAppFilter).await
+    }
+    async fn note_assets_changed(&self) {
+        if !self.assets_stale.swap(true, Ordering::SeqCst) {
+            self.emit_status().await;
+        }
     }
 }
