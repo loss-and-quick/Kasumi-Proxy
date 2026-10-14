@@ -682,6 +682,8 @@ const zh = {
   "profiles.row.jsonHint": "来自订阅的完整 Xray 配置，已清理",
   "profiles.conflict.unpinnedInsecureTls":
     "无法启动：此配置只能在 xray 上运行，而 xray 已不再跳过证书校验。请填写「{pin}」或关闭「{insecure}」。",
+  "profiles.conflict.customAllowInsecure":
+    "无法启动：此配置设置了「{insecure}」，而 xray 已不再接受该字段。请在旁边添加「{pin}」或将其删除。",
   // subscriptions extra
   "subs.saved": "订阅已保存",
   "subs.deleted": "订阅已删除",

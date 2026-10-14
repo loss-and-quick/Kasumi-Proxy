@@ -706,6 +706,8 @@ const vi = {
   "profiles.row.jsonHint": "Cấu hình Xray đầy đủ từ gói đăng ký, đã được làm sạch",
   "profiles.conflict.unpinnedInsecureTls":
     "Không thể khởi động: hồ sơ này chỉ chạy trên xray, mà xray không còn bỏ qua kiểm tra chứng chỉ. Hãy điền “{pin}” hoặc tắt “{insecure}”.",
+  "profiles.conflict.customAllowInsecure":
+    "Không thể khởi động: cấu hình này đặt “{insecure}”, mà xray không còn chấp nhận. Hãy thêm “{pin}” bên cạnh hoặc xóa nó.",
   // subscriptions extra
   "subs.saved": "Đã lưu đăng ký",
   "subs.deleted": "Đã xóa đăng ký",

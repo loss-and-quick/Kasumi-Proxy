@@ -10,7 +10,9 @@ use serde_json::{Map, Value, json};
 use crate::chain::chain_hops;
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
 use crate::core::{core_conflict, skips_cert_check_unpinned};
-use crate::custom_sanitize::{is_service_outbound, sanitize_provider_xray};
+use crate::custom_sanitize::{
+    drop_pinned_allow_insecure, is_service_outbound, sanitize_provider_xray,
+};
 use crate::enums::{Fingerprint, HeaderType, Security};
 use crate::mixins::Transport;
 use crate::profile::{Custom, CustomOrigin, Profile, WG_DEFAULT_LOCAL_ADDRESS};
@@ -776,10 +778,19 @@ pub fn build_xray_config(
     routing_rules: &[RoutingRule],
     profiles: &[Profile],
 ) -> Result<Value, String> {
+    if let Profile::Custom(_) = p
+        && let Some(c) = core_conflict(p)
+    {
+        return Err(c.to_string());
+    }
     let provider = match p {
         Profile::Custom(c) if c.origin == CustomOrigin::User => {
             return match parse_json_safe(&c.raw) {
-                Some(v @ Value::Object(_)) => Ok(v),
+                Some(mut v @ Value::Object(_)) => {
+                    // Runs as written, but for the key xray refuses that a pin makes moot.
+                    drop_pinned_allow_insecure(&mut v, "", &mut Vec::new());
+                    Ok(v)
+                }
                 _ => Err("custom profile contains invalid JSON".to_string()),
             };
         }
@@ -1695,6 +1706,54 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cfg, raw);
+    }
+
+    /// `provider_raw` with `tls` as the `backup` outbound's tlsSettings.
+    fn raw_with_tls(tls: Value) -> Value {
+        let mut raw = provider_raw();
+        raw["outbounds"][2]["streamSettings"]["tlsSettings"] = tls;
+        raw
+    }
+
+    #[test]
+    fn custom_unpinned_allow_insecure_is_refused() {
+        use crate::contract::CoreConflict;
+        let raw = raw_with_tls(json!({ "serverName": "b.example", "allowInsecure": true }));
+        for origin in ["user", "provider"] {
+            let p = custom(origin, &raw);
+            assert_eq!(core_conflict(&p), Some(CoreConflict::CustomAllowInsecure));
+            let err = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap_err();
+            assert_eq!(
+                err,
+                CoreConflict::CustomAllowInsecure.to_string(),
+                "{origin}"
+            );
+        }
+        let checked = raw_with_tls(json!({ "serverName": "b.example", "allowInsecure": false }));
+        assert_eq!(core_conflict(&custom("user", &checked)), None);
+    }
+
+    #[test]
+    fn custom_pinned_allow_insecure_runs_on_the_pin() {
+        let raw = raw_with_tls(json!({
+            "serverName": "b.example", "allowInsecure": true, "pinnedPeerCertSha256": "aabb",
+        }));
+        for origin in ["user", "provider"] {
+            let p = custom(origin, &raw);
+            assert_eq!(core_conflict(&p), None, "{origin}");
+            let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+            let backup = cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["settings"]["vnext"][0]["address"] == "backup.example")
+                .unwrap();
+            assert_eq!(
+                backup["streamSettings"]["tlsSettings"],
+                json!({ "serverName": "b.example", "pinnedPeerCertSha256": "aabb" }),
+                "{origin}"
+            );
+        }
     }
 
     #[test]

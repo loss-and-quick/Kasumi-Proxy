@@ -9,6 +9,12 @@ export function coreConflictText(t: Translate, conflict: CoreConflict): string {
         pin: t("settings.pinnedCert"),
         insecure: t("editor.allowInsecure"),
       });
+    case "customAllowInsecure":
+      // Xray JSON keys, shown as the user finds them in the raw config.
+      return t("profiles.conflict.customAllowInsecure", {
+        insecure: "allowInsecure",
+        pin: "pinnedPeerCertSha256",
+      });
     case "chainCoreConflict":
       return t("editor.engineChainConflict", {
         xray: conflict.xray,

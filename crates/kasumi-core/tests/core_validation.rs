@@ -1739,7 +1739,12 @@ fn xray_array_body_cases() -> Vec<Case> {
             ]},
         })
     };
-    let body = json!([element("DE", "ws"), element("NL", "tcp")]).to_string();
+    let mut pinned = element("NL", "tcp");
+    // xray refuses `allowInsecure` outright; beside a pin, ingest drops it.
+    pinned["outbounds"][0]["streamSettings"]["tlsSettings"]["allowInsecure"] = json!(true);
+    pinned["outbounds"][0]["streamSettings"]["tlsSettings"]["pinnedPeerCertSha256"] =
+        json!(PCS_HEX);
+    let body = json!([element("DE", "ws"), pinned]).to_string();
     let ing = ingest(&IngestInput {
         url: "https://sub.example.org/s",
         headers: &[],

@@ -1714,6 +1714,8 @@ export const CoreConflictSchema = z.union([z.object({
 	xray: z.string(),
 	singBox: z.string(),
 }), z.object({
+	kind: z.literal("customAllowInsecure"),
+}), z.object({
 	kind: z.literal("unpinnedInsecureTls"),
 })]);
 export type CoreConflict = z.infer<typeof CoreConflictSchema>;

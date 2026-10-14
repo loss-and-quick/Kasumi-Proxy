@@ -665,6 +665,11 @@ export type CoreConflict =
  */
 { kind: "unpinnedInsecureTls" } | 
 /**
+ *  The same for a custom Xray config: some `tlsSettings` of it sets
+ *  `allowInsecure` without a `pinnedPeerCertSha256`.
+ */
+{ kind: "customAllowInsecure" } | 
+/**
  *  A proxy chain that no single core can build: every hop is an outbound of the
  *  one config, and these two profiles of it each run on a different core only.
  */

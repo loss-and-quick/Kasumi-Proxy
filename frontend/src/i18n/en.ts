@@ -723,6 +723,8 @@ const en = {
   "profiles.row.jsonHint": "A full Xray config from the subscription, sanitised",
   "profiles.conflict.unpinnedInsecureTls":
     "Can't start: this profile runs only on xray, which no longer skips certificate checks. Fill in “{pin}” or turn off “{insecure}”.",
+  "profiles.conflict.customAllowInsecure":
+    "Can't start: this config sets “{insecure}”, which xray no longer accepts. Add “{pin}” beside it or remove it.",
   // subscriptions extra
   "subs.saved": "Subscription saved",
   "subs.deleted": "Subscription deleted",

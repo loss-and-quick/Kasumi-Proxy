@@ -810,6 +810,34 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn xray_config_skipping_the_cert_check_is_kept_as_sent() {
+        let with_tls = |tls: Value| {
+            let mut c = xray_config(None, "a.example");
+            c["outbounds"][0]["streamSettings"] = serde_json::json!({
+                "network": "tcp", "security": "tls", "tlsSettings": tls,
+            });
+            c
+        };
+        let body = serde_json::json!([
+            with_tls(serde_json::json!({ "allowInsecure": true })),
+            with_tls(serde_json::json!({ "allowInsecure": true, "pinnedPeerCertSha256": "aabb" })),
+        ])
+        .to_string();
+        let ing = ingest(&allowed(body.as_bytes())).unwrap();
+        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
+        let [unpinned, pinned] = ing.profiles.as_slice() else {
+            panic!("{:?}", ing.profiles)
+        };
+        assert!(custom(unpinned).raw.contains("\"allowInsecure\":true"));
+        assert_eq!(
+            crate::core::core_conflict(unpinned),
+            Some(crate::contract::CoreConflict::CustomAllowInsecure)
+        );
+        assert!(!custom(pinned).raw.contains("allowInsecure"));
+        assert_eq!(crate::core::core_conflict(pinned), None);
+    }
+
+    #[test]
     fn xray_object_needs_consent_first() {
         let body = xray_config(Some("A"), "a.example").to_string();
         assert_eq!(
