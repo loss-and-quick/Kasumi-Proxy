@@ -253,3 +253,52 @@ impl Drop for RemoteTestCore {
         }
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use kasumi_core::data_path_plan::AppRouting;
+    use kasumi_core::enums::CoreEngine;
+    use kasumi_core::state::{AdvancedSettings, ProxyMode, SingboxStack};
+
+    use super::*;
+
+    /// The GUI decides about an uplink change through `RemotePlatform`: it must
+    /// answer as the `DesktopPlatform` behind it, not with the trait's default.
+    #[tokio::test]
+    async fn uplink_change_policy_is_the_local_platforms() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("helper.sock");
+        // Nothing is asked of the helper here; a socket that accepts is enough.
+        let _listener = tokio::net::UnixListener::bind(&sock).unwrap();
+        let client = Client::connect(&sock.to_string_lossy()).await.unwrap();
+        let remote = RemotePlatform::new(client).unwrap();
+
+        let host = HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: Some(SingboxStack::Gvisor),
+        };
+        let plan = |engine, mode| {
+            let s = AdvancedSettings {
+                proxy_mode: mode,
+                ..Default::default()
+            };
+            DataPathPlan::resolve(engine, &s, host)
+        };
+        let native = plan(CoreEngine::SingBox, ProxyMode::Tun);
+        let no_tun = plan(CoreEngine::Xray, ProxyMode::ProxyOnly);
+        assert!(!remote.uplink_change_restarts(Some(&native)));
+        assert!(!remote.uplink_change_restarts(Some(&no_tun)));
+        for p in [
+            Some(&native),
+            Some(&no_tun),
+            Some(&plan(CoreEngine::Xray, ProxyMode::Tun)),
+            None,
+        ] {
+            assert_eq!(
+                remote.uplink_change_restarts(p),
+                remote.local.uplink_change_restarts(p)
+            );
+        }
+    }
+}
