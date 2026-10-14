@@ -806,6 +806,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn boot_drops_the_old_engine_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = tempdir_paths(dir.path());
+        let marker = std::path::Path::new(&paths.datadir).join("engine");
+        std::fs::create_dir_all(&paths.datadir).unwrap();
+        std::fs::write(&marker, "xray").unwrap();
+        let platform = DesktopPlatform::with_paths(paths, false).unwrap();
+        platform.boot_init().await.unwrap();
+        assert!(!marker.exists());
+    }
+
+    #[tokio::test]
     async fn service_over_desktop_platform_dispatches() {
         let dir = tempfile::tempdir().unwrap();
         let platform: Arc<dyn Platform> =

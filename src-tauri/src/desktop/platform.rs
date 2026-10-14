@@ -465,6 +465,8 @@ impl Platform for DesktopPlatform {
         // before the first command. Drop the pre-document `service-started` marker.
         self.write_state(&DataPathState::default()).await;
         remove_file(&format!("{}/service-started", self.p.run_dir)).await;
+        // Older versions recorded the core engine in a marker file next to the configs.
+        remove_file(&Path::new(&self.p.datadir).join("engine")).await;
         Ok(())
     }
 
@@ -549,10 +551,11 @@ impl Platform for DesktopPlatform {
         // was recycled by an unrelated process must never be signalled — the
         // data-path runs privileged, so an unguarded kill could take down an
         // arbitrary process as root. (The old always-`Some(tun2socks_bin)` guard was
-        // lost when the marker-based helper resolution went in.)
+        // lost when the marker-based helper resolution went in.) Stop it gracefully:
+        // a sidecar sing-box tears its tun down only on a clean exit.
         let helper_pid = read_pidfile(&self.p.tun2socks_pidfile).await;
         if helper_pid > 0 && pid_matches_any(helper_pid, &self.p.helper_bins()).await {
-            kill_if_running(helper_pid, None, &self.p.tun2socks_pidfile, false).await;
+            kill_if_running(helper_pid, None, &self.p.tun2socks_pidfile, true).await;
         } else {
             remove_file(&self.p.tun2socks_pidfile).await;
         }

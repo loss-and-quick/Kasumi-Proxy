@@ -284,6 +284,8 @@ pub async fn clear_singbox_autoroute(tun_iface_file: &str, tun2_iface_file: &str
     for prio in SINGBOX_MAIN_RULE_PRIO..=SINGBOX_FORCE_RULE_PRIO {
         let p = prio.to_string();
         while silent(&[IP, "rule", "del", "priority", &p]).await == 0 {}
+        // sing-box puts a tun's IPv6 rules in the same range.
+        while silent(&[IP, "-6", "rule", "del", "priority", &p]).await == 0 {}
     }
     // Drain the per-tun route tables (main + force).
     for table in [SINGBOX_MAIN_TABLE, SINGBOX_FORCE_TABLE] {

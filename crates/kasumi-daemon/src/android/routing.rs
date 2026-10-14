@@ -3,12 +3,13 @@
 
 use std::collections::BTreeMap;
 
+use kasumi_backend::lifecycle::orphaned_tun_rules;
 use kasumi_core::state::{AppCaptureMode, AppFilterMode, app_filter_uid};
 use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_CIDR};
 
 use super::paths::{IP, IP6TABLES, IPTABLES};
 use super::tethering::clear_tethering;
-use super::{default_uplink, silent};
+use super::{default_uplink, run_out, silent};
 
 pub const FWMARK: u32 = 255;
 const RULE_PRIORITY: &str = "1000";
@@ -43,6 +44,19 @@ pub struct RoutingState {
 
 fn uid_of(key: &str) -> Option<String> {
     app_filter_uid(key).map(|u| u.to_string())
+}
+
+/// Delete the sing-box tun rules a helper that died uncleanly left behind, in both
+/// families (see [`orphaned_tun_rules`]).
+pub async fn clear_orphaned_tun_rules() {
+    for v6 in [false, true] {
+        let family = if v6 { "-6" } else { "-4" };
+        let (_, listing) = run_out(&[IP, family, "rule", "show"]).await;
+        for del in orphaned_tun_rules(&listing) {
+            let args: Vec<&str> = del.iter().map(String::as_str).collect();
+            ip_rule(v6, &args).await;
+        }
+    }
 }
 
 /// `ip [-6] <args>`.
