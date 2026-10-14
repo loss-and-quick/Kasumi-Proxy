@@ -142,7 +142,7 @@ fn app_scoped(machine_id: &str) -> String {
     hex(&mac.finalize().into_bytes()[..8])
 }
 
-/// A random id kept in `device-id`, outside `app-state.json`, so restoring a backup on
+/// A random id kept in `happ-device-id`, outside `app-state.json`, so restoring a backup on
 /// another device does not clone it.
 async fn happ_device_id(platform: &dyn Platform) -> String {
     static CREATE: Mutex<()> = Mutex::const_new(());
@@ -162,7 +162,7 @@ async fn happ_device_id(platform: &dyn Platform) -> String {
     id
 }
 
-/// Incy's random seed, a UUID without dashes, kept in `incy-seed` like `device-id`.
+/// Incy's random seed, a UUID without dashes, kept in `incy-seed` like `happ-device-id`.
 async fn incy_seed(platform: &dyn Platform) -> String {
     static CREATE: Mutex<()> = Mutex::const_new(());
     let _g = CREATE.lock().await;

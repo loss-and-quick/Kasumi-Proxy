@@ -107,7 +107,7 @@ impl BackendPaths {
 
     /// The random Happ HWID used when the device yields none; see [`crate::identity`].
     pub fn happ_device_id(&self) -> PathBuf {
-        self.data_dir.join("device-id")
+        self.data_dir.join("happ-device-id")
     }
 
     /// The random seed of Incy's HWID when Incy's SSAID is unknown.
