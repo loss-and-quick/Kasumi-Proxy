@@ -12,7 +12,7 @@ use super::tethering::clear_tethering;
 use super::{default_uplink, run_out, silent};
 
 pub const FWMARK: u32 = 255;
-const RULE_PRIORITY: &str = "1000";
+const LEGACY_MARK_RULE_PRIORITY: &str = "1000";
 const MARK_CHAIN: &str = "KASUMI_PROXY_MARK";
 
 // Our own route-table numbers (v4 and v6 share them).
@@ -118,17 +118,26 @@ async fn clear_legacy_strict_carveouts() {
     }
 }
 
-pub async fn remove_mark_rule() {
-    ip_rule(
-        false,
-        &["rule", "del", "fwmark", "255", "priority", RULE_PRIORITY],
-    )
-    .await;
-    ip_rule(
-        true,
-        &["rule", "del", "fwmark", "255", "priority", RULE_PRIORITY],
-    )
-    .await;
+/// Older versions pinned an `fwmark 255` rule to the uplink table, carried over
+/// from the shell module, where Xray marked its sockets 255. No config marks the
+/// cores' sockets now (they leave as uid 0), and the tun helpers' marked sockets
+/// only reach the local SOCKS port. Removed on teardown only, to clean up after an
+/// upgrade.
+async fn clear_legacy_mark_rule() {
+    for v6 in [false, true] {
+        ip_rule(
+            v6,
+            &[
+                "rule",
+                "del",
+                "fwmark",
+                "255",
+                "priority",
+                LEGACY_MARK_RULE_PRIORITY,
+            ],
+        )
+        .await;
+    }
 }
 
 /// The tun path's rules sending local RFC1918 sources to the uplink table.
@@ -157,50 +166,14 @@ async fn pin_lan_bypass(uplink: &str) {
 }
 
 /// Re-point the rules keyed on the uplink after it changed, leaving the cores and
-/// their connections running. sing-box follows the default interface itself
-/// (`auto_detect_interface`); Xray dials through the fwmark rule.
+/// their connections running: they leave as uid 0, which Android routes through
+/// its default network, and sing-box follows the default interface itself
+/// (`auto_detect_interface`).
 pub async fn repin_uplink(uplink: &str) {
-    apply_mark_rule(uplink).await;
     let (_, rules) = run_out(&[IP, "rule", "show", "pref", LAN_BYPASS[0].1]).await;
     if !rules.trim().is_empty() {
         pin_lan_bypass(uplink).await;
     }
-}
-
-/// Bind the proxy fwmark to the active uplink's route table.
-pub async fn apply_mark_rule(iface: &str) {
-    if iface.is_empty() {
-        return;
-    }
-    remove_mark_rule().await;
-    ip_rule(
-        false,
-        &[
-            "rule",
-            "add",
-            "fwmark",
-            "255",
-            "table",
-            iface,
-            "priority",
-            RULE_PRIORITY,
-        ],
-    )
-    .await;
-    ip_rule(
-        true,
-        &[
-            "rule",
-            "add",
-            "fwmark",
-            "255",
-            "table",
-            iface,
-            "priority",
-            RULE_PRIORITY,
-        ],
-    )
-    .await;
 }
 
 async fn app_uid_rules(ipt: &str, filter: &AppFilter) {
@@ -447,7 +420,7 @@ async fn clear_legacy_port_rules(filter: &AppFilter, socks_port: u16, http_port:
 
 /// Tear down every rule/table/device the xray data-path installed.
 pub async fn clear_routing_rules(st: &RoutingState) {
-    remove_mark_rule().await;
+    clear_legacy_mark_rule().await;
     clear_legacy_strict_carveouts().await;
     clear_guards().await;
     // Whatever the tethering option installed, whether or not it is on right now:

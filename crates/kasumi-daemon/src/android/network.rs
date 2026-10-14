@@ -1,21 +1,25 @@
-//! Active-uplink detection + network-change monitor. Reads `/sys/class/net`,
-//! per-iface route tables, and watches `/data/misc/net` via busybox `inotifyd`
-//! (event-driven) or a 5 s poll fallback. On each real uplink switch it re-points
-//! the rules keyed on the uplink and notifies the `Service`, which leaves a running
-//! data-path alone.
+//! Active-uplink detection + network-change monitor. The uplink is the device the
+//! route lookup answers with, which follows Android's default network. A switch of
+//! that network rewrites Android's ip rules, so the watcher listens to
+//! `ip monitor rule` and looks again once a burst settles (a 5 s poll where the
+//! monitor can't run). On each real uplink switch it re-points the rules keyed on
+//! the uplink and notifies the `Service`, which leaves a running data-path alone.
 
 use std::time::Duration;
 
-use kasumi_backend::fs::exists;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
 
 use super::paths::IP;
-use super::routing::{apply_mark_rule, repin_uplink};
-use super::run_out;
+use super::routing::repin_uplink;
+use super::{default_uplink, run_out};
 
-// Physical uplinks worth pinning the proxy mark to.
+/// How long the rule events of one switch keep coming before the watcher looks.
+const SETTLE: Duration = Duration::from_millis(500);
+const POLL: Duration = Duration::from_secs(5);
+
+// Physical uplinks whose route tables the routing rules can name.
 fn is_uplink(name: &str) -> bool {
     name == "wlan0"
         || name == "eth0"
@@ -25,26 +29,26 @@ fn is_uplink(name: &str) -> bool {
         || name.starts_with("ccmni")
 }
 
-// Common busybox locations on rooted Android (KSU / Magisk / APatch).
-const BUSYBOX_PATHS: [&str; 5] = [
-    "/data/adb/ksu/bin/busybox",
-    "/data/adb/magisk/busybox",
-    "/data/adb/ap/bin/busybox",
-    "/system/bin/busybox",
-    "/system/xbin/busybox",
-];
-
-async fn find_busybox() -> Option<&'static str> {
-    for p in BUSYBOX_PATHS {
-        if exists(p).await {
-            return Some(p);
-        }
-    }
-    None
+/// The physical uplink behind a routed device: a CLAT device `v4-<iface>` routes
+/// through `<iface>`, whose table holds its route.
+fn uplink_of(dev: &str) -> Option<String> {
+    let base = dev.strip_prefix("v4-").unwrap_or(dev);
+    is_uplink(base).then(|| base.to_owned())
 }
 
-/// The uplink iface that currently owns a default route, or `None`.
+/// The uplink Android currently routes through, or `None` while it has none.
+/// Asking the route lookup follows Android's default network; any table with a
+/// default route would also name the cellular link that lingers after Wi-Fi is
+/// back.
 async fn active_interface() -> Option<String> {
+    match default_uplink().await {
+        Some(dev) => uplink_of(&dev),
+        None => interface_with_default_route().await,
+    }
+}
+
+/// The first uplink whose own table has a default route.
+async fn interface_with_default_route() -> Option<String> {
     let mut rd = tokio::fs::read_dir("/sys/class/net").await.ok()?;
     let mut names = Vec::new();
     while let Ok(Some(e)) = rd.next_entry().await {
@@ -62,63 +66,61 @@ async fn active_interface() -> Option<String> {
     None
 }
 
-async fn notify(tx: &mpsc::Sender<()>) {
-    let _ = tx.send(()).await;
+/// Re-point the uplink-keyed rules and tell the `Service` when the uplink moved.
+async fn check(last: &mut Option<String>, tx: &mpsc::Sender<()>) {
+    let Some(cur) = active_interface().await else {
+        return;
+    };
+    if Some(&cur) != last.as_ref() {
+        log::info!("uplink: {} -> {cur}", last.as_deref().unwrap_or("none"));
+        repin_uplink(&cur).await;
+        *last = Some(cur);
+        let _ = tx.send(()).await;
+    }
 }
 
-/// Pin the proxy mark to the current uplink, then monitor for network changes,
-/// sending `()` on each real switch. Runs until the process exits.
+/// Monitor for uplink switches, sending `()` on each. Runs until the process exits.
 pub async fn run_watcher(tx: mpsc::Sender<()>) {
     let mut last = active_interface().await;
-    if let Some(l) = &last {
-        apply_mark_rule(l).await;
+    loop {
+        let monitor = Command::new(IP)
+            .args(["-o", "monitor", "rule"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn();
+        let Ok(mut child) = monitor else {
+            loop {
+                tokio::time::sleep(POLL).await;
+                check(&mut last, &tx).await;
+            }
+        };
+        // A switch may have happened while the monitor was down.
+        check(&mut last, &tx).await;
+        if let Some(stdout) = child.stdout.take() {
+            let mut lines = BufReader::new(stdout).lines();
+            while let Ok(Some(_)) = lines.next_line().await {
+                while let Ok(Ok(Some(_))) = tokio::time::timeout(SETTLE, lines.next_line()).await {}
+                check(&mut last, &tx).await;
+            }
+        }
+        let _ = child.kill().await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
+}
 
-    if let Some(bb) = find_busybox().await {
-        loop {
-            if let Ok(mut child) = Command::new(bb)
-                .args(["inotifyd", "-", "/data/misc/net::w"])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
-                .spawn()
-            {
-                if let Some(stdout) = child.stdout.take() {
-                    let mut lines = BufReader::new(stdout).lines();
-                    while let Ok(Some(_)) = lines.next_line().await {
-                        // After an event the new uplink may not be ready yet.
-                        let mut cur = active_interface().await;
-                        for _ in 0..10 {
-                            if cur.is_some() {
-                                break;
-                            }
-                            tokio::time::sleep(Duration::from_secs(1)).await;
-                            cur = active_interface().await;
-                        }
-                        if let Some(cur) = cur
-                            && Some(&cur) != last.as_ref()
-                        {
-                            last = Some(cur.clone());
-                            repin_uplink(&cur).await;
-                            notify(&tx).await;
-                        }
-                    }
-                }
-                let _ = child.kill().await;
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await; // re-arm the watcher
-        }
-    } else {
-        // No busybox — poll every 5 s.
-        loop {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            if let Some(cur) = active_interface().await
-                && Some(&cur) != last.as_ref()
-            {
-                last = Some(cur.clone());
-                repin_uplink(&cur).await;
-                notify(&tx).await;
-            }
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routed_device_maps_to_its_uplink() {
+        assert_eq!(uplink_of("wlan0").as_deref(), Some("wlan0"));
+        assert_eq!(uplink_of("rmnet_data2").as_deref(), Some("rmnet_data2"));
+        // CLAT on an IPv6-only mobile network.
+        assert_eq!(uplink_of("v4-rmnet_data0").as_deref(), Some("rmnet_data0"));
+        assert_eq!(uplink_of("tun0"), None);
+        assert_eq!(uplink_of("lo"), None);
     }
 }

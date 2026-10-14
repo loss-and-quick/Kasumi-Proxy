@@ -837,7 +837,7 @@ impl Platform for AndroidPlatform {
         Some(rx)
     }
 
-    // The watcher re-points the mark and LAN-bypass rules before it notifies.
+    // The watcher re-points the uplink-keyed rules before it notifies.
     fn uplink_change_restarts(&self) -> bool {
         false
     }
