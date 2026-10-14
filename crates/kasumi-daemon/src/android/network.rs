@@ -2,8 +2,10 @@
 //! route lookup answers with, which follows Android's default network. A switch of
 //! that network rewrites Android's ip rules, so the watcher listens to
 //! `ip monitor rule` and looks again once a burst settles (a 5 s poll where the
-//! monitor can't run). On each real uplink switch it re-points the rules keyed on
-//! the uplink and notifies the `Service`, which leaves a running data-path alone.
+//! monitor can't run). On each real uplink switch it notifies the `Service`, which
+//! leaves a running data-path alone: nothing it installs names the uplink, the
+//! cores leave as uid 0 through Android's default network, and sing-box follows
+//! the default interface itself.
 
 use std::time::Duration;
 
@@ -12,7 +14,6 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 
 use super::paths::IP;
-use super::routing::repin_uplink;
 use super::{default_uplink, run_out};
 
 /// How long the rule events of one switch keep coming before the watcher looks.
@@ -66,14 +67,13 @@ async fn interface_with_default_route() -> Option<String> {
     None
 }
 
-/// Re-point the uplink-keyed rules and tell the `Service` when the uplink moved.
+/// Tell the `Service` when the uplink moved.
 async fn check(last: &mut Option<String>, tx: &mpsc::Sender<()>) {
     let Some(cur) = active_interface().await else {
         return;
     };
     if Some(&cur) != last.as_ref() {
         log::info!("uplink: {} -> {cur}", last.as_deref().unwrap_or("none"));
-        repin_uplink(&cur).await;
         *last = Some(cur);
         let _ = tx.send(()).await;
     }

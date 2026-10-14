@@ -9,7 +9,7 @@ use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_C
 
 use super::paths::{IP, IP6TABLES, IPTABLES};
 use super::tethering::clear_tethering;
-use super::{default_uplink, run_out, silent};
+use super::{run_out, silent};
 
 pub const FWMARK: u32 = 255;
 const LEGACY_MARK_RULE_PRIORITY: &str = "1000";
@@ -137,42 +137,6 @@ async fn clear_legacy_mark_rule() {
             ],
         )
         .await;
-    }
-}
-
-/// The tun path's rules sending local RFC1918 sources to the uplink table.
-const LAN_BYPASS: [(&str, &str); 3] = [
-    ("10.0.0.0/8", "5020"),
-    ("172.16.0.0/12", "5021"),
-    ("192.168.0.0/16", "5022"),
-];
-
-async fn pin_lan_bypass(uplink: &str) {
-    for (src, pref) in LAN_BYPASS {
-        // By priority: the rule may still name the previous uplink.
-        for _ in 0..4 {
-            if ip_rule(false, &["rule", "del", "pref", pref]).await != 0 {
-                break;
-            }
-        }
-        ip_rule(
-            false,
-            &[
-                "rule", "add", "from", src, "iif", "lo", "lookup", uplink, "pref", pref,
-            ],
-        )
-        .await;
-    }
-}
-
-/// Re-point the rules keyed on the uplink after it changed, leaving the cores and
-/// their connections running: they leave as uid 0, which Android routes through
-/// its default network, and sing-box follows the default interface itself
-/// (`auto_detect_interface`).
-pub async fn repin_uplink(uplink: &str) {
-    let (_, rules) = run_out(&[IP, "rule", "show", "pref", LAN_BYPASS[0].1]).await;
-    if !rules.trim().is_empty() {
-        pin_lan_bypass(uplink).await;
     }
 }
 
@@ -468,9 +432,13 @@ pub async fn clear_routing_rules(st: &RoutingState) {
     )
     .await;
 
-    // Our LAN-bypass rules: pref 5020-5022 send RFC1918 sources to the uplink
-    // table, 5030-5050 to our tun table. Delete by priority — the band is ours
-    // (the OS lives at pref 10000+); the loop clears any stacked duplicate.
+    // Older versions sent every RFC1918 source to the tun table (5030-5050, the
+    // shell module's hotspot capture, now done per tethering interface) and local
+    // ones to the uplink's table (5020-5022). Named after the uplink of the moment,
+    // the latter sent Wi-Fi-sourced traffic out the mobile link after a switch, so
+    // Android could no longer validate Wi-Fi. Removed on teardown only, to clean
+    // up after an upgrade; the band is ours (the OS lives at pref 10000+) and the
+    // loop clears any stacked duplicate.
     for pref in ["5020", "5021", "5022", "5030", "5040", "5050"] {
         for _ in 0..4 {
             if ip_rule(false, &["rule", "del", "pref", pref]).await != 0 {
@@ -638,31 +606,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     silent(&[IPTABLES, "-t", "mangle", "-A", "OUTPUT", "-j", MARK_CHAIN]).await;
     silent(&[IPTABLES, "-I", "FORWARD", "-o", tun, "-j", "ACCEPT"]).await;
     silent(&[IPTABLES, "-I", "FORWARD", "-i", tun, "-j", "ACCEPT"]).await;
-
-    // Pin local-origin traffic to the physical uplink so it doesn't loop the tun.
-    if let Some(uplink) = default_uplink().await {
-        pin_lan_bypass(&uplink).await;
-    }
-    for (src, pref) in [
-        ("10.0.0.0/8", "5030"),
-        ("172.16.0.0/12", "5040"),
-        ("192.168.0.0/16", "5050"),
-    ] {
-        ip_rule(
-            false,
-            &[
-                "rule", "del", "from", src, "lookup", TUN_TABLE, "pref", pref,
-            ],
-        )
-        .await;
-        ip_rule(
-            false,
-            &[
-                "rule", "add", "from", src, "lookup", TUN_TABLE, "pref", pref,
-            ],
-        )
-        .await;
-    }
     silent(&[
         IPTABLES,
         "-t",

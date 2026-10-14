@@ -837,7 +837,7 @@ impl Platform for AndroidPlatform {
         Some(rx)
     }
 
-    // The watcher re-points the uplink-keyed rules before it notifies.
+    // Nothing the data path installs names the uplink (see `network`).
     fn uplink_change_restarts(&self) -> bool {
         false
     }
