@@ -105,8 +105,8 @@ impl BackendPaths {
         self.data_dir.join("sub-meta.json")
     }
 
-    /// The random HWID used when the device yields none; see [`crate::identity`].
-    pub fn device_id(&self) -> PathBuf {
+    /// The random Happ HWID used when the device yields none; see [`crate::identity`].
+    pub fn happ_device_id(&self) -> PathBuf {
         self.data_dir.join("device-id")
     }
 

@@ -1801,7 +1801,7 @@ export const HopConflictSchema = z.object({
 export type HopConflict = z.infer<typeof HopConflictSchema>;
 
 
-export const HwidSourceSchema = z.union([z.literal("deviceId"), z.literal("happComputed"), z.literal("happStored"), z.literal("incyDerived"), z.literal("incySeed"), z.literal("machineId"), z.literal("settings"), z.literal("subscription")]);
+export const HwidSourceSchema = z.union([z.literal("happComputed"), z.literal("happDeviceId"), z.literal("happMachineId"), z.literal("happStored"), z.literal("incyDerived"), z.literal("incySeed"), z.literal("settings"), z.literal("subscription")]);
 export type HwidSource = z.infer<typeof HwidSourceSchema>;
 
 

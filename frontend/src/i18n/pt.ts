@@ -804,8 +804,8 @@ const pt = {
   "subs.identity.hwidSource.settings": "Definido nas Configurações",
   "subs.identity.hwidSource.happStored": "O ID que o Happ tem neste dispositivo",
   "subs.identity.hwidSource.happComputed": "O ID que o Android dá ao Happ neste dispositivo",
-  "subs.identity.hwidSource.machineId": "Derivado do machine ID deste computador",
-  "subs.identity.hwidSource.deviceId": "Um ID aleatório guardado pelo Kasumi",
+  "subs.identity.hwidSource.happMachineId": "Derivado do machine ID deste computador",
+  "subs.identity.hwidSource.happDeviceId": "Um ID aleatório guardado pelo Kasumi",
   "subs.identity.hwidSource.incyDerived": "O ID que o Incy calcula neste dispositivo",
   "subs.identity.hwidSource.incySeed":
     "O ID do Incy a partir de uma semente aleatória guardada pelo Kasumi",

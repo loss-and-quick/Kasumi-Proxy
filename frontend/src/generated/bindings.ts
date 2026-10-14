@@ -862,9 +862,9 @@ export type HwidSource =
 /**  The SSAID Android would give Happ, from the user's SSAID key. */
 "happComputed" | 
 /**  Derived from the host's machine id. */
-"machineId" | 
+"happMachineId" | 
 /**  Random, kept in the data directory. */
-"deviceId" | 
+"happDeviceId" | 
 /**  Incy's id derived from the SSAID Android gives Incy and the build values. */
 "incyDerived" | 
 /**  Incy's id derived from a random seed kept in the data directory. */

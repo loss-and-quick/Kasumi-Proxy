@@ -135,9 +135,9 @@ pub enum HwidSource {
     /// The SSAID Android would give Happ, from the user's SSAID key.
     HappComputed,
     /// Derived from the host's machine id.
-    MachineId,
+    HappMachineId,
     /// Random, kept in the data directory.
-    DeviceId,
+    HappDeviceId,
     /// Incy's id derived from the SSAID Android gives Incy and the build values.
     IncyDerived,
     /// Incy's id derived from a random seed kept in the data directory.
@@ -218,7 +218,7 @@ pub fn is_valid_hwid(s: &str) -> bool {
 }
 
 /// The OS for `X-Device-OS` and the User-Agent; blank keeps Happ's Android.
-pub fn client_os(name: &str) -> ClientOs {
+pub fn happ_client_os(name: &str) -> ClientOs {
     let name = name.trim();
     match name.to_ascii_lowercase().as_str() {
         "" | "android" => ClientOs::Android,
@@ -235,8 +235,8 @@ fn given(v: Option<&String>) -> Option<&str> {
     v.map(|s| s.trim()).filter(|s| !s.is_empty())
 }
 
-/// The HWID to send and its source: the subscription's, the Settings one, else `auto`.
-pub fn pick_hwid(
+/// Happ's HWID to send and its source: the subscription's, the Settings one, else `auto`.
+pub fn pick_happ_hwid(
     defaults: &RequestIdentityDefaults,
     request: &SubRequestOverrides,
     auto: &AutoHwid,
@@ -253,7 +253,7 @@ pub fn pick_hwid(
 
 /// happ-sub's identity for one subscription. A Settings switch left at Happ's default
 /// lets the provider's keys decide; a changed one, or any per-subscription one, wins.
-pub fn identity(
+pub fn happ_identity(
     defaults: &RequestIdentityDefaults,
     sub_user_agent: &str,
     request: &SubRequestOverrides,
@@ -271,7 +271,7 @@ pub fn identity(
     Identity {
         hwid: Some(hwid.to_owned()),
         device: DeviceInfo {
-            os: client_os(&pick(
+            os: happ_client_os(&pick(
                 request.device_os.as_ref(),
                 defaults.device_os.as_ref(),
                 &facts.os,
@@ -316,12 +316,24 @@ pub fn resolve(
     consented: &[String],
     unix_secs: u64,
 ) -> Resolved {
-    if input.client == RequestClient::Incy {
-        return resolve_incy(input, facts, auto);
+    match input.client {
+        RequestClient::Happ => resolve_happ(input, facts, auto, meta, consented, unix_secs),
+        RequestClient::Incy => resolve_incy(input, facts, auto),
     }
+}
+
+/// Happ's request, built by happ-sub from the user's settings and the provider's keys.
+fn resolve_happ(
+    input: &IdentityInput,
+    facts: &DeviceFacts,
+    auto: &AutoHwid,
+    meta: Option<&MetaMap>,
+    consented: &[String],
+    unix_secs: u64,
+) -> Resolved {
     let consent = |key: &str| consented.iter().any(|k| k == key);
-    let (hwid, hwid_source) = pick_hwid(&input.defaults, &input.request, auto);
-    let mut id = identity(
+    let (hwid, hwid_source) = pick_happ_hwid(&input.defaults, &input.request, auto);
+    let mut id = happ_identity(
         &input.defaults,
         &input.user_agent,
         &input.request,
@@ -688,10 +700,10 @@ mod tests {
 
     #[test]
     fn desktop_os_names_map_to_client_os() {
-        assert_eq!(client_os("Linux"), ClientOs::Linux);
-        assert_eq!(client_os(" windows "), ClientOs::Windows);
-        assert_eq!(client_os(""), ClientOs::Android);
-        assert_eq!(client_os("Haiku"), ClientOs::Other("Haiku".into()));
+        assert_eq!(happ_client_os("Linux"), ClientOs::Linux);
+        assert_eq!(happ_client_os(" windows "), ClientOs::Windows);
+        assert_eq!(happ_client_os(""), ClientOs::Android);
+        assert_eq!(happ_client_os("Haiku"), ClientOs::Other("Haiku".into()));
         let mut f = facts();
         f.os = "Linux".into();
         let r = resolve(&input(), &f, &auto(), None, &[], DAY);
