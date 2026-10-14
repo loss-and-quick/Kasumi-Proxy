@@ -963,8 +963,7 @@ const ar = {
   "subs.identity.providerHeader": "طلب المزوّد إرسال معرّف الجهاز في ترويسة.",
   "subs.identity.providerYouDecide": "المفاتيح التي تضبطها هنا تبقى هي الحاسمة.",
   "subs.identity.compat": "متوافق مع بروتوكول Happ.",
-  "subs.identity.compatIncy":
-    "متوافق مع تطبيق Incy. معرّف الجهاز مستنتج من شيفرة التطبيق ولم يُتحقق منه بعد على جهاز حقيقي.",
+  "subs.identity.compatIncy": "متوافق مع تطبيق Incy.",
   "subs.identity.privacy":
     "يستخدم المزوّدون هذه الترويسات لعدّ أجهزتك: المعرّف نفسه على عدة أجهزة يبدو جهازًا واحدًا.",
   "subs.identityNotice.title": "تستخدم الاشتراكات الآن بروتوكول Happ",

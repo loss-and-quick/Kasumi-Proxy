@@ -823,8 +823,7 @@ const vi = {
   "subs.identity.providerHeader": "Nhà cung cấp yêu cầu gửi ID thiết bị dưới dạng header.",
   "subs.identity.providerYouDecide": "Các công tắc bạn đặt ở đây vẫn được ưu tiên.",
   "subs.identity.compat": "Tương thích với giao thức Happ.",
-  "subs.identity.compatIncy":
-    "Tương thích với ứng dụng Incy. ID thiết bị được suy ra từ mã của ứng dụng và chưa được kiểm tra trên thiết bị thật.",
+  "subs.identity.compatIncy": "Tương thích với ứng dụng Incy.",
   "subs.identity.privacy":
     "Nhà cung cấp dùng các header này để đếm thiết bị của bạn: cùng một ID trên nhiều thiết bị trông như một thiết bị.",
   "subs.identityNotice.title": "Gói đăng ký giờ sử dụng giao thức Happ",

@@ -847,8 +847,7 @@ const es = {
     "El proveedor pidió enviar el ID del dispositivo como encabezado.",
   "subs.identity.providerYouDecide": "Los interruptores que definas aquí siguen mandando.",
   "subs.identity.compat": "Compatible con el protocolo de Happ.",
-  "subs.identity.compatIncy":
-    "Compatible con la app Incy. Su ID de dispositivo sigue el código de la app y aún no se ha comprobado en un dispositivo real.",
+  "subs.identity.compatIncy": "Compatible con la app Incy.",
   "subs.identity.privacy":
     "Los proveedores usan estos encabezados para contar tus dispositivos: el mismo ID en varios parece uno solo.",
   "subs.identityNotice.title": "Las suscripciones ahora usan el protocolo de Happ",

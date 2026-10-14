@@ -846,8 +846,7 @@ const pt = {
     "O provedor pediu para enviar o ID do dispositivo como cabeçalho.",
   "subs.identity.providerYouDecide": "Os interruptores definidos aqui continuam valendo.",
   "subs.identity.compat": "Compatível com o protocolo do Happ.",
-  "subs.identity.compatIncy":
-    "Compatível com o app Incy. O ID do dispositivo segue o código do app e ainda não foi verificado num dispositivo real.",
+  "subs.identity.compatIncy": "Compatível com o app Incy.",
   "subs.identity.privacy":
     "Os provedores usam estes cabeçalhos para contar seus dispositivos: o mesmo ID em vários parece um só.",
   "subs.identityNotice.title": "As assinaturas agora usam o protocolo do Happ",

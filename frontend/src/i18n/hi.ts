@@ -810,8 +810,7 @@ const hi = {
   "subs.identity.providerHeader": "प्रोवाइडर ने डिवाइस ID हेडर में भेजने को कहा है।",
   "subs.identity.providerYouDecide": "यहाँ आपके सेट किए स्विच ही लागू होते हैं।",
   "subs.identity.compat": "Happ प्रोटोकॉल के अनुकूल।",
-  "subs.identity.compatIncy":
-    "Incy ऐप के अनुकूल। इसकी डिवाइस ID ऐप के कोड से निकाली गई है और अभी किसी असली डिवाइस पर जाँची नहीं गई है।",
+  "subs.identity.compatIncy": "Incy ऐप के अनुकूल।",
   "subs.identity.privacy":
     "प्रोवाइडर इन हेडर से आपके डिवाइस गिनते हैं: कई डिवाइस पर एक ही ID हो तो वे एक ही डिवाइस जैसे दिखते हैं।",
   "subs.identityNotice.title": "सब्सक्रिप्शन अब Happ प्रोटोकॉल का उपयोग करते हैं",

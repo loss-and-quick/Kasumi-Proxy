@@ -839,8 +839,7 @@ const en = {
   "subs.identity.providerHeader": "The provider asked to send the device ID as a header.",
   "subs.identity.providerYouDecide": "Switches you set here still win.",
   "subs.identity.compat": "Compatible with the Happ protocol.",
-  "subs.identity.compatIncy":
-    "Compatible with the Incy app. Its device ID follows the app's code and hasn't been checked on a real device yet.",
+  "subs.identity.compatIncy": "Compatible with the Incy app.",
   "subs.identity.privacy":
     "Providers use these headers to count your devices: the same device ID on several devices looks like one.",
   "subs.identityNotice.title": "Subscriptions now use the Happ protocol",

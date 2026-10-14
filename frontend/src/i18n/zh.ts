@@ -797,7 +797,7 @@ const zh = {
   "subs.identity.providerHeader": "服务商要求通过请求头发送设备 ID。",
   "subs.identity.providerYouDecide": "你在这里设置的开关仍然优先。",
   "subs.identity.compat": "兼容 Happ 协议。",
-  "subs.identity.compatIncy": "兼容 Incy 应用。其设备 ID 依据应用代码推算，尚未在真实设备上验证。",
+  "subs.identity.compatIncy": "兼容 Incy 应用。",
   "subs.identity.privacy":
     "服务商用这些请求头统计你的设备数量：多台设备使用同一个 ID 时，会被视为同一台设备。",
   "subs.identityNotice.title": "订阅现在使用 Happ 协议请求",
