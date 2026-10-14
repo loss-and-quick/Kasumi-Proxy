@@ -74,20 +74,65 @@ pub fn bind_uplink_outbounds(
     iface: &str,
     source: &UplinkSource,
 ) {
-    for key in ["outbounds", "endpoints"] {
-        let Some(arr) = cfg.get_mut(key).and_then(Value::as_array_mut) else {
-            continue;
-        };
-        for ob in arr.iter_mut().filter_map(Value::as_object_mut) {
-            match engine {
-                CoreEngine::Xray => bind_xray_outbound(ob, iface, source),
-                CoreEngine::SingBox => bind_singbox_outbound(ob, iface, source),
+    escape_outbounds(engine, cfg, &Escape::Bind { iface, source });
+}
+
+/// Mark the same outbounds [`bind_uplink_outbounds`] binds with `mark` instead, for
+/// a host whose policy routing sends that mark past the tun to the main table. The
+/// main table then picks the uplink for every dial, so a change of uplink needs
+/// nothing rebuilt. xray takes it per outbound as `streamSettings.sockopt.mark`
+/// (`SO_MARK`). sing-box takes it once as `route.default_mark`, which also covers
+/// its DNS servers' own dials.
+/// <https://xtls.github.io/en/config/transport.html#sockoptobject>
+/// <https://sing-box.sagernet.org/configuration/route/#default_mark>
+pub fn mark_egress_outbounds(engine: CoreEngine, cfg: &mut Value, mark: u32) {
+    match engine {
+        CoreEngine::Xray => escape_outbounds(engine, cfg, &Escape::Mark(mark)),
+        CoreEngine::SingBox => {
+            let Some(root) = cfg.as_object_mut() else {
+                return;
+            };
+            if let Some(route) = root
+                .entry("route")
+                .or_insert_with(|| json!({}))
+                .as_object_mut()
+            {
+                route.insert("default_mark".into(), mark.into());
             }
         }
     }
 }
 
-fn bind_xray_outbound(ob: &mut Map<String, Value>, iface: &str, source: &UplinkSource) {
+/// How an outbound's socket leaves the tun.
+enum Escape<'a> {
+    /// Bound to the uplink's device and source address.
+    Bind {
+        iface: &'a str,
+        source: &'a UplinkSource,
+    },
+    /// Carries a mark that policy routing sends past the tun.
+    Mark(u32),
+}
+
+fn escape_outbounds(engine: CoreEngine, cfg: &mut Value, escape: &Escape) {
+    for key in ["outbounds", "endpoints"] {
+        let Some(arr) = cfg.get_mut(key).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for ob in arr.iter_mut().filter_map(Value::as_object_mut) {
+            match (engine, escape) {
+                (CoreEngine::Xray, _) => escape_xray_outbound(ob, escape),
+                (CoreEngine::SingBox, Escape::Bind { iface, source }) => {
+                    bind_singbox_outbound(ob, iface, source)
+                }
+                // sing-box marks every dial at once (see `mark_egress_outbounds`).
+                (CoreEngine::SingBox, Escape::Mark(_)) => {}
+            }
+        }
+    }
+}
+
+fn escape_xray_outbound(ob: &mut Map<String, Value>, escape: &Escape) {
     let protocol = ob.get("protocol").and_then(Value::as_str).unwrap_or("");
     if protocol.is_empty() || XRAY_LOCAL_PROTOCOLS.contains(&protocol) {
         return;
@@ -124,21 +169,23 @@ fn bind_xray_outbound(ob: &mut Map<String, Value>, iface: &str, source: &UplinkS
                     .and_then(Value::as_str)
                     .is_some_and(is_loopback_host)
             {
-                bind_xray_sockopt(leg, iface);
+                escape_xray_sockopt(leg, escape);
             }
         }
     }
-    if relayed || !bind_xray_sockopt(stream, iface) {
+    if relayed || !escape_xray_sockopt(stream, escape) {
         return;
     }
-    if let Some(v4) = &source.v4 {
+    if let Escape::Bind { source, .. } = escape
+        && let Some(v4) = &source.v4
+    {
         ob.insert("sendThrough".into(), v4.as_str().into());
     }
 }
 
-/// Set `sockopt.interface` on one xray stream config unless its socket comes from
-/// another outbound (`dialerProxy`). Returns whether it was bound.
-fn bind_xray_sockopt(stream: &mut Map<String, Value>, iface: &str) -> bool {
+/// Set `sockopt.interface` or `sockopt.mark` on one xray stream config unless its
+/// socket comes from another outbound (`dialerProxy`). Returns whether it was set.
+fn escape_xray_sockopt(stream: &mut Map<String, Value>, escape: &Escape) -> bool {
     let Some(sock) = stream
         .entry("sockopt")
         .or_insert_with(|| json!({}))
@@ -153,7 +200,10 @@ fn bind_xray_sockopt(stream: &mut Map<String, Value>, iface: &str) -> bool {
     {
         return false;
     }
-    sock.insert("interface".into(), iface.into());
+    match escape {
+        Escape::Bind { iface, .. } => sock.insert("interface".into(), (*iface).into()),
+        Escape::Mark(mark) => sock.insert("mark".into(), (*mark).into()),
+    };
     true
 }
 
@@ -495,6 +545,65 @@ mod tests {
         }
         assert!(
             by_tag(&s, "endpoints", "wg-hop")
+                .get("bind_interface")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn marks_the_outbounds_a_bind_would_bind() {
+        let mut x = json!({ "outbounds": [
+            { "tag": "proxy", "protocol": "vless",
+              "settings": { "vnext": [{ "address": "p.example", "port": 443 }] },
+              "streamSettings": { "network": "xhttp", "xhttpSettings": { "downloadSettings": {
+                  "address": "d.example", "port": 443 } } } },
+            { "tag": "direct", "protocol": "freedom" },
+            { "tag": "dns-out", "protocol": "dns" },
+            { "tag": "block", "protocol": "blackhole" },
+            { "tag": "local", "protocol": "socks",
+              "settings": { "servers": [{ "address": "127.0.0.1", "port": 1080 }] } },
+            { "tag": "relayed", "protocol": "vless", "proxySettings": { "tag": "proxy" },
+              "settings": { "vnext": [{ "address": "r.example", "port": 443 }] } },
+            { "tag": "dialed", "protocol": "vless",
+              "settings": { "vnext": [{ "address": "d.example", "port": 443 }] },
+              "streamSettings": { "sockopt": { "dialerProxy": "proxy" } } },
+        ] });
+        mark_egress_outbounds(CoreEngine::Xray, &mut x, 0x4b53);
+        for tag in ["proxy", "direct", "dns-out"] {
+            let ob = by_tag(&x, "outbounds", tag);
+            assert_eq!(
+                ob["streamSettings"]["sockopt"],
+                json!({ "mark": 0x4b53 }),
+                "{tag}"
+            );
+            // Nothing names the uplink: the main table picks it per dial.
+            assert!(ob.get("sendThrough").is_none(), "{tag}");
+        }
+        assert_eq!(
+            by_tag(&x, "outbounds", "proxy")["streamSettings"]["xhttpSettings"]["downloadSettings"]
+                ["sockopt"],
+            json!({ "mark": 0x4b53 })
+        );
+        for tag in ["block", "local", "relayed"] {
+            let ob = by_tag(&x, "outbounds", tag);
+            assert!(ob.get("streamSettings").is_none(), "{tag} touched: {ob}");
+        }
+        assert_eq!(
+            by_tag(&x, "outbounds", "dialed")["streamSettings"]["sockopt"],
+            json!({ "dialerProxy": "proxy" })
+        );
+
+        let mut s = json!({
+            "outbounds": [{ "tag": "proxy", "type": "vless", "server": "p.example" }],
+            "route": { "final": "proxy" },
+        });
+        mark_egress_outbounds(CoreEngine::SingBox, &mut s, 0x4b53);
+        assert_eq!(
+            s["route"],
+            json!({ "final": "proxy", "default_mark": 0x4b53 })
+        );
+        assert!(
+            by_tag(&s, "outbounds", "proxy")
                 .get("bind_interface")
                 .is_none()
         );
