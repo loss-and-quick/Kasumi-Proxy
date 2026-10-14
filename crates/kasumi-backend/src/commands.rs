@@ -486,10 +486,10 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             let lines = lines.map(|n| n as usize).unwrap_or(LOG_TAIL_LINES);
             let path = paths.log(target);
             let Some(txt) = read_text(&path).await else {
-                return Ok(Response::Text(format!("(no log: {})", path.display())));
+                return Ok(Response::Text(unwritten_log(target, &path, lines)));
             };
             if txt.is_empty() {
-                return Ok(Response::Text(format!("(empty log: {})", path.display())));
+                return Ok(Response::Text(unwritten_log(target, &path, lines)));
             }
             let body = txt.strip_suffix('\n').unwrap_or(&txt);
             let all: Vec<&str> = body.split('\n').collect();
@@ -501,6 +501,9 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             for target in LOG_TARGETS {
                 let _ = write_text(paths.log(target), "").await;
             }
+            // The in-memory tail is part of what the viewer shows, so clearing the
+            // files has to clear it too — or the user clears and still sees records.
+            kasumi_log::buffer::clear();
             Ok(Response::Ok)
         }
 
@@ -763,6 +766,30 @@ const LOG_TARGETS: [LogTarget; 4] = [
     LogTarget::Singbox,
     LogTarget::TunEngine,
 ];
+
+/// What the viewer shows for a log file that has nothing in it. The app's own log
+/// has a fallback: the facade keeps the last records in memory, which is the only
+/// place a crash during boot is visible — the file is written by the very first
+/// thing that failed. The core logs have no such window, so they say so plainly.
+fn unwritten_log(target: LogTarget, path: &Path, lines: usize) -> String {
+    let reason = if path.exists() {
+        format!("(empty log: {})", path.display())
+    } else {
+        format!("(no log: {})", path.display())
+    };
+    if target != LogTarget::Daemon {
+        return reason;
+    }
+    let buffered = kasumi_log::recent(lines);
+    if buffered.is_empty() {
+        return reason;
+    }
+    format!(
+        "{reason}\n--- {} record(s) this session, not yet on disk ---\n{}",
+        buffered.len(),
+        buffered.join("\n")
+    )
+}
 
 #[cfg(test)]
 mod tests {
@@ -1085,6 +1112,49 @@ mod tests {
             panic!()
         };
         assert_eq!(t, "c\nd");
+    }
+
+    #[tokio::test]
+    async fn an_empty_app_log_falls_back_to_what_is_still_in_memory() {
+        let (p, _d) = TestPlatform::new();
+        write_text(p.paths().log(LogTarget::Daemon), "")
+            .await
+            .unwrap();
+        kasumi_log::buffer::configure(8);
+        kasumi_log::buffer::push(
+            "2026-02-11T09:14:02.131+00:00 +0.001s INFO  kasumi::sys daemon starting".to_string(),
+        );
+
+        let Response::Text(t) = dispatch(
+            &p,
+            Command::Log {
+                target: Some(LogTarget::Daemon),
+                lines: None,
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert!(t.starts_with("(empty log:"), "{t}");
+        assert!(t.contains("not yet on disk"), "{t}");
+        assert!(t.contains("daemon starting"), "{t}");
+
+        // Clearing the log must take the memory with it.
+        dispatch(&p, Command::ClearLogs).await.unwrap();
+        let Response::Text(t) = dispatch(
+            &p,
+            Command::Log {
+                target: Some(LogTarget::Daemon),
+                lines: None,
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert!(!t.contains("not yet on disk"), "{t}");
+        kasumi_log::buffer::configure(0);
     }
 
     #[tokio::test]
