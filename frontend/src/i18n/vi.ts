@@ -1256,6 +1256,11 @@ const vi = {
   "routes.out.direct": "Trực tiếp",
   "routes.out.block": "Chặn",
   "routes.out.deleted": "Proxy (hồ sơ đã xóa)",
+  "routes.target.customConfig":
+    "Cấu hình tùy chỉnh không thể là đích của quy tắc: lưu lượng này đi qua proxy đang dùng.",
+  "routes.target.singBoxOnly":
+    "Hồ sơ này chỉ chạy trên sing-box, còn hồ sơ đang dùng chạy trên {core}: lưu lượng này đi qua proxy đang dùng.",
+  "routes.target.cantStart": "Lưu lượng này đi qua proxy đang dùng. {reason}",
   "profiles.label.deleted": "Hồ sơ đã xóa",
   "profilePicker.title": "Chọn hồ sơ",
   "routingSheet.outboundDeletedHint":

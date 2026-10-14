@@ -7,6 +7,7 @@ import { normalizeList, toText, uid } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { useProfileLabels } from "../profiles/labels";
 import { ProfilePickerSheet, ProfilePickerTrigger } from "../profiles/ProfilePicker";
+import { useTargetFallbackText } from "../routes/labels";
 
 type Draft = {
   remarks: string;
@@ -57,6 +58,7 @@ export function RoutingRuleSheet({
   const [picking, setPicking] = useState(false);
   const hasProfiles = useAppStore((s) => s.profiles.length > 0);
   const labels = useProfileLabels();
+  const targetFallback = useTargetFallbackText()(draft.outboundTag);
   // Built-in outbounds are one tap; a specific profile is picked from its own list.
   const outboundKind = BUILTIN_OUTBOUNDS.has(draft.outboundTag)
     ? (draft.outboundTag as "proxy" | "direct" | "block")
@@ -141,13 +143,17 @@ export function RoutingRuleSheet({
             expanded={picking}
             onClick={() => setPicking(true)}
           />
-          {labels.has(draft.outboundTag) ? (
-            <div className="hint" style={{ marginTop: 6 }}>
-              {t("routingSheet.outboundProfileHint")}
-            </div>
-          ) : (
+          {!labels.has(draft.outboundTag) ? (
             <div className="hint warn" style={{ marginTop: 6 }}>
               {t("routingSheet.outboundDeletedHint")}
+            </div>
+          ) : targetFallback ? (
+            <div className="hint warn" style={{ marginTop: 6 }}>
+              {targetFallback}
+            </div>
+          ) : (
+            <div className="hint" style={{ marginTop: 6 }}>
+              {t("routingSheet.outboundProfileHint")}
             </div>
           )}
         </div>

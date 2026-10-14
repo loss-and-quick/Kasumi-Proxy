@@ -1296,6 +1296,11 @@ const pt = {
   "routes.out.direct": "Direto",
   "routes.out.block": "Bloquear",
   "routes.out.deleted": "Proxy (perfil excluído)",
+  "routes.target.customConfig":
+    "Uma configuração personalizada não pode ser o destino de uma regra: este tráfego vai pelo proxy ativo.",
+  "routes.target.singBoxOnly":
+    "Este perfil só roda no sing-box, e o ativo roda no {core}: este tráfego vai pelo proxy ativo.",
+  "routes.target.cantStart": "Este tráfego vai pelo proxy ativo. {reason}",
   "profiles.label.deleted": "Perfil excluído",
   "profilePicker.title": "Escolha um perfil",
   "routingSheet.outboundDeletedHint":
