@@ -1066,8 +1066,8 @@ const vi = {
   "settings.assetAutoUpdate": "Tự động cập nhật",
   "settings.assetAutoUpdateSub": "Làm mới geosite/geoip theo lịch",
   "settings.assetUpdateInterval": "Khoảng cập nhật",
-  "settings.assetAutoUpdateWarning":
-    "Khi dữ liệu geo thay đổi, kết nối đang hoạt động sẽ khởi động lại trong giây lát để áp dụng.",
+  "settings.assetAutoUpdateNote":
+    "Dữ liệu geo mới sẽ áp dụng ở lần khởi động lại tiếp theo; Kasumi sẽ nhắc bạn.",
   "settings.assetIntervalHours": plural("count", { other: "Mỗi # giờ" }),
   "settings.assetIntervalDays": plural("count", { other: "Mỗi # ngày" }),
   "settings.assetDownload": "Tải xuống",

@@ -111,8 +111,8 @@ export function AssetFilesSection({
                 label: intervalLabel(minutes),
               }))}
             />
-            <div className="hint warn" style={{ marginTop: 8 }}>
-              {t("settings.assetAutoUpdateWarning")}
+            <div className="hint" style={{ marginTop: 8 }}>
+              {t("settings.assetAutoUpdateNote")}
             </div>
           </SettingGroup>
         )}

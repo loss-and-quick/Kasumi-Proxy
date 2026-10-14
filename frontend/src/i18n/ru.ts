@@ -1208,8 +1208,8 @@ const ru = {
   "settings.assetAutoUpdate": "Автообновление",
   "settings.assetAutoUpdateSub": "Обновлять geosite/geoip по расписанию",
   "settings.assetUpdateInterval": "Интервал обновления",
-  "settings.assetAutoUpdateWarning":
-    "При изменении гео-данных активное соединение ненадолго перезапустится, чтобы применить их.",
+  "settings.assetAutoUpdateNote":
+    "Новые гео-данные применятся при следующем перезапуске — Kasumi напомнит об этом.",
   "settings.assetIntervalHours": plural("count", {
     one: "Каждый # час",
     few: "Каждые # часа",

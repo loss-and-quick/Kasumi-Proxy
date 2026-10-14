@@ -1099,8 +1099,8 @@ const pt = {
   "settings.assetAutoUpdate": "Atualização automática",
   "settings.assetAutoUpdateSub": "Atualizar geosite/geoip por agendamento",
   "settings.assetUpdateInterval": "Intervalo de atualização",
-  "settings.assetAutoUpdateWarning":
-    "Quando os dados geográficos mudam, a conexão ativa reinicia brevemente para aplicá-los.",
+  "settings.assetAutoUpdateNote":
+    "Os novos dados geográficos entram em vigor no próximo reinício; o Kasumi vai lembrar você.",
   "settings.assetIntervalHours": plural("count", { one: "A cada # hora", other: "A cada # horas" }),
   "settings.assetIntervalDays": plural("count", { one: "A cada # dia", other: "A cada # dias" }),
   "settings.assetDownload": "Baixar",

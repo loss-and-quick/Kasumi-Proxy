@@ -1267,8 +1267,8 @@ const ar = {
   "settings.assetAutoUpdate": "تحديث تلقائي",
   "settings.assetAutoUpdateSub": "تحديث geosite/geoip وفق جدول زمني",
   "settings.assetUpdateInterval": "فترة التحديث",
-  "settings.assetAutoUpdateWarning":
-    "عند تغيّر بيانات الموقع الجغرافي، يُعاد تشغيل الاتصال النشط لفترة وجيزة لتطبيقها.",
+  "settings.assetAutoUpdateNote":
+    "تُطبَّق البيانات الجغرافية الجديدة عند إعادة التشغيل التالية، وسيذكّرك Kasumi بذلك.",
   "settings.assetIntervalHours": plural("count", {
     zero: "كل # ساعة",
     one: "كل ساعة",

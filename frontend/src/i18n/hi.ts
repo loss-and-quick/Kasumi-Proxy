@@ -1057,8 +1057,8 @@ const hi = {
   "settings.assetAutoUpdate": "स्वतः अपडेट",
   "settings.assetAutoUpdateSub": "geosite/geoip को निर्धारित समय पर अपडेट करें",
   "settings.assetUpdateInterval": "अपडेट अंतराल",
-  "settings.assetAutoUpdateWarning":
-    "जब जियो डेटा बदलता है, तो उसे लागू करने के लिए सक्रिय कनेक्शन कुछ देर के लिए पुनः आरंभ होता है।",
+  "settings.assetAutoUpdateNote":
+    "नया जियो डेटा अगली बार पुनः प्रारंभ करने पर लागू होगा; Kasumi आपको याद दिलाएगा।",
   "settings.assetIntervalHours": plural("count", { one: "हर # घंटे", other: "हर # घंटे" }),
   "settings.assetIntervalDays": plural("count", { one: "हर # दिन", other: "हर # दिन" }),
   "settings.assetDownload": "डाउनलोड",

@@ -1089,8 +1089,8 @@ const en = {
   "settings.assetAutoUpdate": "Auto-update",
   "settings.assetAutoUpdateSub": "Refresh geosite/geoip on a schedule",
   "settings.assetUpdateInterval": "Update interval",
-  "settings.assetAutoUpdateWarning":
-    "When the geo data changes, the active connection restarts briefly to apply it.",
+  "settings.assetAutoUpdateNote":
+    "New geo data applies on the next restart; Kasumi reminds you when one is due.",
   "settings.assetIntervalHours": plural("count", { one: "Every # hour", other: "Every # hours" }),
   "settings.assetIntervalDays": plural("count", { one: "Every # day", other: "Every # days" }),
   "settings.assetDownload": "Download",

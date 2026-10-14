@@ -1029,7 +1029,7 @@ const zh = {
   "settings.assetAutoUpdate": "自动更新",
   "settings.assetAutoUpdateSub": "按计划刷新 geosite/geoip",
   "settings.assetUpdateInterval": "更新间隔",
-  "settings.assetAutoUpdateWarning": "地理数据变化时，当前连接会短暂重启以应用新数据。",
+  "settings.assetAutoUpdateNote": "新的地理数据将在下次重启时生效，Kasumi 会提醒你。",
   "settings.assetIntervalHours": plural("count", { other: "每 # 小时" }),
   "settings.assetIntervalDays": plural("count", { other: "每 # 天" }),
   "settings.assetDownload": "下载",
