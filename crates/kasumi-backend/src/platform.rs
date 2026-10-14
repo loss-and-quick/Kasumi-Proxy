@@ -109,6 +109,11 @@ impl BackendPaths {
     pub fn device_id(&self) -> PathBuf {
         self.data_dir.join("device-id")
     }
+
+    /// The random seed of Incy's HWID when Incy's SSAID is unknown.
+    pub fn incy_seed(&self) -> PathBuf {
+        self.data_dir.join("incy-seed")
+    }
 }
 
 /// Installed core versions probed off the host. `CoreEngine` isn't hashable, so the

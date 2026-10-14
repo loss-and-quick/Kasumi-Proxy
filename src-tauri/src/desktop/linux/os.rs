@@ -104,6 +104,7 @@ impl DesktopOs for LinuxOs {
             // Generic on purpose: a DMI product name is a fingerprint of its own.
             model: "PC".into(),
             locale: posix_locale([env("LC_ALL"), env("LC_MESSAGES"), env("LANG")]),
+            ..Default::default()
         }
     }
 }

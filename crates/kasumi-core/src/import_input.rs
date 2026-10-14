@@ -11,6 +11,7 @@ use happ_sub::url_crypt::{UrlCryptError, builtin_keyring, decrypt_url};
 use serde::{Deserialize, Serialize};
 
 use crate::profile::Protocol;
+use crate::request_identity::RequestClient;
 use crate::route::RoutePackage;
 use crate::share::parse_share_link;
 use crate::sub_changes::{routing_import, routing_package};
@@ -218,6 +219,8 @@ pub struct SubscriptionLink {
     pub encrypted: bool,
     /// The provider name an `incy://` link carries, for the new subscription.
     pub name: Option<String>,
+    /// The client the new subscription fetches as: Incy for an `incy://` link.
+    pub client: RequestClient,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -260,6 +263,11 @@ pub fn resolve_import_text(text: &str) -> ResolvedImport {
                     name,
                 } => {
                     out.subscriptions.push(SubscriptionLink {
+                        client: if incy_crypt::is_incy_link(&url) {
+                            RequestClient::Incy
+                        } else {
+                            RequestClient::Happ
+                        },
                         url,
                         encrypted,
                         name,
@@ -489,6 +497,9 @@ mod tests {
         );
         let r = resolve_import_text(&format!("happ://add/{link}"));
         assert_eq!(r.subscriptions[0].name.as_deref(), Some("Example VPN"));
+        assert_eq!(r.subscriptions[0].client, RequestClient::Incy);
+        let r = resolve_import_text(&crypt5()[0].0);
+        assert_eq!(r.subscriptions[0].client, RequestClient::Happ);
     }
 
     #[test]

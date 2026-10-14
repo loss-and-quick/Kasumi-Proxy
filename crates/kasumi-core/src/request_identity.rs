@@ -5,11 +5,14 @@
 use serde::{Deserialize, Serialize};
 
 use happ_sub::MetaMap;
-use happ_sub::happ_request::{ClientOs, DeviceInfo, Identity, RequestProfile, build};
+use happ_sub::happ_request::{
+    ClientOs, DEFAULT_TIMEOUT, DeviceInfo, Identity, Locks, RequestProfile, build,
+};
+use happ_sub::incy_request;
 
 use crate::state::Subscription;
 
-pub use happ_sub::HAPP_VERSION;
+pub use happ_sub::{HAPP_VERSION, INCY_VERSION};
 
 /// Settings-wide request identity; each subscription may override any part of it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -87,6 +90,36 @@ pub struct DeviceFacts {
     pub os_version: String,
     pub model: String,
     pub locale: String,
+    /// The `android.os.Build` values Incy hashes into its device id; empty off Android.
+    #[serde(default)]
+    pub build: AndroidBuild,
+}
+
+/// `android.os.Build` fields beyond the model.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AndroidBuild {
+    pub manufacturer: String,
+    pub brand: String,
+    pub device: String,
+    pub product: String,
+    pub board: String,
+    pub hardware: String,
+}
+
+/// Which client a subscription fetch presents itself as.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum RequestClient {
+    #[default]
+    Happ,
+    Incy,
+}
+
+impl RequestClient {
+    pub fn is_happ(&self) -> bool {
+        *self == RequestClient::Happ
+    }
 }
 
 /// Where the HWID a request carries comes from.
@@ -105,6 +138,10 @@ pub enum HwidSource {
     MachineId,
     /// Random, kept in the data directory.
     DeviceId,
+    /// Incy's id derived from the SSAID Android gives Incy and the build values.
+    IncyDerived,
+    /// Incy's id derived from a random seed kept in the data directory.
+    IncySeed,
 }
 
 /// The automatic HWID: what is sent when nobody typed one.
@@ -123,6 +160,8 @@ pub struct IdentityInput {
     pub request: SubRequestOverrides,
     #[serde(default)]
     pub user_agent: String,
+    #[serde(default)]
+    pub client: RequestClient,
 }
 
 impl IdentityInput {
@@ -132,6 +171,7 @@ impl IdentityInput {
             defaults: defaults.clone(),
             request: sub.map(|s| s.request.clone()).unwrap_or_default(),
             user_agent: sub.map(|s| s.user_agent.clone()).unwrap_or_default(),
+            client: sub.map(|s| s.client).unwrap_or_default(),
         }
     }
 }
@@ -276,6 +316,9 @@ pub fn resolve(
     consented: &[String],
     unix_secs: u64,
 ) -> Resolved {
+    if input.client == RequestClient::Incy {
+        return resolve_incy(input, facts, auto);
+    }
     let consent = |key: &str| consented.iter().any(|k| k == key);
     let (hwid, hwid_source) = pick_hwid(&input.defaults, &input.request, auto);
     let mut id = identity(
@@ -332,6 +375,119 @@ pub fn resolve(
     Resolved { profile, view }
 }
 
+/// Incy's request. Incy has no provider keys for its request, no cookie jar and no
+/// retry, and its User-Agent and HWID are its own: the Settings ones, made for
+/// Happ, don't apply, while the device fields and the HWID switch do.
+fn resolve_incy(input: &IdentityInput, facts: &DeviceFacts, auto: &AutoHwid) -> Resolved {
+    let (defaults, request) = (&input.defaults, &input.request);
+    let (hwid, hwid_source) = match given(request.hwid.as_ref()).filter(|h| is_valid_hwid(h)) {
+        Some(h) => (h.to_owned(), HwidSource::Subscription),
+        None => (auto.value.clone(), auto.source),
+    };
+    let pick = |sub: Option<&String>, global: Option<&String>, detected: &str| {
+        given(sub).or(given(global)).unwrap_or(detected).to_owned()
+    };
+    let os_version = pick(
+        request.os_version.as_ref(),
+        defaults.os_version.as_ref(),
+        &facts.os_version,
+    );
+    let model = pick(
+        request.device_model.as_ref(),
+        defaults.device_model.as_ref(),
+        &facts.model,
+    );
+    let tag = language_tag(&pick(
+        request.locale.as_ref(),
+        defaults.locale.as_ref(),
+        &facts.locale,
+    ));
+    let java = java_locale(&tag);
+    let b = &facts.build;
+    let device = incy_request::DeviceFacts {
+        android_id: None,
+        manufacturer: &b.manufacturer,
+        model: &model,
+        brand: &b.brand,
+        device: &b.device,
+        product: &b.product,
+        board: &b.board,
+        hardware: &b.hardware,
+        os_version: &os_version,
+        locale: &java,
+        language_tag: &tag,
+    };
+    let options = incy_request::RequestOptions {
+        app_version: INCY_VERSION,
+        vm_version: None,
+        user_agent: Some(input.user_agent.trim()),
+        hwid: None,
+    };
+    let send = request.send_hwid.unwrap_or(defaults.send_hwid);
+    let headers = incy_request::build_headers(&options, &device, send.then_some(hwid.as_str()));
+    let view = ResolvedIdentity {
+        hwid,
+        hwid_source,
+        auto_hwid: auto.value.clone(),
+        auto_hwid_source: auto.source,
+        facts: facts.clone(),
+        headers: headers
+            .iter()
+            .map(|(name, value)| HeaderPreview {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect(),
+        cookie_jar: false,
+        locks: ProviderLocks::default(),
+        provider_hides_device: false,
+        provider_hwid_cookie: false,
+    };
+    let profile = RequestProfile {
+        headers,
+        timeout: DEFAULT_TIMEOUT,
+        retries: 0,
+        use_cookie_jar: false,
+        locks: Locks::default(),
+    };
+    Resolved { profile, view }
+}
+
+/// A BCP 47 tag; a typed `ru_RU` is read as `ru-RU`.
+fn language_tag(locale: &str) -> String {
+    let tag = locale.trim().replace('_', "-");
+    if tag.is_empty() { "en-US".into() } else { tag }
+}
+
+/// Java's `Locale.toString()` for a tag: `ru-RU` is `ru_RU`, `zh-Hans-CN` is
+/// `zh_CN_#Hans`.
+fn java_locale(tag: &str) -> String {
+    let mut parts = tag.split('-');
+    let language = parts.next().unwrap_or_default().to_ascii_lowercase();
+    let (mut script, mut region) = (None, None);
+    for part in parts {
+        if part.len() == 4 && part.bytes().all(|b| b.is_ascii_alphabetic()) && script.is_none() {
+            let mut s = part.to_ascii_lowercase();
+            s[..1].make_ascii_uppercase();
+            script = Some(s);
+        } else if (part.len() == 2 && part.bytes().all(|b| b.is_ascii_alphabetic()))
+            || (part.len() == 3 && part.bytes().all(|b| b.is_ascii_digit()))
+        {
+            region.get_or_insert_with(|| part.to_ascii_uppercase());
+        }
+    }
+    let mut out = language;
+    if region.is_some() || script.is_some() {
+        out.push('_');
+        out.push_str(region.as_deref().unwrap_or_default());
+    }
+    if let Some(script) = script {
+        out.push_str("_#");
+        out.push_str(&script);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,6 +502,14 @@ mod tests {
             os_version: "16".into(),
             model: "Pixel 9".into(),
             locale: "ru-RU".into(),
+            build: AndroidBuild {
+                manufacturer: "Google".into(),
+                brand: "google".into(),
+                device: "tokay".into(),
+                product: "tokay".into(),
+                board: "tokay".into(),
+                hardware: "tokay".into(),
+            },
         }
     }
 
@@ -533,5 +697,115 @@ mod tests {
         let r = resolve(&input(), &f, &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-Device-OS"), Some("Linux"));
         assert!(header(&r, "User-agent").unwrap().contains("/Linux/"));
+    }
+
+    fn incy() -> IdentityInput {
+        IdentityInput {
+            client: RequestClient::Incy,
+            ..input()
+        }
+    }
+
+    fn incy_auto() -> AutoHwid {
+        AutoHwid {
+            value: "0123ABCD-0000-1111-2222-333344445555".into(),
+            source: HwidSource::IncyDerived,
+        }
+    }
+
+    #[test]
+    fn incy_sends_its_own_header_set_and_order() {
+        let r = resolve(&incy(), &facts(), &incy_auto(), None, &[], DAY);
+        assert_eq!(
+            headers(&r),
+            [
+                ("User-Agent", "INCY/3.7.0/android Dalvik/2.1.0"),
+                ("Accept", "*/*"),
+                ("Accept-Language", "ru-RU"),
+                ("x-hwid", "0123ABCD-0000-1111-2222-333344445555"),
+                ("x-device-os", "Android"),
+                ("x-ver-os", "16"),
+                ("x-device-model", "Google Pixel 9"),
+                ("x-app-version", INCY_VERSION),
+                ("x-device-locale", "ru_RU"),
+                ("x-client", "INCY"),
+            ]
+        );
+        assert_eq!(r.view.hwid_source, HwidSource::IncyDerived);
+        assert_eq!(r.profile.retries, 0);
+        assert!(!r.profile.use_cookie_jar && !r.view.cookie_jar);
+    }
+
+    #[test]
+    fn incy_takes_the_device_fields_but_not_happs_user_agent_or_hwid() {
+        let mut d = incy();
+        d.defaults.user_agent = "Global/1".into();
+        d.defaults.hwid = Some("settingshwid0001".into());
+        d.defaults.os_version = Some("15".into());
+        d.request.locale = Some("en_GB".into());
+        let r = resolve(&d, &facts(), &incy_auto(), None, &[], DAY);
+        assert_eq!(
+            header(&r, "User-Agent"),
+            Some("INCY/3.7.0/android Dalvik/2.1.0")
+        );
+        assert_eq!(r.view.hwid, incy_auto().value);
+        assert_eq!(header(&r, "x-ver-os"), Some("15"));
+        assert_eq!(header(&r, "Accept-Language"), Some("en-GB"));
+        assert_eq!(header(&r, "x-device-locale"), Some("en_GB"));
+
+        d.user_agent = "Mine/1".into();
+        d.request.hwid = Some("MY-ID".into());
+        let r = resolve(&d, &facts(), &incy_auto(), None, &[], DAY);
+        assert_eq!(header(&r, "User-Agent"), Some("Mine/1"));
+        assert_eq!(header(&r, "x-hwid"), Some("MY-ID"));
+        assert_eq!(r.view.hwid_source, HwidSource::Subscription);
+    }
+
+    #[test]
+    fn incy_without_hwid_drops_the_device_block() {
+        let mut d = incy();
+        d.defaults.send_hwid = false;
+        let r = resolve(&d, &facts(), &incy_auto(), None, &[], DAY);
+        let names: Vec<&str> = headers(&r).into_iter().map(|(n, _)| n).collect();
+        assert_eq!(
+            names,
+            [
+                "User-Agent",
+                "Accept",
+                "Accept-Language",
+                "x-app-version",
+                "x-device-locale",
+                "x-client",
+            ]
+        );
+        d.request.send_hwid = Some(true);
+        let r = resolve(&d, &facts(), &incy_auto(), None, &[], DAY);
+        assert!(header(&r, "x-hwid").is_some());
+    }
+
+    #[test]
+    fn incy_ignores_happs_provider_keys() {
+        let m = meta(&[
+            ("change-user-agent", "Provider/1"),
+            ("subscription-always-hwid-enable", "true"),
+        ]);
+        let consented = ["change-user-agent".to_owned()];
+        let r = resolve(&incy(), &facts(), &incy_auto(), Some(&m), &consented, DAY);
+        assert_eq!(
+            header(&r, "User-Agent"),
+            Some("INCY/3.7.0/android Dalvik/2.1.0")
+        );
+        assert_eq!(r.view.locks, ProviderLocks::default());
+    }
+
+    #[test]
+    fn java_locale_follows_locale_to_string() {
+        assert_eq!(java_locale("ru-RU"), "ru_RU");
+        assert_eq!(java_locale("zh-Hans-CN"), "zh_CN_#Hans");
+        assert_eq!(java_locale("sr-Latn"), "sr__#Latn");
+        assert_eq!(java_locale("es-419"), "es_419");
+        assert_eq!(java_locale("en"), "en");
+        assert_eq!(language_tag(" pt_BR "), "pt-BR");
+        assert_eq!(language_tag(""), "en-US");
     }
 }
