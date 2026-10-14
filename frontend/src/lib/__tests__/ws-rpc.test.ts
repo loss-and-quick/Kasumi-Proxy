@@ -93,6 +93,37 @@ describe("ws-rpc push stream", () => {
     expect(FakeSocket.instances).toHaveLength(1);
   });
 
+  it("a socket closing after its replacement opened leaves the replacement alone", async () => {
+    const { subscribeStatus, wsDispatch } = await import("../ws-rpc");
+    subscribeStatus(() => {});
+    await settle();
+    const first = last();
+    first.open();
+    await settle();
+
+    // Still closing when a request asks for a socket: a new one takes over.
+    first.readyState = 2;
+    let settled = false;
+    void wsDispatch({ cmd: "status" } as never).then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await settle();
+    expect(FakeSocket.instances).toHaveLength(2);
+    last().open();
+    await settle();
+
+    first.close();
+    await vi.advanceTimersByTimeAsync(10_000);
+    // No reconnect, and the request on the new socket is still waiting for its reply.
+    expect(FakeSocket.instances).toHaveLength(2);
+    expect(settled).toBe(false);
+  });
+
   it("reconnects after a drop, back on the short delay", async () => {
     const { subscribeStatus } = await import("../ws-rpc");
     subscribeStatus(() => {});

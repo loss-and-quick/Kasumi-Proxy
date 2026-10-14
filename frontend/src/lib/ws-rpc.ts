@@ -27,7 +27,11 @@ let connecting: Promise<WebSocket> | null = null;
 let nextId = 1;
 const pending = new Map<
   number,
-  { resolve: (v: Response_Serialize) => void; reject: (e: Error) => void }
+  {
+    socket: WebSocket;
+    resolve: (v: Response_Serialize) => void;
+    reject: (e: Error) => void;
+  }
 >();
 const statusCbs = new Set<(status: unknown) => void>();
 const subAppliedCbs = new Set<(info: unknown) => void>();
@@ -102,11 +106,16 @@ function scheduleReconnect(): void {
   }, reconnectDelay);
 }
 
-function onClose(): void {
+/** A closing socket settles only what it owns: one replaced while it was still
+ *  closing must not drop the socket that took over. */
+function onClose(closed: WebSocket): void {
+  for (const [id, waiter] of pending) {
+    if (waiter.socket !== closed) continue;
+    waiter.reject(new Error("connection closed"));
+    pending.delete(id);
+  }
+  if (socket !== closed) return;
   socket = null;
-  connecting = null;
-  for (const { reject } of pending.values()) reject(new Error("connection closed"));
-  pending.clear();
   scheduleReconnect();
 }
 
@@ -135,7 +144,7 @@ async function ensureSocket(): Promise<WebSocket> {
       });
     });
     ws.addEventListener("message", handleMessage);
-    ws.addEventListener("close", onClose);
+    ws.addEventListener("close", () => onClose(ws));
     socket = ws;
     connecting = null;
     reconnectDelay = RECONNECT_FIRST_MS;
@@ -157,6 +166,7 @@ export async function wsDispatch(cmd: Command_Deserialize): Promise<Response_Ser
       reject(new Error(`rpc ${(cmd as { cmd: string }).cmd} timed out`));
     }, RPC_TIMEOUT_MS);
     pending.set(id, {
+      socket: ws,
       resolve: (v) => {
         clearTimeout(timer);
         resolve(v);
