@@ -1079,8 +1079,13 @@ fn build_structured_singbox_rules(
                 emitted = true;
             }
         }
+        // A rule whose domains and IPs all parse to nothing is left out rather than
+        // widened to its port or network alone.
+        let names_destinations = item.domain.as_ref().is_some_and(|d| !d.is_empty())
+            || item.ip.as_ref().is_some_and(|ip| !ip.is_empty());
         let other_fields = ["port", "port_range", "network", "protocol"];
         if !emitted
+            && !names_destinations
             && (has_match_fields(&base, &other_fields)
                 || has_match_fields(&base, &SOURCE_MATCH_FIELDS))
         {
@@ -1098,8 +1103,7 @@ fn build_structured_singbox_rules(
 /// Whether `rule` matches every connection once built, so sing-box never reaches
 /// the rules after it (including the resolve step and the IP checks the builder
 /// appends). That holds when the built rule keeps no condition but ports and
-/// transports covering everything: entries that parse to nothing (`#` comments,
-/// `ext:` lists, malformed ports) leave such a rule behind.
+/// transports covering everything, as malformed ports can leave behind.
 pub fn matches_every_connection(rule: &RoutingRule) -> bool {
     let built = build_structured_singbox_rules(std::slice::from_ref(rule), &|t| t.to_owned());
     let [only] = built.rules.as_slice() else {
@@ -1696,8 +1700,8 @@ mod tests {
             }));
         }
 
-        // A domain list that parses to nothing is no condition at all.
-        assert!(rule(&|r: &mut RoutingRule| {
+        // A domain list that parses to nothing leaves the rule out, not widened.
+        assert!(!rule(&|r: &mut RoutingRule| {
             r.port = Some("0-65535".into());
             r.domain = Some(vec!["# geosite:ru".into(), "ext:custom.dat:ads".into()]);
         }));

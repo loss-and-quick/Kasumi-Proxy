@@ -560,18 +560,24 @@ pub(crate) fn xray_rule_has_condition(rule: &Map<String, Value>) -> bool {
         .any(|k| rule.get(*k).is_some_and(set))
 }
 
-fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
+/// `None` when the rule names domains or IPs but every entry is blank or a `#`
+/// comment: left with its port or network alone it would match far more.
+fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Option<Value> {
     let mut m = Map::new();
     m.insert("type".into(), "field".into());
-    if let Some(d) = &rule.domain
-        && !d.is_empty()
-    {
-        m.insert("domain".into(), json!(d));
-    }
-    if let Some(ip) = &rule.ip
-        && !ip.is_empty()
-    {
-        m.insert("ip".into(), json!(ip));
+    for (key, list) in [("domain", &rule.domain), ("ip", &rule.ip)] {
+        let Some(list) = list.as_ref().filter(|l| !l.is_empty()) else {
+            continue;
+        };
+        let kept: Vec<&str> = list
+            .iter()
+            .map(|e| e.trim())
+            .filter(|e| !e.is_empty() && !e.starts_with('#'))
+            .collect();
+        if kept.is_empty() {
+            return None;
+        }
+        m.insert(key.into(), json!(kept));
     }
     if let Some(port) = &rule.port
         && !port.is_empty()
@@ -597,7 +603,7 @@ fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Va
         m.insert("sourceIP".into(), json!(source));
     }
     m.insert("outboundTag".into(), resolve(&rule.outbound_tag).into());
-    Value::Object(m)
+    Some(Value::Object(m))
 }
 
 struct ProfileOutbounds {
@@ -777,7 +783,7 @@ fn build_routing(
             routing_rules
                 .iter()
                 .filter(|r| r.enabled && r.package_name.as_ref().is_none_or(Vec::is_empty))
-                .map(|r| build_rule_object(r, resolve))
+                .filter_map(|r| build_rule_object(r, resolve))
                 .filter(|r| r.as_object().is_some_and(xray_rule_has_condition)),
         );
         rules.extend_from_slice(provider_rules);
@@ -1402,6 +1408,12 @@ mod tests {
                 domain: Some(vec![]),
                 ip: Some(vec![]),
                 port: Some("  ".into()),
+                ..source_rule("block")
+            },
+            // Commented-out domains leave the rule out, not widened to port 443.
+            RoutingRule {
+                domain: Some(vec!["# geosite:ru".into(), " ".into()]),
+                port: Some("443".into()),
                 ..source_rule("block")
             },
             RoutingRule {
