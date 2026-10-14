@@ -18,7 +18,7 @@ export const AppBar = ({
 }) => (
   <div className={`appbar${large ? " lg" : ""}`}>
     {left && <div className="appbar-left">{left}</div>}
-    <div className="appbar-title truncate">{title}</div>
+    <div className="appbar-title">{title}</div>
     {actions && <div className="appbar-actions">{actions}</div>}
     {subtitle && <div className="appbar-sub">{subtitle}</div>}
   </div>

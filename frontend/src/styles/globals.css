@@ -197,7 +197,12 @@ body {
 .appbar-left { grid-area: left; margin-inline-end: 6px; }
 .appbar-actions { grid-area: actions; display: flex; gap: 2px; margin-inline-start: 6px; }
 .appbar.lg { align-content: end; padding-bottom: 14px; min-height: 92px; }
-.appbar-title { grid-area: title; font-size: 22px; font-weight: 500; }
+/* A long title (a wide script beside five toolbar icons) wraps to a second
+   line before it is cut, so the icons never have to give up space. */
+.appbar-title {
+  grid-area: title; font-size: 22px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 .appbar.lg .appbar-title { font-size: 28px; font-weight: 600; }
 .appbar-sub { grid-area: sub; font-size: 12.5px; color: var(--on-surface-variant); font-weight: 400; }
 
