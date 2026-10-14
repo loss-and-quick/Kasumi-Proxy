@@ -35,8 +35,9 @@ Both run the same Rust backend and the same React UI.
 - **Two cores.** Xray-core and sing-box, picked per profile. Supported protocols are VLESS, VMess,
   Trojan, Shadowsocks, SOCKS, HTTP, WireGuard, Hysteria2, TUIC, AnyTLS, Naive and ShadowTLS.
 - **Import.** Subscription URLs, share links, mixed text and QR codes, plus Happ's `happ://add`,
-  `happ://routing` and encrypted `happ://crypt` … `crypt5` links, pasted or scanned. An encrypted
-  link is kept as given and decrypted on each update.
+  `happ://routing` and encrypted `happ://crypt` … `crypt5` links, and Incy's encrypted
+  `incy://crypt1` links, pasted or scanned. An encrypted link is kept as given and decrypted on
+  each update; an Incy link also names the subscription after its provider.
 - **Subscriptions.** Groups of servers that can be updated in one tap, or in the background
   with no UI open.
 - **Happ-compatible subscriptions**, decoded by [happ-sub](https://github.com/loss-and-quick/happ-sub):
