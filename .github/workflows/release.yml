@@ -294,8 +294,12 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.version }}
           # Glob, not a hardcoded name: package-release.sh owns the zip's
           # filename format (the module job's checkout produces exactly one zip
-          # here), so the name lives in one place — same as nightly.yml.
-          files: build/*.zip
+          # here), so the name lives in one place — same as nightly.yml. The
+          # .sha256 sidecar it writes next to the zip rides along, so a user can
+          # rule out a damaged download before flashing.
+          files: |
+            build/*.zip
+            build/*.zip.sha256
 
   # ── Desktop installers (Linux deb/rpm/AppImage, Windows NSIS/MSI + portable zip) →
   #    uploaded to the same release. Cores are fetched per-target into

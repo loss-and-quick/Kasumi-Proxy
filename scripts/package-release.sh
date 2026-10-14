@@ -42,7 +42,8 @@ echo "→ [4/4] Packaging module zip…"
 # against the wrong directory.
 mkdir -p "$(dirname "$OUT")"
 OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
-rm -f "$OUT"
+SUM="$OUT.sha256"
+rm -f "$OUT" "$SUM"
 
 # Zip from inside module/ so its contents land at the archive root (where
 # Magisk expects module.prop, customize.sh, META-INF/…). The webroot React
@@ -61,3 +62,9 @@ rm -f "$OUT"
 
 echo "✅ Release zip: $OUT"
 echo "   $(du -h "$OUT" | cut -f1)"
+
+# A damaged download (interrupted resume, mirror re-serve) reaches the installer as
+# "corrupt deflate stream", indistinguishable from a broken build. Shipping the
+# digest next to the zip lets the user verify the file before flashing.
+(cd "$(dirname "$OUT")" && sha256sum "$(basename "$OUT")" > "$(basename "$OUT").sha256")
+echo "   sha256: $(cut -d' ' -f1 < "$SUM")"
