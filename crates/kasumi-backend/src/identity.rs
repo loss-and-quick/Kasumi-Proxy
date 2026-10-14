@@ -177,7 +177,7 @@ async fn incy_seed(platform: &dyn Platform) -> String {
     }
     let seed = uuid::Uuid::new_v4().simple().to_string();
     if let Err(e) = write_text_atomic(&path, &seed).await {
-        log::warn!("writing {}: {e}", path.display());
+        ks_warn!(Area::State, "writing {}: {e}", path.display());
     }
     seed
 }

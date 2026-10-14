@@ -166,7 +166,11 @@ pub async fn tick(
         let body = match fetch_asset(platform, &asset.remarks, &asset.url, mode).await {
             Ok(body) => body,
             Err(message) => {
-                log::warn!("asset-update {}: failed: {message}", asset.remarks);
+                ks_warn!(
+                    Area::Asset,
+                    "asset-update {}: failed: {message}",
+                    asset.remarks
+                );
                 continue;
             }
         };
@@ -178,7 +182,8 @@ pub async fn tick(
                 refreshed.push(asset.remarks.clone());
                 mark_updated(platform, &asset.id, now).await;
                 if changed && core_running(platform).await {
-                    log::info!(
+                    ks_info!(
+                        Area::Asset,
                         "asset-update {}: changed, applies on the next core start",
                         asset.remarks
                     );
