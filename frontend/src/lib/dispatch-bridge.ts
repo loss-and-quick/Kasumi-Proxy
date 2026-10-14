@@ -285,7 +285,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
         if (Array.isArray(o.remarks)) {
           cb({
             remarks: o.remarks.filter((r): r is string => typeof r === "string"),
-            restarted: o.restarted === true,
+            restartPending: o.restartPending === true,
           });
         }
       });

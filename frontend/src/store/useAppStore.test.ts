@@ -1044,7 +1044,7 @@ describe("useAppStore", () => {
     expect(state.recentActivity[0]?.icon).toBe("cloud_sync");
   });
 
-  it("daemon assetsUpdated push reloads assets and reports the restart", async () => {
+  it("daemon assetsUpdated push reloads assets and reports the pending restart", async () => {
     let push: ((info: AssetsUpdatedEvent) => void) | null = null;
     bridge.onAssetsUpdated.mockImplementation((cb) => {
       push = cb;
@@ -1059,15 +1059,15 @@ describe("useAppStore", () => {
 
     (push as unknown as (info: AssetsUpdatedEvent) => void)({
       remarks: ["geoip.dat"],
-      restarted: true,
+      restartPending: true,
     });
     await vi.waitFor(() => {
       expect(useAppStore.getState().assetFiles[0]?.lastUpdated).toBe(1234);
     });
 
-    // Newest first: the unrequested restart, then the asset that caused it.
+    // Newest first: the pending restart, then the asset that needs it.
     const feed = useAppStore.getState().recentActivity;
-    expect(feed[0].icon).toBe("autorenew");
+    expect(feed[0].icon).toBe("restart_alt");
     expect(feed[1].text).toContain("geoip.dat");
   });
 

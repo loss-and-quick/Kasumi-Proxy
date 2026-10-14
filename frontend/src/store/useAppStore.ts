@@ -467,9 +467,9 @@ export const useAppStore = create<Store>((set, get) => {
     for (const name of info.remarks) {
       pushActivity("folder_zip", translateCurrent("activity.assetDownloaded", { name }));
     }
-    // A restart the user didn't ask for needs saying out loud.
-    if (info.restarted) {
-      pushActivity("autorenew", translateCurrent("activity.assetRestart"));
+    // The running core keeps the old data until the user restarts it.
+    if (info.restartPending) {
+      pushActivity("restart_alt", translateCurrent("activity.assetRestartPending"));
     }
   };
   const waitForUiPaint = () =>
