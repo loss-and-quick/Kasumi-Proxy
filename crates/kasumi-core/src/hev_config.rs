@@ -34,11 +34,6 @@ struct Socks5 {
     /// front (xray / sing-box SOCKS inbounds) speak that, not hev's `"tcp"`
     /// UDP-in-TCP framing, which needs a hev-socks5-server upstream.
     udp: &'static str,
-    /// SO_MARK stamped on hev's own upstream sockets so an `ip rule` keeps them out
-    /// of the tunnel — load-bearing on Android (mirrors tun2socks' `fwmark`), unused
-    /// on desktop (the core binds to the uplink instead), so omitted when `None`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    mark: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -60,7 +55,6 @@ pub fn build_hev_config(
     ipv4: &str,
     ipv6: Option<&str>,
     socks_port: u16,
-    fwmark: Option<u32>,
     opts: &TunOptions,
 ) -> String {
     let cfg = HevConfig {
@@ -74,7 +68,6 @@ pub fn build_hev_config(
             port: socks_port,
             address: "127.0.0.1",
             udp: "udp",
-            mark: fwmark,
         },
         misc: Misc {
             log_level: hev_level(&opts.log_level),
@@ -108,7 +101,7 @@ mod tests {
     #[test]
     fn renders_expected_keys() {
         let opts = AdvancedSettings::default().tun_options();
-        let yaml = build_hev_config("kt0", crate::tun::TUN_IPV4, None, 10808, None, &opts);
+        let yaml = build_hev_config("kt0", crate::tun::TUN_IPV4, None, 10808, &opts);
         assert!(yaml.contains("name: kt0"));
         assert!(yaml.contains("mtu: 9000"));
         assert!(yaml.contains("ipv4: 198.18.0.1"));
@@ -120,8 +113,6 @@ mod tests {
         assert!(yaml.contains("connect-timeout: 10000"));
         assert!(yaml.contains("tcp-read-write-timeout: 300000"));
         assert!(yaml.contains("udp-recv-buffer-size: 524288"));
-        // No fwmark passed → no mark key at all.
-        assert!(!yaml.contains("mark:"));
     }
 
     #[test]
@@ -132,18 +123,8 @@ mod tests {
             crate::tun::TUN_IPV4,
             Some(crate::tun::TUN_IPV6),
             10808,
-            None,
             &opts,
         );
         assert!(yaml.contains("ipv6: fdfe:dcba:9876::1"));
-    }
-
-    #[test]
-    fn mark_emitted_when_fwmark_set() {
-        // Android passes a fwmark so hev's own sockets escape the tunnel like
-        // tun2socks' `fwmark`; desktop passes None (see `build_hev_config`).
-        let opts = AdvancedSettings::default().tun_options();
-        let yaml = build_hev_config("kt0", crate::tun::TUN_IPV4, None, 10808, Some(255), &opts);
-        assert!(yaml.contains("mark: 255"));
     }
 }

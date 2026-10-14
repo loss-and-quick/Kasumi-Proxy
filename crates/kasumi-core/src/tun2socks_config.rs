@@ -26,22 +26,11 @@ struct Tun2socksConfig {
     /// string with an optional size suffix).
     tcp_send_buffer_size: String,
     tcp_receive_buffer_size: String,
-    /// SO_MARK stamped on tun2socks' own upstream sockets so an `ip rule` keeps
-    /// them out of the tunnel — load-bearing on Android (mirrors hev's
-    /// `socks5.mark`), unused on desktop (the core binds to the uplink instead),
-    /// so omitted when `None`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fwmark: Option<u32>,
 }
 
 /// Render the tun2socks YAML for an interface `iface` (which tun2socks creates;
 /// the routing layer addresses it) bridging to `127.0.0.1:<socks_port>`.
-pub fn build_tun2socks_config(
-    iface: &str,
-    socks_port: u16,
-    fwmark: Option<u32>,
-    opts: &TunOptions,
-) -> String {
+pub fn build_tun2socks_config(iface: &str, socks_port: u16, opts: &TunOptions) -> String {
     let cfg = Tun2socksConfig {
         device: format!("tun://{iface}"),
         proxy: format!("socks5://127.0.0.1:{socks_port}"),
@@ -52,7 +41,6 @@ pub fn build_tun2socks_config(
         udp_timeout: format!("{}ms", opts.udp_rw_timeout_ms),
         tcp_send_buffer_size: opts.tcp_buffer_size.to_string(),
         tcp_receive_buffer_size: opts.tcp_buffer_size.to_string(),
-        fwmark,
     };
     // Infallible for this plain-scalar shape.
     yaml_serde::to_string(&cfg).expect("tun2socks config serializes")
@@ -66,7 +54,7 @@ mod tests {
     #[test]
     fn renders_expected_keys() {
         let opts = AdvancedSettings::default().tun_options();
-        let yaml = build_tun2socks_config("kt0", 10808, None, &opts);
+        let yaml = build_tun2socks_config("kt0", 10808, &opts);
         assert!(yaml.contains("device: tun://kt0"));
         assert!(yaml.contains("proxy: socks5://127.0.0.1:10808"));
         assert!(yaml.contains("mtu: 9000"));
@@ -74,16 +62,5 @@ mod tests {
         assert!(yaml.contains("udp-timeout: 60000ms"));
         assert!(yaml.contains("tcp-send-buffer-size: '65536'"));
         assert!(yaml.contains("tcp-receive-buffer-size: '65536'"));
-        // No fwmark passed → no key at all.
-        assert!(!yaml.contains("fwmark"));
-    }
-
-    #[test]
-    fn fwmark_emitted_when_set() {
-        // Android passes a fwmark so tun2socks' own sockets escape the tunnel;
-        // desktop passes None (see `build_tun2socks_config`).
-        let opts = AdvancedSettings::default().tun_options();
-        let yaml = build_tun2socks_config("kt0", 10808, Some(255), &opts);
-        assert!(yaml.contains("fwmark: 255"));
     }
 }

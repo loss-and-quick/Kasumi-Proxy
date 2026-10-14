@@ -41,8 +41,8 @@ use super::paths::{
     TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards,
-    clear_orphaned_tun_rules, clear_routing_rules,
+    AppFilter, RoutingState, apply_external_tun_routing, apply_guards, clear_orphaned_tun_rules,
+    clear_routing_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
@@ -314,7 +314,6 @@ async fn bring_up_tun_helper(
         ipv6: true,
         socks_port,
         log_path: Path::new(&log),
-        fwmark: Some(FWMARK),
         cfg_path: Path::new(spec.cfg),
         stack,
         opts,

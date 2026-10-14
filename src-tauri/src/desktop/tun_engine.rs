@@ -40,14 +40,12 @@ fn cfg_path(tun: TunEngine, p: &DesktopPaths) -> &str {
 /// The desktop external-tun path is IPv4-only, so no IPv6 is handed to a
 /// self-addressing engine. `stack` is the sing-box tun stack (only the sidecar
 /// sing-box reads it).
-#[allow(clippy::too_many_arguments)]
 pub async fn spawn(
     tun: TunEngine,
     p: &DesktopPaths,
     iface: &str,
     socks_port: u16,
     log: &Path,
-    fwmark: Option<u32>,
     stack: &str,
     opts: &TunOptions,
 ) -> std::io::Result<Child> {
@@ -64,7 +62,6 @@ pub async fn spawn(
         ipv6: false,
         socks_port,
         log_path: log,
-        fwmark,
         cfg_path: Path::new(cfg_path(tun, p)),
         stack,
         opts,

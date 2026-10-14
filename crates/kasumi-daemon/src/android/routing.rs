@@ -11,7 +11,6 @@ use super::paths::{IP, IP6TABLES, IPTABLES};
 use super::tethering::clear_tethering;
 use super::{run_out, silent};
 
-pub const FWMARK: u32 = 255;
 const LEGACY_MARK_RULE_PRIORITY: &str = "1000";
 const MARK_CHAIN: &str = "KASUMI_PROXY_MARK";
 
@@ -451,6 +450,8 @@ pub async fn clear_routing_rules(st: &RoutingState) {
         ip_rule(true, &["route", "flush", "table", table]).await;
     }
     if let Some(tun) = &st.tun_iface {
+        // Older versions accepted every forward to and from the tun, for the shell
+        // module's hotspot capture; the tethering plan accepts per interface.
         silent(&[IPTABLES, "-D", "FORWARD", "-o", tun, "-j", "ACCEPT"]).await;
         silent(&[IPTABLES, "-D", "FORWARD", "-i", tun, "-j", "ACCEPT"]).await;
         silent(&[
@@ -583,10 +584,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     silent(&[IPTABLES, "-t", "mangle", "-X", MARK_CHAIN]).await;
     silent(&[IPTABLES, "-t", "mangle", "-N", MARK_CHAIN]).await;
     silent(&[
-        IPTABLES, "-t", "mangle", "-A", MARK_CHAIN, "-m", "mark", "--mark", "255", "-j", "RETURN",
-    ])
-    .await;
-    silent(&[
         IPTABLES,
         "-t",
         "mangle",
@@ -604,8 +601,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     app_uid_rules(IPTABLES, &st.filter).await;
     capture_mark_rules(IPTABLES, &st.filter).await;
     silent(&[IPTABLES, "-t", "mangle", "-A", "OUTPUT", "-j", MARK_CHAIN]).await;
-    silent(&[IPTABLES, "-I", "FORWARD", "-o", tun, "-j", "ACCEPT"]).await;
-    silent(&[IPTABLES, "-I", "FORWARD", "-i", tun, "-j", "ACCEPT"]).await;
     silent(&[
         IPTABLES,
         "-t",
@@ -695,10 +690,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     silent(&[IP6TABLES, "-t", "mangle", "-D", "OUTPUT", "-j", MARK_CHAIN]).await;
     silent(&[IP6TABLES, "-t", "mangle", "-X", MARK_CHAIN]).await;
     silent(&[IP6TABLES, "-t", "mangle", "-N", MARK_CHAIN]).await;
-    silent(&[
-        IP6TABLES, "-t", "mangle", "-A", MARK_CHAIN, "-m", "mark", "--mark", "255", "-j", "RETURN",
-    ])
-    .await;
     silent(&[
         IP6TABLES,
         "-t",
