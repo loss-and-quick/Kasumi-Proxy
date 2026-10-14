@@ -54,6 +54,11 @@ impl Service {
     /// a caller can fall back to the boot auto-start. Takes the lifecycle lock itself.
     async fn restart_if_up(&self) -> bool {
         let _g = self.serialize.lock().await;
+        self.restart_if_up_locked().await
+    }
+
+    /// [`Self::restart_if_up`] for a caller that holds the lifecycle lock.
+    async fn restart_if_up_locked(&self) -> bool {
         let coming_up = self.data_path_up_or_coming().await;
         if coming_up && let Err(e) = self.run_lifecycle(LifecycleCmd::Restart(None)).await {
             ks_warn!(Area::Service, "restart after a change failed: {e}");
@@ -78,7 +83,9 @@ impl Service {
         tokio::spawn(async move {
             while rx.recv().await.is_some() {
                 // Rebuild a running data-path where the platform needs it; otherwise
-                // a new network is the moment to try the boot auto-start.
+                // a new network is the moment to try the boot auto-start. Decided
+                // under the lifecycle lock: a start in flight changes the plan.
+                let _g = this.serialize.lock().await;
                 let plan = this
                     .running_config
                     .lock()
@@ -86,15 +93,14 @@ impl Service {
                     .as_ref()
                     .map(|r| r.config.plan.clone());
                 let handled = if this.platform.uplink_change_restarts(plan.as_ref()) {
-                    this.restart_if_up().await
+                    this.restart_if_up_locked().await
                 } else {
                     this.data_path_up_or_coming().await
                 };
                 if !handled {
-                    let _g = this.serialize.lock().await;
                     this.maybe_auto_start().await;
-                    drop(_g);
                 }
+                drop(_g);
                 this.emit_status().await;
             }
         });
