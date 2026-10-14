@@ -33,6 +33,8 @@ pub struct TestPlatform {
     identity: Mutex<IdentityFixture>,
     /// What `unavailable_protocols` reports; none unless a test sets it.
     unavailable: Mutex<&'static [Protocol]>,
+    /// Engines `tune_config` was called for, in order.
+    tuned: Mutex<Vec<CoreEngine>>,
 }
 
 /// What the identity hooks of [`TestPlatform`] return, and the calls they saw.
@@ -67,6 +69,11 @@ impl TestPlatform {
         *self.unavailable.lock().unwrap() = protocols;
     }
 
+    /// Engines `tune_config` was called for, in order.
+    pub fn tuned(&self) -> Vec<CoreEngine> {
+        self.tuned.lock().unwrap().clone()
+    }
+
     /// The identity hooks called, in order.
     pub fn identity_calls(&self) -> Vec<String> {
         self.identity.lock().unwrap().calls.clone()
@@ -98,6 +105,7 @@ impl TestPlatform {
                 convert_fails: AtomicBool::new(false),
                 identity: Mutex::new(IdentityFixture::default()),
                 unavailable: Mutex::new(&[]),
+                tuned: Mutex::new(Vec::new()),
             },
             dir,
         )
@@ -118,6 +126,9 @@ impl Platform for TestPlatform {
     }
     fn unavailable_protocols(&self) -> &'static [Protocol] {
         *self.unavailable.lock().unwrap()
+    }
+    fn tune_config(&self, engine: Engine, _config: &mut serde_json::Value) {
+        self.tuned.lock().unwrap().push(engine);
     }
     async fn start_data_path(&self, _plan: &DataPathPlan) -> anyhow::Result<()> {
         Ok(())

@@ -314,7 +314,10 @@ where
     result
 }
 
+/// The SOCKS-only config a test core runs, tuned for this platform like the main
+/// core's (on Android, for one, a socket mark leaves the core unreachable).
 fn build_test_config(
+    platform: &dyn Platform,
     engine: Engine,
     loaded: &Loaded,
     port: u16,
@@ -324,7 +327,7 @@ fn build_test_config(
     settings.local_socks_port = Some(port);
     settings.local_http_port = Some(port + 1);
     let rules = &kasumi_core::route::resolve_route(&loaded.state, &loaded.profile);
-    let value = match engine {
+    let mut value = match engine {
         CoreEngine::SingBox => build_singbox_config(
             &loaded.profile,
             &settings,
@@ -338,6 +341,7 @@ fn build_test_config(
         )?,
         CoreEngine::Xray => build_xray_config(&loaded.profile, &settings, rules, &loaded.profiles)?,
     };
+    platform.tune_config(engine, &mut value);
     serde_json::to_string(&value).map_err(|e| e.to_string())
 }
 
@@ -374,7 +378,7 @@ pub async fn run_real_ping(
     let srs_dir = platform.paths().srs_dir.to_string_lossy().into_owned();
     let retained =
         retained_test_log_path(&platform.paths().data_dir, profile_id, TestKind::RealPing);
-    let cfg = build_test_config(engine, &loaded, test_port, &srs_dir)?;
+    let cfg = build_test_config(platform, engine, &loaded, test_port, &srs_dir)?;
     let url = loaded
         .state
         .settings
@@ -442,7 +446,7 @@ pub async fn run_speed_test(
     let test_port = lease.base();
     let srs_dir = platform.paths().srs_dir.to_string_lossy().into_owned();
     let retained = retained_test_log_path(&platform.paths().data_dir, profile_id, TestKind::Speed);
-    let cfg = build_test_config(engine, &loaded, test_port, &srs_dir)?;
+    let cfg = build_test_config(platform, engine, &loaded, test_port, &srs_dir)?;
     let url = loaded
         .state
         .settings
@@ -567,6 +571,8 @@ mod tests {
         // start → a surfaced error, not a silent no-result.
         assert!(run_real_ping(&p, &id).await.is_err());
         assert!(run_speed_test(&p, &id).await.is_err());
+        // Each test config got the platform's tuning, as the main core's does.
+        assert_eq!(p.tuned(), [CoreEngine::Xray, CoreEngine::Xray]);
         // Unknown profile is also an error.
         assert!(run_real_ping(&p, "nope").await.is_err());
     }
