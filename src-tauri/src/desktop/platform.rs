@@ -329,7 +329,10 @@ impl DesktopPlatform {
         }
         if escapes {
             if routing::CORE_ESCAPES_BY_MARK {
-                inject_escape_mark(engine, Path::new(&cfg)).await;
+                // Nothing else keeps an unmarked core off the tun: it would loop.
+                if !inject_escape_mark(engine, Path::new(&cfg)).await {
+                    return self.fail("could not mark the core's egress").await;
+                }
             } else {
                 inject_uplink_bind(engine, Path::new(&cfg)).await;
             }
@@ -839,6 +842,28 @@ mod tests {
     #[test]
     fn now_secs_is_nonzero() {
         assert!(now_secs() > 0);
+    }
+
+    /// A start must not go on with a core it could not mark (it would loop).
+    #[tokio::test]
+    async fn escape_mark_reports_a_config_it_cannot_mark() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = dir.path().join("config.json");
+        assert!(!inject_escape_mark(CoreEngine::Xray, &cfg).await);
+        std::fs::write(&cfg, "not json").unwrap();
+        assert!(!inject_escape_mark(CoreEngine::Xray, &cfg).await);
+
+        std::fs::write(
+            &cfg,
+            r#"{"outbounds":[{"tag":"direct","protocol":"freedom"}]}"#,
+        )
+        .unwrap();
+        assert!(inject_escape_mark(CoreEngine::Xray, &cfg).await);
+        let marked: Value = serde_json::from_str(&std::fs::read_to_string(&cfg).unwrap()).unwrap();
+        assert_eq!(
+            marked["outbounds"][0]["streamSettings"]["sockopt"]["mark"],
+            kasumi_core::singbox_config::SINGBOX_ESCAPE_MARK
+        );
     }
 
     #[test]
