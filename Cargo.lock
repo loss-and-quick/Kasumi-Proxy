@@ -2654,6 +2654,7 @@ dependencies = [
  "hmac",
  "http",
  "kasumi-core",
+ "kasumi-log",
  "libc",
  "log",
  "regex",

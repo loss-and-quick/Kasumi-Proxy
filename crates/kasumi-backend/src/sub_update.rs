@@ -346,14 +346,17 @@ async fn fetch_and_map(
     let res = match primary.await {
         Ok(res) => res,
         Err(e) => {
-            // Full cause chain (with the URL) to the log — the manual "update now"
-            // path logs nowhere else; the UI gets just the cause. A decrypted URL
-            // stays out of the log too.
+            // Full cause chain to the log — the manual "update now" path logs
+            // nowhere else; the UI gets just the cause. A decrypted URL is
+            // already secret-free, a plain one is the credential itself and
+            // arrives inside the chain in whatever form the client normalised
+            // it to, so the chain is redacted by shape.
+            let chain = kasumi_log::redact::in_text(&format!("{e:#}"));
             if encrypted {
                 let cause = display_fetch_error(&e);
                 log::warn!("subscription {}: fetch failed: {cause}", sub.remarks);
             } else {
-                log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
+                log::warn!("subscription {}: fetch failed: {chain}", sub.remarks);
             }
             let failed = SubFetchError {
                 message: display_fetch_error(&e),
@@ -378,7 +381,8 @@ async fn fetch_and_map(
                     res
                 }
                 Err(e) => {
-                    log::warn!("subscription {}: fallback failed: {e:#}", sub.remarks);
+                    let chain = kasumi_log::redact::in_text(&format!("{e:#}"));
+                    log::warn!("subscription {}: fallback failed: {chain}", sub.remarks);
                     return Err(failed);
                 }
             }

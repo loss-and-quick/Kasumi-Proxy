@@ -8,6 +8,7 @@ description = "Transport-neutral orchestration (Platform trait, RPC commands, li
 [dependencies]
 specta = { version = "2.0.0-rc.25", features = ["derive"] }
 kasumi-core = { path = "../kasumi-core" }
+kasumi-log = { path = "../kasumi-log" }
 happ-sub = { workspace = true, features = ["device", "incy-signers", "incy-request"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
