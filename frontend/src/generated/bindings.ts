@@ -760,14 +760,47 @@ export type Custom = {
 /**  Who wrote a custom profile's raw config: a provider's runs only after sanitising. */
 export type CustomOrigin = "user" | "provider";
 
+/**  A desktop's raw facts, as the OS gives them. */
+export type DesktopHost = {
+	/**  os-release `ID`. */
+	osReleaseId?: string,
+	/**  os-release `VERSION_ID`. */
+	osReleaseVersion?: string,
+	/**  `uname -r`. */
+	kernelRelease?: string,
+	hostname?: string,
+	/**  `uname -m`. */
+	cpuArch?: string,
+	username?: string,
+	/**  The locale variable in effect, e.g. `ru_RU.UTF-8`. */
+	posixLocale?: string,
+};
+
 /**  What the device reports about itself, before any override. */
-export type DeviceFacts = {
+export type DeviceFacts = DeviceFacts_Serialize | DeviceFacts_Deserialize;
+
+/**  What the device reports about itself, before any override. */
+export type DeviceFacts_Deserialize = {
 	os: string,
 	osVersion: string,
 	model: string,
 	locale: string,
 	/**  The `android.os.Build` values Incy hashes into its device id; empty off Android. */
 	build?: AndroidBuild,
+	/**  What a desktop reports, unformatted: each client formats it its own way. */
+	desktop?: DesktopHost | null,
+};
+
+/**  What the device reports about itself, before any override. */
+export type DeviceFacts_Serialize = {
+	os: string,
+	osVersion: string,
+	model: string,
+	locale: string,
+	/**  The `android.os.Build` values Incy hashes into its device id; empty off Android. */
+	build: AndroidBuild,
+	/**  What a desktop reports, unformatted: each client formats it its own way. */
+	desktop?: DesktopHost | null,
 };
 
 /**  Xray domain resolution strategy. */
@@ -1407,13 +1440,33 @@ export type RequestIdentityDefaults_Serialize = {
 };
 
 /**  The request a subscription fetch sends, and where its values come from. */
-export type ResolvedIdentity = {
+export type ResolvedIdentity = ResolvedIdentity_Serialize | ResolvedIdentity_Deserialize;
+
+/**  The request a subscription fetch sends, and where its values come from. */
+export type ResolvedIdentity_Deserialize = {
 	hwid: string,
 	hwidSource: HwidSource,
 	autoHwid: string,
 	autoHwidSource: HwidSource,
 	/**  Detected, before overrides. */
-	facts: DeviceFacts,
+	facts: DeviceFacts_Deserialize,
+	headers: HeaderPreview[],
+	cookieJar: boolean,
+	locks: ProviderLocks,
+	/**  The provider's keys alone turn the device headers off. */
+	providerHidesDevice: boolean,
+	/**  The provider's keys alone move the HWID into a cookie. */
+	providerHwidCookie: boolean,
+};
+
+/**  The request a subscription fetch sends, and where its values come from. */
+export type ResolvedIdentity_Serialize = {
+	hwid: string,
+	hwidSource: HwidSource,
+	autoHwid: string,
+	autoHwidSource: HwidSource,
+	/**  Detected, before overrides. */
+	facts: DeviceFacts_Serialize,
 	headers: HeaderPreview[],
 	cookieJar: boolean,
 	locks: ProviderLocks,
@@ -1464,7 +1517,7 @@ export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize 
 /**  Throughput in bytes/sec; `null` when there is no result. */
 { kind: "speed"; value: number | null } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
-({ kind: "ok" }) & { value?: never } | { kind: "requestIdentity"; value: ResolvedIdentity } | { kind: "importInput"; value: ResolvedImport_Deserialize } | { kind: "backupRestored"; value: BackupRestored_Deserialize };
+({ kind: "ok" }) & { value?: never } | { kind: "requestIdentity"; value: ResolvedIdentity_Deserialize } | { kind: "importInput"; value: ResolvedImport_Deserialize } | { kind: "backupRestored"; value: BackupRestored_Deserialize };
 
 /**  One reply. The tag `kind` selects the payload shape under `value`. */
 export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | { kind: "profiles"; value: Profile[] } | { kind: "text"; value: string } | { kind: "ports"; value: number[] } | { kind: "assets"; value: string[] } | { kind: "capabilities"; value: Capabilities } | { kind: "apps"; value: AppInfo_Serialize[] } | { kind: "status"; value: ServiceState_Serialize } | { kind: "wsInfo"; value: WsInfo | null } | 
@@ -1483,7 +1536,7 @@ export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | 
 /**  Throughput in bytes/sec; `null` when there is no result. */
 { kind: "speed"; value: number | null } | 
 /**  A bare acknowledgement (`{ok: true}` / no body in the old protocol). */
-({ kind: "ok" }) & { value?: never } | { kind: "requestIdentity"; value: ResolvedIdentity } | { kind: "importInput"; value: ResolvedImport_Serialize } | { kind: "backupRestored"; value: BackupRestored_Serialize };
+({ kind: "ok" }) & { value?: never } | { kind: "requestIdentity"; value: ResolvedIdentity_Serialize } | { kind: "importInput"; value: ResolvedImport_Serialize } | { kind: "backupRestored"; value: BackupRestored_Serialize };
 
 /**  Which blocks, in what order, a set of profiles runs with. */
 export type Route = {
