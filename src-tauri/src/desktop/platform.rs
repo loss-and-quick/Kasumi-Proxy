@@ -667,6 +667,10 @@ impl Platform for DesktopPlatform {
         Some(rx)
     }
 
+    fn uplink_change_restarts(&self, plan: Option<&DataPathPlan>) -> bool {
+        rebuild_on_uplink_change(plan)
+    }
+
     fn watch_system_resume(&self) -> Option<mpsc::Receiver<()>> {
         let (tx, rx) = mpsc::channel(1);
         tokio::spawn(resume::run_watcher(tx));
@@ -725,6 +729,16 @@ impl Platform for DesktopPlatform {
             kasumi_backend::net::tcp_ping(host, port, timeout).await
         }
     }
+}
+
+/// Whether an uplink change must rebuild the data path `plan` started. Only the
+/// external tun names the uplink: the core's outbounds are bound to its device and
+/// source address, and the server bypass routes go through its gateway. A native
+/// sing-box tun escapes by fwmark and follows the uplink itself
+/// (`auto_detect_interface`), and without a tun the core rides the default route.
+/// A data path this process didn't start is rebuilt to be safe.
+fn rebuild_on_uplink_change(plan: Option<&DataPathPlan>) -> bool {
+    plan.is_none_or(|p| matches!(p.tun, TunPlan::External(_)))
 }
 
 /// Rewrite a core's config to bind every outbound that dials the network (see
@@ -787,6 +801,44 @@ mod tests {
     #[test]
     fn now_secs_is_nonzero() {
         assert!(now_secs() > 0);
+    }
+
+    #[test]
+    fn only_a_bridged_tun_is_rebuilt_on_an_uplink_change() {
+        use kasumi_core::state::AdvancedSettings;
+
+        let host = HostTraits {
+            proxy_modes: true,
+            app_routing: AppRouting::PerProcess,
+            pinned_singbox_stack: Some(SingboxStack::Gvisor),
+        };
+        let plan = |engine, mode| {
+            let s = AdvancedSettings {
+                proxy_mode: mode,
+                ..Default::default()
+            };
+            DataPathPlan::resolve(engine, &s, host)
+        };
+
+        // xray can't own a tun, so its tun mode is bridged.
+        let bridged = plan(CoreEngine::Xray, ProxyMode::Tun);
+        assert!(matches!(bridged.tun, TunPlan::External(_)));
+        assert!(rebuild_on_uplink_change(Some(&bridged)));
+
+        let native = plan(CoreEngine::SingBox, ProxyMode::Tun);
+        assert!(matches!(native.tun, TunPlan::Native { .. }));
+        assert!(!rebuild_on_uplink_change(Some(&native)));
+
+        for mode in [ProxyMode::ProxyOnly, ProxyMode::System, ProxyMode::Pac] {
+            for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+                assert!(
+                    !rebuild_on_uplink_change(Some(&plan(engine, mode))),
+                    "{engine:?} {mode:?}"
+                );
+            }
+        }
+
+        assert!(rebuild_on_uplink_change(None));
     }
 
     #[test]
