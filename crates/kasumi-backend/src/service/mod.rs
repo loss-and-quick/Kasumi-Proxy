@@ -158,17 +158,16 @@ impl Service {
                 url,
                 mode,
             } => {
-                let changed = asset_update::download_asset(&*self.platform, &filename, &url, mode)
+                let body = asset_update::fetch_asset(&*self.platform, &filename, &url, mode)
                     .await
                     .map_err(CommandError)?;
                 // As on the background update: the running core keeps the old data
-                // until its next start.
-                let running = self
-                    .platform
-                    .service_state()
+                // until its next start, decided under the lifecycle lock with the write.
+                let _g = self.serialize.lock().await;
+                let changed = asset_update::apply_asset(&*self.platform, &filename, &body)
                     .await
-                    .is_ok_and(|s| s.engine.is_some());
-                if changed && running {
+                    .map_err(CommandError)?;
+                if changed && asset_update::core_running(&*self.platform).await {
                     self.note_assets_changed().await;
                 }
                 Ok(Response::Ok)

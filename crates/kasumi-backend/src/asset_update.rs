@@ -22,20 +22,25 @@ use crate::state::read_app_state;
 use crate::updater::{self, LifecycleControl, now_ms};
 
 /// Download one asset into the dat dir and convert it, returning whether the file
-/// content actually changed (so a caller can decide whether a core restart is
-/// warranted). Shared by the `DownloadAsset` command and the headless tick.
-///
-/// The `.dat` and its `.srs` move together: a conversion failure rolls the `.dat`
-/// back to the bytes that were there before. Leaving the new `.dat` behind a failed
-/// conversion would make the *next* attempt compare equal and report "unchanged",
-/// so no restart would ever be marked and the core would stay on the old rule-sets
-/// indefinitely.
+/// content actually changed. For callers with no core lifecycle to coordinate with;
+/// the others fetch first and [`apply_asset`] under the lifecycle lock.
 pub async fn download_asset(
     platform: &dyn Platform,
     filename: &str,
     url: &str,
     mode: FetchMode,
 ) -> Result<bool, String> {
+    let body = fetch_asset(platform, filename, url, mode).await?;
+    apply_asset(platform, filename, &body).await
+}
+
+/// Fetch one asset's bytes, without touching the dat dir.
+pub async fn fetch_asset(
+    platform: &dyn Platform,
+    filename: &str,
+    url: &str,
+    mode: FetchMode,
+) -> Result<Vec<u8>, String> {
     if !safe_filename(filename) {
         return Err("invalid filename".into());
     }
@@ -57,14 +62,34 @@ pub async fn download_asset(
     if body.is_empty() {
         return Err("download failed".into());
     }
+    Ok(body)
+}
 
+/// Put fetched bytes in the dat dir and convert them, returning whether the file
+/// content actually changed (so a caller can decide whether a core restart is
+/// warranted). Run under the lifecycle lock where a core may start: a core that
+/// starts between the write and that decision would make it wrong.
+///
+/// The `.dat` and its `.srs` move together: a conversion failure rolls the `.dat`
+/// back to the bytes that were there before. Leaving the new `.dat` behind a failed
+/// conversion would make the *next* attempt compare equal and report "unchanged",
+/// so no restart would ever be marked and the core would stay on the old rule-sets
+/// indefinitely.
+pub async fn apply_asset(
+    platform: &dyn Platform,
+    filename: &str,
+    body: &[u8],
+) -> Result<bool, String> {
+    if !safe_filename(filename) {
+        return Err("invalid filename".into());
+    }
     let path = platform.paths().dat_dir.join(filename);
     // The previous bytes earn their memory twice: they decide whether the content
     // actually changed, and they are the rollback below.
     let previous = tokio::fs::read(&path).await.ok();
-    let changed = previous.as_deref() != Some(body.as_slice());
+    let changed = previous.as_deref() != Some(body);
 
-    write_bytes_atomic(&path, &body)
+    write_bytes_atomic(&path, body)
         .await
         .map_err(|e| e.to_string())?;
     if let Err(e) = platform.convert_asset(filename).await {
@@ -131,18 +156,34 @@ pub async fn tick(
         return;
     }
 
-    let mut any_changed = false;
+    let mut restart_pending = false;
     let mut refreshed: Vec<String> = Vec::new();
     for asset in &due {
         last_attempt.insert(asset.id.clone(), now);
         log::info!("asset-update {}: fetching", asset.remarks);
         // The frontend names the on-disk file after the asset's remarks.
-        match download_asset(platform, &asset.remarks, &asset.url, mode).await {
+        let body = match fetch_asset(platform, &asset.remarks, &asset.url, mode).await {
+            Ok(body) => body,
+            Err(message) => {
+                log::warn!("asset-update {}: failed: {message}", asset.remarks);
+                continue;
+            }
+        };
+        // The write and the pending decision share the lifecycle lock, so a start
+        // can't come between them and leave the flag wrong either way.
+        let _g = serialize.lock().await;
+        match apply_asset(platform, &asset.remarks, &body).await {
             Ok(changed) => {
-                any_changed |= changed;
                 refreshed.push(asset.remarks.clone());
-                let _g = serialize.lock().await;
                 mark_updated(platform, &asset.id, now).await;
+                if changed && core_running(platform).await {
+                    log::info!(
+                        "asset-update {}: changed, applies on the next core start",
+                        asset.remarks
+                    );
+                    lifecycle.note_assets_changed().await;
+                    restart_pending = true;
+                }
             }
             Err(message) => log::warn!("asset-update {}: failed: {message}", asset.remarks),
         }
@@ -150,23 +191,18 @@ pub async fn tick(
     if refreshed.is_empty() {
         return;
     }
-
-    let mut restart_pending = false;
-    if any_changed {
-        let _g = serialize.lock().await;
-        restart_pending = platform
-            .service_state()
-            .await
-            .is_ok_and(|s| s.engine.is_some());
-        if restart_pending {
-            log::info!("asset-update: geo data changed, applies on the next core start");
-            lifecycle.note_assets_changed().await;
-        }
-    }
     on_updated(AssetsUpdatedEvent {
         remarks: refreshed,
         restart_pending,
     });
+}
+
+/// Whether a core is running on the data loaded at its start.
+pub async fn core_running(platform: &dyn Platform) -> bool {
+    platform
+        .service_state()
+        .await
+        .is_ok_and(|s| s.engine.is_some())
 }
 
 /// Stamp the asset's `last_updated` (epoch-ms) in the persisted state.
