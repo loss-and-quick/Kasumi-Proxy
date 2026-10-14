@@ -362,12 +362,9 @@ pub async fn spawn_core(
 
 /// Spawn tun2socks bridging the tun to the local SOCKS port: render its YAML
 /// config (device/proxy/tuning — see `build_tun2socks_config`), write it next to
-/// the runtime state, then run `<bin> --config <cfg>`. `fwmark`, when set, marks
-/// tun2socks' own upstream socket so an `ip rule` can keep it out of the tunnel —
-/// a Linux SO_MARK feature. Windows has no fwmark (its server bypass is a host
-/// route), so it passes `None`.
+/// the runtime state, then run `<bin> --config <cfg>`.
 async fn spawn_tun2socks(s: &TunSpawn<'_>) -> std::io::Result<Child> {
-    let yaml = build_tun2socks_config(s.iface, s.socks_port, s.fwmark, s.opts);
+    let yaml = build_tun2socks_config(s.iface, s.socks_port, s.opts);
     write_text(s.cfg_path, &yaml).await?;
     let argv = [
         s.bin.to_owned(),
@@ -390,7 +387,6 @@ pub struct TunSpawn<'a> {
     pub ipv6: bool,
     pub socks_port: u16,
     pub log_path: &'a Path,
-    pub fwmark: Option<u32>,
     pub cfg_path: &'a Path,
     pub stack: &'a str,
     pub opts: &'a TunOptions,
@@ -413,7 +409,7 @@ pub async fn spawn_tun_engine(tun: TunEngine, s: &TunSpawn<'_>) -> std::io::Resu
 /// next to the runtime state, then run `<hev_bin> <cfg>`.
 async fn spawn_hev(s: &TunSpawn<'_>) -> std::io::Result<Child> {
     let ipv6 = s.ipv6.then(|| s.slot.ipv6());
-    let yaml = build_hev_config(s.iface, s.slot.ipv4(), ipv6, s.socks_port, s.fwmark, s.opts);
+    let yaml = build_hev_config(s.iface, s.slot.ipv4(), ipv6, s.socks_port, s.opts);
     write_text(s.cfg_path, &yaml).await?;
     let argv = [s.bin.to_owned(), s.cfg_path.to_string_lossy().into_owned()];
     spawn_logged(&argv, &std::collections::HashMap::new(), s.log_path, false).await

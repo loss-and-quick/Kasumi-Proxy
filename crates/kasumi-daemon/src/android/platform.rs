@@ -41,8 +41,8 @@ use super::paths::{
     TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    AppFilter, FWMARK, RoutingState, apply_external_tun_routing, apply_guards,
-    clear_orphaned_tun_rules, clear_routing_rules,
+    AppFilter, RoutingState, apply_external_tun_routing, apply_guards, clear_orphaned_tun_rules,
+    clear_routing_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
@@ -314,7 +314,6 @@ async fn bring_up_tun_helper(
         ipv6: true,
         socks_port,
         log_path: Path::new(&log),
-        fwmark: Some(FWMARK),
         cfg_path: Path::new(spec.cfg),
         stack,
         opts,
@@ -798,7 +797,19 @@ impl Platform for AndroidPlatform {
     // only for the categories the config uses.
 
     fn tune_config(&self, engine: Engine, config: &mut Value) {
-        if engine != CoreEngine::SingBox {
+        if engine == CoreEngine::Xray {
+            // The core leaves as root through Android's default network. A socket
+            // mark (a user Custom config may set one, as the shell module's configs
+            // did) matches none of Android's rules and lands on `unreachable`.
+            let outbounds = config.get_mut("outbounds").and_then(Value::as_array_mut);
+            for ob in outbounds.into_iter().flatten() {
+                if let Some(sockopt) = ob
+                    .pointer_mut("/streamSettings/sockopt")
+                    .and_then(Value::as_object_mut)
+                {
+                    sockopt.remove("mark");
+                }
+            }
             return;
         }
         // Android specifics the neutral builder must not assume, so they live here:
@@ -843,6 +854,11 @@ impl Platform for AndroidPlatform {
         let (tx, rx) = mpsc::channel(1);
         tokio::spawn(run_watcher(tx));
         Some(rx)
+    }
+
+    // Nothing the data path installs names the uplink (see `network`).
+    fn uplink_change_restarts(&self) -> bool {
+        false
     }
 
     async fn data_path_healthy(&self) -> Option<bool> {
@@ -1049,6 +1065,24 @@ mod tests {
         let (bin, cfg, _) = core_files(CoreEngine::SingBox);
         assert_eq!(bin, SINGBOX_BIN);
         assert!(cfg.ends_with("singbox.json"));
+    }
+
+    #[test]
+    fn tune_config_drops_xray_socket_marks() {
+        let platform = AndroidPlatform::new();
+        let mut cfg = serde_json::json!({ "outbounds": [
+            { "tag": "proxy", "streamSettings": { "sockopt": { "mark": 255, "tcpNoDelay": true } } },
+            { "tag": "direct", "protocol": "freedom" },
+        ] });
+        platform.tune_config(CoreEngine::Xray, &mut cfg);
+        assert_eq!(
+            cfg["outbounds"][0]["streamSettings"]["sockopt"],
+            serde_json::json!({ "tcpNoDelay": true })
+        );
+        assert_eq!(
+            cfg["outbounds"][1],
+            serde_json::json!({ "tag": "direct", "protocol": "freedom" })
+        );
     }
 
     #[test]

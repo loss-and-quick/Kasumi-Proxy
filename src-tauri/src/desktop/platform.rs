@@ -346,7 +346,6 @@ impl DesktopPlatform {
             &iface,
             plan.ports.socks,
             &helper_log,
-            None,
             &wire_value(&ext.stack),
             &ext.opts,
         )

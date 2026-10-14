@@ -9,10 +9,9 @@ use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_C
 
 use super::paths::{IP, IP6TABLES, IPTABLES};
 use super::tethering::clear_tethering;
-use super::{default_uplink, run_out, silent};
+use super::{run_out, silent};
 
-pub const FWMARK: u32 = 255;
-const RULE_PRIORITY: &str = "1000";
+const LEGACY_MARK_RULE_PRIORITY: &str = "1000";
 const MARK_CHAIN: &str = "KASUMI_PROXY_MARK";
 
 // Our own route-table numbers (v4 and v6 share them).
@@ -118,53 +117,26 @@ async fn clear_legacy_strict_carveouts() {
     }
 }
 
-pub async fn remove_mark_rule() {
-    ip_rule(
-        false,
-        &["rule", "del", "fwmark", "255", "priority", RULE_PRIORITY],
-    )
-    .await;
-    ip_rule(
-        true,
-        &["rule", "del", "fwmark", "255", "priority", RULE_PRIORITY],
-    )
-    .await;
-}
-
-/// Bind the proxy fwmark to the active uplink's route table.
-pub async fn apply_mark_rule(iface: &str) {
-    if iface.is_empty() {
-        return;
+/// Older versions pinned an `fwmark 255` rule to the uplink table, carried over
+/// from the shell module, where Xray marked its sockets 255. No config marks the
+/// cores' sockets now (they leave as uid 0), and the tun helpers' marked sockets
+/// only reach the local SOCKS port. Removed on teardown only, to clean up after an
+/// upgrade.
+async fn clear_legacy_mark_rule() {
+    for v6 in [false, true] {
+        ip_rule(
+            v6,
+            &[
+                "rule",
+                "del",
+                "fwmark",
+                "255",
+                "priority",
+                LEGACY_MARK_RULE_PRIORITY,
+            ],
+        )
+        .await;
     }
-    remove_mark_rule().await;
-    ip_rule(
-        false,
-        &[
-            "rule",
-            "add",
-            "fwmark",
-            "255",
-            "table",
-            iface,
-            "priority",
-            RULE_PRIORITY,
-        ],
-    )
-    .await;
-    ip_rule(
-        true,
-        &[
-            "rule",
-            "add",
-            "fwmark",
-            "255",
-            "table",
-            iface,
-            "priority",
-            RULE_PRIORITY,
-        ],
-    )
-    .await;
 }
 
 async fn app_uid_rules(ipt: &str, filter: &AppFilter) {
@@ -411,7 +383,7 @@ async fn clear_legacy_port_rules(filter: &AppFilter, socks_port: u16, http_port:
 
 /// Tear down every rule/table/device the xray data-path installed.
 pub async fn clear_routing_rules(st: &RoutingState) {
-    remove_mark_rule().await;
+    clear_legacy_mark_rule().await;
     clear_legacy_strict_carveouts().await;
     clear_guards().await;
     // Whatever the tethering option installed, whether or not it is on right now:
@@ -459,9 +431,13 @@ pub async fn clear_routing_rules(st: &RoutingState) {
     )
     .await;
 
-    // Our LAN-bypass rules: pref 5020-5022 send RFC1918 sources to the uplink
-    // table, 5030-5050 to our tun table. Delete by priority — the band is ours
-    // (the OS lives at pref 10000+); the loop clears any stacked duplicate.
+    // Older versions sent every RFC1918 source to the tun table (5030-5050, the
+    // shell module's hotspot capture, now done per tethering interface) and local
+    // ones to the uplink's table (5020-5022). Named after the uplink of the moment,
+    // the latter sent Wi-Fi-sourced traffic out the mobile link after a switch, so
+    // Android could no longer validate Wi-Fi. Removed on teardown only, to clean
+    // up after an upgrade; the band is ours (the OS lives at pref 10000+) and the
+    // loop clears any stacked duplicate.
     for pref in ["5020", "5021", "5022", "5030", "5040", "5050"] {
         for _ in 0..4 {
             if ip_rule(false, &["rule", "del", "pref", pref]).await != 0 {
@@ -474,6 +450,8 @@ pub async fn clear_routing_rules(st: &RoutingState) {
         ip_rule(true, &["route", "flush", "table", table]).await;
     }
     if let Some(tun) = &st.tun_iface {
+        // Older versions accepted every forward to and from the tun, for the shell
+        // module's hotspot capture; the tethering plan accepts per interface.
         silent(&[IPTABLES, "-D", "FORWARD", "-o", tun, "-j", "ACCEPT"]).await;
         silent(&[IPTABLES, "-D", "FORWARD", "-i", tun, "-j", "ACCEPT"]).await;
         silent(&[
@@ -606,10 +584,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     silent(&[IPTABLES, "-t", "mangle", "-X", MARK_CHAIN]).await;
     silent(&[IPTABLES, "-t", "mangle", "-N", MARK_CHAIN]).await;
     silent(&[
-        IPTABLES, "-t", "mangle", "-A", MARK_CHAIN, "-m", "mark", "--mark", "255", "-j", "RETURN",
-    ])
-    .await;
-    silent(&[
         IPTABLES,
         "-t",
         "mangle",
@@ -627,52 +601,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     app_uid_rules(IPTABLES, &st.filter).await;
     capture_mark_rules(IPTABLES, &st.filter).await;
     silent(&[IPTABLES, "-t", "mangle", "-A", "OUTPUT", "-j", MARK_CHAIN]).await;
-    silent(&[IPTABLES, "-I", "FORWARD", "-o", tun, "-j", "ACCEPT"]).await;
-    silent(&[IPTABLES, "-I", "FORWARD", "-i", tun, "-j", "ACCEPT"]).await;
-
-    // Pin local-origin traffic to the physical uplink so it doesn't loop the tun.
-    if let Some(uplink) = default_uplink().await {
-        for (src, pref) in [
-            ("10.0.0.0/8", "5020"),
-            ("172.16.0.0/12", "5021"),
-            ("192.168.0.0/16", "5022"),
-        ] {
-            ip_rule(
-                false,
-                &[
-                    "rule", "del", "from", src, "iif", "lo", "lookup", &uplink, "pref", pref,
-                ],
-            )
-            .await;
-            ip_rule(
-                false,
-                &[
-                    "rule", "add", "from", src, "iif", "lo", "lookup", &uplink, "pref", pref,
-                ],
-            )
-            .await;
-        }
-    }
-    for (src, pref) in [
-        ("10.0.0.0/8", "5030"),
-        ("172.16.0.0/12", "5040"),
-        ("192.168.0.0/16", "5050"),
-    ] {
-        ip_rule(
-            false,
-            &[
-                "rule", "del", "from", src, "lookup", TUN_TABLE, "pref", pref,
-            ],
-        )
-        .await;
-        ip_rule(
-            false,
-            &[
-                "rule", "add", "from", src, "lookup", TUN_TABLE, "pref", pref,
-            ],
-        )
-        .await;
-    }
     silent(&[
         IPTABLES,
         "-t",
@@ -762,10 +690,6 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     silent(&[IP6TABLES, "-t", "mangle", "-D", "OUTPUT", "-j", MARK_CHAIN]).await;
     silent(&[IP6TABLES, "-t", "mangle", "-X", MARK_CHAIN]).await;
     silent(&[IP6TABLES, "-t", "mangle", "-N", MARK_CHAIN]).await;
-    silent(&[
-        IP6TABLES, "-t", "mangle", "-A", MARK_CHAIN, "-m", "mark", "--mark", "255", "-j", "RETURN",
-    ])
-    .await;
     silent(&[
         IP6TABLES,
         "-t",

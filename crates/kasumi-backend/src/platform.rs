@@ -283,6 +283,13 @@ pub trait Platform: Send + Sync {
         None
     }
 
+    /// Whether an uplink change needs the running data-path rebuilt. A platform
+    /// that re-points its uplink-keyed state itself keeps the cores and their
+    /// connections; one whose configs bind outbounds to the uplink can't.
+    fn uplink_change_restarts(&self) -> bool {
+        true
+    }
+
     /// A receiver that yields once each time the machine wakes from suspend/hibernate,
     /// so the `Service` can restart the data-path: a core left running across a sleep can
     /// hold stale routing/DNS state that only a restart re-pins. `None` where the platform

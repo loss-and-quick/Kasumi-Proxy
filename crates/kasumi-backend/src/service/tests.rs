@@ -27,6 +27,9 @@ struct RecordingPlatform {
     core_socks: AtomicU16,
     /// The plan of the last start.
     started: StdMutex<Option<DataPathPlan>>,
+    /// Handed out once by `watch_network_change`.
+    network: StdMutex<Option<tokio::sync::mpsc::Receiver<()>>>,
+    uplink_restarts: AtomicBool,
 }
 
 impl RecordingPlatform {
@@ -55,6 +58,8 @@ impl RecordingPlatform {
                 release: tokio::sync::Notify::new(),
                 core_socks: AtomicU16::new(0),
                 started: StdMutex::new(None),
+                network: StdMutex::new(None),
+                uplink_restarts: AtomicBool::new(true),
             }),
             dir,
         )
@@ -124,6 +129,12 @@ impl Platform for RecordingPlatform {
     fn core_path(&self, _engine: Engine) -> PathBuf {
         PathBuf::new()
     }
+    fn watch_network_change(&self) -> Option<tokio::sync::mpsc::Receiver<()>> {
+        self.network.lock().unwrap().take()
+    }
+    fn uplink_change_restarts(&self) -> bool {
+        self.uplink_restarts.load(Ordering::SeqCst)
+    }
     async fn proxy_status(&self) -> anyhow::Result<crate::net::ProxyStatus> {
         let port = self.core_socks.load(Ordering::SeqCst);
         Ok(crate::net::ProxyStatus {
@@ -167,6 +178,43 @@ async fn start_stops_first_then_writes_config_and_starts() {
     }
     let cfg = read_text(&platform.paths.xray_config).await.unwrap();
     assert!(cfg.contains("outbounds"));
+}
+
+/// The lifecycle calls a running data-path gets for one uplink change.
+async fn calls_on_uplink_change(restarts: bool) -> Vec<String> {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    platform.uplink_restarts.store(restarts, Ordering::SeqCst);
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    *platform.network.lock().unwrap() = Some(rx);
+    let svc = Arc::new(Service::new(platform.clone() as Arc<dyn Platform>).await);
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    svc.spawn_network_watch();
+    platform.calls.lock().unwrap().clear();
+    tx.send(()).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(platform.running.load(Ordering::SeqCst));
+    platform.calls.lock().unwrap().clone()
+}
+
+#[tokio::test]
+async fn uplink_change_keeps_the_data_path_where_the_platform_repins_it() {
+    let calls = calls_on_uplink_change(false).await;
+    assert!(
+        !calls
+            .iter()
+            .any(|c| c.starts_with("stop:") || c.starts_with("start:")),
+        "{calls:?}"
+    );
+}
+
+#[tokio::test]
+async fn uplink_change_rebuilds_the_data_path_elsewhere() {
+    let calls = calls_on_uplink_change(true).await;
+    assert!(calls.iter().any(|c| c.starts_with("stop:")), "{calls:?}");
+    assert!(calls.iter().any(|c| c.starts_with("start:")), "{calls:?}");
 }
 
 #[tokio::test]
