@@ -789,7 +789,19 @@ impl Platform for AndroidPlatform {
     // only for the categories the config uses.
 
     fn tune_config(&self, engine: Engine, config: &mut Value) {
-        if engine != CoreEngine::SingBox {
+        if engine == CoreEngine::Xray {
+            // The core leaves as root through Android's default network. A socket
+            // mark (a user Custom config may set one, as the shell module's configs
+            // did) matches none of Android's rules and lands on `unreachable`.
+            let outbounds = config.get_mut("outbounds").and_then(Value::as_array_mut);
+            for ob in outbounds.into_iter().flatten() {
+                if let Some(sockopt) = ob
+                    .pointer_mut("/streamSettings/sockopt")
+                    .and_then(Value::as_object_mut)
+                {
+                    sockopt.remove("mark");
+                }
+            }
             return;
         }
         // Android specifics the neutral builder must not assume, so they live here:
@@ -1045,6 +1057,24 @@ mod tests {
         let (bin, cfg, _) = core_files(CoreEngine::SingBox);
         assert_eq!(bin, SINGBOX_BIN);
         assert!(cfg.ends_with("singbox.json"));
+    }
+
+    #[test]
+    fn tune_config_drops_xray_socket_marks() {
+        let platform = AndroidPlatform::new();
+        let mut cfg = serde_json::json!({ "outbounds": [
+            { "tag": "proxy", "streamSettings": { "sockopt": { "mark": 255, "tcpNoDelay": true } } },
+            { "tag": "direct", "protocol": "freedom" },
+        ] });
+        platform.tune_config(CoreEngine::Xray, &mut cfg);
+        assert_eq!(
+            cfg["outbounds"][0]["streamSettings"]["sockopt"],
+            serde_json::json!({ "tcpNoDelay": true })
+        );
+        assert_eq!(
+            cfg["outbounds"][1],
+            serde_json::json!({ "tag": "direct", "protocol": "freedom" })
+        );
     }
 
     #[test]
