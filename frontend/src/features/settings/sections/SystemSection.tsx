@@ -126,6 +126,21 @@ export function SystemSection({
             ]}
           />
         </SettingRow>
+        <SettingRow title={t("settings.appLogLevel")} hint={t("settings.appLogLevelHint")}>
+          <Select
+            style={{ width: 150 }}
+            value={settings.appLogLevel ?? "default"}
+            onChange={(v) => set("appLogLevel", v === "default" ? undefined : v)}
+            options={[
+              { value: "default", label: t("settings.appLogLevel.default") },
+              { value: "debug", label: t("settings.logLevel.debug") },
+              { value: "info", label: t("settings.logLevel.info") },
+              { value: "warning", label: t("settings.logLevel.warning") },
+              { value: "error", label: t("settings.logLevel.error") },
+              { value: "none", label: t("settings.logLevel.none") },
+            ]}
+          />
+        </SettingRow>
         <div style={{ padding: "8px 0 0" }}>
           <Field
             commitOnBlur
