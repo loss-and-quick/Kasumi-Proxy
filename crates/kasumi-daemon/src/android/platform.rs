@@ -801,6 +801,7 @@ impl Platform for AndroidPlatform {
                 board: getprop("ro.product.board").await,
                 hardware: getprop("ro.hardware").await,
             },
+            desktop: None,
         }
     }
 

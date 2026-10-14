@@ -1775,13 +1775,41 @@ export const CoreResolutionSchema = z.object({
 export type CoreResolution = z.infer<typeof CoreResolutionSchema>;
 
 
-export const DeviceFactsSchema = z.object({
+export const DesktopHostSchema = z.object({
+	osReleaseId: z.string().optional(),
+	osReleaseVersion: z.string().optional(),
+	kernelRelease: z.string().optional(),
+	hostname: z.string().optional(),
+	cpuArch: z.string().optional(),
+	username: z.string().optional(),
+	posixLocale: z.string().optional(),
+});
+export type DesktopHost = z.infer<typeof DesktopHostSchema>;
+
+
+export const DeviceFacts_SerializeSchema = z.object({
+	os: z.string(),
+	osVersion: z.string(),
+	model: z.string(),
+	locale: z.string(),
+	build: AndroidBuildSchema,
+	desktop: DesktopHostSchema.nullable().optional(),
+});
+export type DeviceFacts_Serialize = z.infer<typeof DeviceFacts_SerializeSchema>;
+
+
+export const DeviceFacts_DeserializeSchema = z.object({
 	os: z.string(),
 	osVersion: z.string(),
 	model: z.string(),
 	locale: z.string(),
 	build: AndroidBuildSchema.optional(),
+	desktop: DesktopHostSchema.nullable().optional(),
 });
+export type DeviceFacts_Deserialize = z.infer<typeof DeviceFacts_DeserializeSchema>;
+
+
+export const DeviceFactsSchema = z.union([DeviceFacts_DeserializeSchema, DeviceFacts_SerializeSchema]);
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
 
@@ -1871,18 +1899,37 @@ export const RequestIdentityDefaultsSchema = z.union([RequestIdentityDefaults_De
 export type RequestIdentityDefaults = z.infer<typeof RequestIdentityDefaultsSchema>;
 
 
-export const ResolvedIdentitySchema = z.object({
+export const ResolvedIdentity_SerializeSchema = z.object({
 	hwid: z.string(),
 	hwidSource: HwidSourceSchema,
 	autoHwid: z.string(),
 	autoHwidSource: HwidSourceSchema,
-	facts: DeviceFactsSchema,
+	facts: DeviceFacts_SerializeSchema,
 	headers: z.array(HeaderPreviewSchema),
 	cookieJar: z.boolean(),
 	locks: ProviderLocksSchema,
 	providerHidesDevice: z.boolean(),
 	providerHwidCookie: z.boolean(),
 });
+export type ResolvedIdentity_Serialize = z.infer<typeof ResolvedIdentity_SerializeSchema>;
+
+
+export const ResolvedIdentity_DeserializeSchema = z.object({
+	hwid: z.string(),
+	hwidSource: HwidSourceSchema,
+	autoHwid: z.string(),
+	autoHwidSource: HwidSourceSchema,
+	facts: DeviceFacts_DeserializeSchema,
+	headers: z.array(HeaderPreviewSchema),
+	cookieJar: z.boolean(),
+	locks: ProviderLocksSchema,
+	providerHidesDevice: z.boolean(),
+	providerHwidCookie: z.boolean(),
+});
+export type ResolvedIdentity_Deserialize = z.infer<typeof ResolvedIdentity_DeserializeSchema>;
+
+
+export const ResolvedIdentitySchema = z.union([ResolvedIdentity_DeserializeSchema, ResolvedIdentity_SerializeSchema]);
 export type ResolvedIdentity = z.infer<typeof ResolvedIdentitySchema>;
 
 
@@ -2029,7 +2076,7 @@ export const Response_SerializeSchema = z.union([z.object({
 	value: z.array(ProfileSchema),
 }), z.object({
 	kind: z.literal("requestIdentity"),
-	value: ResolvedIdentitySchema,
+	value: ResolvedIdentity_SerializeSchema,
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),
@@ -2107,7 +2154,7 @@ export const Response_DeserializeSchema = z.union([z.object({
 	value: z.array(ProfileSchema),
 }), z.object({
 	kind: z.literal("requestIdentity"),
-	value: ResolvedIdentitySchema,
+	value: ResolvedIdentity_DeserializeSchema,
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),
