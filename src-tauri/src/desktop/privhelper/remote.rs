@@ -26,6 +26,7 @@ use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};
 use crate::desktop::DesktopPlatform;
+#[cfg(unix)]
 use kasumi_log::{Area, ks_warn};
 
 pub struct RemotePlatform {

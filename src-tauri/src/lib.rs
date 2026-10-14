@@ -24,7 +24,9 @@ use kasumi_core::contract::{
 };
 use kasumi_core::enums::wire_value;
 use kasumi_core::state::RoutingMode;
-use kasumi_log::{Area, ks_error, ks_info, ks_warn};
+#[cfg(target_os = "linux")]
+use kasumi_log::ks_warn;
+use kasumi_log::{Area, ks_error, ks_info};
 
 pub mod defaults;
 pub mod desktop;
