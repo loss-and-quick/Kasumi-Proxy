@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WS_HEARTBEAT_MS } from "../../generated/defaults";
 
 vi.mock("../ksu-webui", () => ({
   hasKsuNativeApi: () => true,
@@ -39,8 +40,8 @@ class FakeSocket {
   push(value: unknown) {
     this.emit("message", { data: JSON.stringify({ event: "status", value }) });
   }
-  beat(intervalMs: number) {
-    this.emit("message", { data: JSON.stringify({ event: "heartbeat", value: { intervalMs } }) });
+  beat() {
+    this.emit("message", { data: JSON.stringify({ event: "heartbeat" }) });
   }
   sent: { id: number }[] = [];
   send(data: string) {
@@ -140,33 +141,31 @@ describe("ws-rpc push stream", () => {
     const ws = last();
     ws.open();
     await settle();
-    ws.beat(10_000);
 
     const reply = wsDispatch({ cmd: "status" } as never);
     await settle();
     // Five minutes of work, well past any fixed timeout.
     for (let i = 0; i < 30; i++) {
-      await vi.advanceTimersByTimeAsync(10_000);
-      ws.beat(10_000);
+      await vi.advanceTimersByTimeAsync(WS_HEARTBEAT_MS);
+      ws.beat();
     }
     ws.reply(ws.sent[0].id, { kind: "ok" });
     await expect(reply).resolves.toEqual({ kind: "ok" });
     expect(FakeSocket.instances).toHaveLength(1);
   });
 
-  it("a socket that falls silent fails its requests and reconnects", async () => {
+  it("a socket silent from the start fails its requests and reconnects", async () => {
     const { subscribeStatus, wsDispatch } = await import("../ws-rpc");
     subscribeStatus(() => {});
     await settle();
     last().open();
     await settle();
-    last().beat(10_000);
 
     const reply = wsDispatch({ cmd: "status" } as never);
     const failed = expect(reply).rejects.toThrow("the daemon stopped responding");
-    await vi.advanceTimersByTimeAsync(29_000);
+    await vi.advanceTimersByTimeAsync(3 * WS_HEARTBEAT_MS - 1);
     expect(FakeSocket.instances).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(1);
     await failed;
     await vi.advanceTimersByTimeAsync(1_000);
     expect(FakeSocket.instances).toHaveLength(2);

@@ -289,6 +289,10 @@ pub enum PushFrame {
     AssetsUpdated { value: AssetsUpdatedEvent },
 }
 
+/// How often the daemon sends `{"event":"heartbeat"}` on each WebUI socket. A
+/// client takes a socket that stays silent for a few of these as dead.
+pub const WS_HEARTBEAT_MS: u64 = 10_000;
+
 /// WS bootstrap the daemon writes (and serves via the `wsInfo` command).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct WsInfo {

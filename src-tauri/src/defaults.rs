@@ -111,7 +111,7 @@ pub fn render() -> String {
     );
     // Test-core ports are backend-internal now (the daemon leases them from one
     // shared pool); the frontend just names a profile, so they're not exported.
-    let nums: [(&str, i64); 5] = [
+    let nums: [(&str, i64); 6] = [
         (
             "DEFAULT_LOCAL_SOCKS_PORT",
             state::DEFAULT_LOCAL_SOCKS_PORT as i64,
@@ -129,6 +129,10 @@ pub fn render() -> String {
         (
             "SCHEMA_VERSION",
             i64::from(kasumi_core::migrate::SCHEMA_VERSION),
+        ),
+        (
+            "WS_HEARTBEAT_MS",
+            kasumi_core::contract::WS_HEARTBEAT_MS as i64,
         ),
     ];
     for (name, value) in nums {

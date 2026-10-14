@@ -9,6 +9,7 @@
 // ============================================================
 
 import type { Command_Deserialize, Response_Serialize, WsInfo } from "../generated/bindings";
+import { WS_HEARTBEAT_MS } from "../generated/defaults";
 import { execNative, getModuleId, hasKsuNativeApi } from "./ksu-webui";
 import { logDebug, logWarn } from "./logger";
 
@@ -21,8 +22,9 @@ interface ReplyFrame {
   event?: string;
 }
 
-/** Heartbeat intervals a socket may stay silent before it counts as dead. */
-const HEARTBEAT_MISSES = 3;
+/** How long a socket may stay silent before it counts as dead: three missed
+ *  heartbeats. */
+const SILENCE_LIMIT_MS = WS_HEARTBEAT_MS * 3;
 
 let socket: WebSocket | null = null;
 let connecting: Promise<WebSocket> | null = null;
@@ -57,15 +59,13 @@ async function endpoint(): Promise<string> {
   return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
 }
 
-/** The current socket's heartbeat interval; 0 until the daemon names it. */
-let heartbeatMs = 0;
 let silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Re-arm the silence check. A request has no timeout of its own, since the daemon
+/** Restart the silence check. A request has no timeout of its own, since the daemon
  *  bounds its own work: it fails when its socket closes, or when the socket stays
- *  quiet for a few heartbeats and so is dead even if the OS never reports it. */
+ *  silent past the limit and so is dead even if the OS never reports it. */
 function noteAlive(ws: WebSocket): void {
-  if (ws !== socket || heartbeatMs === 0) return;
+  if (ws !== socket) return;
   if (silenceTimer) clearTimeout(silenceTimer);
   silenceTimer = setTimeout(() => {
     silenceTimer = null;
@@ -75,27 +75,23 @@ function noteAlive(ws: WebSocket): void {
       return;
     }
     // The one failure the UI cannot explain on its own.
-    logWarn("ws: the daemon stopped answering", { silentMs: heartbeatMs * HEARTBEAT_MISSES });
+    logWarn("ws: the daemon stopped answering", { silentMs: SILENCE_LIMIT_MS });
     onClose(ws, "the daemon stopped responding");
     ws.close();
-  }, heartbeatMs * HEARTBEAT_MISSES);
+  }, SILENCE_LIMIT_MS);
 }
 
 function handleMessage(ws: WebSocket, ev: MessageEvent): void {
-  let msg: ReplyFrame | null = null;
+  noteAlive(ws);
+  let msg: ReplyFrame;
   try {
     msg = JSON.parse(typeof ev.data === "string" ? ev.data : "") as ReplyFrame;
   } catch {
     // Our own daemon sends JSON; a frame that is not is either a stray version or
     // something else on the port. Nothing can be done about it here.
     logDebug("ws: dropped a frame that is not JSON");
+    return;
   }
-  if (msg?.event === "heartbeat") {
-    const { intervalMs } = (msg.value ?? {}) as { intervalMs?: unknown };
-    if (ws === socket && typeof intervalMs === "number" && intervalMs > 0) heartbeatMs = intervalMs;
-  }
-  noteAlive(ws);
-  if (!msg || msg.event === "heartbeat") return;
   if (msg.event === "status") {
     for (const cb of statusCbs) cb(msg.value);
     return;
@@ -158,7 +154,6 @@ function onClose(closed: WebSocket, reason = "connection closed"): void {
   }
   if (socket !== closed) return;
   socket = null;
-  heartbeatMs = 0;
   if (silenceTimer) {
     clearTimeout(silenceTimer);
     silenceTimer = null;
@@ -193,6 +188,7 @@ async function ensureSocket(): Promise<WebSocket> {
     ws.addEventListener("message", (ev) => handleMessage(ws, ev));
     ws.addEventListener("close", () => onClose(ws));
     socket = ws;
+    noteAlive(ws);
     connecting = null;
     reconnectDelay = RECONNECT_FIRST_MS;
     return ws;

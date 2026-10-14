@@ -22,11 +22,8 @@ use uuid::Uuid;
 use kasumi_backend::Service;
 use kasumi_backend::commands::{Command, Response as CmdResponse};
 use kasumi_backend::fsjson::write_json_atomic;
-use kasumi_core::contract::{PushFrame, WsInfo};
+use kasumi_core::contract::{PushFrame, WS_HEARTBEAT_MS, WsInfo};
 use kasumi_log::{Area, ks_info, ks_warn};
-
-/// How often each connection carries a heartbeat.
-const HEARTBEAT: Duration = Duration::from_secs(10);
 
 /// One WS request: an `id` for correlation plus the flattened [`Command`].
 #[derive(Deserialize)]
@@ -139,16 +136,12 @@ async fn handle_socket(socket: WebSocket, service: Arc<Service>) {
         let _ = tx.send(frame(&PushFrame::Status { value: status }));
     }
 
-    // A heartbeat, first one at once, tells the client the daemon still answers
-    // while a command runs long. It names its interval, so the client needs no
-    // timeout of its own.
+    // The heartbeat tells the client the daemon still answers while a command runs
+    // long, so a request needs no timeout of its own.
     let beat_tx = tx.clone();
     let heartbeat = tokio::spawn(async move {
-        let beat = frame(&serde_json::json!({
-            "event": "heartbeat",
-            "value": { "intervalMs": HEARTBEAT.as_millis() as u64 },
-        }));
-        let mut tick = tokio::time::interval(HEARTBEAT);
+        let beat = frame(&serde_json::json!({ "event": "heartbeat" }));
+        let mut tick = tokio::time::interval(Duration::from_millis(WS_HEARTBEAT_MS));
         loop {
             tick.tick().await;
             if beat_tx.send(beat.clone()).is_err() {
