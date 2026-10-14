@@ -7,7 +7,8 @@ use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
 use crate::config_shared::{parse_pem_chain, split_csv, split_list};
-use crate::enums::{Fingerprint, HeaderType, Security, SsMethod};
+use crate::core::rule_target_fallback;
+use crate::enums::{CoreEngine, Fingerprint, HeaderType, Security, SsMethod};
 use crate::mixins::Transport;
 use crate::profile::Profile;
 use crate::state::{
@@ -1411,7 +1412,7 @@ fn build_singbox_profile_targets(
                 continue;
             }
             match profiles.iter().find(|p| p.meta().id == id) {
-                Some(profile) if !matches!(profile, Profile::Custom(_)) => {
+                Some(profile) if rule_target_fallback(profile, CoreEngine::SingBox).is_none() => {
                     let mut target = build_singbox_outbound(profile, s);
                     if let Some(o) = target.as_object_mut() {
                         o.insert("tag".into(), id.clone().into());
@@ -1762,6 +1763,45 @@ mod tests {
             .unwrap();
         assert_eq!(dr["server"], "local");
         assert_eq!(dr["package_name"], json!(["com.example.app"]));
+    }
+
+    #[test]
+    fn a_custom_rule_target_goes_through_the_proxy() {
+        let custom: Profile = serde_json::from_value(json!({
+            "protocol": "custom",
+            "meta": { "id": "custom", "remarks": "C", "groupId": "g-main" },
+            "raw": "{}",
+        }))
+        .unwrap();
+        let all = vec![
+            chained("trojan://pw@a.ex:443?security=tls&sni=a.ex", "active", None),
+            chained("tuic://u:pw@t.ex:443?sni=t.ex", "tuic", None),
+            custom,
+        ];
+        let s = AdvancedSettings {
+            routing_mode: RoutingMode::Rules,
+            ..Default::default()
+        };
+        let rules: Vec<RoutingRule> = ["tuic", "custom"]
+            .iter()
+            .map(|id| RoutingRule {
+                ip: Some(vec![format!("10.0.0.{}/32", id.len())]),
+                ..source_rule(id)
+            })
+            .collect();
+        let cfg =
+            build_singbox_config(&all[0], &s, &rules, &all, SingboxBuildOpts::default()).unwrap();
+        let outbound_for = |ip: &str| {
+            cfg["route"]["rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r["ip_cidr"] == json!([ip]))
+                .unwrap()["outbound"]
+                .clone()
+        };
+        assert_eq!(outbound_for("10.0.0.4/32"), "tuic");
+        assert_eq!(outbound_for("10.0.0.6/32"), "proxy");
     }
 
     fn chained(uri: &str, id: &str, via: Option<&str>) -> Profile {

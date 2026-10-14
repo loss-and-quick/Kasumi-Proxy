@@ -1535,6 +1535,11 @@ const ar = {
   "routes.out.direct": "مباشر",
   "routes.out.block": "حظر",
   "routes.out.deleted": "الوكيل (الملف محذوف)",
+  "routes.target.customConfig":
+    "لا يمكن أن يكون الإعداد المخصص هدفًا لقاعدة: تمر هذه الحركة عبر الوكيل النشط.",
+  "routes.target.singBoxOnly":
+    "هذا الملف الشخصي يعمل فقط على sing-box، والنشط يعمل على {core}: تمر هذه الحركة عبر الوكيل النشط.",
+  "routes.target.cantStart": "تمر هذه الحركة عبر الوكيل النشط. {reason}",
   "profiles.label.deleted": "ملف محذوف",
   "profilePicker.title": "اختر ملفًا",
   "routingSheet.outboundDeletedHint":

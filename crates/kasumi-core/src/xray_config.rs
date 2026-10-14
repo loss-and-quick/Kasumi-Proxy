@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
 use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
-use crate::core::{core_conflict, skips_cert_check_unpinned};
+use crate::core::{core_conflict, xray_builds};
 use crate::custom_sanitize::{
     drop_pinned_allow_insecure, is_service_outbound, sanitize_provider_xray,
 };
@@ -452,12 +452,7 @@ fn is_stream(p: &Profile) -> bool {
 
 /// Build the outbound `proxy` object for a profile (None if it can't run on xray).
 fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
-    // Xray has removed its QUIC and HTTP/2 transports and rejects a config naming
-    // either, so such a profile (or chain hop) is left to sing-box. Likewise TLS
-    // that skips the certificate check unpinned: xray would check it anyway.
-    if matches!(p.transport(), Some(Transport::Quic(_) | Transport::H2(_)))
-        || skips_cert_check_unpinned(p)
-    {
+    if !xray_builds(p) {
         return None;
     }
     let mut outbound = build_outbound_base(p)?;
@@ -1342,6 +1337,54 @@ mod tests {
         // Emitting the package rule without its package would block example.com
         // for every app.
         assert!(emitted.iter().all(|r| r["outboundTag"] != "block"));
+    }
+
+    #[test]
+    fn a_rule_target_xray_cannot_build_goes_through_the_proxy() {
+        use crate::core::rule_target_fallback;
+        use crate::enums::CoreEngine;
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let p = sample();
+        let mut targets: Vec<Profile> = [
+            "tuic://u:pw@t.ex:443?sni=t.ex",
+            "vless://u@e.x:443?type=h2&security=tls",
+            "vless://u@e.x:443?type=ws&security=tls&sni=e.x&allowInsecure=1",
+            "vless://u@e.x:443?type=xhttp&security=tls&sni=e.x&allowInsecure=1",
+            "vless://u@e.x:443?type=xhttp&security=tls&sni=e.x",
+            "hysteria2://pw@h.x:443?sni=h.x",
+        ]
+        .iter()
+        .map(|uri| crate::share::parse_share_link(uri, None).unwrap())
+        .collect();
+        targets.push(custom("user", &json!({ "outbounds": [] })));
+        for (i, t) in targets.iter_mut().enumerate() {
+            t.meta_mut().id = format!("t{i}");
+        }
+        let mut all = targets.clone();
+        all.push(p.clone());
+        let mut fell_back = Vec::new();
+        for t in &targets {
+            let id = &t.meta().id;
+            let rules = [RoutingRule {
+                domain: Some(vec!["example.com".into()]),
+                ..source_rule(id)
+            }];
+            let cfg = build_xray_config(&p, &s, &rules, &all).unwrap();
+            let rule = cfg["routing"]["rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r.get("domain").is_some())
+                .unwrap();
+            let falls_back = rule_target_fallback(t, CoreEngine::Xray).is_some();
+            let expected = if falls_back { "proxy" } else { id.as_str() };
+            assert_eq!(rule["outboundTag"], expected, "{t:?}");
+            fell_back.push(falls_back);
+        }
+        assert_eq!(fell_back, [true, true, true, true, false, false, true]);
     }
 
     #[test]

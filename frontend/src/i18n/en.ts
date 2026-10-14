@@ -1283,6 +1283,11 @@ const en = {
   "routes.out.direct": "Direct",
   "routes.out.block": "Block",
   "routes.out.deleted": "Proxy (profile deleted)",
+  "routes.target.customConfig":
+    "A custom config can't be a rule's target: this traffic goes through the active proxy.",
+  "routes.target.singBoxOnly":
+    "This profile runs only on sing-box, and the active one runs on {core}: this traffic goes through the active proxy.",
+  "routes.target.cantStart": "This traffic goes through the active proxy. {reason}",
   "profiles.label.deleted": "Deleted profile",
   "profilePicker.title": "Choose a profile",
   "routingSheet.outboundDeletedHint":

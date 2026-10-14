@@ -704,6 +704,12 @@ export type CoreResolution = {
 	 *  (`app_process::sees_processes`).
 	 */
 	seesProcesses?: boolean,
+	/**
+	 *  The cores that can't build this profile as the target of another
+	 *  profile's routing rule, and why (`core::rule_target_fallback`). On such a
+	 *  core the rule's traffic goes through the active proxy instead.
+	 */
+	ruleTargetFallback?: Partial<{ [key in CoreEngine]: TargetFallback }>,
 };
 
 export type Custom = {
@@ -1939,6 +1945,18 @@ export type Subscription_Serialize = {
 	/**  The user agreed to import the full Xray configs this provider sends. */
 	allowProviderConfigs: boolean,
 };
+
+/**  Why a core can't build a profile as a routing-rule target. */
+export type TargetFallback = 
+/**
+ *  A custom config is a whole core config of its own, not one outbound that
+ *  fits into another profile's.
+ */
+{ kind: "customConfig" } | 
+/**  Its protocol, transport or TLS settings run only on sing-box. */
+{ kind: "singBoxOnly" } | 
+/**  No core can run the profile at all. */
+{ kind: "cantStart"; conflict: CoreConflict };
 
 /**  Plain TCP, optionally wearing the HTTP fake-header obfuscation. */
 export type TcpTransport = {

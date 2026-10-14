@@ -1212,6 +1212,10 @@ const zh = {
   "routes.out.direct": "直连",
   "routes.out.block": "阻止",
   "routes.out.deleted": "代理（配置已删除）",
+  "routes.target.customConfig": "自定义配置不能作为规则的目标：此流量将经由当前代理。",
+  "routes.target.singBoxOnly":
+    "此配置只能在 sing-box 上运行，而当前配置运行在 {core} 上：此流量将经由当前代理。",
+  "routes.target.cantStart": "此流量将经由当前代理。{reason}",
   "profiles.label.deleted": "已删除的配置",
   "profilePicker.title": "选择配置",
   "routingSheet.outboundDeletedHint": "此规则指向的配置已删除，其流量改走代理。请另选一个。",

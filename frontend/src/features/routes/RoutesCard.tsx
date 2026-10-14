@@ -38,7 +38,7 @@ import {
   ProfilePickerSheet,
   ProfilePickerTrigger,
 } from "../profiles/ProfilePicker";
-import { routeName, scopeSummary } from "./labels";
+import { routeName, scopeSummary, useTargetFallbackText } from "./labels";
 import { useRoutesView } from "./viewState";
 
 const RuleBlockSheet = lazy(() =>
@@ -71,6 +71,7 @@ export function RoutesCard() {
   const activeId = useAppStore((s) => s.activeId);
   const selectedId = useRoutesView((s) => s.routeId);
   const setRouteId = useRoutesView((s) => s.setRouteId);
+  const fallbackText = useTargetFallbackText();
 
   const [blockSheet, setBlockSheet] = useState<string | null>(null);
   const [addAt, setAddAt] = useState<number | null>(null);
@@ -87,6 +88,7 @@ export function RoutesCard() {
   const refs = routeBlocks(route);
   const deadFrom = catchAllBlockIndex(route, catchAllRules);
   const finalReachable = deadFrom < 0;
+  const finalFallback = fallbackText(routeFinal(route));
 
   const update = (patch: Partial<Route>) => void saveRoute({ ...route, ...patch });
   const onDragEnd = ({ active, over }: DragEndEvent) => {
@@ -250,6 +252,11 @@ export function RoutesCard() {
             <div>
               <div className="lr-title">{t("routes.final.title")}</div>
               {!finalReachable && <div className="lr-sub">{t("routes.final.unreachable")}</div>}
+              {finalFallback && (
+                <div className="lr-sub" style={{ color: "var(--warn)" }}>
+                  {finalFallback}
+                </div>
+              )}
             </div>
           </div>
           <ProfilePickerTrigger

@@ -14,7 +14,7 @@ import { useAppStore } from "../../store/useAppStore";
 import { useProfileLabels } from "../profiles/labels";
 import { isRedundantCatchAll, ruleIcon, ruleSummary } from "../settings/helpers";
 import { makeQuickRule, QUICK_RULES } from "../settings/rule-presets";
-import { outboundLabel } from "./labels";
+import { outboundLabel, useTargetFallbackText } from "./labels";
 
 export function RuleList({
   block,
@@ -34,6 +34,7 @@ export function RuleList({
   const rules = block.rules;
   const labels = useProfileLabels();
   const profileName = (tag: string) => outboundLabel(tag, t, labels);
+  const fallbackText = useTargetFallbackText();
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
     const from = rules.findIndex((r) => r.id === active.id);
@@ -66,6 +67,11 @@ export function RuleList({
                       sub={
                         <>
                           {ruleSummary(rule, t, formatters, profileName)}
+                          {fallbackText(rule.outboundTag) && (
+                            <div style={{ color: "var(--warn)", marginTop: 2 }}>
+                              {fallbackText(rule.outboundTag)}
+                            </div>
+                          )}
                           {index === catchAllIndex && (
                             <div style={{ color: "var(--warn)", marginTop: 2 }}>
                               {t(

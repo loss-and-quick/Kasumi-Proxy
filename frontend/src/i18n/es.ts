@@ -1304,6 +1304,11 @@ const es = {
   "routes.out.direct": "Directo",
   "routes.out.block": "Bloquear",
   "routes.out.deleted": "Proxy (perfil eliminado)",
+  "routes.target.customConfig":
+    "Una configuración personalizada no puede ser el destino de una regla: este tráfico va por el proxy activo.",
+  "routes.target.singBoxOnly":
+    "Este perfil solo funciona en sing-box y el activo funciona en {core}: este tráfico va por el proxy activo.",
+  "routes.target.cantStart": "Este tráfico va por el proxy activo. {reason}",
   "profiles.label.deleted": "Perfil eliminado",
   "profilePicker.title": "Elige un perfil",
   "routingSheet.outboundDeletedHint":

@@ -1244,6 +1244,11 @@ const hi = {
   "routes.out.direct": "सीधे",
   "routes.out.block": "ब्लॉक करें",
   "routes.out.deleted": "प्रॉक्सी (प्रोफ़ाइल हटाई गई)",
+  "routes.target.customConfig":
+    "कस्टम कॉन्फ़िग किसी नियम का लक्ष्य नहीं हो सकता: यह ट्रैफ़िक सक्रिय प्रॉक्सी से जाएगा।",
+  "routes.target.singBoxOnly":
+    "यह प्रोफ़ाइल केवल sing-box पर चलती है, और सक्रिय प्रोफ़ाइल {core} पर: यह ट्रैफ़िक सक्रिय प्रॉक्सी से जाएगा।",
+  "routes.target.cantStart": "यह ट्रैफ़िक सक्रिय प्रॉक्सी से जाएगा। {reason}",
   "profiles.label.deleted": "हटाई गई प्रोफ़ाइल",
   "profilePicker.title": "प्रोफ़ाइल चुनें",
   "routingSheet.outboundDeletedHint":

@@ -1443,6 +1443,11 @@ const ru = {
   "routes.out.direct": "Напрямую",
   "routes.out.block": "Блокировать",
   "routes.out.deleted": "Прокси (профиль удалён)",
+  "routes.target.customConfig":
+    "Кастомный конфиг не может быть целью правила: этот трафик пойдёт через активный прокси.",
+  "routes.target.singBoxOnly":
+    "Этот профиль работает только на sing-box, а активный — на {core}: этот трафик пойдёт через активный прокси.",
+  "routes.target.cantStart": "Этот трафик пойдёт через активный прокси. {reason}",
   "profiles.label.deleted": "Удалённый профиль",
   "profilePicker.title": "Выберите профиль",
   "routingSheet.outboundDeletedHint":
