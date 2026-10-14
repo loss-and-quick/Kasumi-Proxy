@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 use kasumi_core::contract::{AssetsUpdatedEvent, PushFrame, RunState, SubAppliedEvent};
 
+use kasumi_log::{Area, ks_warn};
+
 use crate::platform::StopDataPath;
 use crate::{asset_update, sub_update, updater};
 
@@ -36,7 +38,11 @@ impl Service {
         if state.active_id.is_none() || !state.settings.auto_start {
             return;
         }
-        let _ = self.run_lifecycle(LifecycleCmd::Start(None)).await;
+        // A boot-time start that fails is invisible otherwise: nothing else runs at
+        // this point, and the UI only ever sees "stopped".
+        if let Err(e) = self.run_lifecycle(LifecycleCmd::Start(None)).await {
+            ks_warn!(Area::Service, "auto-start failed: {e}");
+        }
     }
 
     /// Restart the data-path if it's up or coming up — re-pinning routing and rebuilding
@@ -45,8 +51,8 @@ impl Service {
     async fn restart_if_up(&self) -> bool {
         let _g = self.serialize.lock().await;
         let coming_up = self.data_path_up_or_coming().await;
-        if coming_up {
-            let _ = self.run_lifecycle(LifecycleCmd::Restart(None)).await;
+        if coming_up && let Err(e) = self.run_lifecycle(LifecycleCmd::Restart(None)).await {
+            ks_warn!(Area::Service, "restart after a change failed: {e}");
         }
         coming_up
     }
@@ -128,7 +134,14 @@ impl Service {
                 // doesn't show a zombie "connected".
                 if this.platform.data_path_healthy().await == Some(false) {
                     let _g = this.serialize.lock().await;
-                    let _ = this.platform.stop_data_path(StopDataPath::default()).await;
+                    // Teardown that fails leaves the zombie the watchdog is here to
+                    // clear, and nothing else would say so.
+                    if let Err(e) = this.platform.stop_data_path(StopDataPath::default()).await {
+                        ks_warn!(
+                            Area::Lifecycle,
+                            "could not tear the dead data path down: {e}"
+                        );
+                    }
                     drop(_g);
                     this.note_data_path_stopped();
                     this.emit_status().await;

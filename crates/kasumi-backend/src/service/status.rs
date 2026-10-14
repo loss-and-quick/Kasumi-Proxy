@@ -10,6 +10,7 @@ use kasumi_core::contract::{ConnectionProbe, FetchMode, PushFrame, RunState, Ser
 use kasumi_core::state::DEFAULT_DELAY_TEST_URL;
 
 use crate::net::{FetchUrlOptions, fetch_url};
+use kasumi_log::{Area, ks_debug, ks_warn};
 
 use super::Service;
 
@@ -57,7 +58,15 @@ impl Service {
     /// `None` when the platform's state probe fails. Both shells use it for the
     /// initial frame a client gets on connect.
     pub async fn current_status(&self) -> Option<ServiceStatus> {
-        let mut service = self.platform.service_state().await.ok()?;
+        let mut service = match self.platform.service_state().await {
+            Ok(service) => service,
+            // The caller gets no frame at all, so a probe that keeps failing looks
+            // like a quiet daemon rather than a broken one.
+            Err(e) => {
+                ks_warn!(Area::Platform, "service state unavailable: {e}");
+                return None;
+            }
+        };
         let state = crate::state::read_state_shell(&self.platform.paths().app_state).await;
         let check = state.as_ref().is_none_or(|s| s.settings.connectivity_check);
         let active_id = state.and_then(|s| s.active_id);
@@ -140,6 +149,9 @@ impl Service {
                 latency_ms: t0.elapsed().as_millis() as u64,
             },
             Err(e) => {
+                // The UI shows only the capped reason; the chain says why the probe
+                // itself could not run, which is the part that needs the log.
+                ks_debug!(Area::Net, "connectivity probe failed: {e:#}");
                 // Root cause, capped — e.g. "connection timed out", "connection refused".
                 let reason = e.to_string();
                 let reason = reason.chars().take(120).collect::<String>();
