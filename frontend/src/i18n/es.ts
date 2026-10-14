@@ -44,7 +44,7 @@ const es = {
   "overview.starting_btn": "Iniciando",
   "overview.connecting_btn": "Conectando",
   "overview.restart": "Reiniciar",
-  "overview.pendingRestart": "La configuración ha cambiado — reinicia para aplicarla",
+  "overview.pendingRestart": "Hay cambios pendientes — reinicia para aplicarlos",
   "tray.show": "Mostrar",
   "tray.quit": "Salir",
   "tray.recent": "Perfiles recientes",
@@ -85,7 +85,7 @@ const es = {
     other: "Eliminados # duplicados",
   }),
   "activity.assetDownloaded": "Recurso actualizado · {name}",
-  "activity.assetRestart": "Conexión reiniciada para aplicar los nuevos datos geográficos",
+  "activity.assetRestartPending": "Nuevos datos geográficos — reinicia para aplicarlos",
   "activity.profileSaved": "Perfil guardado · {remarks}",
   "time.now": "ahora",
   "time.ago": "hace {n}{unit}",
@@ -1105,8 +1105,8 @@ const es = {
   "settings.assetAutoUpdate": "Actualización automática",
   "settings.assetAutoUpdateSub": "Actualizar geosite/geoip según una programación",
   "settings.assetUpdateInterval": "Intervalo de actualización",
-  "settings.assetAutoUpdateWarning":
-    "Cuando los datos geográficos cambian, la conexión activa se reinicia brevemente para aplicarlos.",
+  "settings.assetAutoUpdateNote":
+    "Los nuevos datos geográficos se aplican en el próximo reinicio; Kasumi te lo recordará.",
   "settings.assetIntervalHours": plural("count", { one: "Cada # hora", other: "Cada # horas" }),
   "settings.assetIntervalDays": plural("count", { one: "Cada # día", other: "Cada # días" }),
   "settings.assetDownload": "Descargar",

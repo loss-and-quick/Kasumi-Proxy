@@ -45,7 +45,7 @@ const en = {
   "overview.starting_btn": "Starting",
   "overview.connecting_btn": "Connecting",
   "overview.restart": "Restart",
-  "overview.pendingRestart": "Settings changed — restart to apply",
+  "overview.pendingRestart": "Changes are waiting — restart to apply",
   "tray.show": "Show",
   "tray.quit": "Quit",
   "tray.recent": "Recent profiles",
@@ -86,7 +86,7 @@ const en = {
     other: "Removed # duplicates",
   }),
   "activity.assetDownloaded": "Asset updated · {name}",
-  "activity.assetRestart": "Connection restarted to apply new geo data",
+  "activity.assetRestartPending": "New geo data — restart to apply",
   "activity.profileSaved": "Profile saved · {remarks}",
   "time.now": "now",
   "time.ago": "{n}{unit} ago",
@@ -1089,8 +1089,8 @@ const en = {
   "settings.assetAutoUpdate": "Auto-update",
   "settings.assetAutoUpdateSub": "Refresh geosite/geoip on a schedule",
   "settings.assetUpdateInterval": "Update interval",
-  "settings.assetAutoUpdateWarning":
-    "When the geo data changes, the active connection restarts briefly to apply it.",
+  "settings.assetAutoUpdateNote":
+    "New geo data applies on the next restart; Kasumi reminds you when one is due.",
   "settings.assetIntervalHours": plural("count", { one: "Every # hour", other: "Every # hours" }),
   "settings.assetIntervalDays": plural("count", { one: "Every # day", other: "Every # days" }),
   "settings.assetDownload": "Download",

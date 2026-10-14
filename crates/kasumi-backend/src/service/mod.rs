@@ -26,7 +26,8 @@ use kasumi_core::mutate::{Backup, MutationIntent};
 use crate::commands::{self, BackupRestored, Command, CommandError, Response};
 use crate::platform::Platform;
 use crate::sub_cookies::SubCookies;
-use crate::sub_update;
+use crate::updater::LifecycleControl;
+use crate::{asset_update, sub_update};
 
 use self::lifecycle::{LifecycleCmd, RunningPath};
 use self::status::ProbeVerdict;
@@ -63,6 +64,9 @@ pub struct Service {
     /// restart applies them). Recomputed on mutations and lifecycle edges only;
     /// `current_status` just reports it.
     pending_restart: AtomicBool,
+    /// Geo data the running core loaded at start changed on disk since; reported
+    /// as a pending restart until the next start or stop.
+    assets_stale: AtomicBool,
     /// Cookies providers set, shared by every subscription fetch and nothing else.
     sub_cookies: Arc<SubCookies>,
 }
@@ -89,6 +93,7 @@ impl Service {
             data_path_generation: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
+            assets_stale: AtomicBool::new(false),
             sub_cookies: Arc::default(),
         })
     }
@@ -147,6 +152,25 @@ impl Service {
                 .map_err(CommandError)?;
                 self.emit_status().await;
                 Ok(Response::State(Box::new(state)))
+            }
+            Command::DownloadAsset {
+                filename,
+                url,
+                mode,
+            } => {
+                let body = asset_update::fetch_asset(&*self.platform, &filename, &url, mode)
+                    .await
+                    .map_err(CommandError)?;
+                // As on the background update: the running core keeps the old data
+                // until its next start, decided under the lifecycle lock with the write.
+                let _g = self.serialize.lock().await;
+                let changed = asset_update::apply_asset(&*self.platform, &filename, &body)
+                    .await
+                    .map_err(CommandError)?;
+                if changed && asset_update::core_running(&*self.platform).await {
+                    self.note_assets_changed().await;
+                }
+                Ok(Response::Ok)
             }
             Command::Status => Ok(Response::Status(
                 self.current_status()

@@ -2,8 +2,9 @@
 //! every asset file, writes it to the dat dir and rebuilds the matching `.srs`.
 //! Because both cores load geo data at startup (xray reads the `.dat`, sing-box
 //! loads local rule-sets) and cache it in memory, fresh data only takes effect on
-//! a restart — so the active core is restarted, but only when a download actually
-//! changed the file content (mirrors the `sub_update` restart-only-on-change rule).
+//! a restart. A restart drops every connection and leaves traffic unproxied while
+//! the data path is down, so a running core is not restarted: when a download
+//! actually changed the file content, the restart is marked pending instead.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -21,20 +22,25 @@ use crate::state::read_app_state;
 use crate::updater::{self, LifecycleControl, now_ms};
 
 /// Download one asset into the dat dir and convert it, returning whether the file
-/// content actually changed (so a caller can decide whether a core restart is
-/// warranted). Shared by the `DownloadAsset` command and the headless tick.
-///
-/// The `.dat` and its `.srs` move together: a conversion failure rolls the `.dat`
-/// back to the bytes that were there before. Leaving the new `.dat` behind a failed
-/// conversion would make the *next* attempt compare equal and report "unchanged",
-/// so no restart would ever fire and the running core would stay on the old
-/// rule-sets indefinitely.
+/// content actually changed. For callers with no core lifecycle to coordinate with;
+/// the others fetch first and [`apply_asset`] under the lifecycle lock.
 pub async fn download_asset(
     platform: &dyn Platform,
     filename: &str,
     url: &str,
     mode: FetchMode,
 ) -> Result<bool, String> {
+    let body = fetch_asset(platform, filename, url, mode).await?;
+    apply_asset(platform, filename, &body).await
+}
+
+/// Fetch one asset's bytes, without touching the dat dir.
+pub async fn fetch_asset(
+    platform: &dyn Platform,
+    filename: &str,
+    url: &str,
+    mode: FetchMode,
+) -> Result<Vec<u8>, String> {
     if !safe_filename(filename) {
         return Err("invalid filename".into());
     }
@@ -56,14 +62,34 @@ pub async fn download_asset(
     if body.is_empty() {
         return Err("download failed".into());
     }
+    Ok(body)
+}
 
+/// Put fetched bytes in the dat dir and convert them, returning whether the file
+/// content actually changed (so a caller can decide whether a core restart is
+/// warranted). Run under the lifecycle lock where a core may start: a core that
+/// starts between the write and that decision would make it wrong.
+///
+/// The `.dat` and its `.srs` move together: a conversion failure rolls the `.dat`
+/// back to the bytes that were there before. Leaving the new `.dat` behind a failed
+/// conversion would make the *next* attempt compare equal and report "unchanged",
+/// so no restart would ever be marked and the core would stay on the old rule-sets
+/// indefinitely.
+pub async fn apply_asset(
+    platform: &dyn Platform,
+    filename: &str,
+    body: &[u8],
+) -> Result<bool, String> {
+    if !safe_filename(filename) {
+        return Err("invalid filename".into());
+    }
     let path = platform.paths().dat_dir.join(filename);
     // The previous bytes earn their memory twice: they decide whether the content
     // actually changed, and they are the rollback below.
     let previous = tokio::fs::read(&path).await.ok();
-    let changed = previous.as_deref() != Some(body.as_slice());
+    let changed = previous.as_deref() != Some(body);
 
-    write_bytes_atomic(&path, &body)
+    write_bytes_atomic(&path, body)
         .await
         .map_err(|e| e.to_string())?;
     if let Err(e) = platform.convert_asset(filename).await {
@@ -93,10 +119,10 @@ fn is_due(asset: &AssetFile, last_attempt: Option<i64>, now: i64, interval_ms: i
 
 /// One pass: re-fetch every due asset on the global interval. `last_attempt` is the
 /// caller's persistent backoff map; `serialize` is the lifecycle lock shared with the
-/// command path so a restart never interleaves with a start/stop. When any download
-/// changed the on-disk data and a core is running, the active core is restarted so the
-/// new geo data takes effect. `on_updated` fires once per pass that refreshed
-/// anything, so an open UI reloads the `lastUpdated` stamps this writes.
+/// command path so a write never interleaves with a start/stop. When any download
+/// changed the on-disk data and a core is running, its restart is marked pending.
+/// `on_updated` fires once per pass that refreshed anything, so an open UI reloads
+/// the `lastUpdated` stamps this writes.
 pub async fn tick(
     platform: &dyn Platform,
     lifecycle: &dyn LifecycleControl,
@@ -130,18 +156,34 @@ pub async fn tick(
         return;
     }
 
-    let mut any_changed = false;
+    let mut restart_pending = false;
     let mut refreshed: Vec<String> = Vec::new();
     for asset in &due {
         last_attempt.insert(asset.id.clone(), now);
         log::info!("asset-update {}: fetching", asset.remarks);
         // The frontend names the on-disk file after the asset's remarks.
-        match download_asset(platform, &asset.remarks, &asset.url, mode).await {
+        let body = match fetch_asset(platform, &asset.remarks, &asset.url, mode).await {
+            Ok(body) => body,
+            Err(message) => {
+                log::warn!("asset-update {}: failed: {message}", asset.remarks);
+                continue;
+            }
+        };
+        // The write and the pending decision share the lifecycle lock, so a start
+        // can't come between them and leave the flag wrong either way.
+        let _g = serialize.lock().await;
+        match apply_asset(platform, &asset.remarks, &body).await {
             Ok(changed) => {
-                any_changed |= changed;
                 refreshed.push(asset.remarks.clone());
-                let _g = serialize.lock().await;
                 mark_updated(platform, &asset.id, now).await;
+                if changed && core_running(platform).await {
+                    log::info!(
+                        "asset-update {}: changed, applies on the next core start",
+                        asset.remarks
+                    );
+                    lifecycle.note_assets_changed().await;
+                    restart_pending = true;
+                }
             }
             Err(message) => log::warn!("asset-update {}: failed: {message}", asset.remarks),
         }
@@ -149,24 +191,18 @@ pub async fn tick(
     if refreshed.is_empty() {
         return;
     }
-
-    let mut restarted = false;
-    if any_changed {
-        let _g = serialize.lock().await;
-        let running = platform
-            .service_state()
-            .await
-            .map(|s| s.engine.is_some())
-            .unwrap_or(false);
-        if running && let Some(active) = read_app_state(platform).await.and_then(|s| s.active_id) {
-            log::info!("asset-update: geo data changed, restarting active core");
-            restarted = lifecycle.restart(Some(active)).await.is_ok();
-        }
-    }
     on_updated(AssetsUpdatedEvent {
         remarks: refreshed,
-        restarted,
+        restart_pending,
     });
+}
+
+/// Whether a core is running on the data loaded at its start.
+pub async fn core_running(platform: &dyn Platform) -> bool {
+    platform
+        .service_state()
+        .await
+        .is_ok_and(|s| s.engine.is_some())
 }
 
 /// Stamp the asset's `last_updated` (epoch-ms) in the persisted state.
@@ -243,6 +279,9 @@ mod tests {
             self.calls.lock().unwrap().push("reload".into());
             Ok(())
         }
+        async fn note_assets_changed(&self) {
+            self.calls.lock().unwrap().push("assets-changed".into());
+        }
     }
 
     /// A minimal HTTP server serving a fixed body, so a tick's download is a real
@@ -287,7 +326,7 @@ mod tests {
 
     /// State with one auto-updating asset pointed at `url`, and a real active
     /// profile — the write-side chain nulls a dangling `active_id`, and without one
-    /// there would be nothing for the updater to restart.
+    /// no core would count as running.
     async fn state_with(p: &TestPlatform, url: &str) -> String {
         let profile = sample_vless();
         let active = profile.meta().id.clone();
@@ -349,10 +388,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn changed_content_stamps_restarts_and_notifies() {
+    async fn changed_content_stamps_marks_the_restart_pending_and_notifies() {
         let (p, _d) = TestPlatform::new();
         let server = Server::start(b"geo-v1").await;
-        let active = state_with(&p, &server.url).await;
+        state_with(&p, &server.url).await;
 
         let lc = RecordingLifecycle::new();
         let mut last = HashMap::new();
@@ -368,14 +407,15 @@ mod tests {
             .unwrap();
         assert_eq!(on_disk, b"geo-v1");
         assert_eq!(p.converted(), vec!["geoip.dat".to_string()]);
-        // First download of a file that wasn't there is a change → restart.
-        assert_eq!(lc.calls(), vec![format!("restart:Some({active:?})")]);
+        // First download of a file that wasn't there is a change; the running core
+        // keeps its connections and picks the data up on its next start.
+        assert_eq!(lc.calls(), vec!["assets-changed".to_string()]);
         let after = read_app_state(&p).await.unwrap();
         assert!(after.asset_files[0].last_updated.is_some());
         let events = seen.lock().unwrap().clone();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].remarks, vec!["geoip.dat".to_string()]);
-        assert!(events[0].restarted);
+        assert!(events[0].restart_pending);
     }
 
     #[tokio::test]
@@ -402,14 +442,14 @@ mod tests {
         assert!(after.asset_files[0].last_updated.is_some());
         let events = seen.lock().unwrap().clone();
         assert_eq!(events.len(), 1);
-        assert!(!events[0].restarted);
+        assert!(!events[0].restart_pending);
     }
 
     #[tokio::test]
-    async fn a_failed_conversion_rolls_back_so_the_retry_still_restarts() {
+    async fn a_failed_conversion_rolls_back_so_the_retry_still_marks_the_restart() {
         let (p, _d) = TestPlatform::new();
         let server = Server::start(b"geo-v1").await;
-        let active = state_with(&p, &server.url).await;
+        state_with(&p, &server.url).await;
         tokio::fs::write(p.paths().dat_dir.join("geoip.dat"), b"geo-v0")
             .await
             .unwrap();
@@ -421,7 +461,7 @@ mod tests {
         tick(&p, &lc, &Mutex::new(()), &mut last, &|_| {}).await;
 
         assert_eq!(server.hits(), 1);
-        // Nothing was applied: the dat is back to the old bytes, no stamp, no restart.
+        // Nothing was applied: the dat is back to the old bytes, no stamp, nothing pending.
         let on_disk = tokio::fs::read(p.paths().dat_dir.join("geoip.dat"))
             .await
             .unwrap();
@@ -437,7 +477,7 @@ mod tests {
         assert!(lc.calls().is_empty());
 
         // Second pass, conversion healthy: the content still reads as changed, so the
-        // core is restarted rather than left on the stale rule-sets.
+        // restart is marked rather than the core left on the stale rule-sets for good.
         p.fail_conversions(false);
         last.clear();
         tick(&p, &lc, &Mutex::new(()), &mut last, &|_| {}).await;
@@ -446,7 +486,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(on_disk, b"geo-v1");
-        assert_eq!(lc.calls(), vec![format!("restart:Some({active:?})")]);
+        assert_eq!(lc.calls(), vec!["assets-changed".to_string()]);
         assert!(
             read_app_state(&p).await.unwrap().asset_files[0]
                 .last_updated

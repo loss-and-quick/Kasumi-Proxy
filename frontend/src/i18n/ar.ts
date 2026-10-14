@@ -43,7 +43,7 @@ const ar = {
   "overview.starting_btn": "جارٍ البدء",
   "overview.connecting_btn": "جارٍ الاتصال",
   "overview.restart": "إعادة التشغيل",
-  "overview.pendingRestart": "تم تغيير الإعدادات — أعد التشغيل لتطبيقها",
+  "overview.pendingRestart": "هناك تغييرات معلّقة — أعد التشغيل لتطبيقها",
   "tray.show": "إظهار",
   "tray.quit": "خروج",
   "tray.recent": "الملفات الأخيرة",
@@ -99,7 +99,7 @@ const ar = {
     other: "تم حذف # تكرار",
   }),
   "activity.assetDownloaded": "تم تحديث المورد · {name}",
-  "activity.assetRestart": "تمت إعادة تشغيل الاتصال لتطبيق بيانات الموقع الجغرافي الجديدة",
+  "activity.assetRestartPending": "بيانات جغرافية جديدة — أعد التشغيل لتطبيقها",
   "activity.profileSaved": "تم حفظ الملف التعريفي · {remarks}",
   "time.now": "الآن",
   "time.ago": "منذ {n}{unit}",
@@ -1267,8 +1267,8 @@ const ar = {
   "settings.assetAutoUpdate": "تحديث تلقائي",
   "settings.assetAutoUpdateSub": "تحديث geosite/geoip وفق جدول زمني",
   "settings.assetUpdateInterval": "فترة التحديث",
-  "settings.assetAutoUpdateWarning":
-    "عند تغيّر بيانات الموقع الجغرافي، يُعاد تشغيل الاتصال النشط لفترة وجيزة لتطبيقها.",
+  "settings.assetAutoUpdateNote":
+    "تُطبَّق البيانات الجغرافية الجديدة عند إعادة التشغيل التالية، وسيذكّرك Kasumi بذلك.",
   "settings.assetIntervalHours": plural("count", {
     zero: "كل # ساعة",
     one: "كل ساعة",

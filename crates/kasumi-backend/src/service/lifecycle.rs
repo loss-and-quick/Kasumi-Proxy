@@ -81,7 +81,11 @@ impl Service {
                 self.platform
                     .stop_data_path(StopDataPath::default())
                     .await
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| e.to_string())?;
+                // Only once it is down: a core a failed stop left running still has
+                // the old geo data.
+                self.assets_stale.store(false, Ordering::SeqCst);
+                Ok(())
             }
             LifecycleCmd::ReloadAppFilter => {
                 // The filter is part of what a start builds (the core config, or the OS
@@ -108,6 +112,7 @@ impl Service {
     fn note_data_path_started(&self, config: CoreConfig, profile_id: String) {
         *self.running_config.lock().unwrap() = Some(RunningPath { config, profile_id });
         self.pending_restart.store(false, Ordering::SeqCst);
+        self.assets_stale.store(false, Ordering::SeqCst);
     }
 
     /// Drop the running-config baseline: with nothing running there is nothing
@@ -176,5 +181,10 @@ impl LifecycleControl for Service {
     }
     async fn reload_app_filter(&self) -> Result<(), String> {
         self.run_lifecycle(LifecycleCmd::ReloadAppFilter).await
+    }
+    async fn note_assets_changed(&self) {
+        if !self.assets_stale.swap(true, Ordering::SeqCst) {
+            self.emit_status().await;
+        }
     }
 }

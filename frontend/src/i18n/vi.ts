@@ -44,7 +44,7 @@ const vi = {
   "overview.starting_btn": "Đang khởi động",
   "overview.connecting_btn": "Đang kết nối",
   "overview.restart": "Khởi động lại",
-  "overview.pendingRestart": "Cài đặt đã thay đổi — khởi động lại để áp dụng",
+  "overview.pendingRestart": "Có thay đổi đang chờ — khởi động lại để áp dụng",
   "tray.show": "Hiển thị",
   "tray.quit": "Thoát",
   "tray.recent": "Hồ sơ gần đây",
@@ -82,7 +82,7 @@ const vi = {
     other: "Đã xóa # bản trùng",
   }),
   "activity.assetDownloaded": "Đã cập nhật tài nguyên · {name}",
-  "activity.assetRestart": "Đã khởi động lại kết nối để áp dụng dữ liệu geo mới",
+  "activity.assetRestartPending": "Dữ liệu geo mới — khởi động lại để áp dụng",
   "activity.profileSaved": "Đã lưu hồ sơ · {remarks}",
   "time.now": "vừa xong",
   "time.ago": "{n}{unit} trước",
@@ -1066,8 +1066,8 @@ const vi = {
   "settings.assetAutoUpdate": "Tự động cập nhật",
   "settings.assetAutoUpdateSub": "Làm mới geosite/geoip theo lịch",
   "settings.assetUpdateInterval": "Khoảng cập nhật",
-  "settings.assetAutoUpdateWarning":
-    "Khi dữ liệu geo thay đổi, kết nối đang hoạt động sẽ khởi động lại trong giây lát để áp dụng.",
+  "settings.assetAutoUpdateNote":
+    "Dữ liệu geo mới sẽ áp dụng ở lần khởi động lại tiếp theo; Kasumi sẽ nhắc bạn.",
   "settings.assetIntervalHours": plural("count", { other: "Mỗi # giờ" }),
   "settings.assetIntervalDays": plural("count", { other: "Mỗi # ngày" }),
   "settings.assetDownload": "Tải xuống",

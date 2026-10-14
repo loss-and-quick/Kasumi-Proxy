@@ -44,7 +44,7 @@ const ru = {
   "overview.starting_btn": "Запуск",
   "overview.connecting_btn": "Подключение",
   "overview.restart": "Перезапустить",
-  "overview.pendingRestart": "Настройки изменены — перезапустите, чтобы применить",
+  "overview.pendingRestart": "Есть изменения — перезапустите, чтобы применить",
   "tray.show": "Показать",
   "tray.quit": "Выход",
   "tray.recent": "Недавние профили",
@@ -95,7 +95,7 @@ const ru = {
     other: "Удалено # дубликата",
   }),
   "activity.assetDownloaded": "Ресурс обновлён · {name}",
-  "activity.assetRestart": "Соединение перезапущено для применения новых гео-данных",
+  "activity.assetRestartPending": "Новые гео-данные — перезапустите, чтобы применить",
   "activity.profileSaved": "Профиль сохранён · {remarks}",
   "time.now": "сейчас",
   "time.ago": "{n}{unit} назад",
@@ -1208,8 +1208,8 @@ const ru = {
   "settings.assetAutoUpdate": "Автообновление",
   "settings.assetAutoUpdateSub": "Обновлять geosite/geoip по расписанию",
   "settings.assetUpdateInterval": "Интервал обновления",
-  "settings.assetAutoUpdateWarning":
-    "При изменении гео-данных активное соединение ненадолго перезапустится, чтобы применить их.",
+  "settings.assetAutoUpdateNote":
+    "Новые гео-данные применятся при следующем перезапуске — Kasumi напомнит об этом.",
   "settings.assetIntervalHours": plural("count", {
     one: "Каждый # час",
     few: "Каждые # часа",

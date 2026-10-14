@@ -30,6 +30,8 @@ struct RecordingPlatform {
     /// Handed out once by `watch_network_change`.
     network: StdMutex<Option<tokio::sync::mpsc::Receiver<()>>>,
     uplink_restarts: AtomicBool,
+    /// When set, `stop_data_path` fails and leaves the data path running.
+    fail_stop: AtomicBool,
 }
 
 impl RecordingPlatform {
@@ -60,6 +62,7 @@ impl RecordingPlatform {
                 started: StdMutex::new(None),
                 network: StdMutex::new(None),
                 uplink_restarts: AtomicBool::new(true),
+                fail_stop: AtomicBool::new(false),
             }),
             dir,
         )
@@ -96,6 +99,9 @@ impl Platform for RecordingPlatform {
     }
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {
         self.log(&format!("stop:keep={}", opts.keep_service_state));
+        if self.fail_stop.load(Ordering::SeqCst) {
+            anyhow::bail!("stop failed");
+        }
         self.running.store(false, Ordering::SeqCst);
         Ok(())
     }
@@ -370,6 +376,97 @@ async fn config_mutation_flags_pending_restart_until_restart() {
     svc.dispatch(Command::Restart { profile_id: None })
         .await
         .unwrap();
+    assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
+async fn changed_geo_data_flags_pending_restart_until_the_next_start() {
+    use crate::updater::LifecycleControl;
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    platform.calls.lock().unwrap().clear();
+
+    let mut rx = svc.subscribe();
+    svc.note_assets_changed().await;
+    assert!(pending_restart(&svc).await);
+    let PushFrame::Status { value } = rx.recv().await.unwrap() else {
+        panic!("expected status")
+    };
+    assert!(value.pending_restart);
+    // Nothing was restarted behind the user's back.
+    assert!(platform.calls.lock().unwrap().is_empty());
+
+    // A settings edit that settles back to the running build keeps the geo flag.
+    set_settings(&svc, |s| s.fragment = true).await;
+    set_settings(&svc, |s| s.fragment = false).await;
+    assert!(pending_restart(&svc).await);
+
+    svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
+async fn a_failed_stop_keeps_the_geo_flag() {
+    use crate::updater::LifecycleControl;
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    svc.note_assets_changed().await;
+
+    platform.fail_stop.store(true, Ordering::SeqCst);
+    assert!(svc.dispatch(Command::Stop).await.is_err());
+    // The core still runs on the old data.
+    assert!(pending_restart(&svc).await);
+
+    platform.fail_stop.store(false, Ordering::SeqCst);
+    svc.dispatch(Command::Stop).await.unwrap();
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
+async fn a_manual_geo_download_flags_pending_restart_only_when_it_changes() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    platform.calls.lock().unwrap().clear();
+    tokio::fs::create_dir_all(&platform.paths.dat_dir)
+        .await
+        .unwrap();
+    let (base, _) = crate::testutil::serve(vec![
+        crate::testutil::http_response(200, &[], b"geo-v1"),
+        crate::testutil::http_response(200, &[], b"geo-v1"),
+    ])
+    .await;
+    let download = || Command::DownloadAsset {
+        filename: "geoip.dat".into(),
+        url: format!("{base}/geoip.dat"),
+        mode: Default::default(),
+    };
+
+    svc.dispatch(download()).await.unwrap();
+    assert!(pending_restart(&svc).await);
+    assert!(platform.calls.lock().unwrap().is_empty());
+
+    // The same bytes again leave a fresh start with nothing pending.
+    svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    svc.dispatch(download()).await.unwrap();
     assert!(!pending_restart(&svc).await);
 }
 

@@ -33,6 +33,9 @@ pub trait LifecycleControl: Send + Sync {
     async fn stop(&self) -> Result<(), String>;
     async fn restart(&self, profile_id: Option<String>) -> Result<(), String>;
     async fn reload_app_filter(&self) -> Result<(), String>;
+    /// Data the running core loaded at start changed on disk; it applies on the
+    /// next start, which the user is told is pending.
+    async fn note_assets_changed(&self) {}
 }
 
 #[cfg(test)]

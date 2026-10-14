@@ -441,13 +441,12 @@ export type AssetFile = {
 export type AssetsUpdated = AssetsUpdatedEvent;
 
 /**
- *  Daemon push: it refreshed geo assets headlessly. `restarted` says whether the
- *  active core was bounced to pick the new data up, so the UI can explain a
- *  connection blip it didn't ask for.
+ *  Daemon push: it refreshed geo assets headlessly. `restart_pending` says the
+ *  running core still has the old data and picks the new up on its next start.
  */
 export type AssetsUpdatedEvent = {
 	remarks: string[],
-	restarted: boolean,
+	restartPending: boolean,
 };
 
 /**  One line of a subscription's history of provider changes. */

@@ -43,7 +43,7 @@ const hi = {
   "overview.starting_btn": "शुरू हो रहा है",
   "overview.connecting_btn": "कनेक्ट हो रहा है",
   "overview.restart": "पुनः प्रारंभ करें",
-  "overview.pendingRestart": "सेटिंग्स बदल गई हैं — लागू करने के लिए पुनः प्रारंभ करें",
+  "overview.pendingRestart": "बदलाव लंबित हैं — लागू करने के लिए पुनः प्रारंभ करें",
   "tray.show": "दिखाएँ",
   "tray.quit": "बाहर निकलें",
   "tray.recent": "हाल के प्रोफ़ाइल",
@@ -81,7 +81,7 @@ const hi = {
   }),
   "activity.duplicatesRemoved": plural("count", { one: "# डुप्लिकेट हटाया", other: "# डुप्लिकेट हटाए" }),
   "activity.assetDownloaded": "संसाधन अपडेट · {name}",
-  "activity.assetRestart": "नया जियो डेटा लागू करने के लिए कनेक्शन पुनः आरंभ हुआ",
+  "activity.assetRestartPending": "नया जियो डेटा — लागू करने के लिए पुनः प्रारंभ करें",
   "activity.profileSaved": "प्रोफ़ाइल सहेजी · {remarks}",
   "time.now": "अभी",
   "time.ago": "{n}{unit} पहले",
@@ -1057,8 +1057,8 @@ const hi = {
   "settings.assetAutoUpdate": "स्वतः अपडेट",
   "settings.assetAutoUpdateSub": "geosite/geoip को निर्धारित समय पर अपडेट करें",
   "settings.assetUpdateInterval": "अपडेट अंतराल",
-  "settings.assetAutoUpdateWarning":
-    "जब जियो डेटा बदलता है, तो उसे लागू करने के लिए सक्रिय कनेक्शन कुछ देर के लिए पुनः आरंभ होता है।",
+  "settings.assetAutoUpdateNote":
+    "नया जियो डेटा अगली बार पुनः प्रारंभ करने पर लागू होगा; Kasumi आपको याद दिलाएगा।",
   "settings.assetIntervalHours": plural("count", { one: "हर # घंटे", other: "हर # घंटे" }),
   "settings.assetIntervalDays": plural("count", { one: "हर # दिन", other: "हर # दिन" }),
   "settings.assetDownload": "डाउनलोड",
