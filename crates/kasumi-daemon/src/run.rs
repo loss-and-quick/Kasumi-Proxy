@@ -8,6 +8,7 @@ use kasumi_backend::fs::write_text;
 use kasumi_backend::platform::{Platform, StopDataPath};
 use kasumi_backend::proc::{kill_if_running, read_pidfile};
 use kasumi_backend::{Command, Response, Service, dispatch};
+use kasumi_log::{Area, LogConfig};
 
 use crate::android::AndroidPlatform;
 use crate::android::paths::DAEMON_PIDFILE;
@@ -27,29 +28,28 @@ pub async fn run_entry() {
 }
 
 async fn run_daemon(platform: Arc<dyn Platform>) {
-    // Operational logging to stderr, which service.sh redirects into daemon.log.
-    // Default to info; override at runtime with RUST_LOG (e.g. RUST_LOG=debug).
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        // Its debug log prints the cookies providers set.
-        .filter_module("cookie_store", log::LevelFilter::Info)
-        .format_timestamp_secs()
-        .target(env_logger::Target::Stderr)
-        .init();
-    log::info!("kasumi-proxy daemon starting");
+    // Operational logging to stderr, which service.sh redirects into daemon.log, so
+    // panics and anything printed outside the facade land there too. Default to
+    // info; override at runtime with RUST_LOG (e.g. RUST_LOG=debug).
+    kasumi_log::pin_module(COOKIE_STORE, log::LevelFilter::Info);
+    kasumi_log::init(&LogConfig::default());
+    kasumi_log::ks_info!(Area::Service, "kasumi-proxy daemon starting");
 
     // One-time boot setup (route tables, sysctl locks, seed lifecycle state).
     // boot_init creates RUN_DIR, so the pidfile write below has somewhere to land.
     if let Err(e) = platform.boot_init().await {
-        eprintln!("kasumi-proxy: boot init failed: {e}");
+        kasumi_log::ks_error!(Area::Platform, "boot init failed: {e}");
     }
 
     // Record our own pid so `kasumi-proxy stop` (uninstall.sh) can find and
     // terminate this process, which runs the graceful teardown below.
     if let Err(e) = write_text(DAEMON_PIDFILE, &std::process::id().to_string()).await {
-        eprintln!("kasumi-proxy: could not write {DAEMON_PIDFILE}: {e}");
+        kasumi_log::ks_error!(Area::State, "could not write {DAEMON_PIDFILE}: {e}");
     }
 
     let service = Service::new(platform.clone()).await;
+    // Adopt the log level the user chose before the background jobs start talking.
+    kasumi_backend::state::apply_app_log_level(&*platform).await;
     service.spawn_background();
 
     // Graceful shutdown: tear down the data-path (core + tun + routing) before
@@ -62,10 +62,13 @@ async fn run_daemon(platform: Arc<dyn Platform>) {
     });
 
     if let Err(e) = server::serve(service).await {
-        eprintln!("kasumi-proxy: server error: {e}");
+        kasumi_log::ks_error!(Area::Ws, "server error: {e}");
         std::process::exit(1);
     }
 }
+
+/// A dependency whose debug output carries credentials, so no directive may raise it.
+const COOKIE_STORE: &str = "cookie_store";
 
 /// Stop a running daemon and leave a clean system. Used by `uninstall.sh` before
 /// it drops `/data/adb/kasumi-proxy`. First terminate the daemon process (graceful

@@ -11,6 +11,8 @@ use crate::lifecycle::resolve_and_write_config;
 use crate::platform::StopDataPath;
 use crate::updater::LifecycleControl;
 
+use kasumi_log::{Area, ks_error, ks_info};
+
 use super::Service;
 
 /// The lifecycle operations, run directly (no locking) by [`Service`]. Callers that
@@ -41,8 +43,18 @@ impl Service {
         Ok(Response::Ok)
     }
 
-    /// The lifecycle switch, run without the lock (the caller holds it).
+    /// The lifecycle switch, run without the lock (the caller holds the one).
     pub(super) async fn run_lifecycle(&self, cmd: LifecycleCmd) -> Result<(), String> {
+        // One record per lifecycle command, before anything can fail: the funnel
+        // every start, stop, restart and auto-update passes through, and the only
+        // place that knows which profile and mode were asked for.
+        let verb = match &cmd {
+            LifecycleCmd::Start(_) => "start",
+            LifecycleCmd::Stop => "stop",
+            LifecycleCmd::Restart(_) => "restart",
+            LifecycleCmd::ReloadAppFilter => "reload-app-filter",
+        };
+        ks_info!(Area::Lifecycle, "{verb} requested");
         match cmd {
             LifecycleCmd::Start(id) | LifecycleCmd::Restart(id) => {
                 self.platform
@@ -58,7 +70,14 @@ impl Service {
                 let (built, profile_id) = resolve_and_write_config(&*self.platform, id.as_deref())
                     .await
                     .map_err(|e| e.0)?;
+                ks_info!(
+                    Area::Lifecycle,
+                    "{verb}: profile={profile_id} mode={:?} engine={:?}",
+                    built.plan.mode,
+                    built.plan.engine,
+                );
                 if let Err(e) = self.platform.start_data_path(&built.plan).await {
+                    ks_error!(Area::Lifecycle, "{verb} failed: {e}");
                     // A failed bring-up must not leave a previously-set OS proxy
                     // pointing at a dead port.
                     self.platform.clear_os_proxy().await;
@@ -72,6 +91,7 @@ impl Service {
                     .await;
                 self.note_data_path_started(built, profile_id);
                 self.settle_pending_restart().await;
+                ks_info!(Area::Lifecycle, "{verb} complete");
                 Ok(())
             }
             LifecycleCmd::Stop => {

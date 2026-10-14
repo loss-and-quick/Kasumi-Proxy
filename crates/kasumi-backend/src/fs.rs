@@ -3,16 +3,25 @@
 //! Reads return `None` rather than erroring on a missing/unreadable file because
 //! the backend treats absent state, pidfiles and logs as the empty case.
 
+use std::io::ErrorKind;
 use std::path::Path;
 
+use kasumi_log::{Area, ks_debug};
 use tokio::fs;
 
 /// File contents as text, or `None` if it can't be read (missing, no permission).
+/// A file that exists and cannot be read is not the empty case, so it is recorded:
+/// everything downstream treats `None` as "nothing stored here".
 pub async fn read_text(path: impl AsRef<Path>) -> Option<String> {
-    fs::read(path)
-        .await
-        .ok()
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
+    let path = path.as_ref();
+    match fs::read(path).await {
+        Ok(bytes) => Some(String::from_utf8_lossy(&bytes).into_owned()),
+        Err(e) if e.kind() == ErrorKind::NotFound => None,
+        Err(e) => {
+            ks_debug!(Area::State, "cannot read {}: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Overwrite `path` with `data`.

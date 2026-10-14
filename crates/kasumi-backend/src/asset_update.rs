@@ -20,6 +20,7 @@ use crate::net::{FetchUrlOptions, fetch_url};
 use crate::platform::Platform;
 use crate::state::read_app_state;
 use crate::updater::{self, LifecycleControl, now_ms};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 /// Download one asset into the dat dir and convert it, returning whether the file
 /// content actually changed. For callers with no core lifecycle to coordinate with;
@@ -160,12 +161,16 @@ pub async fn tick(
     let mut refreshed: Vec<String> = Vec::new();
     for asset in &due {
         last_attempt.insert(asset.id.clone(), now);
-        log::info!("asset-update {}: fetching", asset.remarks);
+        ks_info!(Area::Asset, "asset-update {}: fetching", asset.remarks);
         // The frontend names the on-disk file after the asset's remarks.
         let body = match fetch_asset(platform, &asset.remarks, &asset.url, mode).await {
             Ok(body) => body,
             Err(message) => {
-                log::warn!("asset-update {}: failed: {message}", asset.remarks);
+                ks_warn!(
+                    Area::Asset,
+                    "asset-update {}: failed: {message}",
+                    asset.remarks
+                );
                 continue;
             }
         };
@@ -177,7 +182,8 @@ pub async fn tick(
                 refreshed.push(asset.remarks.clone());
                 mark_updated(platform, &asset.id, now).await;
                 if changed && core_running(platform).await {
-                    log::info!(
+                    ks_info!(
+                        Area::Asset,
                         "asset-update {}: changed, applies on the next core start",
                         asset.remarks
                     );
@@ -185,7 +191,11 @@ pub async fn tick(
                     restart_pending = true;
                 }
             }
-            Err(message) => log::warn!("asset-update {}: failed: {message}", asset.remarks),
+            Err(message) => ks_warn!(
+                Area::Asset,
+                "asset-update {}: failed: {message}",
+                asset.remarks
+            ),
         }
     }
     if refreshed.is_empty() {
@@ -221,7 +231,14 @@ async fn mark_updated(platform: &dyn Platform, asset_id: &str, now: i64) {
     }
     // Same write tail as the intent path: run the write-side chain (invariants)
     // then persist, so the chain stays the one enforcement point across every write.
-    let _ = crate::commands::persist_with_chain(platform, &prev, &mut next).await;
+    if let Err(e) = crate::commands::persist_with_chain(platform, &prev, &mut next).await {
+        // Without the stamp the asset is fetched again next tick; nothing else says
+        // why the conversion is being redone.
+        ks_warn!(
+            Area::Asset,
+            "could not record the update of {asset_id}: {e}"
+        );
+    }
 }
 
 #[cfg(test)]

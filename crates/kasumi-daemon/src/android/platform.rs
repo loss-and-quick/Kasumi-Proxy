@@ -32,6 +32,7 @@ use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::{AndroidBuild, DeviceFacts};
 use kasumi_core::state::{AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
 use kasumi_core::tun::TunOptions;
+use kasumi_log::{Area, ks_error, ks_info, ks_warn};
 
 use super::network::run_watcher;
 use super::paths::{
@@ -482,7 +483,10 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
         let Some(delay) = start_retry_delay(native, attempt, &log_text) else {
             return fail(&format!("core exited on startup — see {log}")).await;
         };
-        log::warn!("sing-box lost the xtables.lock race on startup; retrying in {delay:?}");
+        ks_warn!(
+            Area::Platform,
+            "sing-box lost the xtables.lock race on startup; retrying in {delay:?}"
+        );
         tokio::time::sleep(delay).await;
         attempt += 1;
     }
@@ -603,11 +607,19 @@ impl Platform for AndroidPlatform {
     async fn start_data_path(&self, plan: &DataPathPlan) -> anyhow::Result<()> {
         // Record the bring-up (no started_at yet) so teardown and the watchdog know
         // what runs before the core is even up.
+        ks_info!(
+            Area::Platform,
+            "bringing the data path up: engine={:?} mode={:?} tun={:?}",
+            plan.engine,
+            plan.mode,
+            plan.tun
+        );
         write_state(&plan.state(RunState::Connecting)).await;
         ensure_tun_node().await;
 
         let (bin, cfg, log) = core_files(plan.engine);
         if let Err(e) = start_inner(plan, bin, &cfg, &log).await {
+            ks_error!(Area::Platform, "data-path start failed: {e}");
             // Roll back the half-built data-path so a failed start leaves no orphans.
             let already_failed = read_state()
                 .await
@@ -615,17 +627,32 @@ impl Platform for AndroidPlatform {
             if !already_failed {
                 set_failed(&e.to_string()).await;
             }
-            let _ = self
+            // A rollback that fails is how a half-built data path outlives the start
+            // that could not finish; the caller is about to report the start failure
+            // and would never learn the rules are still there.
+            if let Err(cleanup) = self
                 .stop_data_path(StopDataPath {
                     keep_service_state: true,
                 })
-                .await;
+                .await
+            {
+                ks_error!(
+                    Area::Platform,
+                    "rolling the failed start back failed too: {cleanup}"
+                );
+            }
             return Err(e);
         }
+        ks_info!(Area::Platform, "data path up (engine={:?})", plan.engine);
         Ok(())
     }
 
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {
+        ks_info!(
+            Area::Platform,
+            "tearing the data path down (keep_state={})",
+            opts.keep_service_state
+        );
         let rs = RoutingState {
             tun_iface: read_iface(TUN_IFACE_FILE).await,
             tun2_iface: read_iface(TUN2_IFACE_FILE).await,
@@ -672,6 +699,7 @@ impl Platform for AndroidPlatform {
         if !opts.keep_service_state {
             write_state(&DataPathState::default()).await;
         }
+        ks_info!(Area::Platform, "data path down");
         Ok(())
     }
 

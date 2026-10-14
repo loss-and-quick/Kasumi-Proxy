@@ -44,6 +44,7 @@ use crate::state::read_app_state;
 use crate::sub_cookies::SubCookies;
 use crate::sub_meta;
 use crate::updater::{self, LifecycleControl, now_ms};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 /// Used unless the provider sends `subscription-request-timeout`. Longer than
 /// Happ's 7 s: a fetch through the proxy can be slow.
@@ -106,7 +107,7 @@ pub async fn tick(
         if !sub.filter.trim().is_empty() && filter.is_unfiltered() {
             continue;
         }
-        log::info!("sub-update {}: fetching", sub.remarks);
+        ks_info!(Area::Sub, "sub-update {}: fetching", sub.remarks);
         // Happ's background update keeps meta keys a response omits.
         let identity = &state.settings.request_identity;
         match fetch_and_map(
@@ -134,7 +135,11 @@ pub async fn tick(
                 )
                 .await
                 {
-                    log::info!("sub-update {}: applied {count} profiles", sub.remarks);
+                    ks_info!(
+                        Area::Sub,
+                        "sub-update {}: applied {count} profiles",
+                        sub.remarks
+                    );
                     // The provider may have renamed it.
                     let remarks = next
                         .subscriptions
@@ -149,7 +154,12 @@ pub async fn tick(
                 }
             }
             Err(e) => {
-                log::warn!("sub-update {}: failed: {}", sub.remarks, e.message);
+                ks_warn!(
+                    Area::Sub,
+                    "sub-update {}: failed: {}",
+                    sub.remarks,
+                    e.message
+                );
                 let _g = serialize.lock().await;
                 record_error(platform, &sub.id, &e).await;
             }
@@ -298,7 +308,7 @@ async fn fetch_and_map(
     merge: MergeMode,
 ) -> Result<Fetched, SubFetchError> {
     let url = subscription_fetch_url(&sub.url).map_err(|e| {
-        log::warn!("subscription {}: {e}", sub.remarks);
+        ks_warn!(Area::Sub, "subscription {}: {e}", sub.remarks);
         SubFetchError {
             message: format!("the encrypted link could not be decrypted: {e}"),
             kind: Some(SubErrorKind::UrlDecrypt),
@@ -346,14 +356,25 @@ async fn fetch_and_map(
     let res = match primary.await {
         Ok(res) => res,
         Err(e) => {
-            // Full cause chain (with the URL) to the log — the manual "update now"
-            // path logs nowhere else; the UI gets just the cause. A decrypted URL
-            // stays out of the log too.
+            // Full cause chain to the log — the manual "update now" path logs
+            // nowhere else; the UI gets just the cause. A decrypted URL is
+            // already secret-free, a plain one is the credential itself and
+            // arrives inside the chain in whatever form the client normalised
+            // it to, so the chain is redacted by shape.
+            let chain = kasumi_log::redact::in_text(&format!("{e:#}"));
             if encrypted {
                 let cause = display_fetch_error(&e);
-                log::warn!("subscription {}: fetch failed: {cause}", sub.remarks);
+                ks_warn!(
+                    Area::Sub,
+                    "subscription {}: fetch failed: {cause}",
+                    sub.remarks
+                );
             } else {
-                log::warn!("subscription {}: fetch failed: {e:#}", sub.remarks);
+                ks_warn!(
+                    Area::Sub,
+                    "subscription {}: fetch failed: {chain}",
+                    sub.remarks
+                );
             }
             let failed = SubFetchError {
                 message: display_fetch_error(&e),
@@ -371,14 +392,23 @@ async fn fetch_and_map(
             };
             match fetch_like_happ(happ_sub::meta::fetch_url(fallback), opts, &request).await {
                 Ok(res) => {
-                    log::info!("subscription {}: used the fallback URL", sub.remarks);
+                    ks_info!(
+                        Area::Sub,
+                        "subscription {}: used the fallback URL",
+                        sub.remarks
+                    );
                     used_fallback = Some(host_of(fallback));
                     // Happ merges a fallback response like a background update.
                     merge = MergeMode::Partial;
                     res
                 }
                 Err(e) => {
-                    log::warn!("subscription {}: fallback failed: {e:#}", sub.remarks);
+                    let chain = kasumi_log::redact::in_text(&format!("{e:#}"));
+                    ks_warn!(
+                        Area::Sub,
+                        "subscription {}: fallback failed: {chain}",
+                        sub.remarks
+                    );
                     return Err(failed);
                 }
             }
@@ -396,7 +426,7 @@ async fn fetch_and_map(
         title: &sub.remarks,
     })
     .map_err(|e| {
-        log::warn!("subscription {}: {e}", sub.remarks);
+        ks_warn!(Area::Sub, "subscription {}: {e}", sub.remarks);
         SubFetchError {
             message: e.to_string(),
             kind: Some(e.kind()),
@@ -433,7 +463,7 @@ async fn fetch_like_happ(
         let Some(cause) = result.as_ref().err().and_then(retry_cause) else {
             break;
         };
-        log::info!("subscription fetch failed ({cause:?}), retrying");
+        ks_info!(Area::Sub, "subscription fetch failed ({cause:?}), retrying");
         let retry = request.retry(cause);
         let opts = FetchUrlOptions {
             headers: retry.headers,
@@ -465,7 +495,7 @@ fn retry_cause(e: &anyhow::Error) -> Option<RetryCause> {
 
 fn log_warnings(sub: &Subscription, warnings: &[SubWarning]) {
     for w in warnings {
-        log::info!("subscription {}: {w:?}", sub.remarks);
+        ks_info!(Area::Sub, "subscription {}: {w:?}", sub.remarks);
     }
 }
 
@@ -565,7 +595,11 @@ async fn apply(
     if let Some(Outcome { record, .. }) = outcome {
         let live: Vec<&str> = next.subscriptions.iter().map(|s| s.id.as_str()).collect();
         if let Err(e) = sub_meta::write_entry(platform, &sub.id, Some(record), &live).await {
-            log::warn!("subscription {}: writing sub-meta failed: {e}", sub.remarks);
+            ks_warn!(
+                Area::Sub,
+                "subscription {}: writing sub-meta failed: {e}",
+                sub.remarks
+            );
         }
     }
 
@@ -627,7 +661,8 @@ async fn record_error(platform: &dyn Platform, sub_id: &str, e: &SubFetchError) 
             x.last_error = Some(e.message.clone());
             x.last_error_kind.clone_from(&e.kind);
             if e.needs_consent && offer_provider_configs(x, &now_iso()) {
-                log::info!(
+                ks_info!(
+                    Area::Sub,
                     "subscription {}: asked to allow its Xray configs",
                     x.remarks
                 );

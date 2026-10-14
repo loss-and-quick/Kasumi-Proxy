@@ -216,5 +216,6 @@ impl Service {
         self.spawn_sub_updater();
         self.spawn_asset_updater();
         self.spawn_status_push();
+        self.spawn_log_trim();
     }
 }

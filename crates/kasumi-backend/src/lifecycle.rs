@@ -25,6 +25,8 @@ use crate::fsjson::write_text_atomic;
 use crate::platform::Platform;
 use crate::proc::{RunOpts, pid_matches_bin, run, spawn_logged};
 
+use kasumi_log::{Area, ks_debug, ks_info, ks_warn};
+
 /// Map a hex digit to a consonant so the interface name starts with a letter
 /// (kernel rejects names beginning with a digit).
 fn lead_letter(c: char) -> char {
@@ -222,7 +224,12 @@ pub async fn sync_geo_asset(
 
     let tmp = srs_dir.join(format!(".{kind}.srs.tmp"));
     let _ = tokio::fs::remove_dir_all(&tmp).await;
-    if tokio::fs::create_dir_all(&tmp).await.is_err() {
+    if let Err(e) = tokio::fs::create_dir_all(&tmp).await {
+        ks_warn!(
+            Area::Asset,
+            "geo {kind}: could not stage the conversion in {}: {e}",
+            tmp.display()
+        );
         return;
     }
     let argv = vec![
@@ -235,11 +242,27 @@ pub async fn sync_geo_asset(
         "--prefix".into(),
         prefix.clone(),
     ];
-    let ok = run(&argv, RunOpts::default())
-        .await
-        .map(|r| r.code == 0)
-        .unwrap_or(false);
-    if ok {
+    // geodat2srs reports every failure on stderr and exits non-zero; without that
+    // text a broken conversion is indistinguishable from one that never ran.
+    let converted = match run(&argv, RunOpts::default()).await {
+        Ok(r) if r.code == 0 => true,
+        Ok(r) => {
+            ks_warn!(
+                Area::Asset,
+                "geo {kind}: geodat2srs exited {}{}",
+                r.code,
+                tail_of(&r.stderr)
+                    .map(|t| format!(": {t}"))
+                    .unwrap_or_default()
+            );
+            false
+        }
+        Err(e) => {
+            ks_warn!(Area::Asset, "geo {kind}: geodat2srs could not run: {e}");
+            false
+        }
+    };
+    if converted {
         // Replace this prefix's set with exactly the needed files.
         for f in &present {
             remove_file(srs_dir.join(f)).await;
@@ -253,11 +276,26 @@ pub async fn sync_geo_asset(
             }
         }
         let _ = tokio::fs::remove_dir_all(&tmp).await;
-        let _ = write_text(&stamp, &stamp_want).await;
+        if let Err(e) = write_text(&stamp, &stamp_want).await {
+            // Without the stamp the next boot reconverts; the log says why.
+            ks_warn!(
+                Area::Asset,
+                "geo {kind}: could not stamp the conversion: {e}"
+            );
+        }
     } else {
         let _ = tokio::fs::remove_dir_all(&tmp).await;
         remove_file(&stamp).await;
     }
+}
+
+/// The last lines of a command's stderr, flattened for a single-line record.
+fn tail_of(stderr: &str) -> Option<String> {
+    let lines: Vec<&str> = stderr.lines().rev().take(3).collect();
+    if lines.is_empty() {
+        return None;
+    }
+    Some(lines.into_iter().rev().collect::<Vec<&str>>().join(" | "))
 }
 
 /// Local rule_set `.srs` files a sing-box config references but that are missing.
@@ -351,6 +389,14 @@ pub async fn spawn_core(
     dat_dir: &str,
     kill_on_drop: bool,
 ) -> std::io::Result<Child> {
+    // Every spawn truncates its log (proc::build_logged_command), which erases the
+    // previous run's output — worth a record, or a core that keeps dying looks
+    // like one that says nothing.
+    ks_info!(
+        Area::Proc,
+        "starting {bin} (log truncated at {})",
+        log_path.display()
+    );
     spawn_logged(
         &core_argv(bin, cfg),
         &core_env(dat_dir),
@@ -437,12 +483,18 @@ async fn spawn_singbox_bridge(s: &TunSpawn<'_>) -> std::io::Result<Child> {
 
 /// Confirm the core stayed up: a bad config makes it exit within ~1s.
 pub async fn verify_core_alive(pid: i32, bin: &str, attempts: u32, delay: Duration) -> bool {
-    for _ in 0..attempts {
+    for attempt in 0..attempts {
         if !pid_matches_bin(pid, bin).await {
+            ks_warn!(
+                Area::Proc,
+                "{bin} (pid {pid}) exited within {} ms of the start",
+                delay.as_millis() * u128::from(attempt + 1)
+            );
             return false;
         }
         tokio::time::sleep(delay).await;
     }
+    ks_debug!(Area::Proc, "{bin} (pid {pid}) is up");
     true
 }
 

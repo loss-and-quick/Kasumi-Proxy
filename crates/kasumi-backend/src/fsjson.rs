@@ -4,14 +4,36 @@
 use std::path::Path;
 
 use kasumi_core::data_path_state::DataPathState;
+use kasumi_log::{Area, ks_debug, ks_warn};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tokio::fs;
 
 /// Read the persisted [`DataPathState`], or `None` when it is missing, corrupt or of
-/// another version — all of which mean "no data-path known".
+/// another version — all of which mean "no data-path known". A file that exists and
+/// is none of those is recorded: "no data path known" is what makes the service
+/// start a second one.
 pub async fn read_data_path_state(path: impl AsRef<Path>) -> Option<DataPathState> {
-    DataPathState::from_json(&fs::read(path).await.ok()?)
+    let path = path.as_ref();
+    let bytes = match fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => {
+            ks_debug!(Area::State, "cannot read {}: {e}", path.display());
+            return None;
+        }
+    };
+    match DataPathState::from_json(&bytes) {
+        Some(state) => Some(state),
+        None => {
+            ks_warn!(
+                Area::State,
+                "{} is not a data-path state this build recognises",
+                path.display()
+            );
+            None
+        }
+    }
 }
 
 /// Write the [`DataPathState`] atomically. The document lives in the run dir and is
@@ -24,10 +46,26 @@ pub async fn write_data_path_state(
     write_text_atomic(path, &state.to_json()).await
 }
 
-/// Parse `path` into `T`, or `None` if it's missing or not valid JSON for `T`.
+/// Parse `path` into `T`, or `None` if it's missing or not valid JSON for `T`. A
+/// corrupt document is reported: every caller reads `None` as "nothing stored yet",
+/// which for app-state means the app behaves like a fresh install.
 pub async fn read_json<T: DeserializeOwned>(path: impl AsRef<Path>) -> Option<T> {
-    let bytes = fs::read(path).await.ok()?;
-    serde_json::from_slice(&bytes).ok()
+    let path = path.as_ref();
+    let bytes = match fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(e) => {
+            ks_debug!(Area::State, "cannot read {}: {e}", path.display());
+            return None;
+        }
+    };
+    match serde_json::from_slice(&bytes) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            ks_warn!(Area::State, "{} is not valid JSON: {e}", path.display());
+            None
+        }
+    }
 }
 
 /// Serialize `value` and write it atomically.

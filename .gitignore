@@ -13,6 +13,7 @@ module/webroot/*
 src-tauri/binaries/
 
 # ── Node / Vite ──────────────────────────────────────────────────
+node_modules
 node_modules/
 frontend/dist/
 # tsc -b incremental build cache (per-package, machine-specific)

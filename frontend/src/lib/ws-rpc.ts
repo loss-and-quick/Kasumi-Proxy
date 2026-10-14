@@ -10,6 +10,7 @@
 
 import type { Command_Deserialize, Response_Serialize, WsInfo } from "../generated/bindings";
 import { execNative, getModuleId, hasKsuNativeApi } from "./ksu-webui";
+import { logDebug, logWarn } from "./logger";
 
 /** A daemon → client frame: an id-correlated reply or an event-tagged push. */
 interface ReplyFrame {
@@ -60,6 +61,9 @@ function handleMessage(ev: MessageEvent): void {
   try {
     msg = JSON.parse(typeof ev.data === "string" ? ev.data : "") as ReplyFrame;
   } catch {
+    // Our own daemon sends JSON; a frame that is not is either a stray version or
+    // something else on the port. Nothing can be done about it here.
+    logDebug("ws: dropped a frame that is not JSON");
     return;
   }
   if (msg.event === "status") {
@@ -101,6 +105,7 @@ function scheduleReconnect(): void {
     if (!hasListeners()) return;
     ensureSocket().catch(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+      logDebug("ws: reconnect failed", { nextAttemptMs: reconnectDelay });
       scheduleReconnect();
     });
   }, reconnectDelay);
@@ -109,10 +114,17 @@ function scheduleReconnect(): void {
 /** A closing socket settles only what it owns: one replaced while it was still
  *  closing must not drop the socket that took over. */
 function onClose(closed: WebSocket): void {
+  let dropped = 0;
   for (const [id, waiter] of pending) {
     if (waiter.socket !== closed) continue;
     waiter.reject(new Error("connection closed"));
     pending.delete(id);
+    dropped += 1;
+  }
+  // The callers that were waiting get an error they may show, but only the socket's
+  // own log says how many calls a close took down.
+  if (dropped > 0) {
+    logDebug("ws: the socket closed with calls in flight", { dropped });
   }
   if (socket !== closed) return;
   socket = null;
@@ -163,7 +175,11 @@ export async function wsDispatch(cmd: Command_Deserialize): Promise<Response_Ser
   return new Promise<Response_Serialize>((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id);
-      reject(new Error(`rpc ${(cmd as { cmd: string }).cmd} timed out`));
+      const name = (cmd as { cmd: string }).cmd;
+      // A reply that never came is the one failure the UI cannot explain on its
+      // own: the caller sees a timeout with nothing behind it.
+      logWarn("ws: a command timed out", { cmd: name, timeoutMs: RPC_TIMEOUT_MS });
+      reject(new Error(`rpc ${name} timed out`));
     }, RPC_TIMEOUT_MS);
     pending.set(id, {
       socket: ws,

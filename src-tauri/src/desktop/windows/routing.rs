@@ -24,6 +24,7 @@ use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
 use crate::desktop::net::is_loopback;
 use crate::desktop::{run_out, silent};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 use super::dns_guard;
 
@@ -152,7 +153,10 @@ fn set_adapter_dns(tun_ifindex: u32) -> std::io::Result<()> {
 /// it first. Both live on the adapter and go away with it. Best effort.
 async fn point_dns_at_tun(tun: &str, tun_ifindex: u32) {
     if let Err(e) = set_adapter_dns(tun_ifindex) {
-        log::info!("SetInterfaceDnsSettings unavailable ({e}); using netsh");
+        ks_info!(
+            Area::Platform,
+            "SetInterfaceDnsSettings unavailable ({e}); using netsh"
+        );
         run_argv(&netsh_dns_argv(tun)).await;
     }
     run_argv(&netsh_metric_argv(tun_ifindex)).await;
@@ -170,7 +174,10 @@ fn guard_dns(tun_ifindex: u32, core_bin: &str) {
     });
     match installed {
         Ok(guard) => *DNS_GUARD.lock().unwrap_or_else(PoisonError::into_inner) = Some(guard),
-        Err(e) => log::warn!("DNS guard not installed ({e}); other resolvers stay reachable"),
+        Err(e) => ks_warn!(
+            Area::Platform,
+            "DNS guard not installed ({e}); other resolvers stay reachable"
+        ),
     }
 }
 

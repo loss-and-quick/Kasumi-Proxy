@@ -42,6 +42,7 @@ use kasumi_core::state::{
 use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::stored_for_url;
 use kasumi_core::sub_policy::safe_provider_link;
+use kasumi_log::{Area, ks_warn};
 
 use crate::fs::{read_text, write_text};
 use crate::fsjson::read_json;
@@ -52,6 +53,17 @@ use crate::platform::{AppInfo, Platform};
 const FREE_PORTS_BASE: u16 = kasumi_core::contract::TEST_PORT_BASE;
 /// Default tail length for `log`.
 const LOG_TAIL_LINES: usize = 200;
+
+/// The variant name of a command — `Mutate`, `Status`, `Log` — without its payload.
+/// A command carries the whole intent or profile it was asked about, which is far
+/// too much for a log line, while "which command failed" is usually the question.
+pub fn command_name(command: &Command) -> String {
+    let rendered = format!("{command:?}");
+    match rendered.find(['{', '(']) {
+        Some(end) => rendered[..end].to_string(),
+        None => rendered,
+    }
+}
 
 /// Bad input or a failed operation; transports map it to their error form.
 #[derive(Debug, Clone)]
@@ -486,10 +498,20 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             let lines = lines.map(|n| n as usize).unwrap_or(LOG_TAIL_LINES);
             let path = paths.log(target);
             let Some(txt) = read_text(&path).await else {
-                return Ok(Response::Text(format!("(no log: {})", path.display())));
+                return Ok(Response::Text(unwritten_log(
+                    target,
+                    &path,
+                    lines,
+                    &kasumi_log::recent(lines),
+                )));
             };
             if txt.is_empty() {
-                return Ok(Response::Text(format!("(empty log: {})", path.display())));
+                return Ok(Response::Text(unwritten_log(
+                    target,
+                    &path,
+                    lines,
+                    &kasumi_log::recent(lines),
+                )));
             }
             let body = txt.strip_suffix('\n').unwrap_or(&txt);
             let all: Vec<&str> = body.split('\n').collect();
@@ -501,6 +523,9 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             for target in LOG_TARGETS {
                 let _ = write_text(paths.log(target), "").await;
             }
+            // The in-memory tail is part of what the viewer shows, so clearing the
+            // files has to clear it too — or the user clears and still sees records.
+            kasumi_log::buffer::clear();
             Ok(Response::Ok)
         }
 
@@ -516,15 +541,15 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             let limit = kb.max(0) as usize * 1024;
             for target in LOG_TARGETS {
                 let path = paths.log(target);
-                if let Some(txt) = read_text(&path).await
-                    && txt.len() > limit
-                {
-                    // Keep roughly the second half, cut on a char boundary.
-                    let mut start = txt.len() - limit / 2;
-                    while start < txt.len() && !txt.is_char_boundary(start) {
-                        start += 1;
+                // The shared trimmer, not a second implementation: it is the one the
+                // boot path and the periodic tick use, so "how a log shrinks" is a
+                // single answer. It cuts on a record boundary, which the old
+                // char-boundary cut was free to break mid-record.
+                match kasumi_log::rotate::trim_in_place(&path, limit as u64) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        ks_warn!(Area::Sys, "could not trim {}: {e}", path.display());
                     }
-                    let _ = crate::fsjson::write_text_atomic(&path, &txt[start..]).await;
                 }
             }
             Ok(Response::Ok)
@@ -748,18 +773,45 @@ pub(crate) async fn persist_with_chain(
 ) -> std::io::Result<()> {
     crate::state_mw::default_chain().run(prev, next);
     crate::state::write_app_state(platform, next).await?;
+    // Every write carries the settings, so this is where a changed log level
+    // reaches the running process — the UI's setting must not need a restart.
+    crate::state::apply_app_log_level(platform).await;
     // Whichever path dropped a profile (UI delete, provider refresh, backup
     // replace), its retained test logs go with it.
     crate::jobs::remove_dropped_test_logs(platform, prev, next).await;
     Ok(())
 }
 
-const LOG_TARGETS: [LogTarget; 4] = [
+/// Every log file the app keeps, in the order the viewer lists them.
+pub const LOG_TARGETS: [LogTarget; 4] = [
     LogTarget::Daemon,
     LogTarget::Xray,
     LogTarget::Singbox,
     LogTarget::TunEngine,
 ];
+
+/// What the viewer shows for a log file that has nothing in it. The app's own log
+/// has a fallback: the facade keeps the last records in memory, which is the only
+/// place a crash during boot is visible — the file is written by the very first
+/// thing that failed. The core logs have no such window, so they say so plainly.
+/// `buffered` is passed in rather than read here, so the decision can be tested
+/// without the process-wide buffer other tests are writing to.
+fn unwritten_log(target: LogTarget, path: &Path, lines: usize, buffered: &[String]) -> String {
+    let reason = if path.exists() {
+        format!("(empty log: {})", path.display())
+    } else {
+        format!("(no log: {})", path.display())
+    };
+    if target != LogTarget::Daemon || buffered.is_empty() {
+        return reason;
+    }
+    let shown = &buffered[buffered.len().saturating_sub(lines)..];
+    format!(
+        "{reason}\n--- {} record(s) this session, not yet on disk ---\n{}",
+        shown.len(),
+        shown.join("\n")
+    )
+}
 
 #[cfg(test)]
 mod tests {
@@ -1082,6 +1134,48 @@ mod tests {
             panic!()
         };
         assert_eq!(t, "c\nd");
+    }
+
+    #[test]
+    fn an_empty_app_log_falls_back_to_what_is_still_in_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("daemon.log");
+        std::fs::write(&path, "").unwrap();
+        let buffered = [
+            "2026-02-11T09:14:02.131+00:00 +0.001s INFO  kasumi::sys daemon starting".to_string(),
+            "2026-02-11T09:14:02.140+00:00 +0.002s WARN  kasumi::platform boot init failed"
+                .to_string(),
+        ];
+
+        let text = unwritten_log(LogTarget::Daemon, &path, 10, &buffered);
+        assert!(
+            text.starts_with(&format!("(empty log: {})", path.display())),
+            "{text}"
+        );
+        assert!(
+            text.contains("--- 2 record(s) this session, not yet on disk ---"),
+            "{text}"
+        );
+        assert!(text.contains("daemon starting"), "{text}");
+
+        // The tail the viewer asked for, and only the app's own log falls back.
+        let text = unwritten_log(LogTarget::Daemon, &path, 1, &buffered);
+        assert!(text.contains("boot init failed"), "{text}");
+        assert!(!text.contains("daemon starting"), "{text}");
+        let text = unwritten_log(LogTarget::Xray, &path, 10, &buffered);
+        assert_eq!(text, format!("(empty log: {})", path.display()));
+
+        // A core log that was never written, and an app log with nothing buffered. A
+        // daemon.log that does not exist yet falls back all the same — that is the
+        // boot crash this exists for.
+        let missing = dir.path().join("xray.log");
+        let text = unwritten_log(LogTarget::Daemon, &missing, 10, &buffered);
+        assert!(text.starts_with("(no log:"), "{text}");
+        assert!(text.contains("daemon starting"), "{text}");
+        assert_eq!(
+            unwritten_log(LogTarget::Daemon, &path, 10, &[]),
+            format!("(empty log: {})", path.display())
+        );
     }
 
     #[tokio::test]

@@ -4,7 +4,8 @@
 
 use std::path::Path;
 
-use kasumi_core::state::AppState;
+use kasumi_core::state::{AppState, LogLevel};
+use log::LevelFilter;
 use serde_json::Value;
 
 use crate::fsjson::{read_json, write_json_atomic};
@@ -43,6 +44,40 @@ pub async fn read_state_shell(app_state: &Path) -> Option<AppState> {
 fn migrated(mut doc: Value) -> Option<AppState> {
     kasumi_core::migrate::migrate_app_state(&mut doc);
     serde_json::from_value(doc).ok()
+}
+
+/// Read the app-state + profiles pair just far enough to find the log level, so a
+/// process can adopt the user's verbosity before it has said anything. `None` when
+/// the state is unreadable or the user never chose one — the facade's own default
+/// then stands.
+pub async fn read_app_log_level(platform: &dyn Platform) -> Option<LevelFilter> {
+    read_state_shell(&platform.paths().app_state)
+        .await
+        .and_then(|state| level_filter(state.settings.app_log_level))
+}
+
+/// The one place the stored level is translated, so the settings enum and the
+/// facade's scale cannot drift apart.
+pub fn level_filter(level: Option<LogLevel>) -> Option<LevelFilter> {
+    Some(match level? {
+        LogLevel::Debug => LevelFilter::Debug,
+        LogLevel::Info => LevelFilter::Info,
+        LogLevel::Warning => LevelFilter::Warn,
+        LogLevel::Error => LevelFilter::Error,
+        LogLevel::None => LevelFilter::Off,
+    })
+}
+
+/// Apply the stored log level to the running process. Called once at startup by
+/// every process and again on every persisted state change, so changing the setting
+/// takes effect without a restart — the filter is consulted per record, which is the
+/// only reason the level can move at all.
+pub async fn apply_app_log_level(platform: &dyn Platform) {
+    if let Some(level) = read_app_log_level(platform).await {
+        kasumi_log::set_level(level);
+    } else {
+        kasumi_log::reset_level();
+    }
 }
 
 /// Persist an [`AppState`] back to the split files (both writes atomic).

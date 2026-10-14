@@ -13,6 +13,7 @@ use std::time::Duration;
 use anyhow::Context;
 
 use crate::desktop::paths::{DesktopPaths, path_args};
+use kasumi_log::{Area, ks_info};
 
 use super::client::Client;
 use super::proto::HelperOutdated;
@@ -153,7 +154,8 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
     let uid = unsafe { libc::geteuid() };
 
     let mut cmd = if let Some(bin) = capped_helper() {
-        log::info!(
+        ks_info!(
+            Area::Helper,
             "launching capped helper directly (no elevation): {}",
             bin.display()
         );
@@ -174,14 +176,19 @@ pub async fn spawn_and_connect(paths: &DesktopPaths) -> anyhow::Result<Client> {
         };
         match (granted, target) {
             (true, Some(t)) => {
-                log::info!("granted file caps to {}; launching directly", t.display());
+                ks_info!(
+                    Area::Helper,
+                    "granted file caps to {}; launching directly",
+                    t.display()
+                );
                 let mut c = tokio::process::Command::new(&t);
                 c.arg("--socket").arg(&socket);
                 c
             }
             _ => {
                 let helper = helper_bin()?;
-                log::info!(
+                ks_info!(
+                    Area::Helper,
                     "elevating helper {} via {} (socket {socket})",
                     helper.display(),
                     elevator.display()

@@ -23,10 +23,9 @@ embed-resource = "3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
-# The privileged helper is a separate process, so it can't use tauri-plugin-log
-# (that needs an AppHandle). It installs its own `fern` sink — the same backend the
-# plugin wraps — so both processes log through one `log` facade. See privhelper::hlog.
-fern = "0.7"
+# The privileged helper is a separate process, so it cannot go through the GUI's
+# Tauri setup; it installs the same facade itself. See privhelper::hlog.
+kasumi-log = { path = "../crates/kasumi-log" }
 anyhow = "1"
 async-trait = "0.1"
 tokio = { version = "1", features = [
@@ -40,7 +39,6 @@ tokio = { version = "1", features = [
   "sync",
 ] }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
-tauri-plugin-log = "2"
 specta = { version = "2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "0.0.12"
 specta-serde = "0.0.12"

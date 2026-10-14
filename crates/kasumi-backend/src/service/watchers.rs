@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 
 use kasumi_core::contract::{AssetsUpdatedEvent, PushFrame, RunState, SubAppliedEvent};
 
+use kasumi_log::{Area, ks_warn};
+
 use crate::platform::StopDataPath;
 use crate::{asset_update, sub_update, updater};
 
@@ -21,6 +23,10 @@ const WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 /// server is a traffic pattern of its own and keeps a phone's radio awake.
 const PROBE_INTERVAL: Duration = Duration::from_secs(60);
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
+/// How often the log files are trimmed to `settings.log_rotate_max_kb`. A phone can
+/// run for days between app launches, and nothing else bounds a log that only this
+/// process writes.
+const TRIM_INTERVAL: Duration = Duration::from_secs(300);
 
 impl Service {
     /// Start the active profile once on boot, if `autoStart` allows. Caller holds
@@ -36,7 +42,11 @@ impl Service {
         if state.active_id.is_none() || !state.settings.auto_start {
             return;
         }
-        let _ = self.run_lifecycle(LifecycleCmd::Start(None)).await;
+        // A boot-time start that fails is invisible otherwise: nothing else runs at
+        // this point, and the UI only ever sees "stopped".
+        if let Err(e) = self.run_lifecycle(LifecycleCmd::Start(None)).await {
+            ks_warn!(Area::Service, "auto-start failed: {e}");
+        }
     }
 
     /// Restart the data-path if it's up or coming up — re-pinning routing and rebuilding
@@ -45,8 +55,8 @@ impl Service {
     async fn restart_if_up(&self) -> bool {
         let _g = self.serialize.lock().await;
         let coming_up = self.data_path_up_or_coming().await;
-        if coming_up {
-            let _ = self.run_lifecycle(LifecycleCmd::Restart(None)).await;
+        if coming_up && let Err(e) = self.run_lifecycle(LifecycleCmd::Restart(None)).await {
+            ks_warn!(Area::Service, "restart after a change failed: {e}");
         }
         coming_up
     }
@@ -128,7 +138,14 @@ impl Service {
                 // doesn't show a zombie "connected".
                 if this.platform.data_path_healthy().await == Some(false) {
                     let _g = this.serialize.lock().await;
-                    let _ = this.platform.stop_data_path(StopDataPath::default()).await;
+                    // Teardown that fails leaves the zombie the watchdog is here to
+                    // clear, and nothing else would say so.
+                    if let Err(e) = this.platform.stop_data_path(StopDataPath::default()).await {
+                        ks_warn!(
+                            Area::Lifecycle,
+                            "could not tear the dead data path down: {e}"
+                        );
+                    }
                     drop(_g);
                     this.note_data_path_stopped();
                     this.emit_status().await;
@@ -222,6 +239,28 @@ impl Service {
                 {
                     last = json;
                     let _ = this.events.send(PushFrame::Status { value: status });
+                }
+            }
+        });
+    }
+
+    /// Trim the log files to the configured cap on a slow tick. `Command::Log` and
+    /// the shell scripts do the same, but only when someone looks — a log nobody
+    /// opens still has to stay inside its cap.
+    pub(super) fn spawn_log_trim(self: &Arc<Self>) {
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(TRIM_INTERVAL).await;
+                let Some(state) = crate::state::read_app_state(&*this.platform).await else {
+                    continue;
+                };
+                let limit = u64::try_from(state.settings.log_rotate_max_kb).unwrap_or(0) * 1024;
+                for target in crate::commands::LOG_TARGETS {
+                    let path = this.platform.paths().log(target);
+                    if let Err(e) = kasumi_log::rotate::trim_in_place(&path, limit) {
+                        ks_warn!(Area::Sys, "could not trim {}: {e}", path.display());
+                    }
                 }
             }
         });

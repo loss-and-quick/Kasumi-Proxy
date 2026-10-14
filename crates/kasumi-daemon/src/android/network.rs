@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 
 use super::paths::IP;
 use super::{default_uplink, run_out};
+use kasumi_log::{Area, ks_info};
 
 /// How long the rule events of one switch keep coming before the watcher looks.
 const SETTLE: Duration = Duration::from_millis(500);
@@ -73,7 +74,11 @@ async fn check(last: &mut Option<String>, tx: &mpsc::Sender<()>) {
         return;
     };
     if Some(&cur) != last.as_ref() {
-        log::info!("uplink: {} -> {cur}", last.as_deref().unwrap_or("none"));
+        ks_info!(
+            Area::Platform,
+            "uplink: {} -> {cur}",
+            last.as_deref().unwrap_or("none")
+        );
         *last = Some(cur);
         let _ = tx.send(()).await;
     }

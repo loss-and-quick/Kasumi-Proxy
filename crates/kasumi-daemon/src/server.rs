@@ -22,6 +22,7 @@ use kasumi_backend::Service;
 use kasumi_backend::commands::{Command, Response as CmdResponse};
 use kasumi_backend::fsjson::write_json_atomic;
 use kasumi_core::contract::{PushFrame, WsInfo};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 /// One WS request: an `id` for correlation plus the flattened [`Command`].
 #[derive(Deserialize)]
@@ -95,8 +96,12 @@ async fn ws_handler(
     ws: WebSocketUpgrade,
 ) -> Response {
     if params.get("token").map(String::as_str) != Some(state.token.as_str()) {
+        // A rejected upgrade is the one thing a loopback port cannot hide, and the
+        // only reason it happens is another app on the device guessing the URL.
+        kasumi_log::ks_warn!(Area::Ws, "rejected a socket with the wrong token");
         return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
+    ks_info!(Area::Ws, "a client connected");
     ws.on_upgrade(move |socket| handle_socket(socket, state.service))
 }
 
@@ -140,8 +145,11 @@ async fn handle_socket(socket: WebSocket, service: Arc<Service>) {
                         break;
                     }
                 }
-                // A slow client that lagged behind just resyncs on the next push.
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                // A slow client that lagged behind just resyncs on the next push,
+                // unless it never takes another one.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
+                    ks_warn!(Area::Ws, "a client fell behind by {missed} push(es)");
+                }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
@@ -151,10 +159,18 @@ async fn handle_socket(socket: WebSocket, service: Arc<Service>) {
         match incoming {
             Ok(Message::Text(text)) => {
                 let Ok(req) = serde_json::from_str::<WsRequest>(text.as_str()) else {
+                    // Whatever this is, the UI cannot have sent it — dropping it
+                    // silently is how a protocol mismatch becomes a mystery.
+                    ks_warn!(
+                        Area::Ws,
+                        "dropped an unparseable frame ({bytes} bytes)",
+                        bytes = text.len()
+                    );
                     continue;
                 };
                 let service = service.clone();
                 let reply_tx = tx.clone();
+                let name = kasumi_backend::commands::command_name(&req.command);
                 tokio::spawn(async move {
                     let reply = match service.dispatch(req.command).await {
                         Ok(value) => WsReply {
@@ -163,12 +179,18 @@ async fn handle_socket(socket: WebSocket, service: Arc<Service>) {
                             value: Some(value),
                             error: None,
                         },
-                        Err(e) => WsReply {
-                            id: req.id,
-                            ok: false,
-                            value: None,
-                            error: Some(e.0),
-                        },
+                        Err(e) => {
+                            // The reply carries the message the UI shows, but the log
+                            // is where "which command" survives: the client that sent
+                            // it may be gone by the time anyone reads this.
+                            ks_warn!(Area::Ws, "{name} failed: {}", e.0);
+                            WsReply {
+                                id: req.id,
+                                ok: false,
+                                value: None,
+                                error: Some(e.0),
+                            }
+                        }
                     };
                     let _ = reply_tx.send(frame(&reply));
                 });

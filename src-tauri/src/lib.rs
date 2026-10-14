@@ -24,12 +24,20 @@ use kasumi_core::contract::{
 };
 use kasumi_core::enums::wire_value;
 use kasumi_core::state::RoutingMode;
+#[cfg(target_os = "linux")]
+use kasumi_log::ks_warn;
+use kasumi_log::{Area, ks_error, ks_info};
 
 pub mod defaults;
 pub mod desktop;
 pub mod schemas;
 
 use desktop::DesktopPlatform;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use desktop::paths::APP_LOG_FILE;
+
+/// A dependency whose debug output carries credentials, so no directive may raise it.
+const COOKIE_STORE: &str = "cookie_store";
 
 /// Live service status pushed to the UI (the 1 Hz + on-change stream).
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
@@ -486,7 +494,7 @@ fn tray_icon(state: RunState) -> Option<tauri::image::Image<'static>> {
 /// on the app's async runtime during setup.
 async fn build_service(platform: Arc<dyn Platform>) -> Arc<Service> {
     if let Err(e) = platform.boot_init().await {
-        log::error!("boot init failed: {e}");
+        ks_error!(Area::Service, "boot init failed: {e}");
     }
     let service = Service::new(platform).await;
     service.spawn_background();
@@ -502,7 +510,10 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     use desktop::privhelper::RemotePlatform;
     use kasumi_core::state::ProxyMode;
     if std::env::var_os("KASUMI_SKIP_ELEVATION").is_some() {
-        log::info!("KASUMI_SKIP_ELEVATION set; running the data-path in-process");
+        ks_info!(
+            Area::Service,
+            "KASUMI_SKIP_ELEVATION set; running the data-path in-process"
+        );
         return Ok(Arc::new(DesktopPlatform::new()?));
     }
     // Only tun mode needs the privileged data-path. When the saved mode is a non-tun
@@ -512,13 +523,15 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     // saved mode defaults to tun, keeping the privileged path.
     let mode = desktop::saved_proxy_mode();
     if mode != ProxyMode::Tun {
-        log::info!(
+        ks_info!(
+            Area::Service,
             "saved proxy mode {mode:?} needs no privileges; running the data-path in-process"
         );
         return Ok(Arc::new(DesktopPlatform::new_gated()?));
     }
     let paths = desktop::paths::DesktopPaths::resolve()?;
-    log::info!(
+    ks_info!(
+        Area::Service,
         "bringing up privileged data-path: portable={} datadir={} run_dir={}",
         paths.portable,
         paths.datadir,
@@ -528,7 +541,7 @@ async fn build_platform() -> anyhow::Result<Arc<dyn Platform>> {
     let client = desktop::privhelper::spawn_and_connect(&paths).await?;
     #[cfg(target_os = "windows")]
     let client = desktop::privhelper::connect_service(&paths).await?;
-    log::info!("privileged helper connected");
+    ks_info!(Area::Service, "privileged helper connected");
     Ok(Arc::new(RemotePlatform::new(client)?))
 }
 
@@ -650,26 +663,20 @@ pub fn run() {
         .setup(move |app| {
             builder.mount_events(app);
 
-            #[allow(unused_mut)]
-            let mut log_builder = tauri_plugin_log::Builder::default()
-                .level(log::LevelFilter::Info)
-                .level_for("kasumi_desktop_lib", log::LevelFilter::Debug);
+            let mut log_config = kasumi_log::LogConfig::default();
+            // The same sink the daemon and the helper install: stdout for a terminal
+            // run, <datadir>/daemon.log for the in-app viewer. Desktop has no
+            // separate daemon process, so without the file the viewer's `Daemon`
+            // target would show nothing at all.
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             if let Ok(paths) = desktop::paths::DesktopPaths::resolve() {
-                use tauri_plugin_log::{Target, TargetKind};
-                // Write the app log to <datadir>/daemon.log, beside the core logs.
-                // Desktop has no separate daemon process, so the in-app log viewer's
-                // `Daemon` target — which reads <datadir>/daemon.log — would otherwise
-                // show an empty file while these lines went to the OS log dir.
-                log_builder = log_builder.targets([
-                    Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::Folder {
-                        path: std::path::PathBuf::from(&paths.datadir),
-                        file_name: Some("daemon".into()),
-                    }),
-                ]);
+                log_config = log_config
+                    .with_file(std::path::PathBuf::from(&paths.datadir).join(APP_LOG_FILE));
             }
-            app.handle().plugin(log_builder.build())?;
+            // The GUI runs the same fetch path as the daemon, so the dependency that
+            // prints provider cookies stays pinned here too.
+            kasumi_log::pin_module(COOKIE_STORE, log::LevelFilter::Info);
+            kasumi_log::init(&log_config);
 
             #[cfg(desktop)]
             {
@@ -682,7 +689,7 @@ pub fn run() {
             }
             #[cfg(target_os = "linux")]
             if let Err(e) = desktop::autostart::heal() {
-                log::warn!("autostart entry: {e}");
+                ks_warn!(Area::Service, "autostart entry: {e}");
             }
 
             // Publish the Service through a watch channel and bring it up off-thread:
@@ -697,6 +704,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let build = async {
                     let platform = build_platform().await?;
+                    // The user chose this verbosity once; adopt it before the
+                    // data-path work below starts reporting at the wrong level.
+                    kasumi_backend::state::apply_app_log_level(&*platform).await;
                     // A surviving ownership record at GUI start means the previous run
                     // exited without clearing (a hard crash) — the privileged helper
                     // already reaped its data-path, so the record is an orphan. Restore
@@ -719,7 +729,7 @@ pub fn run() {
                         if let Some(outdated) =
                             e.downcast_ref::<desktop::privhelper::proto::HelperOutdated>()
                         {
-                            log::error!("startup failed: {e}");
+                            ks_error!(Area::Service, "startup failed: {e}");
                             let _ = tx.send(Startup::Failed(StartupProblem::HelperOutdated {
                                 app_protocol: desktop::privhelper::proto::PROTOCOL_VERSION,
                                 helper_protocol: outdated.helper,
@@ -729,7 +739,7 @@ pub fn run() {
                             return;
                         }
                         let msg = e.to_string();
-                        log::error!("startup failed: {msg}");
+                        ks_error!(Area::Service, "startup failed: {msg}");
                         // Surface the reason in a native modal, then quit on dismissal.
                         #[cfg(desktop)]
                         {

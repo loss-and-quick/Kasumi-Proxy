@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use kasumi_log::{Area, ks_warn};
+
 /// TCP-connect latency to `host:port` in ms, with the socket bound to the
 /// physical uplink the way test cores bind their outbounds, so an active tun
 /// can't capture the connect. Without a resolvable uplink it connects unbound.
@@ -22,7 +24,10 @@ pub async fn uplink_tcp_ping(host: &str, port: u16, timeout: Duration) -> Option
     }
     .ok()?;
     if let Err(e) = super::routing::bind_uplink(&socket, addr.ip()).await {
-        log::warn!("tcp-ping {host}: uplink bind failed, connecting unbound: {e}");
+        ks_warn!(
+            Area::Net,
+            "tcp-ping {host}: uplink bind failed, connecting unbound: {e}"
+        );
     }
     let start = std::time::Instant::now();
     match tokio::time::timeout(timeout, socket.connect(addr)).await {

@@ -13,6 +13,8 @@
 
 use caps::{CapSet, Capability, CapsHashSet};
 
+use kasumi_log::{Area, ks_warn};
+
 /// The caps the data-path needs; the helper keeps these and drops the rest.
 ///
 /// - `NET_ADMIN` — tun creation, `ip` routing, tun2socks' fwmark.
@@ -90,7 +92,10 @@ pub fn is_privileged_data_path() -> bool {
         Ok(true) => true,
         Ok(false) => false,
         Err(e) => {
-            log::warn!("could not query effective CAP_NET_ADMIN ({e}); data-path caps not applied");
+            ks_warn!(
+                Area::Platform,
+                "could not query effective CAP_NET_ADMIN ({e}); data-path caps not applied"
+            );
             false
         }
     }
@@ -105,7 +110,8 @@ pub fn has_effective_net_raw() -> bool {
         Ok(true) => true,
         Ok(false) => false,
         Err(e) => {
-            log::warn!(
+            ks_warn!(
+                Area::Platform,
                 "could not query effective CAP_NET_RAW ({e}); test cores won't bind the uplink"
             );
             false

@@ -5,5 +5,19 @@
 MODDIR=${0%/*}
 DATADIR="/data/adb/kasumi-proxy"
 mkdir -p "$DATADIR"
-"$MODDIR/bin/kasumi-proxy" rotateLogs >/dev/null 2>&1
+# shellcheck disable=SC2034 # read by the sourced log.sh
+KASUMI_SCRIPT="service.sh"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=log.sh
+. "$MODDIR/log.sh"
+
+# Trimming before the daemon starts is what keeps yesterday's log from still
+# being the first thing a support request shows.
+if ! "$MODDIR/bin/kasumi-proxy" rotateLogs >/dev/null 2>&1; then
+	klog WARN "rotateLogs failed; the log keeps growing until the next boot"
+fi
+
+# stderr goes to daemon.log, which is also where panics and anything printed
+# outside the facade end up — that is why the daemon logs to stderr.
 "$MODDIR/bin/kasumi-proxy" daemon >>"$DATADIR/daemon.log" 2>&1 &
+klog INFO "daemon started (pid $!)"

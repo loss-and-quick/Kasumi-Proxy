@@ -41,6 +41,7 @@ use kasumi_backend::fsjson::write_text_atomic;
 
 use super::paths::{CMD, DUMPSYS, TC, TETHER_OFFLOAD_SAVED};
 use super::{run_out, silent};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 const OFFLOAD_KEY: &str = "tether_offload_disabled";
 /// What `settings get` prints for a key that is not set.
@@ -113,7 +114,8 @@ pub async fn reconcile_hw_offload() {
         // Read before the change: once the setting is 1 the dump no longer tells.
         let running = tethering_dump().await.is_some_and(|d| hal_started(&d));
         if suppress_hw_offload().await && running {
-            log::warn!(
+            ks_warn!(
+                Area::Platform,
                 "tethering: hardware offload stays on for the running tethering \
                  session until the hotspot / USB tethering is restarted"
             );
@@ -125,7 +127,7 @@ pub async fn reconcile_hw_offload() {
         && let Some(dump) = tethering_dump().await
         && last_offload_event(&dump) == Some(false)
     {
-        log::info!("tethering: hardware offload stopped");
+        ks_info!(Area::Platform, "tethering: hardware offload stopped");
         HW_OFFLOAD_BYPASS.store(false, Ordering::Relaxed);
     }
 }
@@ -139,7 +141,10 @@ async fn suppress_hw_offload() -> bool {
     }
     let reply = settings(&["get", "global", OFFLOAD_KEY]).await;
     let Some(prev) = reply.and_then(|(code, out)| saved_value(&out).filter(|_| code == 0)) else {
-        log::warn!("tethering offload: cannot read {OFFLOAD_KEY}, leaving it alone");
+        ks_warn!(
+            Area::Platform,
+            "tethering offload: cannot read {OFFLOAD_KEY}, leaving it alone"
+        );
         return false;
     };
     // Saved before the change, so a crash in between still restores it.

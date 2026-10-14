@@ -26,6 +26,8 @@ use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
 use super::client::Client;
 use super::proto::{PrivReply, PrivRequest};
 use crate::desktop::DesktopPlatform;
+#[cfg(unix)]
+use kasumi_log::{Area, ks_warn};
 
 pub struct RemotePlatform {
     /// Unprivileged half: paths, config tuning, core probes, watcher.
@@ -198,8 +200,8 @@ impl Platform for RemotePlatform {
             };
             match self.client.call_oneshot(req).await {
                 Ok(PrivReply::Latency { ms }) => return ms,
-                Ok(other) => log::warn!("unexpected reply to TcpPing: {other:?}"),
-                Err(e) => log::warn!("tcp-ping through the helper failed: {e}"),
+                Ok(other) => ks_warn!(Area::Helper, "unexpected reply to TcpPing: {other:?}"),
+                Err(e) => ks_warn!(Area::Helper, "tcp-ping through the helper failed: {e}"),
             }
         }
         // Windows binds the uplink (`IP_UNICAST_IF`) without privilege.

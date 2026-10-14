@@ -198,7 +198,11 @@ fn build_logged_command(
     log_path: impl AsRef<Path>,
     kill_on_drop: bool,
 ) -> std::io::Result<Command> {
-    let log = std::fs::File::create(log_path)?;
+    // Truncate the file so a fresh spawn starts with a clean log, then open in
+    // append mode so any in-place trim during this run keeps writes at EOF rather
+    // than at a stale file offset.
+    std::fs::File::create(&log_path)?;
+    let log = std::fs::OpenOptions::new().append(true).open(&log_path)?;
     let err = log.try_clone()?;
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
@@ -256,6 +260,8 @@ pub async fn spawn_logged(
 mod job {
     use std::sync::OnceLock;
 
+    use kasumi_log::{Area, ks_warn};
+
     use tokio::process::{Child, Command};
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
@@ -283,7 +289,10 @@ mod job {
             .get_or_init(|| match kill_on_close_job() {
                 Ok(h) => Some(Job(h)),
                 Err(e) => {
-                    log::warn!("no job object, children can outlive a crash: {e}");
+                    ks_warn!(
+                        Area::Proc,
+                        "no job object, children can outlive a crash: {e}"
+                    );
                     None
                 }
             })
@@ -334,7 +343,8 @@ mod job {
         if let Some(job) = parent_job() {
             // SAFETY: both handles are open; `child` owns `process`.
             if unsafe { AssignProcessToJobObject(job, process as HANDLE) } == 0 {
-                log::warn!(
+                ks_warn!(
+                    Area::Proc,
                     "pid {pid} is not in the parent job: {}",
                     std::io::Error::last_os_error()
                 );

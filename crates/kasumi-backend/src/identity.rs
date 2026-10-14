@@ -17,6 +17,7 @@ use kasumi_core::request_identity::{
 use crate::fs::read_text;
 use crate::fsjson::write_text_atomic;
 use crate::platform::Platform;
+use kasumi_log::{Area, ks_warn};
 
 /// The HWID sent when none is typed, most Happ-like first: the SSAID Android gave an
 /// installed Happ, the one it would give Happ, an app-scoped machine id, a random id.
@@ -157,7 +158,7 @@ async fn happ_device_id(platform: &dyn Platform) -> String {
     }
     let id = hex(&Sha256::digest(uuid::Uuid::new_v4().as_bytes())[..8]);
     if let Err(e) = write_text_atomic(&path, &id).await {
-        log::warn!("writing {}: {e}", path.display());
+        ks_warn!(Area::State, "writing {}: {e}", path.display());
     }
     id
 }
@@ -176,7 +177,7 @@ async fn incy_seed(platform: &dyn Platform) -> String {
     }
     let seed = uuid::Uuid::new_v4().simple().to_string();
     if let Err(e) = write_text_atomic(&path, &seed).await {
-        log::warn!("writing {}: {e}", path.display());
+        ks_warn!(Area::State, "writing {}: {e}", path.display());
     }
     seed
 }
