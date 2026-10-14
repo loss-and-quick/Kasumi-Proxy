@@ -27,8 +27,8 @@ describe("addInputFrom", () => {
     const { subs, profileText } = addInputFrom(
       resolved({
         subscriptions: [
-          { url: "https://a.example.com/sub?token=1", encrypted: false },
-          { url: "https://b.example.com/s", encrypted: false },
+          { url: "https://a.example.com/sub?token=1", encrypted: false, name: null },
+          { url: "https://b.example.com/s", encrypted: false, name: null },
         ],
         shareText: "trojan://pw@h:443#T",
       }),
@@ -42,7 +42,7 @@ describe("addInputFrom", () => {
 
   it("keeps an encrypted link as given, under a name the provider can replace", () => {
     const { subs } = addInputFrom(
-      resolved({ subscriptions: [{ url: "happ://crypt5/abc", encrypted: true }] }),
+      resolved({ subscriptions: [{ url: "happ://crypt5/abc", encrypted: true, name: null }] }),
       defaults,
       "Encrypted subscription",
     );
@@ -51,6 +51,16 @@ describe("addInputFrom", () => {
       remarks: "Encrypted subscription",
       manualTitle: false,
     });
+  });
+
+  it("names an encrypted link after the provider it carries", () => {
+    const url = "incy://crypt1/abc";
+    const { subs } = addInputFrom(
+      resolved({ subscriptions: [{ url, encrypted: true, name: "Example VPN" }] }),
+      defaults,
+      "Encrypted subscription",
+    );
+    expect(subs[0]).toMatchObject({ url, remarks: "Example VPN", manualTitle: false });
   });
 
   it("passes routing profiles and unsupported links through", () => {
@@ -162,8 +172,8 @@ describe("subDraft", () => {
     const b = bridgeOf(
       resolved({
         subscriptions: [
-          { url: "https://a.example.com/s", encrypted: false },
-          { url: "https://b.example.com/s", encrypted: false },
+          { url: "https://a.example.com/s", encrypted: false, name: null },
+          { url: "https://b.example.com/s", encrypted: false, name: null },
         ],
       }),
     );
