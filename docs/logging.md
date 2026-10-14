@@ -77,7 +77,17 @@ A proxy configuration is mostly secrets.
   own file the same way.
 - Records before the log file existed are still in memory: the facade keeps the last
   512 per process. That window covers boot, which is when the interesting failures
-  happen.
+  happen. An empty app log falls back to that tail, with a line saying where it came
+  from; clearing the log clears it too.
+
+## The UI's own records
+
+`frontend/src/lib/logger.ts` keeps the last 200 UI-side records in memory and the
+diagnostics section shows them: dropped WS frames, a dispatch that failed, a render
+throw, an unawaited promise. Nothing goes to the backend — a phone user has no
+console. Use `logError` / `logWarn` / `logDebug` at the point a call would otherwise
+be swallowed, and keep a failing call's context (the command name, the id) in the
+fields.
 
 ## Rules
 
