@@ -105,11 +105,12 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
             }
         }
         let _ = child.kill().await;
-        // An `ip` without `monitor rule` exits at once; respawning it would churn.
+        // An `ip` without `monitor rule` exits at once: poll for good. A monitor
+        // that worked and died is respawned no faster than the poll would look.
         if !heard {
             poll(&mut last, &tx).await;
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(POLL).await;
     }
 }
 
