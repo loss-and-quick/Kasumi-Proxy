@@ -612,6 +612,7 @@ async fn apply(
         }
     }
 
+    let mut restarted = false;
     if res.active_affected {
         let running = platform
             .service_state()
@@ -622,12 +623,16 @@ async fn apply(
             let needs_restart = res.active_id.is_none()
                 || config_changed(&current, old_active.as_ref(), &next, platform.host_traits());
             if needs_restart {
+                restarted = true;
                 let _ = match &res.active_id {
                     Some(id) => lifecycle.restart(Some(id.clone())).await,
                     None => lifecycle.stop().await,
                 };
             }
         }
+    }
+    if !restarted {
+        lifecycle.note_state_saved(&next).await;
     }
     Some(next)
 }
@@ -733,6 +738,10 @@ mod tests {
             self.calls.lock().unwrap().push("reload".into());
             Ok(())
         }
+        async fn note_state_saved(&self, state: &AppState) {
+            let active = state.active_id.as_deref().unwrap_or("-");
+            self.calls.lock().unwrap().push(format!("saved:{active}"));
+        }
     }
 
     #[test]
@@ -810,6 +819,31 @@ mod tests {
         // TestPlatform reports Running → a restart of the new active id fired.
         let calls = lc.calls.lock().unwrap();
         assert!(calls.iter().any(|c| c.starts_with("restart")));
+        assert!(!calls.iter().any(|c| c.starts_with("saved")));
+    }
+
+    #[tokio::test]
+    async fn a_refresh_that_recreates_the_running_profile_reports_its_new_id() {
+        let (p, _d) = TestPlatform::new();
+        let mut old = sample_vless();
+        old.meta_mut().id = "old".into();
+        old.meta_mut().sub_id = Some("s1".into());
+        old.meta_mut().group_id = "g-main".into();
+        let mut state = default_app_state();
+        state.subscriptions = vec![sub("s1", "u")];
+        state.profiles = vec![old.clone()];
+        state.active_id = Some("old".into());
+        write_app_state(&p, &state).await.unwrap();
+
+        // The same server under a new id: no restart, but the service must hear
+        // that the running core is now the profile with the new id.
+        let mut fresh = old;
+        fresh.meta_mut().id = "fresh".into();
+        let lc = lifecycle();
+        apply(&p, &lc, &state.subscriptions[0], vec![fresh], None, true)
+            .await
+            .expect("apply returns the new state");
+        assert_eq!(*lc.calls.lock().unwrap(), ["saved:fresh"]);
     }
 
     #[tokio::test]
@@ -1584,7 +1618,7 @@ mod tests {
     }
 
     /// Fetch `first`, make its profile active, then fetch `second` and report the
-    /// lifecycle calls the second apply made.
+    /// starts, stops and restarts the second apply made.
     async fn refresh_calls(first: Vec<u8>, second: Vec<u8>) -> Vec<String> {
         refresh_calls_with(false, first, second).await
     }
@@ -1610,7 +1644,9 @@ mod tests {
         update_subscription(&p, &lc, &Mutex::new(()), &jar(), "s1")
             .await
             .unwrap();
-        lc.calls.lock().unwrap().clone()
+        let mut calls = lc.calls.lock().unwrap().clone();
+        calls.retain(|c| !c.starts_with("saved"));
+        calls
     }
 
     #[tokio::test]

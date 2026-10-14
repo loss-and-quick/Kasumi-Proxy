@@ -172,7 +172,11 @@ impl Service {
         let Ok(next_cfg) = commands::build_profile_config(&*self.platform, active_id).await else {
             return;
         };
-        match mutation_effect(&running.config, &next_cfg) {
+        let effect = mutation_effect(&running.config, &next_cfg);
+        if effect != MutationEffect::SetPending(true) && running.profile_id != active_id {
+            self.adopt_active_id(&running.profile_id, active_id);
+        }
+        match effect {
             MutationEffect::LiveModeSwitch(mode) => {
                 self.platform.set_os_proxy(mode, &next_cfg.plan).await;
                 if let Some(running) = self.running_config.lock().unwrap().as_mut() {
@@ -185,6 +189,19 @@ impl Service {
                 }
             }
         }
+    }
+
+    /// The saved active profile builds exactly what runs, under another id: a
+    /// subscription refresh that re-created the profile, or a switch to a
+    /// duplicate. The running core is that profile now, and so is its verdict;
+    /// otherwise the status would wait for a restart that nothing asks for.
+    fn adopt_active_id(&self, running_id: &str, active_id: &str) {
+        if let Some(running) = self.running_config.lock().unwrap().as_mut()
+            && running.profile_id == running_id
+        {
+            running.profile_id = active_id.to_owned();
+        }
+        self.reassign_verdict(running_id, active_id);
     }
 }
 
@@ -206,5 +223,8 @@ impl LifecycleControl for Service {
         if !self.assets_stale.swap(true, Ordering::SeqCst) {
             self.emit_status().await;
         }
+    }
+    async fn note_state_saved(&self, state: &AppState) {
+        self.refresh_pending_restart(state).await;
     }
 }

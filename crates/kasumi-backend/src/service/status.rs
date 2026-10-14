@@ -206,6 +206,14 @@ impl Service {
         changed
     }
 
+    /// Hand the stored verdict from `from` to `to`, a profile that runs the same core.
+    pub(super) fn reassign_verdict(&self, from: &str, to: &str) {
+        let mut verdict = self.connectivity.lock().unwrap();
+        if verdict.profile_id.as_deref() == Some(from) {
+            verdict.profile_id = Some(to.to_owned());
+        }
+    }
+
     pub(super) fn connectivity(&self) -> Connectivity {
         self.connectivity.lock().unwrap().connectivity.clone()
     }
