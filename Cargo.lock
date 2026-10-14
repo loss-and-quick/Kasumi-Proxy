@@ -2055,7 +2055,7 @@ dependencies = [
 [[package]]
 name = "happ-sub"
 version = "0.1.0"
-source = "git+https://github.com/loss-and-quick/happ-sub?rev=7672c07918dcfdf35475e90b185e581e644e7e67#7672c07918dcfdf35475e90b185e581e644e7e67"
+source = "git+https://github.com/loss-and-quick/happ-sub?rev=c08b41b3b1cdccc40a3257d30e4a02f9b1d9088d#c08b41b3b1cdccc40a3257d30e4a02f9b1d9088d"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",

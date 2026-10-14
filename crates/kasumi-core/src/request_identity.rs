@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use happ_sub::MetaMap;
-use happ_sub::request::{ClientOs, DeviceInfo, Identity, RequestProfile, build};
+use happ_sub::happ_request::{ClientOs, DeviceInfo, Identity, RequestProfile, build};
 
 use crate::state::Subscription;
 
@@ -401,7 +401,7 @@ mod tests {
         );
         assert_eq!(
             header(&r, "User-agent"),
-            Some(happ_sub::request::user_agent("Android", 12).as_str())
+            Some(happ_sub::happ_request::user_agent("Android", 12).as_str())
         );
         assert_eq!(header(&r, "X-HWID"), Some(HWID));
         assert_eq!(header(&r, "X-Device-Locale"), Some("ru"));

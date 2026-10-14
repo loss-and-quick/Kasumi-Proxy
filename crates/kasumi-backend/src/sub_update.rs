@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{SecondsFormat, Utc};
-use happ_sub::request::{RequestProfile, RetryCause};
+use happ_sub::happ_request::{RequestProfile, RetryCause};
 use happ_sub::{MergeMode, MetaMap, RoutingAction};
 use tokio::sync::Mutex;
 
