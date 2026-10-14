@@ -6,6 +6,8 @@ use std::fmt;
 
 use base64::Engine as _;
 
+use kasumi_log::{Area, ks_warn};
+
 /// One `<setting>` of the file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SettingEntry {
@@ -48,7 +50,7 @@ pub fn path(user: u32) -> String {
 pub async fn read(user: u32) -> Option<Vec<SettingEntry>> {
     let bytes = tokio::fs::read(path(user)).await.ok()?;
     parse_settings(&bytes)
-        .inspect_err(|e| log::warn!("{}: {e}", path(user)))
+        .inspect_err(|e| ks_warn!(Area::Platform, "{}: {e}", path(user)))
         .ok()
 }
 

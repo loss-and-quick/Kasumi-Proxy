@@ -16,13 +16,22 @@ pub mod tethering;
 pub use platform::AndroidPlatform;
 
 use kasumi_backend::proc::{RunOpts, run};
+use kasumi_log::{Area, ks_debug, ks_warn};
 
 /// Run a shell command, discarding output and returning its exit code. The Android
 /// platform shells out to `ip`/`iptables`/`pm`/etc., so a tiny `&str`-slice wrapper
 /// over the backend's process layer keeps the call sites readable.
 pub(crate) async fn silent(args: &[&str]) -> i32 {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    kasumi_backend::proc::silent(&argv).await
+    let code = kasumi_backend::proc::silent(&argv).await;
+    if code != 0 {
+        // Not a warning: deleting a rule that is already gone is a normal 1 here,
+        // and the routing layer leans on that. But a rule that should have been
+        // added and wasn't looks exactly like one that was, so a failed invocation
+        // gets a record — visible whenever debugging is on.
+        ks_debug!(Area::Platform, "{} exited {code}", args.join(" "));
+    }
+    code
 }
 
 /// Run a shell command, returning `(exit_code, stdout)`.
@@ -30,7 +39,11 @@ pub(crate) async fn run_out(args: &[&str]) -> (i32, String) {
     let argv: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     match run(&argv, RunOpts::default()).await {
         Ok(r) => (r.code, r.stdout),
-        Err(_) => (-1, String::new()),
+        // -1 is read as "no output", which is how a missing binary hides.
+        Err(e) => {
+            ks_warn!(Area::Platform, "{} could not run: {e}", args.join(" "));
+            (-1, String::new())
+        }
     }
 }
 

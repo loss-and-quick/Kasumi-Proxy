@@ -44,6 +44,7 @@ use super::tether_offload::{
     restore_hw_offload,
 };
 use super::{default_uplink, run_out, silent};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 /// Our own chain in `filter FORWARD` (accepts) and `nat PREROUTING` (DNS).
 const CHAIN: &str = "KASUMI_PROXY_TETHER";
@@ -617,8 +618,13 @@ async fn watch(path: TetherPath) {
             let hold = hold_tether_bpf(&t.name).await;
             if !held.contains(&(t.name.clone(), hold)) {
                 match hold {
-                    BpfHold::Pinned => log::info!("tethering: BPF offload held off on {}", t.name),
-                    BpfHold::Detached => log::warn!(
+                    BpfHold::Pinned => ks_info!(
+                        Area::Platform,
+                        "tethering: BPF offload held off on {}",
+                        t.name
+                    ),
+                    BpfHold::Detached => ks_warn!(
+                        Area::Platform,
                         "tethering: cannot add the tc filter on {}, removing BPF \
                          offload programs on every poll",
                         t.name
