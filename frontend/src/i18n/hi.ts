@@ -960,6 +960,7 @@ const hi = {
   "routingSheet.newTitle": "नया रूटिंग नियम",
   "routingSheet.editTitle": "रूटिंग नियम संपादित करें",
   "routingSheet.save": "सहेजें",
+  "routingSheet.needCondition": "कम से कम एक शर्त जोड़ें: डोमेन, IP, पोर्ट, नेटवर्क, प्रोटोकॉल, ऐप या स्रोत।",
   "routingSheet.name": "नाम",
   "routingSheet.defaultName": "नियम",
   "routingSheet.outbound": "आउटबाउंड",

@@ -933,6 +933,7 @@ const zh = {
   "routingSheet.newTitle": "新建路由规则",
   "routingSheet.editTitle": "编辑路由规则",
   "routingSheet.save": "保存",
+  "routingSheet.needCondition": "请至少添加一个条件：域名、IP、端口、网络、协议、应用或来源。",
   "routingSheet.name": "名称",
   "routingSheet.defaultName": "规则",
   "routingSheet.outbound": "出站",

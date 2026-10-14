@@ -972,7 +972,7 @@ mod tests {
             remarks: String::new(),
             enabled: true,
             outbound_tag: "direct".into(),
-            domain: Some(vec![domain.into()]),
+            domain: Some(vec![domain.into()]).filter(|_| !domain.is_empty()),
             ip: None,
             port: Some("0-65535".into()),
             network: None,
@@ -981,14 +981,15 @@ mod tests {
             package_name: None,
             source_ip: None,
         };
-        let rules = vec![rule("example.com"), rule("# example.com")];
+        // A commented-out domain leaves the rule out instead of widening it.
+        let rules = vec![rule("example.com"), rule("# example.com"), rule("")];
         let Response::Flags(flags) = dispatch(&p, Command::CatchAllRules { rules })
             .await
             .unwrap()
         else {
             panic!()
         };
-        assert_eq!(flags, [false, true]);
+        assert_eq!(flags, [false, false, true]);
     }
 
     #[tokio::test]

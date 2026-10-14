@@ -1004,6 +1004,8 @@ const es = {
   "routingSheet.newTitle": "Nueva regla de enrutamiento",
   "routingSheet.editTitle": "Editar regla de enrutamiento",
   "routingSheet.save": "Guardar",
+  "routingSheet.needCondition":
+    "Añade al menos una condición: un dominio, IP, puerto, red, protocolo, app u origen.",
   "routingSheet.name": "Nombre",
   "routingSheet.defaultName": "Regla",
   "routingSheet.outbound": "Salida",

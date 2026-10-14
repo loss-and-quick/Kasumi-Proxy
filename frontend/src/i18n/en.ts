@@ -991,6 +991,8 @@ const en = {
   "routingSheet.newTitle": "New routing rule",
   "routingSheet.editTitle": "Edit routing rule",
   "routingSheet.save": "Save",
+  "routingSheet.needCondition":
+    "Add at least one condition: a domain, IP, port, network, protocol, app or source.",
   "routingSheet.name": "Name",
   "routingSheet.defaultName": "Rule",
   "routingSheet.outbound": "Outbound",

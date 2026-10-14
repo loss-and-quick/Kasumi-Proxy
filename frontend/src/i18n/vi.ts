@@ -968,6 +968,8 @@ const vi = {
   "routingSheet.newTitle": "Quy tắc định tuyến mới",
   "routingSheet.editTitle": "Chỉnh sửa quy tắc định tuyến",
   "routingSheet.save": "Lưu",
+  "routingSheet.needCondition":
+    "Thêm ít nhất một điều kiện: tên miền, IP, cổng, mạng, giao thức, ứng dụng hoặc nguồn.",
   "routingSheet.name": "Tên",
   "routingSheet.defaultName": "Quy tắc",
   "routingSheet.outbound": "Outbound",

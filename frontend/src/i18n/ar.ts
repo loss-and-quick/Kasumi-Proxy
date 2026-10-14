@@ -1155,6 +1155,8 @@ const ar = {
   "routingSheet.newTitle": "قاعدة توجيه جديدة",
   "routingSheet.editTitle": "تعديل قاعدة التوجيه",
   "routingSheet.save": "حفظ",
+  "routingSheet.needCondition":
+    "أضف شرطًا واحدًا على الأقل: نطاق أو IP أو منفذ أو شبكة أو بروتوكول أو تطبيق أو مصدر.",
   "routingSheet.name": "الاسم",
   "routingSheet.defaultName": "قاعدة",
   "routingSheet.outbound": "المسار الصادر",

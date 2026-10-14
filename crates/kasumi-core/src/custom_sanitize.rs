@@ -12,6 +12,7 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::sub_ingest::limits;
+use crate::xray_config::xray_rule_has_condition;
 
 /// Outbound protocols a provider config may use.
 const PROTOCOLS: [&str; 11] = [
@@ -560,6 +561,12 @@ fn sanitize_rule(
             dropped.push(format!("{path}.{k}"));
         }
     }
+    // A rule that only had `inboundTag` or `user` served inbounds Kasumi doesn't
+    // have; with nothing left to match, Xray would refuse the config.
+    if !xray_rule_has_condition(&out) {
+        dropped.push(format!("{path}: no condition left"));
+        return None;
+    }
     Some(Value::Object(out))
 }
 
@@ -749,15 +756,54 @@ mod tests {
         let out = sanitize(json!({
             "outbounds": [vless("proxy")],
             "routing": { "rules": [
-                { "type": "field", "inboundTag": ["api"], "user": ["x"], "outboundTag": "proxy" },
+                { "type": "field", "inboundTag": ["api"], "domain": ["a.example"], "outboundTag": "proxy" },
             ]},
         }));
         let rule = &out.routing.unwrap()["rules"][0];
-        assert_eq!(rule, &json!({ "type": "field", "outboundTag": "proxy" }));
+        assert_eq!(
+            rule,
+            &json!({ "type": "field", "domain": ["a.example"], "outboundTag": "proxy" })
+        );
         assert!(
             out.dropped
                 .contains(&"routing.rules[0].inboundTag".to_string())
         );
+    }
+
+    #[test]
+    fn rule_left_without_a_condition_is_dropped() {
+        let out = sanitize(json!({
+            "outbounds": [vless("main"), vless("l1"), { "tag": "direct", "protocol": "freedom" }],
+            "routing": {
+                "balancers": [
+                    { "tag": "balancer-main", "selector": ["main"] },
+                    { "tag": "balancer-l1", "selector": ["l1"] },
+                ],
+                "rules": [
+                    { "type": "field", "inboundTag": ["socks-l1"], "balancerTag": "balancer-l1" },
+                    { "type": "field", "user": ["x"], "outboundTag": "direct" },
+                    { "type": "field", "domain": [], "outboundTag": "direct" },
+                    { "type": "field", "ip": ["10.0.0.0/8"], "outboundTag": "direct" },
+                    { "type": "field", "network": "tcp,udp", "balancerTag": "balancer-main" },
+                ],
+            },
+        }));
+        let rules = out.routing.unwrap()["rules"].clone();
+        assert_eq!(
+            rules,
+            json!([
+                { "type": "field", "ip": ["10.0.0.0/8"], "outboundTag": "direct" },
+                { "type": "field", "network": "tcp,udp", "balancerTag": "balancer-main" },
+            ])
+        );
+        for i in 0..3 {
+            assert!(
+                out.dropped
+                    .contains(&format!("routing.rules[{i}]: no condition left")),
+                "rule {i}: {:?}",
+                out.dropped
+            );
+        }
     }
 
     fn reality_config(sni: &str, sid: &str, public_key: &str) -> String {
