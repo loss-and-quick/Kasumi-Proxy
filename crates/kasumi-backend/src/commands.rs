@@ -486,10 +486,20 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             let lines = lines.map(|n| n as usize).unwrap_or(LOG_TAIL_LINES);
             let path = paths.log(target);
             let Some(txt) = read_text(&path).await else {
-                return Ok(Response::Text(unwritten_log(target, &path, lines)));
+                return Ok(Response::Text(unwritten_log(
+                    target,
+                    &path,
+                    lines,
+                    &kasumi_log::recent(lines),
+                )));
             };
             if txt.is_empty() {
-                return Ok(Response::Text(unwritten_log(target, &path, lines)));
+                return Ok(Response::Text(unwritten_log(
+                    target,
+                    &path,
+                    lines,
+                    &kasumi_log::recent(lines),
+                )));
             }
             let body = txt.strip_suffix('\n').unwrap_or(&txt);
             let all: Vec<&str> = body.split('\n').collect();
@@ -771,23 +781,22 @@ const LOG_TARGETS: [LogTarget; 4] = [
 /// has a fallback: the facade keeps the last records in memory, which is the only
 /// place a crash during boot is visible — the file is written by the very first
 /// thing that failed. The core logs have no such window, so they say so plainly.
-fn unwritten_log(target: LogTarget, path: &Path, lines: usize) -> String {
+/// `buffered` is passed in rather than read here, so the decision can be tested
+/// without the process-wide buffer other tests are writing to.
+fn unwritten_log(target: LogTarget, path: &Path, lines: usize, buffered: &[String]) -> String {
     let reason = if path.exists() {
         format!("(empty log: {})", path.display())
     } else {
         format!("(no log: {})", path.display())
     };
-    if target != LogTarget::Daemon {
+    if target != LogTarget::Daemon || buffered.is_empty() {
         return reason;
     }
-    let buffered = kasumi_log::recent(lines);
-    if buffered.is_empty() {
-        return reason;
-    }
+    let shown = &buffered[buffered.len().saturating_sub(lines)..];
     format!(
         "{reason}\n--- {} record(s) this session, not yet on disk ---\n{}",
-        buffered.len(),
-        buffered.join("\n")
+        shown.len(),
+        shown.join("\n")
     )
 }
 
@@ -1114,47 +1123,46 @@ mod tests {
         assert_eq!(t, "c\nd");
     }
 
-    #[tokio::test]
-    async fn an_empty_app_log_falls_back_to_what_is_still_in_memory() {
-        let (p, _d) = TestPlatform::new();
-        write_text(p.paths().log(LogTarget::Daemon), "")
-            .await
-            .unwrap();
-        kasumi_log::buffer::configure(8);
-        kasumi_log::buffer::push(
+    #[test]
+    fn an_empty_app_log_falls_back_to_what_is_still_in_memory() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("daemon.log");
+        std::fs::write(&path, "").unwrap();
+        let buffered = [
             "2026-02-11T09:14:02.131+00:00 +0.001s INFO  kasumi::sys daemon starting".to_string(),
+            "2026-02-11T09:14:02.140+00:00 +0.002s WARN  kasumi::platform boot init failed"
+                .to_string(),
+        ];
+
+        let text = unwritten_log(LogTarget::Daemon, &path, 10, &buffered);
+        assert!(
+            text.starts_with(&format!("(empty log: {})", path.display())),
+            "{text}"
         );
+        assert!(
+            text.contains("--- 2 record(s) this session, not yet on disk ---"),
+            "{text}"
+        );
+        assert!(text.contains("daemon starting"), "{text}");
 
-        let Response::Text(t) = dispatch(
-            &p,
-            Command::Log {
-                target: Some(LogTarget::Daemon),
-                lines: None,
-            },
-        )
-        .await
-        .unwrap() else {
-            panic!()
-        };
-        assert!(t.starts_with("(empty log:"), "{t}");
-        assert!(t.contains("not yet on disk"), "{t}");
-        assert!(t.contains("daemon starting"), "{t}");
+        // The tail the viewer asked for, and only the app's own log falls back.
+        let text = unwritten_log(LogTarget::Daemon, &path, 1, &buffered);
+        assert!(text.contains("boot init failed"), "{text}");
+        assert!(!text.contains("daemon starting"), "{text}");
+        let text = unwritten_log(LogTarget::Xray, &path, 10, &buffered);
+        assert_eq!(text, format!("(empty log: {})", path.display()));
 
-        // Clearing the log must take the memory with it.
-        dispatch(&p, Command::ClearLogs).await.unwrap();
-        let Response::Text(t) = dispatch(
-            &p,
-            Command::Log {
-                target: Some(LogTarget::Daemon),
-                lines: None,
-            },
-        )
-        .await
-        .unwrap() else {
-            panic!()
-        };
-        assert!(!t.contains("not yet on disk"), "{t}");
-        kasumi_log::buffer::configure(0);
+        // A core log that was never written, and an app log with nothing buffered. A
+        // daemon.log that does not exist yet falls back all the same — that is the
+        // boot crash this exists for.
+        let missing = dir.path().join("xray.log");
+        let text = unwritten_log(LogTarget::Daemon, &missing, 10, &buffered);
+        assert!(text.starts_with("(no log:"), "{text}");
+        assert!(text.contains("daemon starting"), "{text}");
+        assert_eq!(
+            unwritten_log(LogTarget::Daemon, &path, 10, &[]),
+            format!("(empty log: {})", path.display())
+        );
     }
 
     #[tokio::test]
