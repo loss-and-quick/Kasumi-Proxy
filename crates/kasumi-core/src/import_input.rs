@@ -1,10 +1,12 @@
-//! What pasted or scanned text holds: subscription URLs, Happ's `happ://` links or
-//! share links. Pure; every shell asks this module so they agree on the grammar.
+//! What pasted or scanned text holds: subscription URLs, Happ's `happ://` links,
+//! Incy's `incy://crypt1/` links or share links. Pure; every shell asks this module
+//! so they agree on the grammar.
 
 use std::borrow::Cow;
 
 use happ_sub::RoutingAction;
 use happ_sub::deeplink::{Deeplink, parse_deeplink};
+use happ_sub::incy_crypt::{self, IncyCryptError};
 use happ_sub::url_crypt::{UrlCryptError, builtin_keyring, decrypt_url};
 use serde::{Deserialize, Serialize};
 
@@ -13,14 +15,17 @@ use crate::route::RoutePackage;
 use crate::share::parse_share_link;
 use crate::sub_changes::{routing_import, routing_package};
 use crate::sub_meta_types::RoutingImport;
+use crate::sub_policy::clean_title;
 
 /// What one token of an import is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportInput {
     /// `url` is what the subscription stores: an encrypted link stays encrypted.
+    /// `name` is the provider name an `incy://` link carries.
     SubscriptionUrl {
         url: String,
         encrypted: bool,
+        name: Option<String>,
     },
     Routing(Box<RoutingAction>),
     /// Anything else, for the share-link parser.
@@ -54,14 +59,14 @@ pub enum UnsupportedInput {
 /// Classify one token (a line without spaces).
 pub fn resolve_import_input(text: &str) -> ImportInput {
     let text = text.trim();
+    if incy_crypt::is_incy_link(text) {
+        return encrypted_subscription(text);
+    }
     let link = match parse_deeplink(text) {
         Ok(link) => link,
         Err(happ_sub::Error::InvalidDeeplink(_)) => {
             return if is_subscription_url(text) {
-                ImportInput::SubscriptionUrl {
-                    url: text.to_owned(),
-                    encrypted: false,
-                }
+                plain_subscription(text)
             } else {
                 ImportInput::ShareLinks
             };
@@ -70,13 +75,7 @@ pub fn resolve_import_input(text: &str) -> ImportInput {
     };
     match link {
         Deeplink::Add(inner) => resolve_add(&inner),
-        Deeplink::Crypt { .. } => match decrypt(text) {
-            Ok(_) => ImportInput::SubscriptionUrl {
-                url: text.to_owned(),
-                encrypted: true,
-            },
-            Err(_) => unsupported(UnsupportedInput::UrlDecrypt),
-        },
+        Deeplink::Crypt { .. } => encrypted_subscription(text),
         Deeplink::Routing(action) => match *action {
             RoutingAction::Off => unsupported(UnsupportedInput::RoutingOff),
             action => ImportInput::Routing(Box::new(action)),
@@ -94,6 +93,26 @@ fn unsupported(kind: UnsupportedInput) -> ImportInput {
     ImportInput::Unsupported { kind }
 }
 
+fn plain_subscription(url: &str) -> ImportInput {
+    ImportInput::SubscriptionUrl {
+        url: url.to_owned(),
+        encrypted: false,
+        name: None,
+    }
+}
+
+/// An encrypted link is checked here but stored as given.
+fn encrypted_subscription(link: &str) -> ImportInput {
+    match decrypt(link) {
+        Ok(Decrypted { name, .. }) => ImportInput::SubscriptionUrl {
+            url: link.to_owned(),
+            encrypted: true,
+            name,
+        },
+        Err(_) => unsupported(UnsupportedInput::UrlDecrypt),
+    }
+}
+
 /// `happ://add/<url>`: the URL may arrive percent-encoded, and may itself be encrypted.
 fn resolve_add(inner: &str) -> ImportInput {
     let inner = inner.trim();
@@ -107,10 +126,7 @@ fn resolve_add(inner: &str) -> ImportInput {
         return resolve_import_input(url);
     }
     if is_subscription_url(url) {
-        return ImportInput::SubscriptionUrl {
-            url: url.to_owned(),
-            encrypted: false,
-        };
+        return plain_subscription(url);
     }
     unsupported(UnsupportedInput::Invalid)
 }
@@ -125,28 +141,60 @@ fn is_subscription_url(text: &str) -> bool {
     url::Url::parse(text).is_ok_and(|u| u.username().is_empty() && u.password().is_none())
 }
 
-/// Whether `url` is a `happ://crypt…crypt5` link.
+/// Whether `url` is a `happ://crypt…crypt5` or `incy://crypt1` link.
 pub fn is_encrypted_url(url: &str) -> bool {
-    matches!(parse_deeplink(url), Ok(Deeplink::Crypt { .. }))
+    incy_crypt::is_incy_link(url) || matches!(parse_deeplink(url), Ok(Deeplink::Crypt { .. }))
 }
 
-fn decrypt(link: &str) -> Result<String, UrlCryptError> {
-    let url = decrypt_url(link, builtin_keyring())?;
-    let url = url.trim();
-    if is_subscription_url(url) {
-        Ok(url.to_owned())
-    } else {
-        Err(UrlCryptError::InvalidFormat(
-            "the link does not hold an http(s) URL".into(),
-        ))
+/// Why an encrypted link gives no subscription URL.
+#[derive(Debug)]
+pub enum LinkDecryptError {
+    Happ(UrlCryptError),
+    Incy(IncyCryptError),
+    NotHttp,
+}
+
+impl std::fmt::Display for LinkDecryptError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LinkDecryptError::Happ(e) => e.fmt(f),
+            LinkDecryptError::Incy(e) => e.fmt(f),
+            LinkDecryptError::NotHttp => f.write_str("the link does not hold an http(s) URL"),
+        }
     }
+}
+
+impl std::error::Error for LinkDecryptError {}
+
+struct Decrypted {
+    url: String,
+    name: Option<String>,
+}
+
+fn decrypt(link: &str) -> Result<Decrypted, LinkDecryptError> {
+    let (url, name) = if incy_crypt::is_incy_link(link) {
+        let l = incy_crypt::decrypt_link(link, incy_crypt::builtin_key())
+            .map_err(LinkDecryptError::Incy)?;
+        (l.url, l.name.as_deref().and_then(clean_title))
+    } else {
+        let url = decrypt_url(link, builtin_keyring()).map_err(LinkDecryptError::Happ)?;
+        (url, None)
+    };
+    let url = url.trim();
+    if !is_subscription_url(url) {
+        return Err(LinkDecryptError::NotHttp);
+    }
+    Ok(Decrypted {
+        url: url.to_owned(),
+        name,
+    })
 }
 
 /// The URL a subscription is fetched from: an encrypted link is decrypted on every
 /// fetch, so keys added to happ-sub apply without the user re-adding it.
-pub fn subscription_fetch_url(url: &str) -> Result<Cow<'_, str>, UrlCryptError> {
+pub fn subscription_fetch_url(url: &str) -> Result<Cow<'_, str>, LinkDecryptError> {
     if is_encrypted_url(url) {
-        decrypt(url.trim()).map(Cow::Owned)
+        decrypt(url.trim()).map(|d| Cow::Owned(d.url))
     } else {
         Ok(Cow::Borrowed(url))
     }
@@ -168,6 +216,8 @@ pub struct ResolvedImport {
 pub struct SubscriptionLink {
     pub url: String,
     pub encrypted: bool,
+    /// The provider name an `incy://` link carries, for the new subscription.
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -204,8 +254,16 @@ pub fn resolve_import_text(text: &str) -> ResolvedImport {
         }
         for (token, input) in tokens.into_iter().zip(inputs) {
             match input {
-                ImportInput::SubscriptionUrl { url, encrypted } => {
-                    out.subscriptions.push(SubscriptionLink { url, encrypted });
+                ImportInput::SubscriptionUrl {
+                    url,
+                    encrypted,
+                    name,
+                } => {
+                    out.subscriptions.push(SubscriptionLink {
+                        url,
+                        encrypted,
+                        name,
+                    });
                 }
                 ImportInput::Routing(action) => {
                     if let Some(profile) = action.profile() {
@@ -309,6 +367,7 @@ mod tests {
             ImportInput::SubscriptionUrl {
                 url: "https://sub.example.com/s/abc".into(),
                 encrypted: false,
+                name: None,
             }
         );
         assert_eq!(
@@ -332,6 +391,7 @@ mod tests {
                 ImportInput::SubscriptionUrl {
                     url: "https://sub.example.com/s/abc?x=1#Title".into(),
                     encrypted: false,
+                    name: None,
                 },
                 "{link}"
             );
@@ -360,6 +420,7 @@ mod tests {
                 ImportInput::SubscriptionUrl {
                     url: link.trim().into(),
                     encrypted: true,
+                    name: None,
                 }
             );
         }
@@ -373,8 +434,77 @@ mod tests {
             ImportInput::SubscriptionUrl {
                 url: link.into(),
                 encrypted: true,
+                name: None,
             }
         );
+    }
+
+    /// The cross-platform vector pinned by Incy's reference encoder.
+    const INCY_VECTOR: &str = "incy://crypt1/AAECAwQFBgcICQoLNyIQL3rDwRZqnyoD8pGKSLXP6o8NdSXQVSSALNbbUyIr__tWGFUexdIfKvvmDnuDGbmBvuppfNef6aKNZUwOm4c-Sg";
+
+    fn incy_link(url: &str, name: Option<&str>) -> String {
+        incy_crypt::encrypt_link(
+            url,
+            name,
+            incy_crypt::builtin_key(),
+            [7; incy_crypt::IV_LEN],
+        )
+    }
+
+    #[test]
+    fn incy_link_is_an_encrypted_subscription() {
+        assert_eq!(
+            subscription_fetch_url(INCY_VECTOR).unwrap(),
+            "https://sub.example.com/test-vector"
+        );
+        assert_eq!(
+            resolve_import_input(&format!(" {INCY_VECTOR} ")),
+            ImportInput::SubscriptionUrl {
+                url: INCY_VECTOR.into(),
+                encrypted: true,
+                name: None,
+            }
+        );
+        assert!(is_encrypted_url(INCY_VECTOR));
+        assert!(is_encrypted_url("INCY://Crypt1/x"));
+    }
+
+    #[test]
+    fn incy_link_names_the_subscription() {
+        let link = incy_link(
+            "https://sub.example.com/s?t=1#Example",
+            Some(" Example\u{202e} VPN\n"),
+        );
+        assert_eq!(
+            resolve_import_input(&link),
+            ImportInput::SubscriptionUrl {
+                url: link.clone(),
+                encrypted: true,
+                name: Some("Example VPN".into()),
+            }
+        );
+        assert_eq!(
+            subscription_fetch_url(&link).unwrap(),
+            "https://sub.example.com/s?t=1#Example"
+        );
+        let r = resolve_import_text(&format!("happ://add/{link}"));
+        assert_eq!(r.subscriptions[0].name.as_deref(), Some("Example VPN"));
+    }
+
+    #[test]
+    fn incy_link_without_a_subscription_url_is_reported() {
+        for link in [
+            incy_link("vless://id@h:443#Name", None),
+            INCY_VECTOR.replacen("AAEC", "AAED", 1),
+            "incy://crypt1/".into(),
+        ] {
+            assert_eq!(
+                resolve_import_input(&link),
+                unsupported(UnsupportedInput::UrlDecrypt),
+                "{link}"
+            );
+            assert!(subscription_fetch_url(&link).is_err());
+        }
     }
 
     #[test]

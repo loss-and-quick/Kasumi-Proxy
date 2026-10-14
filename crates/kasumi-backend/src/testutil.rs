@@ -402,3 +402,9 @@ pub fn crypt1_link(url: &str) -> String {
     let payload = base64::engine::general_purpose::STANDARD.encode(cipher);
     format!("happ://crypt/{payload}")
 }
+
+/// An `incy://crypt1/` link to `url` under Incy's built-in key.
+pub fn incy_link(url: &str, name: Option<&str>) -> String {
+    use happ_sub::incy_crypt::{IV_LEN, builtin_key, encrypt_link};
+    encrypt_link(url, name, builtin_key(), [7; IV_LEN])
+}

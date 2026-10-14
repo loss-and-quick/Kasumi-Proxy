@@ -1878,6 +1878,7 @@ export type UnsupportedLink = z.infer<typeof UnsupportedLinkSchema>;
 export const SubscriptionLinkSchema = z.object({
 	url: z.string(),
 	encrypted: z.boolean(),
+	name: z.string().nullable(),
 });
 export type SubscriptionLink = z.infer<typeof SubscriptionLinkSchema>;
 

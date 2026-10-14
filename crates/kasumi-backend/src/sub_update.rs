@@ -1207,6 +1207,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stored_incy_link_is_decrypted_at_fetch() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        let link = crate::testutil::incy_link(&format!("{base}/s?t=1"), Some("Example VPN"));
+        with_old_profile(&p, &link).await;
+        let after = update(&p).await;
+
+        assert!(requests.lock().unwrap()[0].starts_with("GET /s?t=1 HTTP/1.1"));
+        let s = &after.subscriptions[0];
+        assert_eq!(s.url, link, "the link stays encrypted");
+        assert_eq!(s.last_error, None);
+        assert_eq!(after.profiles[0].meta().remarks, "Fresh");
+    }
+
+    #[tokio::test]
     async fn undecryptable_link_keeps_profiles() {
         let (p, _d) = TestPlatform::new();
         with_old_profile(&p, "happ://crypt5/zzzzAAAAAAAAAAAAAAAAAAAAAAAA").await;
