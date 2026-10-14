@@ -1449,6 +1449,14 @@ const ru = {
   "routes.target.singBoxOnly":
     "Этот профиль работает только на sing-box, а активный — на {core}: этот трафик пойдёт через активный прокси.",
   "routes.target.cantStart": "Этот трафик пойдёт через активный прокси. {reason}",
+  "routes.target.ignored":
+    "На sing-box эти настройки игнорируются, поэтому трафик может не пройти: {settings}.",
+  "routes.target.setting.vlessEncryption": "шифрование VLESS",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "транспорт mKCP",
+  "routes.target.setting.xhttp": "транспорт XHTTP",
+  "routes.target.setting.grpcServicePath": "путь сервиса gRPC",
+  "routes.target.setting.verifyPeerCertName": "имя сертификата для проверки",
   "profiles.label.deleted": "Удалённый профиль",
   "profilePicker.title": "Выберите профиль",
   "routingSheet.outboundDeletedHint":

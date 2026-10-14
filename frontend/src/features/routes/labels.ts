@@ -9,8 +9,9 @@ import type {
   Group,
   Route,
   TargetFallback,
+  XrayOnlySetting,
 } from "../../generated/bindings";
-import { type Translate, type useFormatters, useT } from "../../i18n";
+import { type Translate, useFormatters, useT } from "../../i18n";
 import { coreConflictText } from "../../lib/core-conflict";
 import { isDefaultRoute, routeGroups, routeProfiles } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
@@ -109,13 +110,59 @@ export function targetFallbackText(
   }
 }
 
-/** {@link targetFallbackText} for a rule target under the current active profile. */
+/**
+ * Settings of the rule's target profile that sing-box leaves out when it builds
+ * the profile (the backend's `xrayOnlySettings`), when the active profile runs
+ * on sing-box and so builds it. Empty on any other core, where the target is
+ * built by xray or falls back (see {@link targetFallback}).
+ */
+export function targetIgnored(
+  tag: string,
+  activeId: string | null,
+  resolutions: Readonly<Record<string, CoreResolution>>,
+): XrayOnlySetting[] {
+  if (!activeId || tag === activeId) return [];
+  if (resolutions[activeId]?.resolved !== "sing-box") return [];
+  return resolutions[tag]?.xrayOnlySettings ?? [];
+}
+
+function ignoredSettingName(t: Translate, setting: XrayOnlySetting): string {
+  switch (setting) {
+    case "vlessEncryption":
+      return t("routes.target.setting.vlessEncryption");
+    case "visionUdp443Flow":
+      return t("routes.target.setting.visionUdp443Flow");
+    case "kcp":
+      return t("routes.target.setting.kcp");
+    case "xhttp":
+      return t("routes.target.setting.xhttp");
+    case "grpcServicePath":
+      return t("routes.target.setting.grpcServicePath");
+    case "verifyPeerCertName":
+      return t("routes.target.setting.verifyPeerCertName");
+  }
+}
+
+export function targetIgnoredText(
+  t: Translate,
+  formatters: ReturnType<typeof useFormatters>,
+  settings: readonly XrayOnlySetting[],
+): string {
+  return t("routes.target.ignored", {
+    settings: formatters.formatList(settings.map((s) => ignoredSettingName(t, s))),
+  });
+}
+
+/** {@link targetFallbackText}, else {@link targetIgnoredText}, for a rule target under the current active profile. */
 export function useTargetFallbackText(): (tag: string) => string | null {
   const t = useT();
+  const formatters = useFormatters();
   const activeId = useAppStore((s) => s.activeId);
   const resolutions = useAppStore((s) => s.coreResolutions);
   return (tag) => {
     const why = targetFallback(tag, activeId, resolutions);
-    return why ? targetFallbackText(t, why) : null;
+    if (why) return targetFallbackText(t, why);
+    const ignored = targetIgnored(tag, activeId, resolutions);
+    return ignored.length ? targetIgnoredText(t, formatters, ignored) : null;
   };
 }

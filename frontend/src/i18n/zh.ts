@@ -1217,6 +1217,13 @@ const zh = {
   "routes.target.singBoxOnly":
     "此配置只能在 sing-box 上运行，而当前配置运行在 {core} 上：此流量将经由当前代理。",
   "routes.target.cantStart": "此流量将经由当前代理。{reason}",
+  "routes.target.ignored": "在 sing-box 上这些设置会被忽略，此流量可能无法连通：{settings}。",
+  "routes.target.setting.vlessEncryption": "VLESS 加密",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "mKCP 传输",
+  "routes.target.setting.xhttp": "XHTTP 传输",
+  "routes.target.setting.grpcServicePath": "gRPC 服务路径",
+  "routes.target.setting.verifyPeerCertName": "要验证的证书名称",
   "profiles.label.deleted": "已删除的配置",
   "profilePicker.title": "选择配置",
   "routingSheet.outboundDeletedHint": "此规则指向的配置已删除，其流量改走代理。请另选一个。",
