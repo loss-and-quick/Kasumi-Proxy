@@ -7,11 +7,12 @@ use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use happ_sub::MetaMap;
-use happ_sub::device::{HAPP_PACKAGE, HAPP_SIGNERS, decode_user_key, ssaid};
+use happ_sub::device::{HAPP_PACKAGE, HAPP_SIGNERS, decode_user_key, is_valid_sys_hwid, ssaid};
 use happ_sub::incy_request::{self, derive_hwid, usable_android_id};
 use happ_sub::incy_signers::{INCY_PACKAGE, INCY_SIGNERS};
 use kasumi_core::request_identity::{
-    AutoHwid, DeviceFacts, HwidSource, IdentityInput, RequestClient, Resolved, resolve,
+    AutoHwid, DeviceFacts, HwidSource, IdentityInput, RequestClient, Resolved,
+    is_happ_linux_desktop, resolve,
 };
 
 use crate::fs::read_text;
@@ -20,8 +21,13 @@ use crate::platform::Platform;
 use kasumi_log::{Area, ks_warn};
 
 /// The HWID sent when none is typed, most Happ-like first: the SSAID Android gave an
-/// installed Happ, the one it would give Happ, an app-scoped machine id, a random id.
-pub async fn auto_happ_hwid(platform: &dyn Platform, android_user: u32) -> AutoHwid {
+/// installed Happ, the one it would give Happ, the machine id (as it is on Linux, as
+/// Happ desktop sends it; app-scoped elsewhere), a random id.
+pub async fn auto_happ_hwid(
+    platform: &dyn Platform,
+    android_user: u32,
+    facts: &DeviceFacts,
+) -> AutoHwid {
     let valid = |s: String| Some(s.trim().to_owned()).filter(|s| is_hex16(s));
     if let Some(value) = platform
         .stored_ssaid(android_user, HAPP_PACKAGE)
@@ -44,19 +50,29 @@ pub async fn auto_happ_hwid(platform: &dyn Platform, android_user: u32) -> AutoH
             source: HwidSource::HappComputed,
         };
     }
-    if let Some(id) = platform
+    let desktop = is_happ_linux_desktop(&facts.os);
+    let machine_id = platform
         .machine_id()
         .await
         .map(|s| s.trim().to_owned())
-        .filter(|s| !s.is_empty())
-    {
-        return AutoHwid {
-            value: app_scoped(&id),
-            source: HwidSource::HappMachineId,
-        };
+        .filter(|s| !s.is_empty());
+    if let Some(id) = machine_id {
+        // Happ desktop sends the machine id as it is, when it isn't blank or zeros.
+        if desktop && is_valid_sys_hwid(&id) {
+            return AutoHwid {
+                value: id,
+                source: HwidSource::HappMachineId,
+            };
+        }
+        if !desktop {
+            return AutoHwid {
+                value: app_scoped(&id),
+                source: HwidSource::HappMachineId,
+            };
+        }
     }
     AutoHwid {
-        value: happ_device_id(platform).await,
+        value: happ_device_id(platform, desktop).await,
         source: HwidSource::HappDeviceId,
     }
 }
@@ -118,7 +134,7 @@ pub async fn resolve_request(
     let facts = platform.device_facts().await;
     let user = input.defaults.android_user;
     let auto = match input.client {
-        RequestClient::Happ => auto_happ_hwid(platform, user).await,
+        RequestClient::Happ => auto_happ_hwid(platform, user, &facts).await,
         RequestClient::Incy => auto_incy_hwid(platform, user, &facts).await,
     };
     let now = SystemTime::now()
@@ -135,7 +151,8 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// machine-id(5) asks applications not to expose the raw id, so send a keyed hash.
+/// machine-id(5) asks applications not to expose the raw id, so send a keyed hash
+/// where no Happ build to match sends it raw.
 fn app_scoped(machine_id: &str) -> String {
     let mut mac =
         Hmac::<Sha256>::new_from_slice(b"kasumi-proxy/hwid").expect("HMAC accepts any key length");
@@ -144,19 +161,31 @@ fn app_scoped(machine_id: &str) -> String {
 }
 
 /// A random id kept in `happ-device-id`, outside `app-state.json`, so restoring a backup on
-/// another device does not clone it.
-async fn happ_device_id(platform: &dyn Platform) -> String {
+/// another device does not clone it. On the Linux desktop it is a UUID, as the fallback
+/// Happ desktop keeps when it has no machine id; elsewhere 16 hex digits, like an SSAID.
+async fn happ_device_id(platform: &dyn Platform, desktop: bool) -> String {
     static CREATE: Mutex<()> = Mutex::const_new(());
     let _g = CREATE.lock().await;
     let path = platform.paths().happ_device_id();
+    let fits = |s: &str| {
+        if desktop {
+            s.len() == 36 && uuid::Uuid::parse_str(s).is_ok()
+        } else {
+            is_hex16(s)
+        }
+    };
     if let Some(id) = read_text(&path)
         .await
         .map(|s| s.trim().to_owned())
-        .filter(|s| is_hex16(s))
+        .filter(|s| fits(s))
     {
         return id;
     }
-    let id = hex(&Sha256::digest(uuid::Uuid::new_v4().as_bytes())[..8]);
+    let id = if desktop {
+        uuid::Uuid::new_v4().hyphenated().to_string()
+    } else {
+        hex(&Sha256::digest(uuid::Uuid::new_v4().as_bytes())[..8])
+    };
     if let Err(e) = write_text_atomic(&path, &id).await {
         ks_warn!(Area::State, "writing {}: {e}", path.display());
     }
@@ -199,7 +228,7 @@ mod tests {
             i.user_key = Some(KEY.into());
             i.machine_id = Some("m".into());
         });
-        let hwid = auto_happ_hwid(&p, 0).await;
+        let hwid = auto_happ_hwid(&p, 0, &DeviceFacts::default()).await;
         assert_eq!(hwid.value, "00112233aabbccdd");
         assert_eq!(hwid.source, HwidSource::HappStored);
         assert_eq!(p.identity_calls(), ["stored:0:su.happ.proxyutility"]);
@@ -212,7 +241,7 @@ mod tests {
             i.stored_ssaid = Some("not an ssaid".into());
             i.user_key = Some(KEY.into());
         });
-        let hwid = auto_happ_hwid(&p, 10).await;
+        let hwid = auto_happ_hwid(&p, 10, &DeviceFacts::default()).await;
         assert_eq!(hwid.value, KEY_SSAID);
         assert_eq!(hwid.source, HwidSource::HappComputed);
         assert_eq!(
@@ -226,7 +255,7 @@ mod tests {
         let (p, _d) = TestPlatform::new();
         let raw = "5f3c8a1e9b2d4c6f8e0a1b2c3d4e5f60";
         p.identity(|i| i.machine_id = Some(format!("{raw}\n")));
-        let hwid = auto_happ_hwid(&p, 0).await;
+        let hwid = auto_happ_hwid(&p, 0, &DeviceFacts::default()).await;
         assert_eq!(hwid.source, HwidSource::HappMachineId);
         assert!(is_hex16(&hwid.value));
         assert!(!raw.contains(&hwid.value));
@@ -237,16 +266,56 @@ mod tests {
     #[tokio::test]
     async fn happ_persisted_random_is_stable_and_outside_app_state() {
         let (p, _d) = TestPlatform::new();
-        let first = auto_happ_hwid(&p, 0).await;
+        let first = auto_happ_hwid(&p, 0, &DeviceFacts::default()).await;
         assert_eq!(first.source, HwidSource::HappDeviceId);
         assert!(is_hex16(&first.value));
-        assert_eq!(auto_happ_hwid(&p, 0).await, first);
+        assert_eq!(auto_happ_hwid(&p, 0, &DeviceFacts::default()).await, first);
         let stored = std::fs::read_to_string(p.paths().happ_device_id()).unwrap();
         assert_eq!(stored, first.value);
         assert!(!p.paths().app_state.exists());
 
         let (other, _d2) = TestPlatform::new();
-        assert_ne!(auto_happ_hwid(&other, 0).await.value, first.value);
+        assert_ne!(
+            auto_happ_hwid(&other, 0, &DeviceFacts::default())
+                .await
+                .value,
+            first.value
+        );
+    }
+
+    fn linux() -> DeviceFacts {
+        DeviceFacts {
+            os: "Linux".into(),
+            ..Default::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn happ_linux_desktop_sends_the_machine_id_as_it_is() {
+        let (p, _d) = TestPlatform::new();
+        let raw = "5f3c8a1e9b2d4c6f8e0a1b2c3d4e5f60";
+        p.identity(|i| i.machine_id = Some(format!("{raw}\n")));
+        let hwid = auto_happ_hwid(&p, 0, &linux()).await;
+        assert_eq!(hwid.value, raw);
+        assert_eq!(hwid.source, HwidSource::HappMachineId);
+    }
+
+    #[tokio::test]
+    async fn happ_linux_desktop_without_a_machine_id_keeps_a_random_uuid() {
+        let (p, _d) = TestPlatform::new();
+        // An id of zeros is no id to Happ desktop.
+        p.identity(|i| i.machine_id = Some("00000000-0000-0000-0000-000000000000".into()));
+        // A 16-digit id from before gives way to the UUID Happ desktop keeps.
+        std::fs::write(p.paths().happ_device_id(), "00112233aabbccdd").unwrap();
+        let first = auto_happ_hwid(&p, 0, &linux()).await;
+        assert_eq!(first.source, HwidSource::HappDeviceId);
+        assert!(
+            uuid::Uuid::parse_str(&first.value).is_ok(),
+            "{}",
+            first.value
+        );
+        assert_eq!(first.value.len(), 36);
+        assert_eq!(auto_happ_hwid(&p, 0, &linux()).await, first);
     }
 
     fn phone() -> DeviceFacts {

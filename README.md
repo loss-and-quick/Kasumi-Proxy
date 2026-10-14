@@ -43,8 +43,8 @@ Both run the same Rust backend and the same React UI.
 - **Happ-compatible subscriptions**, decoded by [happ-sub](https://github.com/loss-and-quick/happ-sub):
   - the provider's title, traffic and expiry, announcements and update interval, from headers and
     `#key:` directives;
-  - requests that identify like Happ (User-Agent, HWID, device headers), editable per subscription
-    or in Settings;
+  - requests that identify like Happ (User-Agent, HWID, device headers): Android Happ on a phone,
+    Happ desktop on Linux; editable per subscription or in Settings;
   - or, per subscription, like Incy (its User-Agent, `x-` headers and device ID), the default for
     a subscription added from an `incy://` link;
   - changes the provider proposes (a new URL or domain, a fallback URL, routing profiles, tunnel

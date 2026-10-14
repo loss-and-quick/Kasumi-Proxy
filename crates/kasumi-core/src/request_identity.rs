@@ -217,6 +217,11 @@ pub fn is_valid_hwid(s: &str) -> bool {
     (1..=64).contains(&s.len()) && s.bytes().all(|b| (b'!'..=b'~').contains(&b))
 }
 
+/// Whether a device with OS `name` gets Happ's Linux desktop request and HWID.
+pub fn is_happ_linux_desktop(name: &str) -> bool {
+    happ_client_os(name) == ClientOs::Linux
+}
+
 /// The OS for `X-Device-OS` and the User-Agent; blank keeps Happ's Android.
 pub fn happ_client_os(name: &str) -> ClientOs {
     let name = name.trim();
@@ -428,6 +433,8 @@ fn resolve_incy(input: &IdentityInput, facts: &DeviceFacts, auto: &AutoHwid) -> 
         os_version: &os_version,
         locale: &java,
         language_tag: &tag,
+        // No desktop fields: Incy's Android request, whatever the device.
+        ..Default::default()
     };
     let options = incy_request::RequestOptions {
         app_version: INCY_VERSION,
@@ -709,6 +716,38 @@ mod tests {
         let r = resolve(&input(), &f, &auto(), None, &[], DAY);
         assert_eq!(header(&r, "X-Device-OS"), Some("Linux"));
         assert!(header(&r, "User-agent").unwrap().contains("/Linux/"));
+        assert!(is_happ_linux_desktop(" linux "));
+        assert!(!is_happ_linux_desktop(""));
+    }
+
+    /// A Linux desktop sends Happ desktop's request, not Android Happ's.
+    #[test]
+    fn linux_sends_happ_desktops_request() {
+        let f = DeviceFacts {
+            os: "Linux".into(),
+            os_version: "nixos_26.05".into(),
+            model: "magicbook_x86_64".into(),
+            locale: "ru_RU".into(),
+            ..Default::default()
+        };
+        let r = resolve(&input(), &f, &auto(), None, &[], DAY);
+        assert_eq!(
+            header(&r, "User-agent"),
+            Some(happ_sub::happ_request::user_agent_for_os("Linux", DAY).as_str())
+        );
+        assert!(
+            header(&r, "User-agent")
+                .unwrap()
+                .starts_with(&format!("Happ/{}/Linux/", happ_sub::HAPP_DESKTOP_VERSION))
+        );
+        assert_eq!(header(&r, "X-Device-Locale"), Some("ru_RU"));
+        assert_eq!(header(&r, "X-Ver-OS"), Some("nixos_26.05"));
+        assert_eq!(header(&r, "X-Device-model"), Some("magicbook_x86_64"));
+        assert_eq!(header(&r, "X-Bundle-ID"), Some("su.happ.desktop.linux"));
+        assert_eq!(
+            header(&r, "X-App-Version"),
+            Some(happ_sub::HAPP_DESKTOP_VERSION)
+        );
     }
 
     fn incy() -> IdentityInput {

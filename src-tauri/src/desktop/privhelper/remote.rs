@@ -152,6 +152,16 @@ impl Platform for RemotePlatform {
         self.local.watch_system_resume()
     }
 
+    // What a subscription request says about this device: world-readable files and
+    // the user's own environment.
+    async fn device_facts(&self) -> kasumi_core::request_identity::DeviceFacts {
+        self.local.device_facts().await
+    }
+
+    async fn machine_id(&self) -> Option<String> {
+        self.local.machine_id().await
+    }
+
     fn app_filter(&self) -> Option<&dyn AppFilterCapability> {
         self.local.app_filter()
     }
@@ -272,16 +282,21 @@ mod tests {
 
     use super::*;
 
+    /// A `RemotePlatform` over a socket that only accepts: enough for what the
+    /// GUI answers itself, which never reaches the helper. Keep the guard alive.
+    async fn remote() -> (tempfile::TempDir, tokio::net::UnixListener, RemotePlatform) {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("helper.sock");
+        let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+        let client = Client::connect(&sock.to_string_lossy()).await.unwrap();
+        (dir, listener, RemotePlatform::new(client).unwrap())
+    }
+
     /// The GUI decides about an uplink change through `RemotePlatform`: it must
     /// answer as the `DesktopPlatform` behind it, not with the trait's default.
     #[tokio::test]
     async fn uplink_change_policy_is_the_local_platforms() {
-        let dir = tempfile::tempdir().unwrap();
-        let sock = dir.path().join("helper.sock");
-        // Nothing is asked of the helper here; a socket that accepts is enough.
-        let _listener = tokio::net::UnixListener::bind(&sock).unwrap();
-        let client = Client::connect(&sock.to_string_lossy()).await.unwrap();
-        let remote = RemotePlatform::new(client).unwrap();
+        let (_dir, _listener, remote) = remote().await;
 
         let host = HostTraits {
             proxy_modes: true,
@@ -310,5 +325,26 @@ mod tests {
                 remote.local.uplink_change_restarts(p)
             );
         }
+    }
+
+    /// The resume watch runs in the GUI too: the trait's default has none, and the
+    /// data path would never be rebuilt after a sleep.
+    #[tokio::test]
+    async fn the_resume_watch_is_the_local_platforms() {
+        let (_dir, _listener, remote) = remote().await;
+        assert!(remote.watch_system_resume().is_some());
+    }
+
+    /// A subscription request describes this machine, not the trait's empty
+    /// defaults, which read as an Android client.
+    #[tokio::test]
+    async fn device_identity_is_the_local_platforms() {
+        let (_dir, _listener, remote) = remote().await;
+        assert_eq!(
+            remote.device_facts().await,
+            remote.local.device_facts().await
+        );
+        assert!(!remote.device_facts().await.os.is_empty());
+        assert_eq!(remote.machine_id().await, remote.local.machine_id().await);
     }
 }
