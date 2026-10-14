@@ -406,6 +406,41 @@ async fn changed_geo_data_flags_pending_restart_until_the_next_start() {
 }
 
 #[tokio::test]
+async fn a_manual_geo_download_flags_pending_restart_only_when_it_changes() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    platform.calls.lock().unwrap().clear();
+    tokio::fs::create_dir_all(&platform.paths.dat_dir)
+        .await
+        .unwrap();
+    let (base, _) = crate::testutil::serve(vec![
+        crate::testutil::http_response(200, &[], b"geo-v1"),
+        crate::testutil::http_response(200, &[], b"geo-v1"),
+    ])
+    .await;
+    let download = || Command::DownloadAsset {
+        filename: "geoip.dat".into(),
+        url: format!("{base}/geoip.dat"),
+        mode: Default::default(),
+    };
+
+    svc.dispatch(download()).await.unwrap();
+    assert!(pending_restart(&svc).await);
+    assert!(platform.calls.lock().unwrap().is_empty());
+
+    // The same bytes again leave a fresh start with nothing pending.
+    svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    svc.dispatch(download()).await.unwrap();
+    assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
 async fn tun_engine_tuning_flags_pending_restart() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;

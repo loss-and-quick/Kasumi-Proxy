@@ -26,7 +26,8 @@ use kasumi_core::mutate::{Backup, MutationIntent};
 use crate::commands::{self, BackupRestored, Command, CommandError, Response};
 use crate::platform::Platform;
 use crate::sub_cookies::SubCookies;
-use crate::sub_update;
+use crate::updater::LifecycleControl;
+use crate::{asset_update, sub_update};
 
 use self::lifecycle::{LifecycleCmd, RunningPath};
 use self::status::ProbeVerdict;
@@ -151,6 +152,26 @@ impl Service {
                 .map_err(CommandError)?;
                 self.emit_status().await;
                 Ok(Response::State(Box::new(state)))
+            }
+            Command::DownloadAsset {
+                filename,
+                url,
+                mode,
+            } => {
+                let changed = asset_update::download_asset(&*self.platform, &filename, &url, mode)
+                    .await
+                    .map_err(CommandError)?;
+                // As on the background update: the running core keeps the old data
+                // until its next start.
+                let running = self
+                    .platform
+                    .service_state()
+                    .await
+                    .is_ok_and(|s| s.engine.is_some());
+                if changed && running {
+                    self.note_assets_changed().await;
+                }
+                Ok(Response::Ok)
             }
             Command::Status => Ok(Response::Status(
                 self.current_status()
