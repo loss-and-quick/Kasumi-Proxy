@@ -45,6 +45,8 @@ Both run the same Rust backend and the same React UI.
     `#key:` directives;
   - requests that identify like Happ (User-Agent, HWID, device headers), editable per subscription
     or in Settings;
+  - or, per subscription, like Incy (its User-Agent, `x-` headers and device ID), the default for
+    a subscription added from an `incy://` link;
   - changes the provider proposes (a new URL or domain, a fallback URL, routing profiles, tunnel
     tweaks) apply only after you review and accept them;
   - JSON bodies: full Xray configs, once you allow them, keep only their outbounds and routing;
