@@ -138,7 +138,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kasumi-proxy-debug-${{ github.sha }}
-          path: build/*.zip
+          # *.zip.sha256 is the sidecar package-release.sh writes next to the zip:
+          # a nightly build can be re-downloaded, so verifying it is cheap.
+          path: |
+            build/*.zip
+            build/*.zip.sha256
           retention-days: 7
 
   # ── Desktop installers as nightly artifacts (unsigned), same fetch+bundle path
