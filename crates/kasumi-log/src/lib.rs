@@ -223,15 +223,34 @@ fn level_directives(level: LevelFilter) -> String {
     level.to_string().to_lowercase()
 }
 
+/// Keep a noisy dependency quiet whatever the directive string says. A third-party
+/// crate's debug output is not ours to publish: `cookie_store` prints the cookies a
+/// provider sets, which are session credentials, so it stays pinned to info even
+/// under `RUST_LOG=debug`. Applied on top of every filter, before [`set_directives`]
+/// is called again.
+pub fn pin_module(module: &str, level: LevelFilter) {
+    if let Ok(mut slot) = filter_slot().write() {
+        slot.pin(module, level);
+    }
+}
+
+fn directives_from_pins(pins: &[(String, LevelFilter)], base: &str) -> String {
+    if pins.is_empty() {
+        return base.to_string();
+    }
+    let mut directives = vec![base.to_string()];
+    directives.extend(
+        pins.iter()
+            .map(|(module, level)| format!("{module}={}", level_directives(*level))),
+    );
+    directives.join(",")
+}
+
 /// Replace the live filter. An unparsable string falls back to "log everything the
 /// dispatcher was built for" rather than silencing the process.
 pub fn set_directives(directives: &str) {
-    let filter = match env_filter::Builder::new().try_parse(directives) {
-        Ok(builder) => builder.build(),
-        Err(_) => env_filter::Builder::new().parse("trace").build(),
-    };
     if let Ok(mut slot) = filter_slot().write() {
-        *slot = filter;
+        slot.rebuild(directives);
     }
 }
 
@@ -271,10 +290,56 @@ pub fn recent(n: usize) -> Vec<String> {
 }
 
 static STARTED: OnceLock<Instant> = OnceLock::new();
-static FILTER: OnceLock<RwLock<env_filter::Filter>> = OnceLock::new();
+static FILTER: OnceLock<RwLock<LiveFilter>> = OnceLock::new();
 
-fn filter_slot() -> &'static RwLock<env_filter::Filter> {
-    FILTER.get_or_init(|| RwLock::new(env_filter::Builder::new().parse("info").build()))
+/// The live filter: parsed directives plus the module pins that survive a change of
+/// level.
+#[derive(Clone)]
+struct LiveFilter {
+    parsed: env_filter::Filter,
+    pins: Vec<(String, LevelFilter)>,
+    /// The directives as asked for, without the pins — a level change replaces
+    /// these and the pins are re-applied on top.
+    raw: String,
+}
+
+impl LiveFilter {
+    fn new(directives: &str) -> Self {
+        Self {
+            raw: directives.to_string(),
+            parsed: Self::parse(directives),
+            pins: Vec::new(),
+        }
+    }
+
+    /// Re-parse with the pins applied on top, keeping the pins themselves.
+    fn rebuild(&mut self, directives: &str) {
+        self.raw = directives.to_string();
+        self.parsed = Self::parse(&directives_from_pins(&self.pins, &self.raw));
+    }
+
+    /// Add a pin and re-apply whatever is in force right now.
+    fn pin(&mut self, module: &str, level: LevelFilter) {
+        self.pins.retain(|(pinned, _)| pinned != module);
+        self.pins.push((module.to_string(), level));
+        let current = self.raw.clone();
+        self.rebuild(&current);
+    }
+
+    fn parse(directives: &str) -> env_filter::Filter {
+        match env_filter::Builder::new().try_parse(directives) {
+            Ok(builder) => builder.build(),
+            Err(_) => env_filter::Builder::new().parse("trace").build(),
+        }
+    }
+
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        self.parsed.enabled(metadata)
+    }
+}
+
+fn filter_slot() -> &'static RwLock<LiveFilter> {
+    FILTER.get_or_init(|| RwLock::new(LiveFilter::new("info")))
 }
 
 /// One record as one line. Records must stay single-line: the log viewer reverses
@@ -469,6 +534,26 @@ mod tests {
             ..LogConfig::default()
         };
         assert_eq!(directives_for(&config), "info,kasumi::lifecycle=debug");
+    }
+
+    #[test]
+    fn a_pin_outranks_a_louder_directive_string() {
+        let mut filter = LiveFilter::new("debug");
+        filter.pin("cookie_store", LevelFilter::Info);
+        let debug = Metadata::builder()
+            .level(Level::Debug)
+            .target("cookie_store")
+            .build();
+        let ours = Metadata::builder()
+            .level(Level::Debug)
+            .target("kasumi::lifecycle")
+            .build();
+        assert!(!filter.enabled(&debug));
+        assert!(filter.enabled(&ours));
+        // The pin survives a later level change.
+        filter.rebuild("warn");
+        assert!(!filter.enabled(&debug));
+        assert!(!filter.enabled(&ours));
     }
 
     #[test]
