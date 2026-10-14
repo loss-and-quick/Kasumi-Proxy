@@ -880,6 +880,8 @@ const ru = {
   "subs.identity.hwidSource.happComputed": "ID, который Android выдаёт Happ на этом устройстве",
   "subs.identity.hwidSource.machineId": "Получен из machine ID этого компьютера",
   "subs.identity.hwidSource.deviceId": "Случайный ID, который хранит Kasumi",
+  "subs.identity.hwidSource.incyDerived": "ID, который Incy выводит на этом устройстве",
+  "subs.identity.hwidSource.incySeed": "ID Incy из случайного seed, который хранит Kasumi",
   "subs.identity.copy": "Скопировать",
   "subs.identity.copied": "ID устройства скопирован",
   "subs.identity.edit": "Изменить",
@@ -888,11 +890,15 @@ const ru = {
   "subs.identity.ua": "User-Agent",
   "subs.identity.uaDefault": "По умолчанию",
   "subs.identity.uaHapp": "Happ",
+  "subs.identity.client": "Представляться как",
+  "subs.identity.clientHapp": "Happ",
+  "subs.identity.clientIncy": "Incy",
   "subs.identity.uaCustom": "Свой",
   "subs.identity.uaHint":
     "Провайдеры выбирают формат ответа по User-Agent. С User-Agent другого приложения может прийти формат, который Kasumi не читает.",
   "subs.identity.sendHwid": "Отправлять данные устройства",
   "subs.identity.sendHwidSub": "X-HWID, X-Device-OS, X-Ver-OS, X-Device-model",
+  "subs.identity.sendHwidSubIncy": "x-hwid, x-device-os, x-ver-os, x-device-model",
   "subs.identity.hwidInCookie": "ID устройства в cookie",
   "subs.identity.hwidInCookieSub": "Отправляется в Cookie вместо X-HWID",
   "subs.identity.fromSettings": "из настроек",
@@ -911,6 +917,8 @@ const ru = {
   "subs.identity.providerHeader": "Провайдер просит отправлять ID устройства заголовком.",
   "subs.identity.providerYouDecide": "Переключатели, заданные здесь, всё равно главнее.",
   "subs.identity.compat": "Совместимо с протоколом Happ.",
+  "subs.identity.compatIncy":
+    "Совместимо с приложением Incy. Его ID устройства воспроизведён по коду приложения и ещё не сверен на реальном устройстве.",
   "subs.identity.privacy":
     "По этим заголовкам провайдеры считают ваши устройства: один и тот же ID на нескольких устройствах для них выглядит как одно.",
   "subs.identityNotice.title": "Подписки теперь используют протокол Happ",

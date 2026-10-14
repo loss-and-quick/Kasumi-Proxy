@@ -50,6 +50,7 @@ export type {
   MutationIntent_Serialize as MutationIntent,
   PendingChange_Serialize as PendingChange,
   PortCollision,
+  RequestClient,
   RequestIdentityDefaults_Serialize as RequestIdentityDefaults,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,

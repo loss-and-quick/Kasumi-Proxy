@@ -786,6 +786,8 @@ const vi = {
   "subs.identity.hwidSource.happComputed": "ID mà Android cấp cho Happ trên thiết bị này",
   "subs.identity.hwidSource.machineId": "Tạo từ machine ID của máy tính này",
   "subs.identity.hwidSource.deviceId": "ID ngẫu nhiên do Kasumi lưu",
+  "subs.identity.hwidSource.incyDerived": "ID mà Incy tính ra trên thiết bị này",
+  "subs.identity.hwidSource.incySeed": "ID Incy từ hạt giống ngẫu nhiên do Kasumi lưu",
   "subs.identity.copy": "Sao chép",
   "subs.identity.copied": "Đã sao chép ID thiết bị",
   "subs.identity.edit": "Chỉnh sửa",
@@ -794,11 +796,15 @@ const vi = {
   "subs.identity.ua": "User-Agent",
   "subs.identity.uaDefault": "Mặc định",
   "subs.identity.uaHapp": "Happ",
+  "subs.identity.client": "Xuất hiện dưới dạng",
+  "subs.identity.clientHapp": "Happ",
+  "subs.identity.clientIncy": "Incy",
   "subs.identity.uaCustom": "Tùy chỉnh",
   "subs.identity.uaHint":
     "Nhà cung cấp chọn định dạng phản hồi theo User-Agent. User-Agent của ứng dụng khác có thể nhận định dạng mà Kasumi không đọc được.",
   "subs.identity.sendHwid": "Gửi thông tin thiết bị",
   "subs.identity.sendHwidSub": "X-HWID, X-Device-OS, X-Ver-OS, X-Device-model",
+  "subs.identity.sendHwidSubIncy": "x-hwid, x-device-os, x-ver-os, x-device-model",
   "subs.identity.hwidInCookie": "ID thiết bị trong cookie",
   "subs.identity.hwidInCookieSub": "Gửi dưới dạng Cookie thay cho X-HWID",
   "subs.identity.fromSettings": "theo Cài đặt",
@@ -817,6 +823,8 @@ const vi = {
   "subs.identity.providerHeader": "Nhà cung cấp yêu cầu gửi ID thiết bị dưới dạng header.",
   "subs.identity.providerYouDecide": "Các công tắc bạn đặt ở đây vẫn được ưu tiên.",
   "subs.identity.compat": "Tương thích với giao thức Happ.",
+  "subs.identity.compatIncy":
+    "Tương thích với ứng dụng Incy. ID thiết bị được suy ra từ mã của ứng dụng và chưa được kiểm tra trên thiết bị thật.",
   "subs.identity.privacy":
     "Nhà cung cấp dùng các header này để đếm thiết bị của bạn: cùng một ID trên nhiều thiết bị trông như một thiết bị.",
   "subs.identityNotice.title": "Gói đăng ký giờ sử dụng giao thức Happ",

@@ -19,6 +19,7 @@ import type {
 import {
   DEFAULT_CORE_BY_PROTOCOL,
   HAPP_VERSION,
+  INCY_VERSION,
   SCHEMA_VERSION,
   SHARE_LINK_SCHEMES,
 } from "../generated/defaults";
@@ -188,7 +189,13 @@ function simResolveImport(text: string): ResolvedImport {
     }
     inputs.forEach((x, i) => {
       if (!x) return;
-      if ("sub" in x) out.subscriptions.push({ url: x.sub, encrypted: x.encrypted, name: null });
+      if ("sub" in x)
+        out.subscriptions.push({
+          url: x.sub,
+          encrypted: x.encrypted,
+          name: null,
+          client: /^incy:/i.test(x.sub) ? "incy" : "happ",
+        });
       else if ("routing" in x)
         out.routing.push({
           routing: x.routing,
@@ -438,8 +445,46 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     const request = input?.request ?? sub?.request ?? {};
     const ownUa = input ? input.userAgent : (sub?.userAgent ?? "");
     const facts = { os: "Android", osVersion: "16", model: "Pixel 9", locale: "ru-RU" };
-    const autoHwid = "3f9c2a7be1d04c58";
     const pick = (...v: (string | null | undefined)[]) => v.find((x) => x?.trim()) ?? "";
+    if ((input?.client ?? sub?.client) === "incy") {
+      const auto = "6B1F0C2E-94D3-4A7B-8C15-2E9F0A7D4B31";
+      const own = request.hwid?.trim();
+      const hwid = own || auto;
+      const tag = pick(request.locale, defaults.locale, facts.locale).replace(/_/g, "-");
+      const headers = [
+        { name: "User-Agent", value: ownUa.trim() || `INCY/${INCY_VERSION}/android Dalvik/2.1.0` },
+        { name: "Accept", value: "*/*" },
+        { name: "Accept-Language", value: tag },
+      ];
+      if (request.sendHwid ?? defaults.sendHwid)
+        headers.push(
+          { name: "x-hwid", value: hwid },
+          { name: "x-device-os", value: "Android" },
+          { name: "x-ver-os", value: pick(request.osVersion, defaults.osVersion, facts.osVersion) },
+          {
+            name: "x-device-model",
+            value: `Google ${pick(request.deviceModel, defaults.deviceModel, facts.model)}`,
+          },
+        );
+      headers.push(
+        { name: "x-app-version", value: INCY_VERSION },
+        { name: "x-device-locale", value: tag.replace(/-/g, "_") },
+        { name: "x-client", value: "INCY" },
+      );
+      return {
+        hwid,
+        hwidSource: own ? "subscription" : "incyDerived",
+        autoHwid: auto,
+        autoHwidSource: "incyDerived",
+        facts,
+        headers,
+        cookieJar: false,
+        locks: { userAgent: false, sendHwid: false, hwidInCookie: false },
+        providerHidesDevice: false,
+        providerHwidCookie: false,
+      };
+    }
+    const autoHwid = "3f9c2a7be1d04c58";
     const hwid = pick(request.hwid, defaults.hwid, autoHwid);
     const hwidSource = request.hwid?.trim()
       ? "subscription"

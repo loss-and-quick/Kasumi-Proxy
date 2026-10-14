@@ -807,6 +807,9 @@ const es = {
   "subs.identity.hwidSource.happComputed": "El ID que Android da a Happ en este dispositivo",
   "subs.identity.hwidSource.machineId": "Derivado del machine ID de este equipo",
   "subs.identity.hwidSource.deviceId": "Un ID aleatorio que guarda Kasumi",
+  "subs.identity.hwidSource.incyDerived": "El ID que Incy calcula en este dispositivo",
+  "subs.identity.hwidSource.incySeed":
+    "El ID de Incy a partir de una semilla aleatoria que guarda Kasumi",
   "subs.identity.copy": "Copiar",
   "subs.identity.copied": "ID del dispositivo copiado",
   "subs.identity.edit": "Editar",
@@ -815,11 +818,15 @@ const es = {
   "subs.identity.ua": "User-Agent",
   "subs.identity.uaDefault": "Predeterminado",
   "subs.identity.uaHapp": "Happ",
+  "subs.identity.client": "Presentarse como",
+  "subs.identity.clientHapp": "Happ",
+  "subs.identity.clientIncy": "Incy",
   "subs.identity.uaCustom": "Personalizado",
   "subs.identity.uaHint":
     "Los proveedores eligen el formato de la respuesta según el User-Agent. Con el de otra app puede llegar un formato que Kasumi no lee.",
   "subs.identity.sendHwid": "Enviar datos del dispositivo",
   "subs.identity.sendHwidSub": "X-HWID, X-Device-OS, X-Ver-OS, X-Device-model",
+  "subs.identity.sendHwidSubIncy": "x-hwid, x-device-os, x-ver-os, x-device-model",
   "subs.identity.hwidInCookie": "ID del dispositivo en una cookie",
   "subs.identity.hwidInCookieSub": "Se envía como Cookie en lugar de X-HWID",
   "subs.identity.fromSettings": "de Ajustes",
@@ -840,6 +847,8 @@ const es = {
     "El proveedor pidió enviar el ID del dispositivo como encabezado.",
   "subs.identity.providerYouDecide": "Los interruptores que definas aquí siguen mandando.",
   "subs.identity.compat": "Compatible con el protocolo de Happ.",
+  "subs.identity.compatIncy":
+    "Compatible con la app Incy. Su ID de dispositivo sigue el código de la app y aún no se ha comprobado en un dispositivo real.",
   "subs.identity.privacy":
     "Los proveedores usan estos encabezados para contar tus dispositivos: el mismo ID en varios parece uno solo.",
   "subs.identityNotice.title": "Las suscripciones ahora usan el protocolo de Happ",

@@ -321,6 +321,7 @@ describe("dispatch-bridge request identity", () => {
       defaults: DEFAULT_ADVANCED_SETTINGS.requestIdentity,
       request: { sendHwid: false },
       userAgent: "",
+      client: "happ" as const,
     };
     expect(await bridge.resolveRequestIdentity({ subId: "s1", input })).toEqual(view);
     expect(dispatch).toHaveBeenCalledWith({ cmd: "resolveRequestIdentity", subId: "s1", input });
@@ -336,7 +337,7 @@ describe("dispatch-bridge request identity", () => {
 describe("dispatch-bridge import input", () => {
   it("resolveImportInput returns the backend's sorting", async () => {
     const value = {
-      subscriptions: [{ url: "happ://crypt5/abc", encrypted: true, name: null }],
+      subscriptions: [{ url: "happ://crypt5/abc", encrypted: true, name: null, client: "happ" }],
       routing: [],
       unsupported: [{ text: "happ://toggle", kind: "control" as const }],
       shareText: "vless://x",

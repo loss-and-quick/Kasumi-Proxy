@@ -806,6 +806,9 @@ const pt = {
   "subs.identity.hwidSource.happComputed": "O ID que o Android dá ao Happ neste dispositivo",
   "subs.identity.hwidSource.machineId": "Derivado do machine ID deste computador",
   "subs.identity.hwidSource.deviceId": "Um ID aleatório guardado pelo Kasumi",
+  "subs.identity.hwidSource.incyDerived": "O ID que o Incy calcula neste dispositivo",
+  "subs.identity.hwidSource.incySeed":
+    "O ID do Incy a partir de uma semente aleatória guardada pelo Kasumi",
   "subs.identity.copy": "Copiar",
   "subs.identity.copied": "ID do dispositivo copiado",
   "subs.identity.edit": "Editar",
@@ -814,11 +817,15 @@ const pt = {
   "subs.identity.ua": "User-Agent",
   "subs.identity.uaDefault": "Padrão",
   "subs.identity.uaHapp": "Happ",
+  "subs.identity.client": "Apresentar-se como",
+  "subs.identity.clientHapp": "Happ",
+  "subs.identity.clientIncy": "Incy",
   "subs.identity.uaCustom": "Personalizado",
   "subs.identity.uaHint":
     "Os provedores escolhem o formato da resposta pelo User-Agent. Com o de outro app pode vir um formato que o Kasumi não lê.",
   "subs.identity.sendHwid": "Enviar dados do dispositivo",
   "subs.identity.sendHwidSub": "X-HWID, X-Device-OS, X-Ver-OS, X-Device-model",
+  "subs.identity.sendHwidSubIncy": "x-hwid, x-device-os, x-ver-os, x-device-model",
   "subs.identity.hwidInCookie": "ID do dispositivo em um cookie",
   "subs.identity.hwidInCookieSub": "Enviado como Cookie em vez de X-HWID",
   "subs.identity.fromSettings": "das Configurações",
@@ -839,6 +846,8 @@ const pt = {
     "O provedor pediu para enviar o ID do dispositivo como cabeçalho.",
   "subs.identity.providerYouDecide": "Os interruptores definidos aqui continuam valendo.",
   "subs.identity.compat": "Compatível com o protocolo do Happ.",
+  "subs.identity.compatIncy":
+    "Compatível com o app Incy. O ID do dispositivo segue o código do app e ainda não foi verificado num dispositivo real.",
   "subs.identity.privacy":
     "Os provedores usam estes cabeçalhos para contar seus dispositivos: o mesmo ID em vários parece um só.",
   "subs.identityNotice.title": "As assinaturas agora usam o protocolo do Happ",
