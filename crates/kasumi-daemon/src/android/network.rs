@@ -1,7 +1,8 @@
 //! Active-uplink detection + network-change monitor. Reads `/sys/class/net`,
 //! per-iface route tables, and watches `/data/misc/net` via busybox `inotifyd`
-//! (event-driven) or a 5 s poll fallback. On each real uplink switch it re-pins the
-//! proxy mark rule and notifies the `Service` (which restarts the data-path).
+//! (event-driven) or a 5 s poll fallback. On each real uplink switch it re-points
+//! the rules keyed on the uplink and notifies the `Service`, which leaves a running
+//! data-path alone.
 
 use std::time::Duration;
 
@@ -11,7 +12,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 
 use super::paths::IP;
-use super::routing::apply_mark_rule;
+use super::routing::{apply_mark_rule, repin_uplink};
 use super::run_out;
 
 // Physical uplinks worth pinning the proxy mark to.
@@ -98,8 +99,8 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
                             && Some(&cur) != last.as_ref()
                         {
                             last = Some(cur.clone());
+                            repin_uplink(&cur).await;
                             notify(&tx).await;
-                            apply_mark_rule(&cur).await;
                         }
                     }
                 }
@@ -115,8 +116,8 @@ pub async fn run_watcher(tx: mpsc::Sender<()>) {
                 && Some(&cur) != last.as_ref()
             {
                 last = Some(cur.clone());
+                repin_uplink(&cur).await;
                 notify(&tx).await;
-                apply_mark_rule(&cur).await;
             }
         }
     }

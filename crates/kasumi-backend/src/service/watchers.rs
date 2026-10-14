@@ -44,17 +44,20 @@ impl Service {
     /// a caller can fall back to the boot auto-start. Takes the lifecycle lock itself.
     async fn restart_if_up(&self) -> bool {
         let _g = self.serialize.lock().await;
-        let coming_up = self
-            .platform
-            .service_state()
-            .await
-            .ok()
-            .map(|s| s.engine.is_some() || s.state == RunState::Connecting)
-            .unwrap_or(false);
+        let coming_up = self.data_path_up_or_coming().await;
         if coming_up {
             let _ = self.run_lifecycle(LifecycleCmd::Restart(None)).await;
         }
         coming_up
+    }
+
+    /// Whether the data-path is up or coming up.
+    async fn data_path_up_or_coming(&self) -> bool {
+        self.platform
+            .service_state()
+            .await
+            .ok()
+            .is_some_and(|s| s.engine.is_some() || s.state == RunState::Connecting)
     }
 
     pub(super) fn spawn_network_watch(self: &Arc<Self>) {
@@ -64,8 +67,14 @@ impl Service {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             while rx.recv().await.is_some() {
-                // Re-pin if the data-path is up; otherwise try the boot auto-start.
-                if !this.restart_if_up().await {
+                // Rebuild a running data-path where the platform needs it; otherwise
+                // a new network is the moment to try the boot auto-start.
+                let handled = if this.platform.uplink_change_restarts() {
+                    this.restart_if_up().await
+                } else {
+                    this.data_path_up_or_coming().await
+                };
+                if !handled {
                     let _g = this.serialize.lock().await;
                     this.maybe_auto_start().await;
                     drop(_g);

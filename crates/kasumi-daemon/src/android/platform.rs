@@ -837,6 +837,11 @@ impl Platform for AndroidPlatform {
         Some(rx)
     }
 
+    // The watcher re-points the mark and LAN-bypass rules before it notifies.
+    fn uplink_change_restarts(&self) -> bool {
+        false
+    }
+
     async fn data_path_healthy(&self) -> Option<bool> {
         let core_pid = read_pidfile(PIDFILE).await;
         if !(core_pid > 0 && pid_matches_any(core_pid, &core_bins()).await) {

@@ -131,6 +131,42 @@ pub async fn remove_mark_rule() {
     .await;
 }
 
+/// The tun path's rules sending local RFC1918 sources to the uplink table.
+const LAN_BYPASS: [(&str, &str); 3] = [
+    ("10.0.0.0/8", "5020"),
+    ("172.16.0.0/12", "5021"),
+    ("192.168.0.0/16", "5022"),
+];
+
+async fn pin_lan_bypass(uplink: &str) {
+    for (src, pref) in LAN_BYPASS {
+        // By priority: the rule may still name the previous uplink.
+        for _ in 0..4 {
+            if ip_rule(false, &["rule", "del", "pref", pref]).await != 0 {
+                break;
+            }
+        }
+        ip_rule(
+            false,
+            &[
+                "rule", "add", "from", src, "iif", "lo", "lookup", uplink, "pref", pref,
+            ],
+        )
+        .await;
+    }
+}
+
+/// Re-point the rules keyed on the uplink after it changed, leaving the cores and
+/// their connections running. sing-box follows the default interface itself
+/// (`auto_detect_interface`); Xray dials through the fwmark rule.
+pub async fn repin_uplink(uplink: &str) {
+    apply_mark_rule(uplink).await;
+    let (_, rules) = run_out(&[IP, "rule", "show", "pref", LAN_BYPASS[0].1]).await;
+    if !rules.trim().is_empty() {
+        pin_lan_bypass(uplink).await;
+    }
+}
+
 /// Bind the proxy fwmark to the active uplink's route table.
 pub async fn apply_mark_rule(iface: &str) {
     if iface.is_empty() {
@@ -632,26 +668,7 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
 
     // Pin local-origin traffic to the physical uplink so it doesn't loop the tun.
     if let Some(uplink) = default_uplink().await {
-        for (src, pref) in [
-            ("10.0.0.0/8", "5020"),
-            ("172.16.0.0/12", "5021"),
-            ("192.168.0.0/16", "5022"),
-        ] {
-            ip_rule(
-                false,
-                &[
-                    "rule", "del", "from", src, "iif", "lo", "lookup", &uplink, "pref", pref,
-                ],
-            )
-            .await;
-            ip_rule(
-                false,
-                &[
-                    "rule", "add", "from", src, "iif", "lo", "lookup", &uplink, "pref", pref,
-                ],
-            )
-            .await;
-        }
+        pin_lan_bypass(&uplink).await;
     }
     for (src, pref) in [
         ("10.0.0.0/8", "5030"),
