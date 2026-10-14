@@ -22,7 +22,14 @@ export function SubscriptionRequestsSection({
 }) {
   const t = useT();
   const id = settings.requestIdentity;
-  const view = useResolvedIdentity(undefined, { defaults: id, request: {}, userAgent: "" });
+  // The preview is Happ's; an Incy subscription takes only the device fields and the
+  // HWID switch from here.
+  const view = useResolvedIdentity(undefined, {
+    defaults: id,
+    request: {},
+    userAgent: "",
+    client: "happ",
+  });
   const patch = (p: Partial<RequestIdentityDefaults>) => set("requestIdentity", { ...id, ...p });
   const desktop = getRuntimeBridgeMode() === "tauri";
   const sentUa = view?.headers.find((h) => h.name.toLowerCase() === "user-agent")?.value;

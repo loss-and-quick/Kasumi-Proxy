@@ -7,7 +7,7 @@
 
 import type { Profile } from "../generated/bindings";
 import type { DictKey } from "../i18n";
-import type { Bridge, ResolvedImport, Subscription } from "./bridge";
+import type { Bridge, RequestClient, ResolvedImport, Subscription } from "./bridge";
 import { type GroupChoice, hostOf } from "./groups";
 import { uid } from "./utils";
 
@@ -69,6 +69,7 @@ export function makeSubscription(
     warnings: [],
     insecureByProvider: false,
     allowProviderConfigs: false,
+    client: p.client ?? "happ",
   };
 }
 
@@ -104,9 +105,11 @@ export function addInputFrom(
   encryptedName: string,
 ): AddInput {
   return {
-    subs: resolved.subscriptions.map(({ url, encrypted, name }) =>
+    subs: resolved.subscriptions.map(({ url, encrypted, name, client }) =>
       makeSubscription(
-        encrypted ? { url, remarks: name ?? encryptedName, manualTitle: false } : { url },
+        encrypted
+          ? { url, client, remarks: name ?? encryptedName, manualTitle: false }
+          : { url, client },
         defaults,
       ),
     ),
@@ -239,7 +242,7 @@ export function withClipboard(current: string, clip: string | null): string {
  *  encrypted one kept), a `happ://` link that is no subscription, or anything else,
  *  saved as typed. */
 export type SubscriptionUrlCheck =
-  | { kind: "url"; url: string; encrypted: boolean; name: string | null }
+  | { kind: "url"; url: string; encrypted: boolean; name: string | null; client: RequestClient }
   | { kind: "routing" }
   | { kind: "unsupported"; reason: UnsupportedKind }
   | { kind: "other" };

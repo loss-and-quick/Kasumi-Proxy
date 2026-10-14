@@ -290,6 +290,16 @@ export type AdvancedSettings_Serialize = {
 	identityNoticeDismissed: boolean,
 };
 
+/**  `android.os.Build` fields beyond the model. */
+export type AndroidBuild = {
+	manufacturer?: string,
+	brand?: string,
+	device?: string,
+	product?: string,
+	board?: string,
+	hardware?: string,
+};
+
 export type Anytls = {
 	meta: Meta,
 	endpoint: Endpoint,
@@ -743,6 +753,8 @@ export type DeviceFacts = {
 	osVersion: string,
 	model: string,
 	locale: string,
+	/**  The `android.os.Build` values Incy hashes into its device id; empty off Android. */
+	build?: AndroidBuild,
 };
 
 /**  Xray domain resolution strategy. */
@@ -850,9 +862,13 @@ export type HwidSource =
 /**  The SSAID Android would give Happ, from the user's SSAID key. */
 "happComputed" | 
 /**  Derived from the host's machine id. */
-"machineId" | 
+"happMachineId" | 
 /**  Random, kept in the data directory. */
-"deviceId";
+"happDeviceId" | 
+/**  Incy's id derived from the SSAID Android gives Incy and the build values. */
+"incyDerived" | 
+/**  Incy's id derived from a random seed kept in the data directory. */
+"incySeed";
 
 export type Hysteria2 = {
 	meta: Meta,
@@ -879,6 +895,7 @@ export type IdentityInput_Deserialize = {
 	defaults: RequestIdentityDefaults_Deserialize,
 	request?: SubRequestOverrides_Deserialize,
 	userAgent?: string,
+	client?: RequestClient,
 };
 
 /**  The identity settings one fetch uses: the Settings defaults and the subscription's own. */
@@ -886,6 +903,7 @@ export type IdentityInput_Serialize = {
 	defaults: RequestIdentityDefaults_Serialize,
 	request: SubRequestOverrides_Serialize,
 	userAgent: string,
+	client: RequestClient,
 };
 
 /**  Merge vs replace, shared by list-import and backup-restore intents. */
@@ -1334,6 +1352,9 @@ export type ProxyMode = "tun" | "proxy-only" | "system" | "pac";
 export type QuicTransport = {
 	headerType?: HeaderType,
 };
+
+/**  Which client a subscription fetch presents itself as. */
+export type RequestClient = "happ" | "incy";
 
 /**  Settings-wide request identity; each subscription may override any part of it. */
 export type RequestIdentityDefaults = RequestIdentityDefaults_Serialize | RequestIdentityDefaults_Deserialize;
@@ -1881,6 +1902,8 @@ export type SubscriptionLink = {
 	encrypted: boolean,
 	/**  The provider name an `incy://` link carries, for the new subscription. */
 	name: string | null,
+	/**  The client the new subscription fetches as: Incy for an `incy://` link. */
+	client: RequestClient,
 };
 
 /**  A subscription source (`SubscriptionSchema`). */
@@ -1916,6 +1939,8 @@ export type Subscription_Deserialize = {
 	lastErrorKind?: SubErrorKind | null,
 	/**  Where this subscription's request identity departs from the Settings one. */
 	request?: SubRequestOverrides_Deserialize,
+	/**  The client the fetch presents itself as. */
+	client?: RequestClient,
 	/**  Provider keys that wait for the user's answer. */
 	pendingChanges?: PendingChange_Deserialize[],
 	/**  The user's answers, so an answered value is not asked about again. */
@@ -1963,6 +1988,8 @@ export type Subscription_Serialize = {
 	lastErrorKind?: SubErrorKind | null,
 	/**  Where this subscription's request identity departs from the Settings one. */
 	request?: SubRequestOverrides_Serialize,
+	/**  The client the fetch presents itself as. */
+	client?: RequestClient,
 	/**  Provider keys that wait for the user's answer. */
 	pendingChanges?: PendingChange_Serialize[],
 	/**  The user's answers, so an answered value is not asked about again. */

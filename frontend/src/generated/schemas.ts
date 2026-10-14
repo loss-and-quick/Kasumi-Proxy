@@ -218,6 +218,17 @@ export const AdvancedSettingsSchema = z.union([AdvancedSettings_DeserializeSchem
 export type AdvancedSettings = z.infer<typeof AdvancedSettingsSchema>;
 
 
+export const AndroidBuildSchema = z.object({
+	manufacturer: z.string().optional(),
+	brand: z.string().optional(),
+	device: z.string().optional(),
+	product: z.string().optional(),
+	board: z.string().optional(),
+	hardware: z.string().optional(),
+});
+export type AndroidBuild = z.infer<typeof AndroidBuildSchema>;
+
+
 export const SecuritySchema = z.union([z.literal("none"), z.literal("reality"), z.literal("tls")]);
 export type Security = z.infer<typeof SecuritySchema>;
 
@@ -384,6 +395,10 @@ export const SubErrorKindSchema = z.union([z.object({
 	kind: z.literal("urlDecrypt"),
 })]);
 export type SubErrorKind = z.infer<typeof SubErrorKindSchema>;
+
+
+export const RequestClientSchema = z.union([z.literal("happ"), z.literal("incy")]);
+export type RequestClient = z.infer<typeof RequestClientSchema>;
 
 
 export const TrafficInfo_SerializeSchema = z.object({
@@ -564,6 +579,7 @@ export const Subscription_SerializeSchema = z.object({
 	warnings: z.array(SubWarningSchema).optional(),
 	lastErrorKind: SubErrorKindSchema.nullable().optional(),
 	request: SubRequestOverrides_SerializeSchema.optional(),
+	client: RequestClientSchema.optional(),
 	pendingChanges: z.array(PendingChange_SerializeSchema).optional(),
 	decisions: z.array(ChangeDecisionSchema).optional(),
 	audit: z.array(AuditEntrySchema).optional(),
@@ -1109,6 +1125,7 @@ export const Subscription_DeserializeSchema = z.object({
 	warnings: z.array(SubWarningSchema).optional(),
 	lastErrorKind: SubErrorKindSchema.nullable().optional(),
 	request: SubRequestOverrides_DeserializeSchema.optional(),
+	client: RequestClientSchema.optional(),
 	pendingChanges: z.array(PendingChange_DeserializeSchema).optional(),
 	decisions: z.array(ChangeDecisionSchema).optional(),
 	audit: z.array(AuditEntrySchema).optional(),
@@ -1343,6 +1360,7 @@ export const IdentityInput_SerializeSchema = z.object({
 	defaults: RequestIdentityDefaults_SerializeSchema,
 	request: SubRequestOverrides_SerializeSchema,
 	userAgent: z.string(),
+	client: RequestClientSchema,
 });
 export type IdentityInput_Serialize = z.infer<typeof IdentityInput_SerializeSchema>;
 
@@ -1587,6 +1605,7 @@ export const IdentityInput_DeserializeSchema = z.object({
 	defaults: RequestIdentityDefaults_DeserializeSchema,
 	request: SubRequestOverrides_DeserializeSchema.optional(),
 	userAgent: z.string().optional(),
+	client: RequestClientSchema.optional(),
 });
 export type IdentityInput_Deserialize = z.infer<typeof IdentityInput_DeserializeSchema>;
 
@@ -1759,6 +1778,7 @@ export const DeviceFactsSchema = z.object({
 	osVersion: z.string(),
 	model: z.string(),
 	locale: z.string(),
+	build: AndroidBuildSchema.optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
@@ -1781,7 +1801,7 @@ export const HopConflictSchema = z.object({
 export type HopConflict = z.infer<typeof HopConflictSchema>;
 
 
-export const HwidSourceSchema = z.union([z.literal("deviceId"), z.literal("happComputed"), z.literal("happStored"), z.literal("machineId"), z.literal("settings"), z.literal("subscription")]);
+export const HwidSourceSchema = z.union([z.literal("happComputed"), z.literal("happDeviceId"), z.literal("happMachineId"), z.literal("happStored"), z.literal("incyDerived"), z.literal("incySeed"), z.literal("settings"), z.literal("subscription")]);
 export type HwidSource = z.infer<typeof HwidSourceSchema>;
 
 
@@ -1879,6 +1899,7 @@ export const SubscriptionLinkSchema = z.object({
 	url: z.string(),
 	encrypted: z.boolean(),
 	name: z.string().nullable(),
+	client: RequestClientSchema,
 });
 export type SubscriptionLink = z.infer<typeof SubscriptionLinkSchema>;
 

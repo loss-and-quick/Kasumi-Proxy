@@ -1,6 +1,7 @@
 import { useT } from "../../i18n";
 import type { RequestIdentityDefaults, SubRequestOverrides, Subscription } from "../../lib/bridge";
 import {
+  ClientControl,
   type DeviceField,
   DeviceFields,
   detectedPlaceholders,
@@ -24,17 +25,22 @@ export function SubIdentitySection({
   /** Whether `sub` is stored, so the provider's keys for it apply. */
   saved: boolean;
   defaults: RequestIdentityDefaults;
-  onChange: (patch: Pick<Subscription, "request" | "userAgent">) => void;
+  onChange: (patch: Partial<Pick<Subscription, "request" | "userAgent" | "client">>) => void;
 }) {
   const t = useT();
   const request = sub.request ?? {};
+  const client = sub.client ?? "happ";
+  // Incy has no provider keys, no cookie mode and a fixed OS; the Settings
+  // User-Agent and HWID are Happ's.
+  const incy = client === "incy";
   const view = useResolvedIdentity(saved ? sub.id : undefined, {
     defaults,
     request,
     userAgent: sub.userAgent,
+    client,
   });
   const setRequest = (patch: Partial<SubRequestOverrides>) =>
-    onChange({ request: { ...request, ...patch }, userAgent: sub.userAgent });
+    onChange({ request: { ...request, ...patch } });
   const detected = detectedPlaceholders(view);
   // A blank field shows what it inherits: the Settings value, else the detected one.
   const inherited: Record<DeviceField, string> = {
@@ -47,42 +53,46 @@ export function SubIdentitySection({
 
   return (
     <>
-      <ProviderAsks view={view} />
+      <ClientControl value={client} onChange={(client) => onChange({ client })} />
+      {!incy && <ProviderAsks view={view} />}
       <HwidRow
         view={view}
         value={request.hwid}
         expected="subscription"
-        placeholder={defaults.hwid || view?.autoHwid || ""}
+        placeholder={(!incy && defaults.hwid) || view?.autoHwid || ""}
         onChange={(hwid) => setRequest({ hwid })}
       />
       <UserAgentControl
         value={sub.userAgent}
         defaultLabel={t("subs.identity.uaDefault")}
         sent={sentUa}
-        onChange={(userAgent) => onChange({ request: sub.request, userAgent })}
+        onChange={(userAgent) => onChange({ userAgent })}
       />
       <OverrideSwitch
         title={t("subs.identity.sendHwid")}
-        hint={t("subs.identity.sendHwidSub")}
+        hint={t(incy ? "subs.identity.sendHwidSubIncy" : "subs.identity.sendHwidSub")}
         value={request.sendHwid}
         inherited={defaults.sendHwid}
         onChange={(sendHwid) => setRequest({ sendHwid })}
       />
-      <OverrideSwitch
-        title={t("subs.identity.hwidInCookie")}
-        hint={t("subs.identity.hwidInCookieSub")}
-        value={request.hwidInCookie}
-        inherited={defaults.hwidInCookie}
-        onChange={(hwidInCookie) => setRequest({ hwidInCookie })}
-      />
+      {!incy && (
+        <OverrideSwitch
+          title={t("subs.identity.hwidInCookie")}
+          hint={t("subs.identity.hwidInCookieSub")}
+          value={request.hwidInCookie}
+          inherited={defaults.hwidInCookie}
+          onChange={(hwidInCookie) => setRequest({ hwidInCookie })}
+        />
+      )}
       <div style={{ height: 8 }} />
       <DeviceFields
         values={request}
         placeholders={inherited}
+        omit={incy ? ["deviceOs"] : []}
         onChange={(key, v) => setRequest({ [key]: v })}
       />
       <HeaderPreview view={view} />
-      <IdentityFootnote />
+      <IdentityFootnote compat={t(incy ? "subs.identity.compatIncy" : "subs.identity.compat")} />
     </>
   );
 }

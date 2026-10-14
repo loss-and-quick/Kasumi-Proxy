@@ -29,7 +29,7 @@ use kasumi_core::data_path_plan::{
 use kasumi_core::data_path_state::{DataPathState, HelperSlot, TunSlot};
 use kasumi_core::enums::{CoreEngine, TunEngine, wire_value};
 use kasumi_core::profile::Protocol;
-use kasumi_core::request_identity::DeviceFacts;
+use kasumi_core::request_identity::{AndroidBuild, DeviceFacts};
 use kasumi_core::state::{AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
 use kasumi_core::tun::TunOptions;
 
@@ -766,6 +766,14 @@ impl Platform for AndroidPlatform {
             os_version: getprop("ro.build.version.release").await,
             model: getprop("ro.product.model").await,
             locale,
+            build: AndroidBuild {
+                manufacturer: getprop("ro.product.manufacturer").await,
+                brand: getprop("ro.product.brand").await,
+                device: getprop("ro.product.device").await,
+                product: getprop("ro.product.name").await,
+                board: getprop("ro.product.board").await,
+                hardware: getprop("ro.hardware").await,
+            },
         }
     }
 

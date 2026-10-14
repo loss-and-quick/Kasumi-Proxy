@@ -95,6 +95,7 @@ impl DesktopOs for WindowsOs {
             os_version: build.map(windows_release).unwrap_or_default(),
             model: "PC".into(),
             locale,
+            ..Default::default()
         }
     }
 }

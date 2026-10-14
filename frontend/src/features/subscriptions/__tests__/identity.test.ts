@@ -24,8 +24,8 @@ describe("request identity helpers", () => {
       "settings",
       "happStored",
       "happComputed",
-      "machineId",
-      "deviceId",
+      "happMachineId",
+      "happDeviceId",
     ];
     for (const s of sources) expect(en[HWID_SOURCE_KEY[s]]).toBeTruthy();
   });

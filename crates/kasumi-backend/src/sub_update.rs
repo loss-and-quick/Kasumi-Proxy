@@ -333,8 +333,9 @@ async fn fetch_and_map(
         // Offer HTTP/2 as Happ's OkHttp does; downloads and probes keep HTTP/1.1.
         http2: true,
         // As close to Happ's request as reqwest allows; it still adds `Accept: */*`,
-        // which no client or request option removes.
-        title_case_headers: true,
+        // which no client or request option removes. Incy spells its `x-` headers in
+        // lower case; one case has to win, and theirs is the one a server can tell.
+        title_case_headers: sub.client.is_happ(),
         ..Default::default()
     };
     // The fragment carries provider directives for the import and never goes on
@@ -921,6 +922,7 @@ mod tests {
                 os_version: "16".into(),
                 model: "Pixel 9".into(),
                 locale: "ru-RU".into(),
+                ..Default::default()
             };
             i.user_key =
                 Some("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F".into());
@@ -1021,6 +1023,49 @@ mod tests {
         assert_eq!(value("Accept"), "*/*");
         assert_eq!(value("Accept-Encoding"), "gzip");
         assert_eq!(value("Host"), base.trim_start_matches("http://"));
+    }
+
+    #[tokio::test]
+    async fn incy_subscription_request_head_on_the_wire() {
+        let (p, _d) = TestPlatform::new();
+        phone(&p);
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        with_old_profile(&p, &format!("{base}/s")).await;
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].client = kasumi_core::request_identity::RequestClient::Incy;
+        write_app_state(&p, &state).await.unwrap();
+        let after = update(&p).await;
+        assert_eq!(after.subscriptions[0].last_error, None);
+
+        let head = requests.lock().unwrap()[0].clone();
+        let sent: Vec<(&str, &str)> = head
+            .split("\r\n")
+            .skip(1)
+            .filter_map(|l| l.split_once(": "))
+            .collect();
+        let names: Vec<&str> = sent.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            [
+                "user-agent",
+                "accept",
+                "accept-language",
+                "x-hwid",
+                "x-device-os",
+                "x-ver-os",
+                "x-device-model",
+                "x-app-version",
+                "x-device-locale",
+                "x-client",
+                "accept-encoding",
+                "host",
+            ]
+        );
+        let value = |name: &str| sent.iter().find(|(n, _)| *n == name).unwrap().1;
+        assert_eq!(value("user-agent"), "INCY/3.7.0/android Dalvik/2.1.0");
+        assert_eq!(value("x-client"), "INCY");
+        assert_eq!(value("x-device-locale"), "ru_RU");
+        assert_eq!(value("x-hwid").len(), 36);
     }
 
     #[tokio::test]

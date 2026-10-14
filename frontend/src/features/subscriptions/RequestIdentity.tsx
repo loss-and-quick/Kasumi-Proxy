@@ -4,7 +4,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Field, Icon, IconBtn, Segmented, SettingRow, Switch } from "../../components";
 import { type DictKey, useT } from "../../i18n";
-import type { HwidSource, IdentityInput, ResolvedIdentity } from "../../lib/bridge";
+import type { HwidSource, IdentityInput, RequestClient, ResolvedIdentity } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import { useAppStore } from "../../store/useAppStore";
 import { copyText } from "../profiles/clipboard";
@@ -204,6 +204,30 @@ export function UserAgentControl({
   );
 }
 
+/** The app a fetch presents itself as. */
+export function ClientControl({
+  value,
+  onChange,
+}: {
+  value: RequestClient;
+  onChange: (v: RequestClient) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="field">
+      <Segmented
+        label={t("subs.identity.client")}
+        options={[
+          { value: "happ", label: t("subs.identity.clientHapp") },
+          { value: "incy", label: t("subs.identity.clientIncy") },
+        ]}
+        value={value}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
 export type DeviceField = "deviceOs" | "osVersion" | "deviceModel" | "locale";
 
 const DEVICE_FIELDS: { key: DeviceField; label: DictKey }[] = [
@@ -217,16 +241,20 @@ const DEVICE_FIELDS: { key: DeviceField; label: DictKey }[] = [
 export function DeviceFields({
   values,
   placeholders,
+  omit = [],
   onChange,
   commitOnBlur,
 }: {
   values: Partial<Record<DeviceField, string | null>>;
   placeholders: Record<DeviceField, string>;
+  /** Fields the request doesn't use. */
+  omit?: readonly DeviceField[];
   onChange: (key: DeviceField, v: string | undefined) => void;
   commitOnBlur?: boolean;
 }) {
   const t = useT();
-  const rows = [DEVICE_FIELDS.slice(0, 2), DEVICE_FIELDS.slice(2)];
+  const shown = DEVICE_FIELDS.filter((f) => !omit.includes(f.key));
+  const rows = [shown.slice(0, 2), shown.slice(2)].filter((r) => r.length);
   return (
     <>
       {rows.map((row) => (
@@ -321,8 +349,8 @@ export function HeaderPreview({ view }: { view: ResolvedIdentity | null }) {
   );
 }
 
-/** Which Happ release the identity matches, and what sending it means. */
-export function IdentityFootnote({ extra }: { extra?: ReactNode }) {
+/** Which client release the identity matches, and what sending it means. */
+export function IdentityFootnote({ compat, extra }: { compat?: string; extra?: ReactNode }) {
   const t = useT();
   return (
     <div
@@ -338,7 +366,7 @@ export function IdentityFootnote({ extra }: { extra?: ReactNode }) {
     >
       <Icon name="info" style={{ fontSize: 18, color: "var(--on-surface-faint)", flexShrink: 0 }} />
       <div>
-        {t("subs.identity.compat")} {t("subs.identity.privacy")}
+        {compat ?? t("subs.identity.compat")} {t("subs.identity.privacy")}
         {extra}
       </div>
     </div>

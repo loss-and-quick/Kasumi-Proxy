@@ -908,7 +908,7 @@ mod tests {
         let v = view(resolve(Some("s1"), None).await.unwrap());
         assert!(v.provider_hides_device);
         assert_eq!(names(&v), ["Connection", "User-agent", "X-Device-Locale"]);
-        assert_eq!(v.hwid_source, HwidSource::DeviceId);
+        assert_eq!(v.hwid_source, HwidSource::HappDeviceId);
 
         let mut input = IdentityInput::stored(&state.settings.request_identity, None);
         input.request.send_hwid = Some(true);

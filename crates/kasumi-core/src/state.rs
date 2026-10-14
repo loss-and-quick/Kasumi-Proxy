@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::contract::FetchMode;
 use crate::enums::{CoreEngine, TunEngine};
 use crate::profile::{Profile, Protocol};
-pub use crate::request_identity::{RequestIdentityDefaults, SubRequestOverrides};
+pub use crate::request_identity::{RequestClient, RequestIdentityDefaults, SubRequestOverrides};
 use crate::route::{Route, RuleBlock};
 pub use crate::sub_meta_types::{
     AuditEntry, AuditOutcome, ChangeAction, ChangeDecision, ContentHint, MetaRisk, NoticeColor,
@@ -196,6 +196,9 @@ pub struct Subscription {
     /// Where this subscription's request identity departs from the Settings one.
     #[serde(default, skip_serializing_if = "SubRequestOverrides::is_empty")]
     pub request: SubRequestOverrides,
+    /// The client the fetch presents itself as.
+    #[serde(default, skip_serializing_if = "RequestClient::is_happ")]
+    pub client: RequestClient,
     /// Provider keys that wait for the user's answer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending_changes: Vec<PendingChange>,

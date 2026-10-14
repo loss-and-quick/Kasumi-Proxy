@@ -8,8 +8,10 @@ export const HWID_SOURCE_KEY: Record<HwidSource, DictKey> = {
   settings: "subs.identity.hwidSource.settings",
   happStored: "subs.identity.hwidSource.happStored",
   happComputed: "subs.identity.hwidSource.happComputed",
-  machineId: "subs.identity.hwidSource.machineId",
-  deviceId: "subs.identity.hwidSource.deviceId",
+  happMachineId: "subs.identity.hwidSource.happMachineId",
+  happDeviceId: "subs.identity.hwidSource.happDeviceId",
+  incyDerived: "subs.identity.hwidSource.incyDerived",
+  incySeed: "subs.identity.hwidSource.incySeed",
 };
 
 /** A typed value, or `undefined` when the field was left blank (inherit). */

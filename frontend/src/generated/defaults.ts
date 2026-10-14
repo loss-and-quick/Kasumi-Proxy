@@ -588,6 +588,7 @@ export const DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";
 export const DEFAULT_SPEED_TEST_URL = "http://speed.cloudflare.com/__down?bytes=10000000";
 export const DEFAULT_ROUTE_ID = "route-default";
 export const HAPP_VERSION = "4.7.1";
+export const INCY_VERSION = "3.7.0";
 
 /** What a new subscription starts with until the user changes it. */
 export const NEW_SUB_DEFAULTS: Pick<Subscription_Serialize, "autoUpdate" | "interval"> = {"autoUpdate":false,"interval":360};
