@@ -20,6 +20,7 @@ use crate::net::{FetchUrlOptions, fetch_url};
 use crate::platform::Platform;
 use crate::state::read_app_state;
 use crate::updater::{self, LifecycleControl, now_ms};
+use kasumi_log::{Area, ks_info, ks_warn};
 
 /// Download one asset into the dat dir and convert it, returning whether the file
 /// content actually changed. For callers with no core lifecycle to coordinate with;
@@ -160,7 +161,7 @@ pub async fn tick(
     let mut refreshed: Vec<String> = Vec::new();
     for asset in &due {
         last_attempt.insert(asset.id.clone(), now);
-        log::info!("asset-update {}: fetching", asset.remarks);
+        ks_info!(Area::Asset, "asset-update {}: fetching", asset.remarks);
         // The frontend names the on-disk file after the asset's remarks.
         let body = match fetch_asset(platform, &asset.remarks, &asset.url, mode).await {
             Ok(body) => body,
@@ -185,7 +186,11 @@ pub async fn tick(
                     restart_pending = true;
                 }
             }
-            Err(message) => log::warn!("asset-update {}: failed: {message}", asset.remarks),
+            Err(message) => ks_warn!(
+                Area::Asset,
+                "asset-update {}: failed: {message}",
+                asset.remarks
+            ),
         }
     }
     if refreshed.is_empty() {

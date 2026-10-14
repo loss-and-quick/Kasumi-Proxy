@@ -13,6 +13,9 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 
 use crate::fs::{read_text, remove_file};
+// The job-object helpers below are the only Windows-only records in this crate.
+#[cfg(windows)]
+use kasumi_log::{Area, ks_warn};
 
 #[derive(Debug, Clone)]
 pub struct RunResult {
@@ -283,7 +286,10 @@ mod job {
             .get_or_init(|| match kill_on_close_job() {
                 Ok(h) => Some(Job(h)),
                 Err(e) => {
-                    log::warn!("no job object, children can outlive a crash: {e}");
+                    ks_warn!(
+                        Area::Proc,
+                        "no job object, children can outlive a crash: {e}"
+                    );
                     None
                 }
             })
@@ -334,7 +340,8 @@ mod job {
         if let Some(job) = parent_job() {
             // SAFETY: both handles are open; `child` owns `process`.
             if unsafe { AssignProcessToJobObject(job, process as HANDLE) } == 0 {
-                log::warn!(
+                ks_warn!(
+                    Area::Proc,
                     "pid {pid} is not in the parent job: {}",
                     std::io::Error::last_os_error()
                 );

@@ -25,6 +25,7 @@ use crate::fs::{exists, list_names, read_text, remove_file};
 use crate::fsjson::write_text_atomic;
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
+use kasumi_log::{Area, ks_debug, ks_info, ks_warn};
 
 struct Loaded {
     profile: Profile,
@@ -234,7 +235,7 @@ where
 {
     let bin = platform.core_path(engine);
     if !exists(&bin).await {
-        log::warn!("test core binary missing: {}", bin.display());
+        ks_warn!(Area::Jobs, "test core binary missing: {}", bin.display());
         return Err("test core binary missing".into());
     }
     let data_dir = platform.paths().data_dir.clone();
@@ -248,11 +249,11 @@ where
     // uplink and escape an active tun); it reads this config and writes this log as
     // root. Both live in the shared data_dir, which the GUI owns, so it can still
     // clean them up afterwards.
-    log::debug!("test core {engine:?} starting on port {port}");
+    ks_debug!(Area::Jobs, "test core {engine:?} starting on port {port}");
     let mut core = match platform.spawn_test_core(engine, &cfg_path, &log_path).await {
         Ok(c) => c,
         Err(e) => {
-            log::warn!("test core spawn failed on port {port}: {e}");
+            ks_warn!(Area::Jobs, "test core spawn failed on port {port}: {e}");
             remove_file(&cfg_path).await;
             remove_file(&log_path).await;
             return Err(format!("failed to start test core: {e}"));
@@ -274,7 +275,8 @@ where
         // own tail so a transport that connects-but-won't-pass-data (gRPC/XHTTP cold
         // start, TLS error, dead upstream) is diagnosable, not a silent None.
         if measured.is_none() {
-            log::info!(
+            ks_info!(
+                Area::Jobs,
                 "test core on port {port}: no probe result; core log: {}",
                 log_tail(&log_path, 6).await
             );
@@ -284,7 +286,10 @@ where
         // The core exited or never bound its SOCKS port — surface its own log so the
         // user sees the real reason (bad config, port in use, TLS error, …).
         let tail = log_tail(&log_path, 5).await;
-        log::warn!("test core on port {port} did not start; core log: {tail}");
+        ks_warn!(
+            Area::Jobs,
+            "test core on port {port} did not start; core log: {tail}"
+        );
         Err(if tail.is_empty() {
             "test core did not start".into()
         } else {
@@ -408,7 +413,8 @@ pub async fn run_real_ping(
     )
     .await
     .inspect(|r| {
-        log::info!(
+        ks_info!(
+            Area::Jobs,
             "real-ping {} port {test_port}: {r:?}",
             loaded.profile.meta().remarks
         )
@@ -478,7 +484,8 @@ pub async fn run_speed_test(
     )
     .await
     .inspect(|r| {
-        log::info!(
+        ks_info!(
+            Area::Jobs,
             "speed-test {} port {test_port}: {r:?}",
             loaded.profile.meta().remarks
         )
