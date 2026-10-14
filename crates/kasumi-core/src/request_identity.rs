@@ -12,6 +12,7 @@ use happ_sub::incy_request;
 
 use crate::state::Subscription;
 
+pub use happ_sub::happ_request::desktop_hwid as happ_desktop_hwid;
 pub use happ_sub::{HAPP_VERSION, INCY_VERSION};
 
 /// Settings-wide request identity; each subscription may override any part of it.
@@ -93,6 +94,65 @@ pub struct DeviceFacts {
     /// The `android.os.Build` values Incy hashes into its device id; empty off Android.
     #[serde(default)]
     pub build: AndroidBuild,
+    /// What a desktop reports, unformatted: each client formats it its own way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desktop: Option<DesktopHost>,
+}
+
+impl DeviceFacts {
+    /// A desktop's facts. The OS version, model and locale shown are the ones Happ
+    /// desktop sends; Incy formats `host` its own way.
+    pub fn desktop(os: &str, host: DesktopHost) -> Self {
+        let happ = happ_sub::happ_request::desktop_device(&host.facts(os, None));
+        Self {
+            os: os.to_owned(),
+            os_version: happ.os_version,
+            model: happ.model,
+            locale: happ.locale,
+            build: AndroidBuild::default(),
+            desktop: Some(host),
+        }
+    }
+}
+
+/// A desktop's raw facts, as the OS gives them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DesktopHost {
+    /// os-release `ID`.
+    pub os_release_id: String,
+    /// os-release `VERSION_ID`.
+    pub os_release_version: String,
+    /// `uname -r`.
+    pub kernel_release: String,
+    pub hostname: String,
+    /// `uname -m`.
+    pub cpu_arch: String,
+    pub username: String,
+    /// The locale variable in effect, e.g. `ru_RU.UTF-8`.
+    pub posix_locale: String,
+}
+
+impl DesktopHost {
+    /// The facts happ-sub formats for each client.
+    pub fn facts<'a>(
+        &'a self,
+        os: &'a str,
+        machine_id: Option<&'a str>,
+    ) -> happ_sub::DesktopFacts<'a> {
+        happ_sub::DesktopFacts {
+            os,
+            os_release_id: &self.os_release_id,
+            os_release_version: &self.os_release_version,
+            kernel_release: &self.kernel_release,
+            hostname: &self.hostname,
+            cpu_arch: &self.cpu_arch,
+            username: &self.username,
+            machine_id,
+            posix_locale: &self.posix_locale,
+            language_tag: "",
+        }
+    }
 }
 
 /// `android.os.Build` fields beyond the model.
@@ -404,15 +464,18 @@ fn resolve_incy(input: &IdentityInput, facts: &DeviceFacts, auto: &AutoHwid) -> 
     let pick = |sub: Option<&String>, global: Option<&String>, detected: &str| {
         given(sub).or(given(global)).unwrap_or(detected).to_owned()
     };
+    // A desktop reads as Incy desktop describes it (the JVM's view); typed values win.
+    let host = facts.desktop.as_ref().map(|h| h.facts(&facts.os, None));
+    let desktop = host.as_ref().map(incy_request::desktop_facts);
     let os_version = pick(
         request.os_version.as_ref(),
         defaults.os_version.as_ref(),
-        &facts.os_version,
+        desktop.map_or(facts.os_version.as_str(), |d| d.os_version),
     );
     let model = pick(
         request.device_model.as_ref(),
         defaults.device_model.as_ref(),
-        &facts.model,
+        desktop.map_or(facts.model.as_str(), |d| d.model),
     );
     let tag = language_tag(&pick(
         request.locale.as_ref(),
@@ -421,24 +484,33 @@ fn resolve_incy(input: &IdentityInput, facts: &DeviceFacts, auto: &AutoHwid) -> 
     ));
     let java = java_locale(&tag);
     let b = &facts.build;
-    let device = incy_request::DeviceFacts {
-        android_id: None,
-        manufacturer: &b.manufacturer,
-        model: &model,
-        brand: &b.brand,
-        device: &b.device,
-        product: &b.product,
-        board: &b.board,
-        hardware: &b.hardware,
-        os_version: &os_version,
-        locale: &java,
-        language_tag: &tag,
-        // No desktop fields: Incy's Android request, whatever the device.
-        ..Default::default()
+    let device = match desktop {
+        Some(d) => incy_request::DeviceFacts {
+            model: &model,
+            os_version: &os_version,
+            locale: &java,
+            language_tag: &tag,
+            ..d
+        },
+        None => incy_request::DeviceFacts {
+            android_id: None,
+            manufacturer: &b.manufacturer,
+            model: &model,
+            brand: &b.brand,
+            device: &b.device,
+            product: &b.product,
+            board: &b.board,
+            hardware: &b.hardware,
+            os_version: &os_version,
+            locale: &java,
+            language_tag: &tag,
+            ..Default::default()
+        },
     };
     let options = incy_request::RequestOptions {
-        app_version: INCY_VERSION,
-        vm_version: None,
+        // Empty picks Incy desktop's own version for a desktop.
+        app_version: if desktop.is_some() { "" } else { INCY_VERSION },
+        vm_version: desktop.map(|_| incy_request::BUNDLED_DESKTOP_VM_VERSION),
         user_agent: Some(input.user_agent.trim()),
         hwid: None,
     };
@@ -529,7 +601,23 @@ mod tests {
                 board: "tokay".into(),
                 hardware: "tokay".into(),
             },
+            desktop: None,
         }
+    }
+
+    fn linux() -> DeviceFacts {
+        DeviceFacts::desktop(
+            "Linux",
+            DesktopHost {
+                os_release_id: "nixos".into(),
+                os_release_version: "26.05".into(),
+                kernel_release: "6.17.8-cachyos".into(),
+                hostname: "magicbook".into(),
+                cpu_arch: "x86_64".into(),
+                username: "minicx".into(),
+                posix_locale: "ru_RU.UTF-8".into(),
+            },
+        )
     }
 
     fn auto() -> AutoHwid {
@@ -723,13 +811,11 @@ mod tests {
     /// A Linux desktop sends Happ desktop's request, not Android Happ's.
     #[test]
     fn linux_sends_happ_desktops_request() {
-        let f = DeviceFacts {
-            os: "Linux".into(),
-            os_version: "nixos_26.05".into(),
-            model: "magicbook_x86_64".into(),
-            locale: "ru_RU".into(),
-            ..Default::default()
-        };
+        let f = linux();
+        // What the UI shows is what Happ desktop sends.
+        assert_eq!(f.os_version, "nixos_26.05");
+        assert_eq!(f.model, "magicbook_x86_64");
+        assert_eq!(f.locale, "ru_RU");
         let r = resolve(&input(), &f, &auto(), None, &[], DAY);
         assert_eq!(
             header(&r, "User-agent"),
@@ -748,6 +834,37 @@ mod tests {
             header(&r, "X-App-Version"),
             Some(happ_sub::HAPP_DESKTOP_VERSION)
         );
+    }
+
+    /// The same Linux desktop reads as Incy desktop describes it: the JVM's
+    /// `os.version` and `os.arch`, Incy desktop's version and its bundled JRE.
+    #[test]
+    fn linux_sends_incy_desktops_request() {
+        let r = resolve(&incy(), &linux(), &incy_auto(), None, &[], DAY);
+        let ua = header(&r, "User-Agent").unwrap();
+        assert_eq!(
+            ua,
+            format!(
+                "INCY/{}/linux Dalvik/{}",
+                happ_sub::INCY_DESKTOP_VERSION,
+                incy_request::BUNDLED_DESKTOP_VM_VERSION
+            )
+        );
+        assert_eq!(header(&r, "Accept-Language"), Some("ru-RU"));
+        assert_eq!(header(&r, "x-device-locale"), Some("ru_RU"));
+        assert_eq!(
+            header(&r, "x-app-version"),
+            Some(happ_sub::INCY_DESKTOP_VERSION)
+        );
+        assert_eq!(header(&r, "x-device-os"), Some("Linux"));
+        assert_eq!(header(&r, "x-ver-os"), Some("6.17.8-cachyos"));
+        assert_eq!(header(&r, "x-device-model"), Some("Linux amd64"));
+
+        // A typed model still wins.
+        let mut typed = incy();
+        typed.request.device_model = Some("Workstation".into());
+        let r = resolve(&typed, &linux(), &incy_auto(), None, &[], DAY);
+        assert_eq!(header(&r, "x-device-model"), Some("Workstation"));
     }
 
     fn incy() -> IdentityInput {

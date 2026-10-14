@@ -7,11 +7,11 @@ use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
 use happ_sub::MetaMap;
-use happ_sub::device::{HAPP_PACKAGE, HAPP_SIGNERS, decode_user_key, is_valid_sys_hwid, ssaid};
+use happ_sub::device::{HAPP_PACKAGE, HAPP_SIGNERS, decode_user_key, ssaid};
 use happ_sub::incy_request::{self, derive_hwid, usable_android_id};
 use happ_sub::incy_signers::{INCY_PACKAGE, INCY_SIGNERS};
 use kasumi_core::request_identity::{
-    AutoHwid, DeviceFacts, HwidSource, IdentityInput, RequestClient, Resolved,
+    AutoHwid, DeviceFacts, HwidSource, IdentityInput, RequestClient, Resolved, happ_desktop_hwid,
     is_happ_linux_desktop, resolve,
 };
 
@@ -56,20 +56,18 @@ pub async fn auto_happ_hwid(
         .await
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty());
-    if let Some(id) = machine_id {
-        // Happ desktop sends the machine id as it is, when it isn't blank or zeros.
-        if desktop && is_valid_sys_hwid(&id) {
+    if desktop {
+        if let Some(value) = happ_desktop_hwid(machine_id.as_deref()) {
             return AutoHwid {
-                value: id,
+                value,
                 source: HwidSource::HappMachineId,
             };
         }
-        if !desktop {
-            return AutoHwid {
-                value: app_scoped(&id),
-                source: HwidSource::HappMachineId,
-            };
-        }
+    } else if let Some(id) = machine_id {
+        return AutoHwid {
+            value: app_scoped(&id),
+            source: HwidSource::HappMachineId,
+        };
     }
     AutoHwid {
         value: happ_device_id(platform, desktop).await,
@@ -81,11 +79,21 @@ pub async fn auto_happ_hwid(
 /// is the SSAID Android gives Incy (stored once installed, else computed from the
 /// user's SSAID key), with the build values; without a usable one it hashes a random
 /// seed. The id an installed Incy keeps sits in keystore-encrypted preferences.
+/// Incy desktop hashes the machine id, host name, OS, architecture and user name.
 pub async fn auto_incy_hwid(
     platform: &dyn Platform,
     android_user: u32,
     facts: &DeviceFacts,
 ) -> AutoHwid {
+    if let Some(host) = &facts.desktop {
+        let machine_id = platform.machine_id().await;
+        let seed = incy_seed(platform).await;
+        let host = host.facts(&facts.os, machine_id.as_deref());
+        return AutoHwid {
+            value: derive_hwid(None, &incy_request::desktop_facts(&host), &seed),
+            source: HwidSource::IncyDerived,
+        };
+    }
     let b = &facts.build;
     let device = |android_id| incy_request::DeviceFacts {
         android_id,
@@ -284,10 +292,35 @@ mod tests {
     }
 
     fn linux() -> DeviceFacts {
-        DeviceFacts {
-            os: "Linux".into(),
-            ..Default::default()
-        }
+        DeviceFacts::desktop(
+            "Linux",
+            kasumi_core::request_identity::DesktopHost {
+                os_release_id: "nixos".into(),
+                os_release_version: "26.05".into(),
+                kernel_release: "6.17.8-cachyos".into(),
+                hostname: "magicbook".into(),
+                cpu_arch: "x86_64".into(),
+                username: "minicx".into(),
+                posix_locale: "ru_RU.UTF-8".into(),
+            },
+        )
+    }
+
+    /// Incy desktop hashes the machine id with the host, OS, architecture and user:
+    /// the same machine always gets the same id, another machine another one.
+    #[tokio::test]
+    async fn incy_linux_desktop_derives_its_id_from_the_machine() {
+        let (p, _d) = TestPlatform::new();
+        p.identity(|i| i.machine_id = Some("5f3c8a1e9b2d4c6f8e0a1b2c3d4e5f60".into()));
+        let first = auto_incy_hwid(&p, 0, &linux()).await;
+        assert_eq!(first.source, HwidSource::IncyDerived);
+        assert_eq!(first.value.len(), 36);
+        assert_eq!(first.value, first.value.to_uppercase());
+        assert_eq!(auto_incy_hwid(&p, 0, &linux()).await, first);
+
+        let (other, _d2) = TestPlatform::new();
+        other.identity(|i| i.machine_id = Some("00112233445566778899aabbccddeeff".into()));
+        assert_ne!(auto_incy_hwid(&other, 0, &linux()).await.value, first.value);
     }
 
     #[tokio::test]
