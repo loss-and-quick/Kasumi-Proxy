@@ -81,7 +81,11 @@ impl Service {
                 self.platform
                     .stop_data_path(StopDataPath::default())
                     .await
-                    .map_err(|e| e.to_string())
+                    .map_err(|e| e.to_string())?;
+                // Only once it is down: a core a failed stop left running still has
+                // the old geo data.
+                self.assets_stale.store(false, Ordering::SeqCst);
+                Ok(())
             }
             LifecycleCmd::ReloadAppFilter => {
                 // The filter is part of what a start builds (the core config, or the OS
@@ -118,7 +122,6 @@ impl Service {
         // The old core's verdict (and its latency) says nothing about the next one.
         self.reset_connectivity();
         self.pending_restart.store(false, Ordering::SeqCst);
-        self.assets_stale.store(false, Ordering::SeqCst);
     }
 
     /// Re-diff the fresh baseline against the saved state. The start built its

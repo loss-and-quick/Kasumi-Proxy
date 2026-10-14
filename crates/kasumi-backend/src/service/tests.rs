@@ -30,6 +30,8 @@ struct RecordingPlatform {
     /// Handed out once by `watch_network_change`.
     network: StdMutex<Option<tokio::sync::mpsc::Receiver<()>>>,
     uplink_restarts: AtomicBool,
+    /// When set, `stop_data_path` fails and leaves the data path running.
+    fail_stop: AtomicBool,
 }
 
 impl RecordingPlatform {
@@ -60,6 +62,7 @@ impl RecordingPlatform {
                 started: StdMutex::new(None),
                 network: StdMutex::new(None),
                 uplink_restarts: AtomicBool::new(true),
+                fail_stop: AtomicBool::new(false),
             }),
             dir,
         )
@@ -96,6 +99,9 @@ impl Platform for RecordingPlatform {
     }
     async fn stop_data_path(&self, opts: StopDataPath) -> anyhow::Result<()> {
         self.log(&format!("stop:keep={}", opts.keep_service_state));
+        if self.fail_stop.load(Ordering::SeqCst) {
+            anyhow::bail!("stop failed");
+        }
         self.running.store(false, Ordering::SeqCst);
         Ok(())
     }
@@ -400,6 +406,30 @@ async fn changed_geo_data_flags_pending_restart_until_the_next_start() {
     assert!(pending_restart(&svc).await);
 
     svc.dispatch(Command::Restart { profile_id: None })
+        .await
+        .unwrap();
+    assert!(!pending_restart(&svc).await);
+}
+
+#[tokio::test]
+async fn a_failed_stop_keeps_the_geo_flag() {
+    use crate::updater::LifecycleControl;
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    svc.note_assets_changed().await;
+
+    platform.fail_stop.store(true, Ordering::SeqCst);
+    assert!(svc.dispatch(Command::Stop).await.is_err());
+    // The core still runs on the old data.
+    assert!(pending_restart(&svc).await);
+
+    platform.fail_stop.store(false, Ordering::SeqCst);
+    svc.dispatch(Command::Stop).await.unwrap();
+    svc.dispatch(Command::Start { profile_id: None })
         .await
         .unwrap();
     assert!(!pending_restart(&svc).await);
