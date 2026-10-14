@@ -1,8 +1,10 @@
 //! Core-engine resolution — profile override + per-protocol defaults, with
 //! capability guards for transports/protocols only one core can build.
 
+use std::collections::BTreeMap;
+
 use crate::chain::chain_hops;
-use crate::contract::CoreConflict;
+use crate::contract::{CoreConflict, TargetFallback};
 use crate::custom_sanitize::{has_unpinned_allow_insecure, sanitize_provider_xray};
 use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
@@ -59,6 +61,38 @@ fn custom_allows_insecure_unpinned(c: &Custom) -> bool {
         CustomOrigin::Provider => sanitize_provider_xray(&raw)
             .is_ok_and(|s| s.outbounds.iter().any(has_unpinned_allow_insecure)),
     }
+}
+
+/// Whether xray can build an outbound for `p`. It has dropped its QUIC and HTTP/2
+/// transports and rejects a config naming either, has no outbound for the
+/// sing-box-only protocols or a custom config, and would check the certificate
+/// of TLS that skips the check unpinned.
+pub(crate) fn xray_builds(p: &Profile) -> bool {
+    !(is_singbox_only(p.protocol())
+        || p.protocol() == Protocol::Custom
+        || matches!(p.transport(), Some(Transport::Quic(_) | Transport::H2(_)))
+        || skips_cert_check_unpinned(p))
+}
+
+/// Why `core` can't build `target` as the outbound of another profile's routing
+/// rule. The config builders then send that rule's traffic through the active
+/// proxy rather than fail the whole config.
+pub fn rule_target_fallback(target: &Profile, core: CoreEngine) -> Option<TargetFallback> {
+    if let Profile::Custom(_) = target {
+        return Some(TargetFallback::CustomConfig);
+    }
+    (core == CoreEngine::Xray && !xray_builds(target)).then(|| match core_conflict(target) {
+        Some(conflict) => TargetFallback::CantStart { conflict },
+        None => TargetFallback::SingBoxOnly,
+    })
+}
+
+/// [`rule_target_fallback`] for every core that has one.
+pub fn rule_target_fallbacks(target: &Profile) -> BTreeMap<CoreEngine, TargetFallback> {
+    use strum::IntoEnumIterator;
+    CoreEngine::iter()
+        .filter_map(|core| rule_target_fallback(target, core).map(|f| (core, f)))
+        .collect()
 }
 
 fn capability_core(p: &Profile) -> Option<CoreEngine> {
@@ -412,6 +446,49 @@ mod tests {
         assert_eq!(core_conflict(&pinned), None);
         let checked = p("vless://u@e.x:443?type=xhttp&security=tls&sni=e.x");
         assert_eq!(core_conflict(&checked), None);
+    }
+
+    #[test]
+    fn rule_target_fallback_names_why() {
+        use CoreEngine::{SingBox, Xray};
+        let fallbacks = |uri: &str| rule_target_fallbacks(&p(uri));
+        assert_eq!(
+            fallbacks("vless://u@e.x:443?type=tcp&security=tls"),
+            BTreeMap::new()
+        );
+        let only_singbox = BTreeMap::from([(Xray, TargetFallback::SingBoxOnly)]);
+        assert_eq!(fallbacks("tuic://u:pw@t.ex:443?sni=t.ex"), only_singbox);
+        assert_eq!(
+            fallbacks("vless://u@e.x:443?type=h2&security=tls"),
+            only_singbox
+        );
+        assert_eq!(
+            fallbacks(&format!("vless://u@e.x:443?type=ws&{INSECURE}")),
+            only_singbox
+        );
+        // Sing-box still builds an xray-only profile, without the parts it lacks.
+        assert_eq!(
+            fallbacks(&format!("vless://u@e.x:443?type=xhttp&{INSECURE}")),
+            BTreeMap::from([(
+                Xray,
+                TargetFallback::CantStart {
+                    conflict: CoreConflict::UnpinnedInsecureTls
+                }
+            )])
+        );
+        let custom: Profile = serde_json::from_value(serde_json::json!({
+            "protocol": "custom",
+            "meta": { "id": "c", "remarks": "C", "groupId": "g-main" },
+            "raw": "{}",
+        }))
+        .unwrap();
+        assert_eq!(
+            rule_target_fallbacks(&custom),
+            BTreeMap::from([
+                (Xray, TargetFallback::CustomConfig),
+                (SingBox, TargetFallback::CustomConfig),
+            ])
+        );
     }
 
     #[test]

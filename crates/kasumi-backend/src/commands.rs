@@ -19,7 +19,9 @@ use kasumi_core::contract::{
     Capabilities, ConnectionProbe, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind,
     WsInfo,
 };
-use kasumi_core::core::{chain_forced_core, core_conflict, forced_core, preferred_core};
+use kasumi_core::core::{
+    chain_forced_core, core_conflict, forced_core, preferred_core, rule_target_fallbacks,
+};
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::data_path_plan::AppRouting;
 use kasumi_core::enums::{CoreEngine, wire_value};
@@ -651,6 +653,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                             sees_processes: kasumi_core::app_process::sees_processes(
                                 resolved, &settings,
                             ),
+                            rule_target_fallback: rule_target_fallbacks(p),
                         }
                     })
                     .collect(),
@@ -1365,6 +1368,20 @@ mod tests {
         assert_eq!(rs[1].forced, None);
         assert_eq!(rs[2].resolved, CoreEngine::Xray);
         assert_eq!(rs[2].forced, Some(CoreEngine::Xray));
+
+        use kasumi_core::contract::TargetFallback;
+        let fallbacks: Vec<_> = rs.iter().map(|r| &r.rule_target_fallback).collect();
+        assert_eq!(
+            fallbacks[0].get(&CoreEngine::Xray),
+            Some(&TargetFallback::SingBoxOnly)
+        );
+        assert!(fallbacks[1].is_empty() && fallbacks[2].is_empty());
+        assert_eq!(
+            fallbacks[3].get(&CoreEngine::Xray),
+            Some(&TargetFallback::CantStart {
+                conflict: kasumi_core::contract::CoreConflict::UnpinnedInsecureTls
+            })
+        );
     }
 
     #[tokio::test]

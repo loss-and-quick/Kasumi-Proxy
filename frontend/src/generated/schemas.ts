@@ -1721,12 +1721,24 @@ export const CoreConflictSchema = z.union([z.object({
 export type CoreConflict = z.infer<typeof CoreConflictSchema>;
 
 
+export const TargetFallbackSchema = z.union([z.object({
+	kind: z.literal("cantStart"),
+	conflict: CoreConflictSchema,
+}), z.object({
+	kind: z.literal("customConfig"),
+}), z.object({
+	kind: z.literal("singBoxOnly"),
+})]);
+export type TargetFallback = z.infer<typeof TargetFallbackSchema>;
+
+
 export const CoreResolutionSchema = z.object({
 	resolved: CoreEngineSchema,
 	forced: CoreEngineSchema.nullable(),
 	forcedByHop: z.string().nullable().optional(),
 	conflict: CoreConflictSchema.nullable().optional(),
 	seesProcesses: z.boolean().optional(),
+	ruleTargetFallback: z.partialRecord(CoreEngineSchema, TargetFallbackSchema).optional(),
 });
 export type CoreResolution = z.infer<typeof CoreResolutionSchema>;
 

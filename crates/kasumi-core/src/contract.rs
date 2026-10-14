@@ -2,6 +2,8 @@
 //! constants both sides agree on but that aren't persisted app state. Field
 //! names and string values are fixed by the WS/JSON protocol the UI speaks.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::enums::CoreEngine;
@@ -41,6 +43,24 @@ pub struct CoreResolution {
     /// (`app_process::sees_processes`).
     #[serde(default)]
     pub sees_processes: bool,
+    /// The cores that can't build this profile as the target of another
+    /// profile's routing rule, and why (`core::rule_target_fallback`). On such a
+    /// core the rule's traffic goes through the active proxy instead.
+    #[serde(default)]
+    pub rule_target_fallback: BTreeMap<CoreEngine, TargetFallback>,
+}
+
+/// Why a core can't build a profile as a routing-rule target.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TargetFallback {
+    /// A custom config is a whole core config of its own, not one outbound that
+    /// fits into another profile's.
+    CustomConfig,
+    /// Its protocol, transport or TLS settings run only on sing-box.
+    SingBoxOnly,
+    /// No core can run the profile at all.
+    CantStart { conflict: CoreConflict },
 }
 
 /// Why no core can run a profile (`core::core_conflict`).
