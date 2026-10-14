@@ -138,7 +138,13 @@ impl Platform for RecordingPlatform {
     fn watch_network_change(&self) -> Option<tokio::sync::mpsc::Receiver<()>> {
         self.network.lock().unwrap().take()
     }
-    fn uplink_change_restarts(&self) -> bool {
+    fn uplink_change_restarts(&self, plan: Option<&DataPathPlan>) -> bool {
+        let seen = match plan {
+            None => "no-plan",
+            Some(p) if self.started.lock().unwrap().as_ref() == Some(p) => "running-plan",
+            Some(_) => "other-plan",
+        };
+        self.log(&format!("uplink-check:{seen}"));
         self.uplink_restarts.load(Ordering::SeqCst)
     }
     async fn proxy_status(&self) -> anyhow::Result<crate::net::ProxyStatus> {
@@ -221,6 +227,15 @@ async fn uplink_change_rebuilds_the_data_path_elsewhere() {
     let calls = calls_on_uplink_change(true).await;
     assert!(calls.iter().any(|c| c.starts_with("stop:")), "{calls:?}");
     assert!(calls.iter().any(|c| c.starts_with("start:")), "{calls:?}");
+}
+
+#[tokio::test]
+async fn the_platform_decides_on_the_plan_that_runs() {
+    let calls = calls_on_uplink_change(false).await;
+    assert_eq!(
+        calls.first().map(String::as_str),
+        Some("uplink-check:running-plan")
+    );
 }
 
 #[tokio::test]

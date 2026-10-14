@@ -79,7 +79,13 @@ impl Service {
             while rx.recv().await.is_some() {
                 // Rebuild a running data-path where the platform needs it; otherwise
                 // a new network is the moment to try the boot auto-start.
-                let handled = if this.platform.uplink_change_restarts() {
+                let plan = this
+                    .running_config
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|r| r.config.plan.clone());
+                let handled = if this.platform.uplink_change_restarts(plan.as_ref()) {
                     this.restart_if_up().await
                 } else {
                     this.data_path_up_or_coming().await

@@ -885,7 +885,7 @@ impl Platform for AndroidPlatform {
     }
 
     // Nothing the data path installs names the uplink (see `network`).
-    fn uplink_change_restarts(&self) -> bool {
+    fn uplink_change_restarts(&self, _plan: Option<&DataPathPlan>) -> bool {
         false
     }
 

@@ -283,10 +283,11 @@ pub trait Platform: Send + Sync {
         None
     }
 
-    /// Whether an uplink change needs the running data-path rebuilt. A platform
-    /// that re-points its uplink-keyed state itself keeps the cores and their
-    /// connections; one whose configs bind outbounds to the uplink can't.
-    fn uplink_change_restarts(&self) -> bool {
+    /// Whether an uplink change needs the running data-path rebuilt. `plan` is the
+    /// one it was started with, `None` when this process did not start it. A data
+    /// path that names nothing about the uplink keeps its cores and their
+    /// connections; one whose configs or routes bind to the uplink can't.
+    fn uplink_change_restarts(&self, _plan: Option<&DataPathPlan>) -> bool {
         true
     }
 
