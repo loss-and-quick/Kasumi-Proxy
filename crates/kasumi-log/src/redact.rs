@@ -58,6 +58,51 @@ pub fn query_free(raw: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Borrowed(&raw[..cut])
 }
 
+/// Redact every URL inside free-form text. An error chain from a fetch carries the
+/// URL that failed, and the chain is the most valuable thing to log about a failed
+/// fetch — so it is logged whole, with each URL replaced by [`url`]. Matches `http://`
+/// and `https://` case-insensitively and stops at the next whitespace, which covers
+/// both a stored subscription link and the normalised form a client library echoes.
+pub fn in_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = find_scheme(rest) {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        // Never split inside the scheme itself, whatever the text looks like.
+        let end = tail
+            .find(char::is_whitespace)
+            .unwrap_or(tail.len())
+            .max(SCHEME_HTTPS.len());
+        let (token, remainder) = tail.split_at(end);
+        let (link, punctuation) = split_trailing_punctuation(token);
+        out.push_str(&url(link));
+        out.push_str(punctuation);
+        rest = remainder;
+    }
+    out.push_str(rest);
+    out
+}
+
+const SCHEME_HTTP: &str = "http://";
+const SCHEME_HTTPS: &str = "https://";
+
+fn find_scheme(text: &str) -> Option<usize> {
+    let lower = text.to_ascii_lowercase();
+    match (lower.find(SCHEME_HTTP), lower.find(SCHEME_HTTPS)) {
+        (Some(http), Some(https)) => Some(http.min(https)),
+        (Some(found), None) | (None, Some(found)) => Some(found),
+        (None, None) => None,
+    }
+}
+
+/// Punctuation that ends the URL rather than belonging to it: error messages wrap
+/// URLs in brackets and quotes.
+fn split_trailing_punctuation(token: &str) -> (&str, &str) {
+    let end = token.trim_end_matches(['.', ',', ';', ':', ')', ']', '\'', '"']);
+    token.split_at(end.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +151,38 @@ mod tests {
         assert_eq!(query_free("a?b#c"), "a");
         assert_eq!(query_free("a#b"), "a");
         assert_eq!(query_free("a"), "a");
+    }
+
+    #[test]
+    fn in_text_redacts_a_url_inside_a_chain() {
+        let chain = "error sending request for url (https://sub.example.com/list?token=abc): \
+                     connection refused";
+        assert_eq!(
+            in_text(chain),
+            "error sending request for url (https://sub.example.com/list): connection refused"
+        );
+    }
+
+    #[test]
+    fn in_text_handles_several_urls_and_userinfo() {
+        let text = "redirected https://a.example/x?k=1 then https://u:p@b.example/y?k=2 done";
+        assert_eq!(
+            in_text(text),
+            "redirected https://a.example/x then https://b.example/y done"
+        );
+    }
+
+    #[test]
+    fn in_text_leaves_text_without_urls_alone() {
+        let text = "dns error: failed to lookup address information: Temporary failure";
+        assert_eq!(in_text(text), text);
+    }
+
+    #[test]
+    fn in_text_keeps_trailing_punctuation_outside_the_url() {
+        assert_eq!(
+            in_text("failed: https://example.com/a?k=1, retrying"),
+            "failed: https://example.com/a, retrying"
+        );
     }
 }
