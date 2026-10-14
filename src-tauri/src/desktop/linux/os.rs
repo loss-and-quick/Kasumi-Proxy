@@ -95,37 +95,72 @@ impl DesktopOs for LinuxOs {
         None
     }
 
+    // What Happ desktop reports through Qt's `QSysInfo` and `QLocale`.
     async fn device_facts(&self) -> DeviceFacts {
-        let os_release = read_text("/etc/os-release").await.unwrap_or_default();
+        let os_release = match read_text("/etc/os-release").await {
+            Some(text) => text,
+            None => read_text("/usr/lib/os-release").await.unwrap_or_default(),
+        };
+        let hostname = read_text("/proc/sys/kernel/hostname")
+            .await
+            .map(|h| h.trim().to_owned())
+            .unwrap_or_default();
         let env = |k: &str| std::env::var(k).ok();
         DeviceFacts {
             os: "Linux".into(),
-            os_version: os_release_version(&os_release),
-            // Generic on purpose: a DMI product name is a fingerprint of its own.
-            model: "PC".into(),
-            locale: posix_locale([env("LC_ALL"), env("LC_MESSAGES"), env("LANG")]),
+            os_version: qt_product(&os_release),
+            model: format!("{hostname}_{}", qt_cpu_architecture(std::env::consts::ARCH)),
+            locale: qt_locale_name(&posix_locale([
+                env("LC_ALL"),
+                env("LC_MESSAGES"),
+                env("LANG"),
+            ])),
             ..Default::default()
         }
     }
 }
 
-/// `VERSION_ID` of an os-release file, unquoted.
-fn os_release_version(os_release: &str) -> String {
-    os_release
-        .lines()
-        .find_map(|l| l.strip_prefix("VERSION_ID="))
-        .map(|v| v.trim().trim_matches(['"', '\'']).to_owned())
-        .unwrap_or_default()
+/// `QSysInfo::productType()` + `_` + `productVersion()`: the os-release `ID` and
+/// `VERSION_ID`, each `unknown` when missing.
+fn qt_product(os_release: &str) -> String {
+    let field = |key: &str| {
+        os_release
+            .lines()
+            .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+            .map(|v| v.trim().trim_matches(['"', '\'']).to_owned())
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "unknown".into())
+    };
+    format!("{}_{}", field("ID"), field("VERSION_ID"))
 }
 
-/// The first set locale variable, as POSIX resolves them; `C`/`POSIX` mean English.
+/// `QSysInfo::currentCpuArchitecture()` for a Rust target architecture.
+fn qt_cpu_architecture(arch: &str) -> &str {
+    match arch {
+        "x86" => "i386",
+        "aarch64" => "arm64",
+        other => other,
+    }
+}
+
+/// The first set locale variable, as POSIX resolves them.
 fn posix_locale(vars: [Option<String>; 3]) -> String {
     vars.into_iter()
         .flatten()
         .map(|v| v.trim().to_owned())
         .find(|v| !v.is_empty())
-        .filter(|v| v != "C" && v != "POSIX" && !v.starts_with("C."))
-        .unwrap_or_else(|| "en".into())
+        .unwrap_or_else(|| "C".into())
+}
+
+/// `QLocale::name()` for a POSIX locale: `language_TERRITORY` without the codeset
+/// or modifier, and `C` for the C and POSIX locales.
+fn qt_locale_name(posix: &str) -> String {
+    let name = posix.split(['.', '@']).next().unwrap_or_default();
+    if name.is_empty() || name == "C" || name == "POSIX" {
+        "C".into()
+    } else {
+        name.to_owned()
+    }
 }
 
 #[cfg(test)]
@@ -133,22 +168,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn os_release_version_unquotes() {
-        let nixos = "NAME=NixOS\nVERSION_ID=\"26.05\"\nPRETTY_NAME=\"NixOS 26.05\"\n";
-        assert_eq!(os_release_version(nixos), "26.05");
-        assert_eq!(os_release_version("ID=arch\nBUILD_ID=rolling\n"), "");
+    fn qt_product_joins_id_and_version() {
+        let nixos = "NAME=NixOS\nID=nixos\nVERSION_ID=\"26.05\"\nPRETTY_NAME=\"NixOS 26.05\"\n";
+        assert_eq!(qt_product(nixos), "nixos_26.05");
+        // `ID_LIKE` is not `ID`.
+        assert_eq!(
+            qt_product("ID_LIKE=debian\nID=ubuntu\nVERSION_ID=24.04\n"),
+            "ubuntu_24.04"
+        );
+        assert_eq!(qt_product("ID=arch\nBUILD_ID=rolling\n"), "arch_unknown");
+        assert_eq!(qt_product(""), "unknown_unknown");
     }
 
     #[test]
-    fn posix_locale_follows_precedence() {
+    fn qt_cpu_architecture_names() {
+        assert_eq!(qt_cpu_architecture("x86_64"), "x86_64");
+        assert_eq!(qt_cpu_architecture("aarch64"), "arm64");
+        assert_eq!(qt_cpu_architecture("x86"), "i386");
+    }
+
+    #[test]
+    fn locale_follows_posix_precedence_and_qt_naming() {
         let s = |v: &str| Some(v.to_owned());
-        assert_eq!(posix_locale([None, s(""), s("ru_RU.UTF-8")]), "ru_RU.UTF-8");
-        assert_eq!(
-            posix_locale([s("de_DE.UTF-8"), None, s("ru_RU.UTF-8")]),
-            "de_DE.UTF-8"
-        );
-        assert_eq!(posix_locale([None, None, s("C.UTF-8")]), "en");
-        assert_eq!(posix_locale([None, None, None]), "en");
+        let name = |vars| qt_locale_name(&posix_locale(vars));
+        assert_eq!(name([None, s(""), s("ru_RU.UTF-8")]), "ru_RU");
+        assert_eq!(name([s("de_DE.UTF-8"), None, s("ru_RU.UTF-8")]), "de_DE");
+        assert_eq!(name([None, None, s("sr_RS@latin")]), "sr_RS");
+        assert_eq!(name([None, None, s("C.UTF-8")]), "C");
+        assert_eq!(name([None, None, None]), "C");
     }
 
     #[tokio::test]
