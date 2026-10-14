@@ -50,6 +50,9 @@ pub enum CoreConflict {
     /// TLS without a certificate check or a pinned certificate, on a profile only
     /// xray runs: xray has dropped `allowInsecure`, so only a pin gets past its check.
     UnpinnedInsecureTls,
+    /// The same for a custom Xray config: some `tlsSettings` of it sets
+    /// `allowInsecure` without a `pinnedPeerCertSha256`.
+    CustomAllowInsecure,
     /// A proxy chain that no single core can build: every hop is an outbound of the
     /// one config, and these two profiles of it each run on a different core only.
     ChainCoreConflict {
@@ -67,6 +70,10 @@ impl std::fmt::Display for CoreConflict {
             Self::UnpinnedInsecureTls => f.write_str(
                 "this profile runs only on xray, which no longer skips certificate checks: \
                  pin the server certificate (SHA-256) or turn off \"Allow insecure\"",
+            ),
+            Self::CustomAllowInsecure => f.write_str(
+                "this config sets \"allowInsecure\", which xray no longer accepts: \
+                 add \"pinnedPeerCertSha256\" beside it or remove it",
             ),
             Self::ChainCoreConflict { xray, sing_box } => write!(
                 f,

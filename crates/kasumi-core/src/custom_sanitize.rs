@@ -265,8 +265,61 @@ fn sanitize_outbound(
     }
     if let Some(stream) = out.get_mut("streamSettings") {
         strip_host_files(stream, &format!("{path}.streamSettings"), dropped);
+        drop_pinned_allow_insecure(stream, &format!("{path}.streamSettings"), dropped);
     }
     Some(Value::Object(out))
+}
+
+/// Whether some `tlsSettings` in `v` sets `allowInsecure` without a
+/// `pinnedPeerCertSha256`. Xray refuses the key, and dropping it would turn the
+/// certificate check back on, so no core can run such a config as written.
+pub(crate) fn has_unpinned_allow_insecure(v: &Value) -> bool {
+    match v {
+        Value::Object(m) => m.iter().any(|(k, child)| {
+            (k == "tlsSettings" && allows_insecure(child) && !is_pinned(child))
+                || has_unpinned_allow_insecure(child)
+        }),
+        Value::Array(a) => a.iter().any(has_unpinned_allow_insecure),
+        _ => false,
+    }
+}
+
+/// Drop `allowInsecure` from every `tlsSettings` in `v` that pins the peer
+/// certificate. Xray refuses the key, and with a pin it already skips the CA
+/// chain and accepts only the pinned certificate, so the key adds nothing.
+pub(crate) fn drop_pinned_allow_insecure(v: &mut Value, path: &str, dropped: &mut Vec<String>) {
+    match v {
+        Value::Object(m) => {
+            for (k, child) in m.iter_mut() {
+                let child_path = format!("{path}.{k}");
+                if k == "tlsSettings"
+                    && allows_insecure(child)
+                    && is_pinned(child)
+                    && let Some(tls) = child.as_object_mut()
+                {
+                    tls.remove("allowInsecure");
+                    dropped.push(format!("{child_path}.allowInsecure"));
+                }
+                drop_pinned_allow_insecure(child, &child_path, dropped);
+            }
+        }
+        Value::Array(a) => {
+            for (i, child) in a.iter_mut().enumerate() {
+                drop_pinned_allow_insecure(child, &format!("{path}[{i}]"), dropped);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn allows_insecure(tls: &Value) -> bool {
+    tls.get("allowInsecure") == Some(&Value::Bool(true))
+}
+
+fn is_pinned(tls: &Value) -> bool {
+    tls.get("pinnedPeerCertSha256")
+        .and_then(Value::as_str)
+        .is_some_and(|pcs| !pcs.trim().is_empty())
 }
 
 /// Drop file keys and reduce every sockopt (including nested ones such as an
@@ -735,6 +788,55 @@ mod tests {
         assert!(differs_only_in_reality_pick(&a, &b));
         assert!(!differs_only_in_reality_pick(&a, &other_key));
         assert!(!differs_only_in_reality_pick(&a, "not json"));
+    }
+
+    fn insecure_tls(pin: Option<&str>) -> Value {
+        let mut tls = json!({ "serverName": "srv.example", "allowInsecure": true });
+        if let Some(pin) = pin {
+            tls["pinnedPeerCertSha256"] = pin.into();
+        }
+        tls
+    }
+
+    #[test]
+    fn pinned_allow_insecure_is_dropped() {
+        let mut ob = vless("proxy");
+        ob["streamSettings"]["tlsSettings"] = insecure_tls(Some("aabb"));
+        // An xhttp download leg carries its own tlsSettings.
+        ob["streamSettings"]["xhttpSettings"] = json!({ "extra": { "downloadSettings": {
+            "security": "tls", "tlsSettings": insecure_tls(Some("ccdd")),
+        }}});
+        let out = sanitize(json!({ "outbounds": [ob] }));
+        assert!(!has_unpinned_allow_insecure(&Value::from(
+            out.outbounds.clone()
+        )));
+        let stream = &out.outbounds[0]["streamSettings"];
+        assert_eq!(
+            stream["tlsSettings"],
+            json!({ "serverName": "srv.example", "pinnedPeerCertSha256": "aabb" })
+        );
+        let leg = &stream["xhttpSettings"]["extra"]["downloadSettings"]["tlsSettings"];
+        assert!(leg.get("allowInsecure").is_none(), "{leg}");
+        assert!(
+            out.dropped
+                .contains(&"outbounds[0].streamSettings.tlsSettings.allowInsecure".to_string())
+        );
+    }
+
+    #[test]
+    fn unpinned_allow_insecure_is_kept_and_reported() {
+        let mut ob = vless("proxy");
+        ob["streamSettings"]["tlsSettings"] = insecure_tls(Some(" "));
+        let out = sanitize(json!({ "outbounds": [vless("other"), ob] }));
+        assert_eq!(
+            out.outbounds[1]["streamSettings"]["tlsSettings"]["allowInsecure"],
+            true
+        );
+        assert!(has_unpinned_allow_insecure(&Value::from(out.outbounds)));
+
+        let mut checked = vless("proxy");
+        checked["streamSettings"]["tlsSettings"] = json!({ "allowInsecure": false });
+        assert!(!has_unpinned_allow_insecure(&checked));
     }
 
     #[test]

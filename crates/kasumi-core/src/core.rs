@@ -3,9 +3,10 @@
 
 use crate::chain::chain_hops;
 use crate::contract::CoreConflict;
+use crate::custom_sanitize::{has_unpinned_allow_insecure, sanitize_provider_xray};
 use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
-use crate::profile::{Profile, Protocol};
+use crate::profile::{Custom, CustomOrigin, Profile, Protocol};
 use crate::state::AdvancedSettings;
 
 fn is_singbox_only(proto: Protocol) -> bool {
@@ -40,8 +41,24 @@ pub(crate) fn skips_cert_check_unpinned(p: &Profile) -> bool {
 
 /// Why no core can run the profile as configured, if none can.
 pub fn core_conflict(p: &Profile) -> Option<CoreConflict> {
+    if let Profile::Custom(c) = p {
+        return custom_allows_insecure_unpinned(c).then_some(CoreConflict::CustomAllowInsecure);
+    }
     (capability_core(p) == Some(CoreEngine::Xray) && skips_cert_check_unpinned(p))
         .then_some(CoreConflict::UnpinnedInsecureTls)
+}
+
+/// Checked on what xray would load: a provider config only once sanitised, so an
+/// outbound the sanitiser drops doesn't count. Invalid JSON is the builder's error.
+fn custom_allows_insecure_unpinned(c: &Custom) -> bool {
+    let Ok(raw) = serde_json::from_str::<serde_json::Value>(&c.raw) else {
+        return false;
+    };
+    match c.origin {
+        CustomOrigin::User => has_unpinned_allow_insecure(&raw),
+        CustomOrigin::Provider => sanitize_provider_xray(&raw)
+            .is_ok_and(|s| s.outbounds.iter().any(has_unpinned_allow_insecure)),
+    }
 }
 
 fn capability_core(p: &Profile) -> Option<CoreEngine> {

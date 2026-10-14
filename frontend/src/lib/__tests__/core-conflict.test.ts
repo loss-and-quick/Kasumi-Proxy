@@ -11,6 +11,14 @@ describe("coreConflictText", () => {
     expect(text).toContain("“Allow insecure”");
   });
 
+  it("names the Xray keys that fix a custom config skipping the check", () => {
+    const text = coreConflictText((key, vars) => translate("en", key, vars), {
+      kind: "customAllowInsecure",
+    });
+    expect(text).toContain("“allowInsecure”");
+    expect(text).toContain("“pinnedPeerCertSha256”");
+  });
+
   it("explains a proxy chain needing both cores", () => {
     const text = coreConflictText((key, vars) => translate("en", key, vars), {
       kind: "chainCoreConflict",
