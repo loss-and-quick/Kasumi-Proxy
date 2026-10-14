@@ -133,3 +133,28 @@ export const EmptyHint = ({ icon, text }: { icon: string; text: string }) => (
     <span style={{ fontSize: 13, lineHeight: 1.4 }}>{text}</span>
   </Card>
 );
+
+/**
+ * Text that gives up its middle when the line is too narrow, so the ends that
+ * tell hosts apart (the first label, the domain suffix and the port) stay in view.
+ * The full text is the hover title.
+ */
+export function MiddleEllipsis({
+  text,
+  tail = 12,
+  className,
+}: {
+  text: string;
+  /** Trailing characters that are never cut. */
+  tail?: number;
+  className?: string;
+}) {
+  const chars = Array.from(text);
+  const cut = Math.max(0, chars.length - tail);
+  return (
+    <span className={`mid-ellipsis${className ? ` ${className}` : ""}`} dir="auto" title={text}>
+      <span className="mid-head">{chars.slice(0, cut).join("")}</span>
+      <span className="mid-tail">{chars.slice(cut).join("")}</span>
+    </span>
+  );
+}

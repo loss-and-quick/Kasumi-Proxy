@@ -6,7 +6,7 @@
 // ============================================================
 
 import { type ReactNode, useDeferredValue, useMemo, useRef, useState } from "react";
-import { BesideSheet, Icon, Ping, SectionLabel, Sheet } from "../../components";
+import { BesideSheet, Icon, MiddleEllipsis, Ping, SectionLabel, Sheet } from "../../components";
 import type { Group, Profile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { fuzzyFilterSort, fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
@@ -239,13 +239,13 @@ export function ProfilePickerTrigger({
     >
       <span className="select-value picker-trigger-value">
         <span
-          className="truncate"
+          className="picker-trigger-name"
           dir="auto"
           style={!choice && !label ? { color: "var(--warn)" } : undefined}
         >
           {name}
         </span>
-        {detail && <span className="picker-trigger-detail truncate">{detail}</span>}
+        {detail && <MiddleEllipsis className="picker-trigger-detail" text={detail} />}
       </span>
       <Icon name="expand_more" className="select-arrow" />
     </button>
