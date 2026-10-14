@@ -70,6 +70,20 @@ export function RoutingRuleSheet({
     if (open) setDraft(makeDraft(rule));
   }, [open, rule]);
 
+  // A rule needs something to match on: Xray refuses one without, and sing-box
+  // would send every connection to its outbound.
+  const hasCondition =
+    [
+      draft.domainText,
+      draft.ipText,
+      draft.protocolText,
+      draft.processText,
+      draft.packageText,
+      draft.sourceIpText,
+    ].some((text) => normalizeList(text)) ||
+    !!draft.port.trim() ||
+    !!draft.network;
+
   const save = () => {
     const domain = normalizeList(draft.domainText);
     const ip = normalizeList(draft.ipText);
@@ -101,11 +115,16 @@ export function RoutingRuleSheet({
       title={rule ? t("routingSheet.editTitle") : t("routingSheet.newTitle")}
       onClose={onClose}
       headRight={
-        <Btn variant="filled" sm icon="check" onClick={save}>
+        <Btn variant="filled" sm icon="check" onClick={save} disabled={!hasCondition}>
           {t("routingSheet.save")}
         </Btn>
       }
     >
+      {!hasCondition && (
+        <div className="hint" style={{ marginBottom: 10 }}>
+          {t("routingSheet.needCondition")}
+        </div>
+      )}
       <Field
         label={t("routingSheet.name")}
         value={draft.remarks}

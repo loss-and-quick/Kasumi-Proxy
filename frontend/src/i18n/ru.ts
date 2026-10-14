@@ -1092,6 +1092,8 @@ const ru = {
   "routingSheet.newTitle": "Новое правило маршрутизации",
   "routingSheet.editTitle": "Редактировать правило маршрутизации",
   "routingSheet.save": "Сохранить",
+  "routingSheet.needCondition":
+    "Добавьте хотя бы одно условие: домен, IP, порт, сеть, протокол, приложение или источник.",
   "routingSheet.name": "Название",
   "routingSheet.defaultName": "Правило",
   "routingSheet.outbound": "Исходящий маршрут",

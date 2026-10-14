@@ -992,6 +992,8 @@ const pt = {
   "routingSheet.newTitle": "Nova regra de roteamento",
   "routingSheet.editTitle": "Editar regra de roteamento",
   "routingSheet.save": "Salvar",
+  "routingSheet.needCondition":
+    "Adicione pelo menos uma condição: domínio, IP, porta, rede, protocolo, app ou origem.",
   "routingSheet.name": "Nome",
   "routingSheet.defaultName": "Regra",
   "routingSheet.outbound": "Saída",
