@@ -33,6 +33,26 @@ struct WsRequest {
     command: Command,
 }
 
+/// A request frame the daemon could not read.
+struct Unreadable {
+    /// The request's `id`, if it could be read: the client gives a request no
+    /// timeout of its own, so that request gets the error as its reply. A frame
+    /// with no readable `id` is not a request the client is waiting on.
+    id: Option<i64>,
+    error: String,
+}
+
+fn read_request(text: &str) -> Result<WsRequest, Unreadable> {
+    #[derive(Deserialize)]
+    struct Id {
+        id: i64,
+    }
+    serde_json::from_str::<WsRequest>(text).map_err(|e| Unreadable {
+        id: serde_json::from_str::<Id>(text).ok().map(|i| i.id),
+        error: format!("the daemon could not read this request: {e}"),
+    })
+}
+
 /// One WS reply, correlated by `id`. `value` carries the typed response on success;
 /// `error` carries the message on failure.
 #[derive(Serialize)]
@@ -173,15 +193,27 @@ async fn handle_socket(socket: WebSocket, service: Arc<Service>) {
     while let Some(incoming) = stream.next().await {
         match incoming {
             Ok(Message::Text(text)) => {
-                let Ok(req) = serde_json::from_str::<WsRequest>(text.as_str()) else {
-                    // Whatever this is, the UI cannot have sent it — dropping it
-                    // silently is how a protocol mismatch becomes a mystery.
-                    ks_warn!(
-                        Area::Ws,
-                        "dropped an unparseable frame ({bytes} bytes)",
-                        bytes = text.len()
-                    );
-                    continue;
+                let req = match read_request(text.as_str()) {
+                    Ok(req) => req,
+                    Err(Unreadable { id, error }) => {
+                        // A protocol mismatch (a stale page against a newer daemon)
+                        // must not become a mystery, nor a request that waits forever.
+                        ks_warn!(
+                            Area::Ws,
+                            "could not read a request ({bytes} bytes)",
+                            bytes = text.len()
+                        );
+                        if let Some(id) = id {
+                            let reply = WsReply {
+                                id,
+                                ok: false,
+                                value: None,
+                                error: Some(error),
+                            };
+                            let _ = tx.send(frame(&reply));
+                        }
+                        continue;
+                    }
                 };
                 let service = service.clone();
                 let reply_tx = tx.clone();
@@ -222,4 +254,25 @@ async fn handle_socket(socket: WebSocket, service: Arc<Service>) {
     pusher.abort();
     heartbeat.abort();
     let _ = writer.await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_request_the_daemon_cannot_read_keeps_its_id() {
+        assert!(read_request(r#"{"id":1,"cmd":"status"}"#).is_ok());
+
+        let Err(e) = read_request(r#"{"id":7,"cmd":"noSuchCommand"}"#) else {
+            panic!("an unknown command was read");
+        };
+        assert_eq!(e.id, Some(7));
+        assert!(e.error.contains("noSuchCommand"), "{}", e.error);
+
+        // Nothing waits on a frame without an id.
+        let id = |text| read_request(text).err().and_then(|e| e.id);
+        assert_eq!(id(r#"{"cmd":"status"}"#), None);
+        assert_eq!(id("not json"), None);
+    }
 }
