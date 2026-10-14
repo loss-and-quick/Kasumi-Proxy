@@ -523,6 +523,43 @@ fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
 const SPECIAL_OUTBOUND_TAGS: [&str; 3] = ["proxy", "direct", "block"];
 const DNS_OUT: &str = "dns-out";
 
+/// The field-rule keys Xray matches on (`RawFieldRule` in Xray's
+/// infra/conf/router.go). Xray refuses to start on a rule with none of them set:
+/// "this rule has no effective fields".
+const XRAY_RULE_CONDITIONS: [&str; 17] = [
+    "domain",
+    "domains",
+    "ip",
+    "port",
+    "network",
+    "sourceIP",
+    "source",
+    "sourcePort",
+    "user",
+    "vlessRoute",
+    "inboundTag",
+    "protocol",
+    "attrs",
+    "localIP",
+    "localPort",
+    "process",
+    "localOS",
+];
+
+/// Whether an Xray field rule has a condition Xray accepts.
+pub(crate) fn xray_rule_has_condition(rule: &Map<String, Value>) -> bool {
+    let set = |v: &Value| match v {
+        Value::Null => false,
+        Value::String(s) => !s.trim().is_empty(),
+        Value::Array(a) => !a.is_empty(),
+        Value::Object(o) => !o.is_empty(),
+        _ => true,
+    };
+    XRAY_RULE_CONDITIONS
+        .iter()
+        .any(|k| rule.get(*k).is_some_and(set))
+}
+
 fn build_rule_object(rule: &RoutingRule, resolve: &dyn Fn(&str) -> String) -> Value {
     let mut m = Map::new();
     m.insert("type".into(), "field".into());
@@ -735,12 +772,14 @@ fn build_routing(
         // xray can't tell which Android package opened a connection. Dropping just
         // the package condition would widen the rule to every app, so a rule that
         // names packages is left out on xray entirely.
-        for r in routing_rules
-            .iter()
-            .filter(|r| r.enabled && r.package_name.as_ref().is_none_or(Vec::is_empty))
-        {
-            rules.push(build_rule_object(r, resolve));
-        }
+        // A rule left with no condition matches nothing here and stops Xray.
+        rules.extend(
+            routing_rules
+                .iter()
+                .filter(|r| r.enabled && r.package_name.as_ref().is_none_or(Vec::is_empty))
+                .map(|r| build_rule_object(r, resolve))
+                .filter(|r| r.as_object().is_some_and(xray_rule_has_condition)),
+        );
         rules.extend_from_slice(provider_rules);
         rules.push(final_rule);
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
@@ -751,7 +790,11 @@ fn build_routing(
         && let Some(Value::Array(parsed)) = parse_json_safe(cr)
     {
         let mut rules: Vec<Value> = vec![force_rule, dns_rule];
-        rules.extend(parsed);
+        rules.extend(
+            parsed
+                .into_iter()
+                .filter(|r| r.as_object().is_none_or(xray_rule_has_condition)),
+        );
         rules.extend_from_slice(provider_rules);
         rules.push(final_rule);
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
@@ -1337,6 +1380,60 @@ mod tests {
         // Emitting the package rule without its package would block example.com
         // for every app.
         assert!(emitted.iter().all(|r| r["outboundTag"] != "block"));
+    }
+
+    #[test]
+    fn rules_without_a_condition_are_left_out() {
+        let p = sample();
+        let every_rule_matches_something = |cfg: &Value| {
+            cfg["routing"]["rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|r| xray_rule_has_condition(r.as_object().unwrap()))
+        };
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let rules = vec![
+            source_rule("block"),
+            RoutingRule {
+                domain: Some(vec![]),
+                ip: Some(vec![]),
+                port: Some("  ".into()),
+                ..source_rule("block")
+            },
+            RoutingRule {
+                domain: Some(vec!["example.com".into()]),
+                ..source_rule("direct")
+            },
+        ];
+        let cfg = build_xray_config(&p, &s, &rules, std::slice::from_ref(&p)).unwrap();
+        assert!(every_rule_matches_something(&cfg));
+        let emitted = cfg["routing"]["rules"].as_array().unwrap();
+        assert!(emitted.iter().all(|r| r["outboundTag"] != "block"));
+        assert!(
+            emitted
+                .iter()
+                .any(|r| r["domain"] == json!(["example.com"]))
+        );
+
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Custom,
+            custom_routing: Some(
+                r#"[{"type":"field","outboundTag":"block"},
+                    {"type":"field","domain":[],"outboundTag":"block"},
+                    {"type":"field","inboundTag":["socks-in"],"port":"443","outboundTag":"direct"}]"#
+                    .into(),
+            ),
+            ..Default::default()
+        };
+        let cfg = build_xray_config(&p, &s, &[], std::slice::from_ref(&p)).unwrap();
+        assert!(every_rule_matches_something(&cfg));
+        let emitted = cfg["routing"]["rules"].as_array().unwrap();
+        assert!(emitted.iter().all(|r| r["outboundTag"] != "block"));
+        assert!(emitted.iter().any(|r| r["port"] == "443"));
     }
 
     #[test]
