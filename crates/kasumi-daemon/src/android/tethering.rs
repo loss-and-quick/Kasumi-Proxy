@@ -18,8 +18,16 @@
 //! held off ([`super::tether_offload`]), since offloaded packets never reach the
 //! rules. Teardown ([`clear_tethering`]) always removes everything and restores
 //! the offload setting, whatever the option says by then.
+//!
+//! A sing-box tun without IPv6 and with `strict_route` puts `unreachable` first in
+//! the IPv6 rules, which also drops what the phone itself sends to the clients:
+//! the IPv6 rejects below and every other unicast reply. The downstreams' on-link
+//! IPv6 prefixes get their own table, looked up for phone-originated packets ahead
+//! of sing-box, so those replies arrive and clients fall back to IPv4 at once
+//! instead of after a timeout. The table only routes onto the downstreams, so
+//! nothing reaches the uplink through it.
 
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -80,7 +88,8 @@ const HOOKS: [Hook; 4] = [
     },
 ];
 /// Holds the tethering subnets' connected routes, so the tun's replies can find the
-/// way back to the client without depending on how the OS files those routes.
+/// way back to the client without depending on how the OS files those routes. Its
+/// IPv6 half holds the downstreams' on-link prefixes for the phone's own packets.
 const REPLY_TABLE: &str = "1102";
 /// Above the app-mark rules (1000/1010) and below everything else, the OS's own
 /// rules and sing-box's `auto_route` rules (9000+, including its uid-0 exemption
@@ -122,6 +131,9 @@ pub struct TetherIface {
     pub name: String,
     /// The downstream's IPv4 subnet, e.g. `10.249.48.0/24`.
     pub net: String,
+    /// The downstream's IPv6 on-link prefixes: link-local, and the prefix shared
+    /// from the upstream when there is one.
+    pub net6: Vec<String>,
 }
 
 /// The commands that make tethered traffic go through the proxy. Each entry is the
@@ -130,6 +142,9 @@ pub struct TetherIface {
 pub struct TetherPlan {
     pub ip_routes: Vec<Vec<String>>,
     pub ip_rules: Vec<Vec<String>>,
+    /// Run with `ip -6`.
+    pub ip6_routes: Vec<Vec<String>>,
+    pub ip6_rules: Vec<Vec<String>>,
     /// `filter FORWARD` chain, IPv4.
     pub filter4: Vec<Vec<String>>,
     /// `filter FORWARD` chain, IPv6.
@@ -144,6 +159,8 @@ impl TetherPlan {
     pub fn is_empty(&self) -> bool {
         self.ip_routes.is_empty()
             && self.ip_rules.is_empty()
+            && self.ip6_routes.is_empty()
+            && self.ip6_rules.is_empty()
             && self.sections().iter().all(|s| s.is_empty())
     }
 
@@ -238,6 +255,34 @@ pub fn tether_plan(ifaces: &[TetherIface], tun: &str, table: &str) -> TetherPlan
                 reply,
             ]));
         }
+        // `append`: every downstream has its own fe80::/64, and `replace` would
+        // keep only the last one.
+        for net6 in &t.net6 {
+            plan.ip6_routes.push(args(&[
+                "route",
+                "append",
+                net6,
+                "dev",
+                name,
+                "table",
+                REPLY_TABLE,
+            ]));
+        }
+    }
+    // Phone-originated packets only (`iif lo`): forwarded client IPv6 still meets
+    // the rules below. A destination off the downstreams finds no route in the
+    // table and falls through to them too.
+    if !plan.ip6_routes.is_empty() {
+        plan.ip6_rules.push(args(&[
+            "rule",
+            "add",
+            "iif",
+            "lo",
+            "lookup",
+            REPLY_TABLE,
+            "pref",
+            PRIO_REPLY,
+        ]));
     }
     plan
 }
@@ -315,17 +360,58 @@ fn parse_iface_nets(addr_out: &str) -> Vec<(String, String)> {
     nets
 }
 
-/// The tethering downstreams with their subnets. A downstream without an IPv4
-/// address yet waits for the next poll. `exclude` names interfaces that must never
-/// qualify (the uplink, the tuns).
+/// The prefix of every IPv6 address but loopback out of `ip -o addr show`, as
+/// `(iface, "prefix/n")` with the host bits cleared, without repeats.
+fn parse_iface_nets6(addr_out: &str) -> Vec<(String, String)> {
+    let mut nets = Vec::new();
+    for line in addr_out.lines() {
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        let Some(i) = toks.iter().position(|t| *t == "inet6") else {
+            continue;
+        };
+        let (Some(name), Some(cidr)) = (toks.get(1), toks.get(i + 1)) else {
+            continue;
+        };
+        let name = name.trim_end_matches(':').split('@').next().unwrap_or("");
+        let Some((ip, prefix)) = cidr.split_once('/') else {
+            continue;
+        };
+        let (Ok(ip), Ok(prefix)) = (ip.parse::<Ipv6Addr>(), prefix.parse::<u32>()) else {
+            continue;
+        };
+        if prefix > 128 || ip.is_loopback() {
+            continue;
+        }
+        let mask = u128::MAX.checked_shl(128 - prefix).unwrap_or(0);
+        let net = (
+            name.to_string(),
+            format!("{}/{prefix}", Ipv6Addr::from(u128::from(ip) & mask)),
+        );
+        if !nets.contains(&net) {
+            nets.push(net);
+        }
+    }
+    nets
+}
+
+/// The tethering downstreams with their subnets, out of `ip -o addr show`. A
+/// downstream without an IPv4 address yet waits for the next poll. `exclude` names
+/// interfaces that must never qualify (the uplink, the tuns).
 pub fn tether_ifaces(rules_out: &str, addr_out: &str, exclude: &[&str]) -> Vec<TetherIface> {
     let nets = parse_iface_nets(addr_out);
+    let nets6 = parse_iface_nets6(addr_out);
     parse_tether_downstreams(rules_out)
         .into_iter()
         .filter(|name| !exclude.contains(&name.as_str()))
         .filter_map(|name| {
             let net = nets.iter().find(|(n, _)| *n == name)?.1.clone();
-            Some(TetherIface { name, net })
+            let mut net6: Vec<String> = nets6
+                .iter()
+                .filter(|(n, _)| *n == name)
+                .map(|(_, p)| p.clone())
+                .collect();
+            net6.sort();
+            Some(TetherIface { name, net, net6 })
         })
         .collect()
 }
@@ -340,46 +426,62 @@ async fn detect(rules: &str, tuns: &[&str]) -> Vec<TetherIface> {
     if let Some(u) = uplink.as_deref() {
         exclude.push(u);
     }
-    let (_, addrs) = run_out(&[IP, "-o", "-4", "addr", "show"]).await;
+    let (_, addrs) = run_out(&[IP, "-o", "addr", "show"]).await;
     tether_ifaces(rules, &addrs, &exclude)
 }
 
-/// Whether the rules [`install`] put in for `ifaces` are all still there, judged
-/// from `ip -4 rule show`, `ip -4 route show table 1102` and whether the `FORWARD`
-/// jump exists. The kernel drops a device's routes when the device goes away, so a
-/// downstream recreated under the same name and subnet (tethering switched off and
-/// on) comes back with the rules in place but table 1102 empty.
-fn plan_in_place(
-    ifaces: &[TetherIface],
-    tun: &str,
-    rules_out: &str,
-    routes_out: &str,
+/// What the watcher reads back to judge whether the installed plan is intact.
+struct Installed<'a> {
+    /// `ip -4 rule show` and `ip -6 rule show`.
+    rules: &'a str,
+    rules6: &'a str,
+    /// `ip -4 route show table 1102` and `ip -6 route show table 1102`.
+    routes: &'a str,
+    routes6: &'a str,
+    /// Whether the `FORWARD` jump exists.
     hooked: bool,
-) -> bool {
-    let rule_lines: Vec<(&str, Vec<&str>)> = rules_out
+}
+
+/// Whether `rules_out` has a rule at `pref` with every `[key, value]` pair.
+fn has_rule(rules_out: &str, pref: &str, pairs: &[[&str; 2]]) -> bool {
+    rules_out
         .lines()
         .filter_map(|l| l.split_once(':'))
-        .map(|(pref, rest)| (pref.trim(), rest.split_whitespace().collect()))
-        .collect();
-    let has_rule = |pref: &str, pairs: &[[&str; 2]]| {
-        rule_lines.iter().any(|(p, toks)| {
-            *p == pref
+        .any(|(p, rest)| {
+            let toks: Vec<&str> = rest.split_whitespace().collect();
+            p.trim() == pref
                 && pairs
                     .iter()
                     .all(|pair| toks.windows(2).any(|w| w == pair.as_slice()))
         })
-    };
-    let has_route = |t: &TetherIface| {
-        routes_out.lines().any(|l| {
-            let toks: Vec<&str> = l.split_whitespace().collect();
-            toks.starts_with(&[t.net.as_str(), "dev", t.name.as_str()])
-        })
-    };
-    hooked
+}
+
+/// Whether `routes_out` routes `net` out of `dev`.
+fn has_route(routes_out: &str, net: &str, dev: &str) -> bool {
+    routes_out.lines().any(|l| {
+        let toks: Vec<&str> = l.split_whitespace().collect();
+        toks.starts_with(&[net, "dev", dev])
+    })
+}
+
+/// Whether the rules [`install`] put in for `ifaces` are all still there. The
+/// kernel drops a device's routes when the device goes away, so a downstream
+/// recreated under the same name and subnet (tethering switched off and on) comes
+/// back with the rules in place but table 1102 empty.
+fn plan_in_place(ifaces: &[TetherIface], tun: &str, now: &Installed) -> bool {
+    let any6 = ifaces.iter().any(|t| !t.net6.is_empty());
+    now.hooked
+        && (!any6
+            || has_rule(
+                now.rules6,
+                PRIO_REPLY,
+                &[["iif", "lo"], ["lookup", REPLY_TABLE]],
+            ))
         && ifaces.iter().all(|t| {
-            has_route(t)
-                && has_rule(PRIO_STEER, &[["iif", &t.name]])
-                && has_rule(PRIO_REPLY, &[["iif", tun], ["to", &t.net]])
+            has_route(now.routes, &t.net, &t.name)
+                && t.net6.iter().all(|n| has_route(now.routes6, n, &t.name))
+                && has_rule(now.rules, PRIO_STEER, &[["iif", &t.name]])
+                && has_rule(now.rules, PRIO_REPLY, &[["iif", tun], ["to", &t.net]])
         })
 }
 
@@ -393,13 +495,17 @@ async fn ipt(bin: &str, table: Option<&str>, rest: &[&str]) -> i32 {
 }
 
 async fn install(plan: &TetherPlan) {
-    for r in &plan.ip_routes {
-        let a: Vec<&str> = r.iter().map(String::as_str).collect();
-        ip_rule(false, &a).await;
-    }
-    for r in &plan.ip_rules {
-        let a: Vec<&str> = r.iter().map(String::as_str).collect();
-        ip_rule(false, &a).await;
+    let ip_cmds = [
+        (false, &plan.ip_routes),
+        (false, &plan.ip_rules),
+        (true, &plan.ip6_routes),
+        (true, &plan.ip6_rules),
+    ];
+    for (v6, cmds) in ip_cmds {
+        for r in cmds {
+            let a: Vec<&str> = r.iter().map(String::as_str).collect();
+            ip_rule(v6, &a).await;
+        }
     }
     for (h, rules) in HOOKS.iter().zip(plan.sections()) {
         let (bin, table, chain) = (h.bin, h.table, h.chain);
@@ -423,14 +529,16 @@ async fn clear_rules() {
         ipt(h.bin, h.table, &["-F", h.chain]).await;
         ipt(h.bin, h.table, &["-X", h.chain]).await;
     }
-    for pref in [PRIO_STEER, PRIO_REPLY] {
-        for _ in 0..8 {
-            if ip_rule(false, &["rule", "del", "pref", pref]).await != 0 {
-                break;
+    for v6 in [false, true] {
+        for pref in [PRIO_STEER, PRIO_REPLY] {
+            for _ in 0..8 {
+                if ip_rule(v6, &["rule", "del", "pref", pref]).await != 0 {
+                    break;
+                }
             }
         }
+        ip_rule(v6, &["route", "flush", "table", REPLY_TABLE]).await;
     }
-    ip_rule(false, &["route", "flush", "table", REPLY_TABLE]).await;
 }
 
 /// Data-path teardown: remove the rules, hand BPF offload back and give the
@@ -475,8 +583,18 @@ async fn watch(path: TetherPath) {
         let intact = match tun {
             Some(tun) if want == applied && !applied.is_empty() => {
                 let (_, routes) = run_out(&[IP, "-4", "route", "show", "table", REPLY_TABLE]).await;
+                let (_, routes6) =
+                    run_out(&[IP, "-6", "route", "show", "table", REPLY_TABLE]).await;
+                let (_, rules6) = run_out(&[IP, "-6", "rule", "show"]).await;
                 let hooked = ipt(IPTABLES, None, &["-C", "FORWARD", "-j", CHAIN]).await == 0;
-                plan_in_place(&applied, tun, &rules, &routes, hooked)
+                let now = Installed {
+                    rules: &rules,
+                    rules6: &rules6,
+                    routes: &routes,
+                    routes6: &routes6,
+                    hooked,
+                };
+                plan_in_place(&applied, tun, &now)
             }
             _ => want == applied,
         };
@@ -538,9 +656,14 @@ mod tests {
     use super::*;
 
     fn iface(name: &str, net: &str) -> TetherIface {
+        iface6(name, net, &[])
+    }
+
+    fn iface6(name: &str, net: &str, net6: &[&str]) -> TetherIface {
         TetherIface {
             name: name.into(),
             net: net.into(),
+            net6: net6.iter().map(|n| n.to_string()).collect(),
         }
     }
 
@@ -548,6 +671,8 @@ mod tests {
         [
             &plan.ip_routes,
             &plan.ip_rules,
+            &plan.ip6_routes,
+            &plan.ip6_rules,
             &plan.filter4,
             &plan.filter6,
             &plan.nat4,
@@ -813,45 +938,49 @@ mod tests {
 ";
     const REPLY_ROUTES: &str = "10.173.7.0/24 dev rndis0 scope link \n";
 
+    fn v4_only<'a>(rules: &'a str, routes: &'a str, hooked: bool) -> Installed<'a> {
+        Installed {
+            rules,
+            rules6: "",
+            routes,
+            routes6: "",
+            hooked,
+        }
+    }
+
     #[test]
     fn a_recreated_downstream_is_reinstalled() {
         let applied = [iface("rndis0", "10.173.7.0/24")];
+        let tun = "p2fbf546d";
         assert!(!plan_in_place(
             &applied,
-            "p2fbf546d",
-            RECREATED_RULES,
-            "",
-            true
+            tun,
+            &v4_only(RECREATED_RULES, "", true)
         ));
         assert!(plan_in_place(
             &applied,
-            "p2fbf546d",
-            RECREATED_RULES,
-            REPLY_ROUTES,
-            true
+            tun,
+            &v4_only(RECREATED_RULES, REPLY_ROUTES, true)
         ));
     }
 
     #[test]
     fn a_missing_rule_or_forward_jump_is_reinstalled() {
         let applied = [iface("rndis0", "10.173.7.0/24")];
+        let tun = "p2fbf546d";
         let no_reply = RECREATED_RULES.replace("1016:", "1017:");
         let no_steer = RECREATED_RULES.replace("1015:", "1014:");
         for rules in [no_reply.as_str(), no_steer.as_str()] {
             assert!(!plan_in_place(
                 &applied,
-                "p2fbf546d",
-                rules,
-                REPLY_ROUTES,
-                true
+                tun,
+                &v4_only(rules, REPLY_ROUTES, true)
             ));
         }
         assert!(!plan_in_place(
             &applied,
-            "p2fbf546d",
-            RECREATED_RULES,
-            REPLY_ROUTES,
-            false
+            tun,
+            &v4_only(RECREATED_RULES, REPLY_ROUTES, false)
         ));
     }
 
@@ -874,9 +1003,139 @@ mod tests {
         assert!(!plan_in_place(
             &applied,
             "p2fbf546d",
-            RECREATED_RULES,
-            elsewhere,
-            true
+            &v4_only(RECREATED_RULES, elsewhere, true)
         ));
+    }
+
+    // `ip -o addr show` with USB tethering sharing an IPv6 upstream: rndis0 has
+    // its link-local address and the phone's address in the shared /64.
+    const USB_ADDRS6: &str = "\
+1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever
+1: lo    inet6 ::1/128 scope host \\       valid_lft forever preferred_lft forever
+28: rmnet_data3    inet 100.78.31.181/30 scope global rmnet_data3\\       valid_lft forever preferred_lft forever
+28: rmnet_data3    inet6 2a00:1fa0:cca4:3c2d:b0d9:49ff:fe3b:184f/64 scope global dynamic mngtmpaddr \\       valid_lft forever preferred_lft forever
+28: rmnet_data3    inet6 fe80::b0d9:49ff:fe3b:184f/64 scope link \\       valid_lft forever preferred_lft forever
+31: p2fbf546d    inet 198.18.0.1/15 brd 198.19.255.255 scope global p2fbf546d\\       valid_lft forever preferred_lft forever
+32: rndis0    inet 10.249.48.65/24 brd 10.249.48.255 scope global rndis0\\       valid_lft forever preferred_lft forever
+32: rndis0    inet6 2a00:1fa0:cca4:3c2e::1/64 scope global \\       valid_lft forever preferred_lft forever
+32: rndis0    inet6 fe80::4c1d:2aff:fe0b:9e11/64 scope link \\       valid_lft forever preferred_lft forever
+";
+
+    #[test]
+    fn detects_the_downstreams_ipv6_prefixes() {
+        let got = tether_ifaces(USB_RULES, USB_ADDRS6, &["p2fbf546d", "rmnet_data3"]);
+        assert_eq!(
+            got,
+            [iface6(
+                "rndis0",
+                "10.249.48.0/24",
+                &["2a00:1fa0:cca4:3c2e::/64", "fe80::/64"]
+            )]
+        );
+    }
+
+    #[test]
+    fn the_phones_ipv6_replies_reach_the_downstreams_ahead_of_singbox() {
+        let ifaces = [
+            iface6(
+                "rndis0",
+                "10.249.48.0/24",
+                &["2a00:1fa0:cca4:3c2e::/64", "fe80::/64"],
+            ),
+            iface6("wlan0", "10.183.251.0/24", &["fe80::/64"]),
+        ];
+        let plan = tether_plan(&ifaces, "p2fbf546d", "2022");
+        let joined = |v: &Vec<Vec<String>>| v.iter().map(|r| r.join(" ")).collect::<Vec<_>>();
+        assert_eq!(
+            joined(&plan.ip6_routes),
+            [
+                "route append 2a00:1fa0:cca4:3c2e::/64 dev rndis0 table 1102",
+                "route append fe80::/64 dev rndis0 table 1102",
+                "route append fe80::/64 dev wlan0 table 1102",
+            ]
+        );
+        assert_eq!(
+            joined(&plan.ip6_rules),
+            ["rule add iif lo lookup 1102 pref 1016"]
+        );
+        let pref: u32 = PRIO_REPLY.parse().unwrap();
+        assert!(pref < kasumi_core::singbox_config::SINGBOX_MAIN_RULE_PRIO);
+    }
+
+    #[test]
+    fn client_ipv6_gets_no_way_out_through_the_reply_table() {
+        let ifaces = [iface6(
+            "rndis0",
+            "10.249.48.0/24",
+            &["2a00:1fa0:cca4:3c2e::/64", "fe80::/64"],
+        )];
+        let plan = tether_plan(&ifaces, "p2fbf546d", "2022");
+        // Only packets the phone sends itself are looked up there; forwarded ones
+        // arrive on the downstream and still meet strict_route and the rejects.
+        for r in &plan.ip6_rules {
+            let iif: Vec<_> = r.windows(2).filter(|w| w[0] == "iif").collect();
+            assert_eq!(iif, [["iif", "lo"]], "{r:?}");
+        }
+        // The table only leads back onto the downstream: no gateway, no default.
+        for r in &plan.ip6_routes {
+            assert!(!r.iter().any(|t| t == "via" || t == "default"), "{r:?}");
+            let dev = r.windows(2).find(|w| w[0] == "dev").unwrap();
+            assert_eq!(dev[1], "rndis0");
+        }
+        // The client-facing rejects are unchanged.
+        assert_eq!(plan.filter6.len(), 1);
+        assert_eq!(plan.input6.len(), 2);
+    }
+
+    #[test]
+    fn no_ipv6_prefix_no_ipv6_rule() {
+        let plan = tether_plan(&[iface("rndis0", "10.249.48.0/24")], "p2fbf546d", "2022");
+        assert!(plan.ip6_routes.is_empty());
+        assert!(plan.ip6_rules.is_empty());
+    }
+
+    #[test]
+    fn a_changed_ipv6_prefix_is_reinstalled() {
+        // A new upstream brings a new shared /64: the detected downstream differs
+        // from the applied one, which the watcher answers with a reinstall.
+        let before = tether_ifaces(USB_RULES, USB_ADDRS6, &["p2fbf546d"]);
+        let after_addrs = USB_ADDRS6.replace("3c2e::1/64", "77aa::1/64");
+        let after = tether_ifaces(USB_RULES, &after_addrs, &["p2fbf546d"]);
+        assert_ne!(before, after);
+    }
+
+    const RULES6: &str = "\
+0:\tfrom all lookup local 
+1016:\tfrom all iif lo lookup 1102 
+9000:\tfrom all unreachable
+";
+    const ROUTES6: &str = "\
+2a00:1fa0:cca4:3c2e::/64 dev rndis0 metric 1024 pref medium
+fe80::/64 dev rndis0 metric 1024 pref medium
+";
+
+    #[test]
+    fn missing_ipv6_reply_rules_are_reinstalled() {
+        let applied = [iface6(
+            "rndis0",
+            "10.173.7.0/24",
+            &["2a00:1fa0:cca4:3c2e::/64", "fe80::/64"],
+        )];
+        let tun = "p2fbf546d";
+        let now = |rules6, routes6| Installed {
+            rules: RECREATED_RULES,
+            rules6,
+            routes: REPLY_ROUTES,
+            routes6,
+            hooked: true,
+        };
+        assert!(plan_in_place(&applied, tun, &now(RULES6, ROUTES6)));
+        let no_rule = RULES6.replace("1016:", "1017:");
+        assert!(!plan_in_place(&applied, tun, &now(&no_rule, ROUTES6)));
+        let one_route = ROUTES6.lines().next().unwrap();
+        assert!(!plan_in_place(&applied, tun, &now(RULES6, one_route)));
+        // A downstream without IPv6 needs neither.
+        let v4 = [iface("rndis0", "10.173.7.0/24")];
+        assert!(plan_in_place(&v4, tun, &now("", "")));
     }
 }
