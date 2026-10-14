@@ -540,6 +540,12 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return state.profiles.filter((p) => p.meta.id !== profile.meta.id).map((p) => p.meta.id);
   },
 
+  // Dev stub: no core matrix (the real answer lives behind the backend's
+  // `chainConflicts`).
+  async chainConflicts(_profile: Profile) {
+    return [];
+  },
+
   // Dev stub: no clash check (the real answer lives behind the backend's
   // `checkLocalPorts`).
   async checkLocalPorts() {

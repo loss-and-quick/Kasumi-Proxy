@@ -225,6 +225,7 @@ const en = {
   "editor.engineForcedByHop": "“{hop}” in its chain runs only on {core}, so this profile does too",
   "editor.engineChainConflict":
     "This chain can't start: “{xray}” runs only on xray and “{singBox}” only on sing-box. Pick another hop.",
+  "editor.viaConflict": "Can’t go through it: “{xray}” needs xray, “{singBox}” needs sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Obfs password",

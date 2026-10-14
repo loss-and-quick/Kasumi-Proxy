@@ -137,6 +137,23 @@ describe("dispatch-bridge chain candidates", () => {
 
     expect(await bridge.chainCandidates(draft as unknown as Profile)).toEqual(["a", "b"]);
   });
+
+  it("chainConflicts ships the draft and unwraps the conflicting hops", async () => {
+    const draft = endpointProfile("draft");
+    const conflict = { kind: "chainCoreConflict", xray: "x", singBox: "s" } as const;
+    const dispatch: Dispatch = vi.fn(async (cmd) => {
+      if (cmd.cmd === "chainConflicts") {
+        expect(cmd.profile.meta.id).toBe("draft");
+        return { kind: "hopConflicts", value: [{ id: "a", conflict }] } as Response_Serialize;
+      }
+      throw new Error(`unexpected command ${cmd.cmd}`);
+    });
+    const bridge = createBridge(dispatch, noPush);
+
+    expect(await bridge.chainConflicts(draft as unknown as Profile)).toEqual([
+      { id: "a", conflict },
+    ]);
+  });
 });
 
 describe("dispatch-bridge local ports", () => {

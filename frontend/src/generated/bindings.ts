@@ -555,6 +555,11 @@ export type Command_Deserialize = ({ cmd: "readState" }) & { allowInsecure?: nev
  */
 ({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; backup?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; rules?: never; settings?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
+ *  Of those candidates, the ones whose core requirement conflicts with the
+ *  (possibly unsaved) profile's chain, by `core::chain_conflicts`.
+ */
+({ cmd: "chainConflicts"; profile: Profile }) & { allowInsecure?: never; backup?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; rules?: never; settings?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+/**
  *  The local-port clash these (possibly unsaved) settings would have on this
  *  platform, by `AdvancedSettings::port_collision` — the check a settings
  *  write is refused by.
@@ -615,6 +620,11 @@ export type Command_Serialize = ({ cmd: "readState" }) & { allowInsecure?: never
  *  the UI never re-implements chain validity.
  */
 ({ cmd: "chainCandidates"; profile: Profile }) & { allowInsecure?: never; backup?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; rules?: never; settings?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
+/**
+ *  Of those candidates, the ones whose core requirement conflicts with the
+ *  (possibly unsaved) profile's chain, by `core::chain_conflicts`.
+ */
+({ cmd: "chainConflicts"; profile: Profile }) & { allowInsecure?: never; backup?: never; count?: never; filename?: never; groupId?: never; input?: never; intent?: never; kind?: never; lines?: never; maxKb?: never; mode?: never; profileId?: never; profiles?: never; rules?: never; settings?: never; span?: never; start?: never; subId?: never; target?: never; text?: never; url?: never; userAgent?: never } | 
 /**
  *  The local-port clash these (possibly unsaved) settings would have on this
  *  platform, by `AdvancedSettings::port_collision` — the check a settings
@@ -796,6 +806,15 @@ export type HeaderPreview = {
 
 /**  Fake-packet header obfuscation (mKCP / QUIC). */
 export type HeaderType = "none" | "http" | "srtp" | "utp" | "wechat-video" | "dtls" | "wireguard" | "dns";
+
+/**
+ *  A chain hop that can't be dialled through because its core requirement
+ *  conflicts with the profile's chain (`core::chain_conflicts`).
+ */
+export type HopConflict = {
+	id: string,
+	conflict: CoreConflict,
+};
 
 export type Http = {
 	meta: Meta,
@@ -1394,6 +1413,8 @@ export type Response_Deserialize = { kind: "state"; value: AppState_Deserialize 
 { kind: "coreResolutions"; value: CoreResolution[] } | 
 /**  Profile ids, in stored order. */
 { kind: "profileIds"; value: string[] } | 
+/**  Chain hops ruled out by a core conflict. */
+{ kind: "hopConflicts"; value: HopConflict[] } | 
 /**  Two local listeners on one port, or `null` when the ports are fine. */
 { kind: "portCollision"; value: PortCollision | null } | 
 /**  One answer per item of the request, in its order. */
@@ -1411,6 +1432,8 @@ export type Response_Serialize = { kind: "state"; value: AppState_Serialize } | 
 { kind: "coreResolutions"; value: CoreResolution[] } | 
 /**  Profile ids, in stored order. */
 { kind: "profileIds"; value: string[] } | 
+/**  Chain hops ruled out by a core conflict. */
+{ kind: "hopConflicts"; value: HopConflict[] } | 
 /**  Two local listeners on one port, or `null` when the ports are fine. */
 { kind: "portCollision"; value: PortCollision | null } | 
 /**  One answer per item of the request, in its order. */

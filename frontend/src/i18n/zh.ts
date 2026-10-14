@@ -218,6 +218,7 @@ const zh = {
   "editor.engineForcedByHop": "链中的「{hop}」只能在 {core} 上运行，因此此配置也是",
   "editor.engineChainConflict":
     "此链无法启动：「{xray}」只能在 xray 上运行，「{singBox}」只能在 sing-box 上运行。请选择其他跳点。",
+  "editor.viaConflict": "无法经过：「{xray}」需要 xray，「{singBox}」需要 sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "混淆",
   "editor.obfsPassword": "混淆密码",

@@ -324,6 +324,11 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "profileIds" ? r.value : wrongKind(r, "profileIds");
     },
 
+    async chainConflicts(profile) {
+      const r = await dispatch({ cmd: "chainConflicts", profile });
+      return r.kind === "hopConflicts" ? r.value : wrongKind(r, "hopConflicts");
+    },
+
     async checkLocalPorts(settings) {
       const r = await dispatch({ cmd: "checkLocalPorts", settings });
       return r.kind === "portCollision" ? r.value : wrongKind(r, "portCollision");

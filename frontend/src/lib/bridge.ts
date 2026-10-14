@@ -14,6 +14,7 @@ import type {
   ConnectionProbe,
   CoreResolution,
   FetchMode,
+  HopConflict,
   IdentityInput_Serialize as IdentityInput,
   ImportMode,
   LogTarget,
@@ -189,6 +190,10 @@ export interface Bridge {
   // through, checked by the backend's `chain::chain_candidates` — the same rule
   // the config builders enforce, so the UI never re-implements chain validity.
   chainCandidates(profile: Profile): Promise<string[]>;
+
+  // Of those candidates, the hops whose core requirement conflicts with the
+  // profile's chain (`core::chain_conflicts`), each with the conflict.
+  chainConflicts(profile: Profile): Promise<HopConflict[]>;
 
   // The local-port clash these (possibly unsaved) settings would have on this
   // platform, by the backend check a settings write is refused by; `null` when

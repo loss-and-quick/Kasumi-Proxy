@@ -197,7 +197,12 @@ body {
 .appbar-left { grid-area: left; margin-inline-end: 6px; }
 .appbar-actions { grid-area: actions; display: flex; gap: 2px; margin-inline-start: 6px; }
 .appbar.lg { align-content: end; padding-bottom: 14px; min-height: 92px; }
-.appbar-title { grid-area: title; font-size: 22px; font-weight: 500; }
+/* A long title (a wide script beside five toolbar icons) wraps to a second
+   line before it is cut, so the icons never have to give up space. */
+.appbar-title {
+  grid-area: title; font-size: 22px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 .appbar.lg .appbar-title { font-size: 28px; font-weight: 600; }
 .appbar-sub { grid-area: sub; font-size: 12.5px; color: var(--on-surface-variant); font-weight: 400; }
 
@@ -583,7 +588,7 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .route-insert:hover, .route-insert:focus-visible { color: var(--primary); border-color: var(--primary); }
 .route-chain > .route-insert { position: relative; left: -24px; top: 0; margin: 4px 0 -2px; }
 .route-final {
-  position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  position: relative; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px;
   margin-top: 8px; padding: 8px 10px; border-radius: 14px;
   border: 1px dashed var(--outline-variant);
 }
@@ -592,8 +597,8 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
   border-radius: 2px; background: var(--on-surface-variant); box-shadow: 0 0 0 3px var(--surface);
 }
 .route-final.muted { opacity: 0.6; }
-.route-final-label { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 0; }
-.route-final > :last-child { flex: 0 1 160px; min-width: 120px; }
+.route-final-label { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 120px; }
+.route-final > :last-child { flex: 1 1 160px; min-width: 120px; }
 .route-final-label .lr-title { font-size: var(--fs-title); font-weight: 500; }
 .route-final-label .lr-sub { font-size: var(--fs-support); color: var(--on-surface-faint); }
 .route-shared-note {
@@ -678,11 +683,22 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .picker-row.selected { background: var(--primary-container); }
 .picker-row-text { flex: 1 1 auto; min-width: 0; display: block; }
 .picker-row-name { display: block; font-size: 14.5px; font-weight: 600; }
+.picker-row-why { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--warn); }
+.picker-row:disabled { opacity: 0.6; cursor: default; }
+.picker-row:disabled:hover { background: var(--sc-lowest); }
 .picker-row.selected .picker-row-name { color: var(--on-primary-container); }
 .picker-row-icon { font-size: 20px; color: var(--on-surface-variant); flex: 0 0 auto; }
 .picker-check { font-size: 20px; color: var(--primary); flex: 0 0 auto; }
 .picker-trigger-value { display: flex; flex-direction: column; }
+/* A name that outgrows a narrow field takes a second line before it is cut. */
+.picker-trigger-name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  overflow-wrap: anywhere; line-height: 1.25;
+}
 .picker-trigger-detail { font-size: 12px; color: var(--on-surface-variant); margin-top: 1px; }
+.mid-ellipsis { display: flex; min-width: 0; }
+.mid-head { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.mid-tail { flex: none; white-space: pre; }
 
 .dialog { position: absolute; left: 0; right: 0; margin-inline: auto; width: min(calc(100% - 48px), 360px); top: 50%; transform: translateY(-50%); background: var(--sc-high); border-radius: 28px; z-index: 41; padding: 24px; animation: pop var(--dur-base) var(--ease-enter); }
 @keyframes pop { from { transform: translateY(-50%) scale(0.9); opacity: 0; } }

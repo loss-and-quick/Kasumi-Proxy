@@ -235,6 +235,7 @@ const ru = {
     "Узел «{hop}» в цепочке работает только на {core} — на нём запустится и этот профиль",
   "editor.engineChainConflict":
     "Цепочка не запустится: «{xray}» работает только на xray, а «{singBox}» — только на sing-box. Выберите другой узел.",
+  "editor.viaConflict": "Нельзя: «{xray}» требует xray, «{singBox}» — sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Обфускация",
   "editor.obfsPassword": "Пароль obfs",

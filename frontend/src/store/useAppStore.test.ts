@@ -193,6 +193,7 @@ function createBridgeMock(): BridgeMock {
       profiles.map(() => ({ resolved: "xray" as const, forced: null })),
     ),
     chainCandidates: vi.fn(async (_profile: Profile) => []),
+    chainConflicts: vi.fn(async (_profile: Profile) => []),
     checkLocalPorts: vi.fn(async () => null),
     // Stands in for the backend's rule builder: the tests' only catch-all is a
     // full port range.

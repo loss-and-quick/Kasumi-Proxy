@@ -23,7 +23,7 @@ import {
   useNodesState,
 } from "@xyflow/react";
 import { useEffect, useMemo } from "react";
-import { Icon, ListRow, Sheet } from "../../components";
+import { Icon, ListRow, MiddleEllipsis, Sheet } from "../../components";
 import { useFormatters, useT } from "../../i18n";
 import { PROXY_OUTBOUND, refEnabled, routeBlocks } from "../../lib/routes";
 import { useIsWide } from "../../lib/useIsWide";
@@ -68,7 +68,11 @@ function GraphCard({ data }: NodeProps<Node<NodeData>>) {
       <Icon name={data.icon} style={{ color: data.color }} />
       <div style={{ minWidth: 0 }}>
         <div className="truncate route-graph-title">{data.title}</div>
-        {data.sub && <div className="truncate route-graph-sub">{data.sub}</div>}
+        {data.sub && (
+          <div className="route-graph-sub">
+            <MiddleEllipsis text={data.sub} />
+          </div>
+        )}
       </div>
       {(data.kind !== "out" || data.hasSource) && (
         <Handle type="source" position={data.vertical ? Position.Bottom : Position.Right} />

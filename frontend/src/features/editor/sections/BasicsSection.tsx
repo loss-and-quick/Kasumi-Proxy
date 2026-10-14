@@ -38,6 +38,7 @@ export function BasicsSection({
   group,
   setGroup,
   viaCandidates,
+  viaConflicts,
   changeProtocol,
   engineForced,
   engineHint,
@@ -57,6 +58,8 @@ export function BasicsSection({
   setGroup: (value: GroupChoice) => void;
   /** The profiles this one may dial through. */
   viaCandidates: ReadonlySet<string>;
+  /** Candidates among them that can't be picked, each with why. */
+  viaConflicts: ReadonlyMap<string, string>;
   changeProtocol: (proto: Protocol) => void;
   engineForced: CoreEngine | null;
   engineHint: string;
@@ -131,6 +134,7 @@ export function BasicsSection({
           value={draft.meta.via ?? VIA_DIRECT}
           choices={[{ value: VIA_DIRECT, label: t("editor.viaDirect"), icon: "near_me" }]}
           only={viaCandidates}
+          blocked={viaConflicts}
           onChange={(value) => setMeta({ via: value === VIA_DIRECT ? null : value })}
           hint={t("editor.viaHint")}
         />

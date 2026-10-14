@@ -6,7 +6,7 @@
 // ============================================================
 
 import { type ReactNode, useDeferredValue, useMemo, useRef, useState } from "react";
-import { BesideSheet, Icon, Ping, SectionLabel, Sheet } from "../../components";
+import { BesideSheet, Icon, MiddleEllipsis, Ping, SectionLabel, Sheet } from "../../components";
 import type { Group, Profile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { fuzzyFilterSort, fuzzyScore, NO_MATCH } from "../../lib/fuzzy";
@@ -37,12 +37,15 @@ export function ProfilePickerList({
   choices,
   value,
   tests,
+  blocked,
   onPick,
 }: {
   sections: PickerSection[];
   choices: PickerChoice[];
   value: string;
   tests: Record<string, Pick<ProfileTest, "ping">>;
+  /** Profiles shown but not pickable, each with why. */
+  blocked?: ReadonlyMap<string, string>;
   onPick: (value: string) => void;
 }) {
   const t = useT();
@@ -66,13 +69,20 @@ export function ProfilePickerList({
           {profiles.map((p) => {
             const selected = p.meta.id === value;
             const ping = tests[p.meta.id]?.ping;
+            const why = selected ? undefined : blocked?.get(p.meta.id);
             return (
-              <PickerRow key={p.meta.id} selected={selected} onClick={() => onPick(p.meta.id)}>
+              <PickerRow
+                key={p.meta.id}
+                selected={selected}
+                disabled={why != null}
+                onClick={() => onPick(p.meta.id)}
+              >
                 <span className="picker-row-text">
                   <span className="picker-row-name truncate" dir="auto">
                     {p.meta.remarks}
                   </span>
                   <ProfileMetaLine profile={p} active={selected} />
+                  {why && <span className="picker-row-why">{why}</span>}
                 </span>
                 {ping != null && <Ping value={ping} />}
               </PickerRow>
@@ -89,10 +99,12 @@ export function ProfilePickerList({
 
 function PickerRow({
   selected,
+  disabled,
   onClick,
   children,
 }: {
   selected: boolean;
+  disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -101,6 +113,7 @@ function PickerRow({
       type="button"
       role="option"
       aria-selected={selected}
+      disabled={disabled}
       className={`btn-reset picker-row${selected ? " selected" : ""}`}
       onClick={onClick}
     >
@@ -115,6 +128,7 @@ export function ProfilePickerSheet({
   value,
   choices = [],
   only,
+  blocked,
   onPick,
   onClose,
 }: {
@@ -123,6 +137,8 @@ export function ProfilePickerSheet({
   choices?: PickerChoice[];
   /** Offer just these profiles (e.g. the ones a chain may go through). */
   only?: ReadonlySet<string>;
+  /** Profiles shown but not pickable, each with why (e.g. a core conflict). */
+  blocked?: ReadonlyMap<string, string>;
   onPick: (value: string) => void;
   onClose: () => void;
 }) {
@@ -180,6 +196,7 @@ export function ProfilePickerSheet({
             choices={shownChoices}
             value={value}
             tests={tests}
+            blocked={blocked}
             onPick={(next) => {
               onPick(next);
               onClose();
@@ -222,13 +239,13 @@ export function ProfilePickerTrigger({
     >
       <span className="select-value picker-trigger-value">
         <span
-          className="truncate"
+          className="picker-trigger-name"
           dir="auto"
           style={!choice && !label ? { color: "var(--warn)" } : undefined}
         >
           {name}
         </span>
-        {detail && <span className="picker-trigger-detail truncate">{detail}</span>}
+        {detail && <MiddleEllipsis className="picker-trigger-detail" text={detail} />}
       </span>
       <Icon name="expand_more" className="select-arrow" />
     </button>
@@ -242,6 +259,7 @@ export function ProfilePickerField({
   value,
   choices,
   only,
+  blocked,
   deletedLabel,
   onChange,
 }: {
@@ -252,6 +270,7 @@ export function ProfilePickerField({
   value: string;
   choices?: PickerChoice[];
   only?: ReadonlySet<string>;
+  blocked?: ReadonlyMap<string, string>;
   deletedLabel?: string;
   onChange: (value: string) => void;
 }) {
@@ -277,6 +296,7 @@ export function ProfilePickerField({
           value={value}
           choices={choices}
           only={only}
+          blocked={blocked}
           onPick={onChange}
           onClose={() => setOpen(false)}
         />
