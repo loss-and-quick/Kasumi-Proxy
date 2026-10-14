@@ -78,15 +78,46 @@ function handleMessage(ev: MessageEvent): void {
   else waiter.reject(new Error(msg.error ?? "rpc failed"));
 }
 
+const RECONNECT_FIRST_MS = 1000;
+const RECONNECT_MAX_MS = 10_000;
+let reconnectDelay = RECONNECT_FIRST_MS;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+const hasListeners = () =>
+  statusCbs.size > 0 || subAppliedCbs.size > 0 || assetsUpdatedCbs.size > 0;
+
+/** Keep the push streams alive: while anyone listens, retry until a socket opens.
+ *  One failed attempt (the daemon restarting, `wsInfo` not answering while the
+ *  WebView sat in the background) must not leave the status frozen. */
+function scheduleReconnect(): void {
+  if (reconnectTimer || !hasListeners()) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    ensureSocket().catch(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+      scheduleReconnect();
+    });
+  }, reconnectDelay);
+}
+
 function onClose(): void {
   socket = null;
   connecting = null;
   for (const { reject } of pending.values()) reject(new Error("connection closed"));
   pending.clear();
-  // Keep the push streams alive: reconnect lazily if anyone is still listening.
-  if (statusCbs.size > 0 || subAppliedCbs.size > 0 || assetsUpdatedCbs.size > 0) {
-    setTimeout(() => void ensureSocket().catch(() => {}), 1000);
-  }
+  scheduleReconnect();
+}
+
+// A page brought back to the front reconnects at once instead of on the backoff.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !hasListeners()) return;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    void ensureSocket().catch(() => scheduleReconnect());
+  });
 }
 
 async function ensureSocket(): Promise<WebSocket> {
@@ -105,6 +136,7 @@ async function ensureSocket(): Promise<WebSocket> {
     ws.addEventListener("close", onClose);
     socket = ws;
     connecting = null;
+    reconnectDelay = RECONNECT_FIRST_MS;
     return ws;
   })();
   connecting.catch(() => {
@@ -139,7 +171,7 @@ export async function wsDispatch(cmd: Command_Deserialize): Promise<Response_Ser
 /** Subscribe to server-pushed status. Returns an unsubscribe function. */
 export function subscribeStatus(cb: (status: unknown) => void): () => void {
   statusCbs.add(cb);
-  void ensureSocket().catch(() => {});
+  void ensureSocket().catch(() => scheduleReconnect());
   return () => {
     statusCbs.delete(cb);
   };
@@ -148,7 +180,7 @@ export function subscribeStatus(cb: (status: unknown) => void): () => void {
 /** Subscribe to the daemon's "subscription applied" push. Returns an unsubscribe. */
 export function subscribeSubApplied(cb: (info: unknown) => void): () => void {
   subAppliedCbs.add(cb);
-  void ensureSocket().catch(() => {});
+  void ensureSocket().catch(() => scheduleReconnect());
   return () => {
     subAppliedCbs.delete(cb);
   };
@@ -157,7 +189,7 @@ export function subscribeSubApplied(cb: (info: unknown) => void): () => void {
 /** Subscribe to the daemon's "geo assets updated" push. Returns an unsubscribe. */
 export function subscribeAssetsUpdated(cb: (info: unknown) => void): () => void {
   assetsUpdatedCbs.add(cb);
-  void ensureSocket().catch(() => {});
+  void ensureSocket().catch(() => scheduleReconnect());
   return () => {
     assetsUpdatedCbs.delete(cb);
   };
