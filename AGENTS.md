@@ -22,6 +22,10 @@ The repository layout, build instructions and requirements are in
   fixtures "golden" or "oracle".
 - **Renaming the project** touches the data path `/data/adb/kasumi-proxy`, the iptables chain,
   the `kasumi-proxy` binary, `module.prop` and string literals. Grep every case form.
+- **Logging goes through `crates/kasumi-log`**: `ks_info!(Area::Lifecycle, …)` and friends, never
+  `println!` (`crates/kasumi-log/tests/hygiene.rs` enforces it outside test modules). Subscription URLs,
+  profile passwords and UUIDs are credentials: log the id, never the value. The rules are in
+  [docs/logging.md](docs/logging.md).
 
 ## Checks before finishing
 

@@ -7,6 +7,7 @@ One Rust workspace and a React UI. Two thin shells sit on top of a shared backen
 ```
 crates/
   kasumi-core/      domain types and logic with no IO: profiles, share links, xray/sing-box config builders, migrations
+  kasumi-log/       the logging facade every process shares: one format, area targets, redaction, rotation
   kasumi-backend/   orchestration: the Platform trait, typed Command/Response, lifecycle, jobs, the Service
   kasumi-daemon/    Android binary: axum HTTP (webroot) + token-gated WebSocket → Service
 src-tauri/          Tauri 2 desktop app (Linux/Windows Platform) + codegen for the frontend
@@ -92,3 +93,9 @@ shellcheck -s sh module/*.sh
 - Fill in the PR description using [the template](.github/PULL_REQUEST_TEMPLATE.md).
 - Don't commit build artifacts: `module/bin/<abi>/`, `module/webroot/`, `src-tauri/binaries/`,
   `src-tauri/gen/`.
+
+## Logging
+
+Log through the facade in `crates/kasumi-log`, never with `println!`: pick an area
+(`ks_info!(Area::Lifecycle, …)`), and keep credentials out of the message — a
+subscription URL is the credential. See [docs/logging.md](docs/logging.md).
