@@ -433,6 +433,8 @@ fn resolve_incy(input: &IdentityInput, facts: &DeviceFacts, auto: &AutoHwid) -> 
         os_version: &os_version,
         locale: &java,
         language_tag: &tag,
+        // No desktop fields: Incy's Android request, whatever the device.
+        ..Default::default()
     };
     let options = incy_request::RequestOptions {
         app_version: INCY_VERSION,
@@ -738,6 +740,7 @@ mod tests {
                 .unwrap()
                 .starts_with(&format!("Happ/{}/Linux/", happ_sub::HAPP_DESKTOP_VERSION))
         );
+        assert_eq!(header(&r, "X-Device-Locale"), Some("ru_RU"));
         assert_eq!(header(&r, "X-Ver-OS"), Some("nixos_26.05"));
         assert_eq!(header(&r, "X-Device-model"), Some("magicbook_x86_64"));
         assert_eq!(header(&r, "X-Bundle-ID"), Some("su.happ.desktop.linux"));
