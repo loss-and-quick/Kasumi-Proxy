@@ -48,6 +48,8 @@ async fn run_daemon(platform: Arc<dyn Platform>) {
     }
 
     let service = Service::new(platform.clone()).await;
+    // Adopt the log level the user chose before the background jobs start talking.
+    kasumi_backend::state::apply_app_log_level(&*platform).await;
     service.spawn_background();
 
     // Graceful shutdown: tear down the data-path (core + tun + routing) before

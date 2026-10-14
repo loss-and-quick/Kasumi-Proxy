@@ -702,6 +702,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let build = async {
                     let platform = build_platform().await?;
+                    // The user chose this verbosity once; adopt it before the
+                    // data-path work below starts reporting at the wrong level.
+                    kasumi_backend::state::apply_app_log_level(&*platform).await;
                     // A surviving ownership record at GUI start means the previous run
                     // exited without clearing (a hard crash) — the privileged helper
                     // already reaped its data-path, so the record is an orphan. Restore

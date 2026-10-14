@@ -117,6 +117,13 @@ export type AdvancedSettings_Deserialize = {
 	fragmentDelay?: string | null,
 	singboxFragment?: SingboxFragment,
 	logLevel?: LogLevel | null,
+	/**
+	 *  Verbosity of the app's own log — the daemon, the GUI and the privileged
+	 *  helper — which is a separate stream from the cores' `log_level` above: those
+	 *  land in xray.log / singbox.log, these in daemon.log. `None` leaves the
+	 *  facade's own default in place (our areas at debug, dependencies at info).
+	 */
+	appLogLevel?: LogLevel | null,
 	logRotateMaxKb?: number,
 	localSocksPort?: number | null,
 	localHttpPort?: number | null,
@@ -226,6 +233,13 @@ export type AdvancedSettings_Serialize = {
 	fragmentDelay?: string | null,
 	singboxFragment: SingboxFragment,
 	logLevel?: LogLevel | null,
+	/**
+	 *  Verbosity of the app's own log — the daemon, the GUI and the privileged
+	 *  helper — which is a separate stream from the cores' `log_level` above: those
+	 *  land in xray.log / singbox.log, these in daemon.log. `None` leaves the
+	 *  facade's own default in place (our areas at debug, dependencies at info).
+	 */
+	appLogLevel?: LogLevel | null,
 	logRotateMaxKb: number,
 	localSocksPort?: number | null,
 	localHttpPort?: number | null,

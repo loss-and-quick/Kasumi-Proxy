@@ -101,6 +101,7 @@ fn run_transient_inner() -> anyhow::Result<()> {
     tokio::runtime::Runtime::new()?.block_on(async {
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
         super::hlog::init(&platform.paths().run_dir);
+        kasumi_backend::state::apply_app_log_level(&*platform).await;
         ks_info!(Area::Helper, "transient helper starting: pipe={pipe}");
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;
         serve_transient(platform, &pipe).await
@@ -173,6 +174,7 @@ fn run_service(arguments: Vec<OsString>) -> anyhow::Result<()> {
     let result = tokio::runtime::Runtime::new()?.block_on(async {
         let platform: Arc<dyn Platform> = Arc::new(DesktopPlatform::new()?);
         super::hlog::init(&platform.paths().run_dir);
+        kasumi_backend::state::apply_app_log_level(&*platform).await;
         ks_info!(Area::Helper, "service starting");
         // The run dir holds the helper-owned data-path state; create it as SYSTEM.
         tokio::fs::create_dir_all(&platform.paths().run_dir).await?;

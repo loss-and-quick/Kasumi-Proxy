@@ -474,6 +474,12 @@ pub struct AdvancedSettings {
     pub singbox_fragment: SingboxFragment,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_level: Option<LogLevel>,
+    /// Verbosity of the app's own log — the daemon, the GUI and the privileged
+    /// helper — which is a separate stream from the cores' `log_level` above: those
+    /// land in xray.log / singbox.log, these in daemon.log. `None` leaves the
+    /// facade's own default in place (our areas at debug, dependencies at info).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_log_level: Option<LogLevel>,
     pub log_rotate_max_kb: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub local_socks_port: Option<u16>,
@@ -573,6 +579,7 @@ impl Default for AdvancedSettings {
             fragment_delay: None,
             singbox_fragment: SingboxFragment::Record,
             log_level: None,
+            app_log_level: None,
             log_rotate_max_kb: DEFAULT_LOG_ROTATE_KB,
             local_socks_port: None,
             local_http_port: None,

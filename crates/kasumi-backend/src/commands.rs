@@ -748,6 +748,9 @@ pub(crate) async fn persist_with_chain(
 ) -> std::io::Result<()> {
     crate::state_mw::default_chain().run(prev, next);
     crate::state::write_app_state(platform, next).await?;
+    // Every write carries the settings, so this is where a changed log level
+    // reaches the running process — the UI's setting must not need a restart.
+    crate::state::apply_app_log_level(platform).await;
     // Whichever path dropped a profile (UI delete, provider refresh, backup
     // replace), its retained test logs go with it.
     crate::jobs::remove_dropped_test_logs(platform, prev, next).await;
