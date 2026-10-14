@@ -53,6 +53,17 @@ const FREE_PORTS_BASE: u16 = kasumi_core::contract::TEST_PORT_BASE;
 /// Default tail length for `log`.
 const LOG_TAIL_LINES: usize = 200;
 
+/// The variant name of a command — `Mutate`, `Status`, `Log` — without its payload.
+/// A command carries the whole intent or profile it was asked about, which is far
+/// too much for a log line, while "which command failed" is usually the question.
+pub fn command_name(command: &Command) -> String {
+    let rendered = format!("{command:?}");
+    match rendered.find(['{', '(']) {
+        Some(end) => rendered[..end].to_string(),
+        None => rendered,
+    }
+}
+
 /// Bad input or a failed operation; transports map it to their error form.
 #[derive(Debug, Clone)]
 pub struct CommandError(pub String);

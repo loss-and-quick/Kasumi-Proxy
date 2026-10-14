@@ -226,7 +226,14 @@ async fn mark_updated(platform: &dyn Platform, asset_id: &str, now: i64) {
     }
     // Same write tail as the intent path: run the write-side chain (invariants)
     // then persist, so the chain stays the one enforcement point across every write.
-    let _ = crate::commands::persist_with_chain(platform, &prev, &mut next).await;
+    if let Err(e) = crate::commands::persist_with_chain(platform, &prev, &mut next).await {
+        // Without the stamp the asset is fetched again next tick; nothing else says
+        // why the conversion is being redone.
+        ks_warn!(
+            Area::Asset,
+            "could not record the update of {asset_id}: {e}"
+        );
+    }
 }
 
 #[cfg(test)]
