@@ -36,6 +36,9 @@ pub trait LifecycleControl: Send + Sync {
     /// Data the running core loaded at start changed on disk; it applies on the
     /// next start, which the user is told is pending.
     async fn note_assets_changed(&self) {}
+    /// A refresh saved `state` and left the running core alone. The core may now
+    /// stand for a re-created active profile, or need a restart to match.
+    async fn note_state_saved(&self, _state: &kasumi_core::state::AppState) {}
 }
 
 #[cfg(test)]

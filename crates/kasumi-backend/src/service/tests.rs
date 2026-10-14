@@ -811,6 +811,29 @@ async fn saved_switch_does_not_inherit_the_running_profiles_ping() {
 }
 
 #[tokio::test]
+async fn a_running_profile_recreated_under_a_new_id_keeps_its_verdict() {
+    let (_d, svc, _core) = running_first_of_two().await;
+    assert!(probe(&svc).await.latency_ms.is_some());
+
+    // A subscription refresh re-creates the running profile under a new id and
+    // moves the selection to it, without a restart: the build is the same.
+    let mut state = crate::state::read_app_state(svc.platform()).await.unwrap();
+    state.profiles[0].meta_mut().id = "a2".into();
+    state.active_id = Some("a2".into());
+    crate::state::write_app_state(svc.platform(), &state)
+        .await
+        .unwrap();
+    svc.note_state_saved(&state).await;
+
+    let status = svc.current_status().await.unwrap();
+    assert_eq!(status.active_id.as_deref(), Some("a2"));
+    assert_eq!(status.service.state, RunState::Connected);
+    assert!(status.latency_ms.is_some());
+    assert!(!status.pending_restart);
+    assert_eq!(probe(&svc).await.profile_id.as_deref(), Some("a2"));
+}
+
+#[tokio::test]
 async fn probe_in_flight_across_a_saved_switch_is_not_reported_for_the_new_profile() {
     let (_d, svc, core) = running_first_of_two().await;
 
