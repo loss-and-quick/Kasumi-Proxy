@@ -271,6 +271,10 @@ fn split_cidr(cidr: &str) -> (&str, bool) {
     (addr, !addr.contains(':'))
 }
 
+/// An external tun's core escapes by binding the uplink (`IP_UNICAST_IF`): Windows has
+/// no fwmark to route it past the tun by.
+pub const CORE_ESCAPES_BY_MARK: bool = false;
+
 /// Bring up external-tun routing: host-route the bypass CIDRs via the uplink, address the
 /// tun and split-default into it. Persists the installed set. `core_bin` is the core
 /// whose own DNS stays allowed out of the uplink while `capture_dns` guards the rest.
@@ -392,7 +396,7 @@ pub async fn clear_singbox_autoroute(_tun_iface_file: &str, _tun2_iface_file: &s
 /// No-op on Windows: fwmark is a Linux concept and `route.default_mark` is never
 /// injected off-Linux — the core's escape here is route-based
 /// (`route_exclude_address` + wintun's own binding). Linux-seam signature match.
-pub async fn apply_singbox_escape_rule() {}
+pub async fn apply_escape_rules() {}
 
 /// The physical uplink adapter name of the current default route — what a
 /// helper-spawned test core binds its outbound to (`bind_interface` /
