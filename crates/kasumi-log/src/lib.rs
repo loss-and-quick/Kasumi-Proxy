@@ -191,7 +191,8 @@ fn install(config: &LogConfig) {
         .format(|out, _message, record| {
             let line = render(record);
             buffer::push(line.clone());
-            out.finish(format_args!("{line}\n"));
+            // Each output ends the record with its own line separator.
+            out.finish(format_args!("{line}"));
         });
 
     if config.to_stderr {
