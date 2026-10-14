@@ -1,5 +1,8 @@
-import { Card, ListRow, SectionLabel } from "../../../components";
+import { useState } from "react";
+import { Btn, Card, ListRow, NavRow, SectionLabel, Sheet } from "../../../components";
 import { useT } from "../../../i18n";
+import { formatLogs, notableCount, recentLogs } from "../../../lib/logger";
+import { copyText } from "../../profiles/clipboard";
 
 export function DiagnosticsSection({
   bridgeMode,
@@ -9,6 +12,7 @@ export function DiagnosticsSection({
   profilesCount,
   subscriptionsCount,
   activeId,
+  notify,
 }: {
   bridgeMode: string;
   xrayVersion: string;
@@ -17,9 +21,15 @@ export function DiagnosticsSection({
   profilesCount: number;
   subscriptionsCount: number;
   activeId: string | null;
+  notify: (message: string) => void;
 }) {
   const t = useT();
   const notInstalled = t("common.notInstalled");
+  // What the UI itself recorded this session — render throws, dropped frames,
+  // dispatches that failed. The backend's log says nothing about any of that.
+  const [uiLogsOpen, setUiLogsOpen] = useState(false);
+  const uiEntries = recentLogs();
+  const notable = notableCount();
 
   return (
     <>
@@ -48,7 +58,46 @@ export function DiagnosticsSection({
           title={t("settings.activeProfile")}
           sub={activeId ? t("settings.activeSelected") : t("settings.activeNone")}
         />
+        <NavRow
+          icon="description"
+          title={t("settings.uiLogs")}
+          sub={
+            notable > 0
+              ? t("settings.uiLogsCount", { count: `${notable}` })
+              : t("settings.uiLogsEmpty")
+          }
+          onClick={() => setUiLogsOpen(true)}
+        />
       </Card>
+
+      <Sheet open={uiLogsOpen} title={t("settings.uiLogs")} onClose={() => setUiLogsOpen(false)}>
+        {uiEntries.length === 0 ? (
+          <p className="muted">{t("settings.uiLogsEmpty")}</p>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+              <Btn
+                variant="outline"
+                onClick={async () =>
+                  notify(
+                    (await copyText(formatLogs(uiEntries)))
+                      ? t("logs.copied")
+                      : t("logs.copyFailed"),
+                  )
+                }
+              >
+                {t("logs.copy")}
+              </Btn>
+            </div>
+            <textarea
+              className="input mono"
+              readOnly
+              value={formatLogs(uiEntries)}
+              style={{ minHeight: 320, whiteSpace: "pre", fontSize: 11.5 }}
+            />
+          </>
+        )}
+      </Sheet>
     </>
   );
 }

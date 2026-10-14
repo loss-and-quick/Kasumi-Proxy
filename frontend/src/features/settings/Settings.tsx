@@ -273,6 +273,7 @@ export default function Settings({
               profilesCount={profiles.length}
               subscriptionsCount={subscriptions.length}
               activeId={activeId}
+              notify={notify}
             />
           </>
         );

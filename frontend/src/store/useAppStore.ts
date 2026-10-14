@@ -35,6 +35,7 @@ import { isServiceUp } from "../lib/bridge";
 import { bridge } from "../lib/bridge-provider";
 import { BASE_GROUP_ID, type GroupChoice, groupNamed } from "../lib/groups";
 import { showNativeToast } from "../lib/ksu-webui";
+import { errorStack, logError, logWarn } from "../lib/logger";
 import {
   type CatchAllRules,
   newRoute,
@@ -228,7 +229,7 @@ export const useAppStore = create<Store>((set, get) => {
           coreResolutions: Object.fromEntries(profiles.map((p, i) => [p.meta.id, rs[i]])),
         }),
       )
-      .catch(() => {});
+      .catch((e: unknown) => logError("core resolution failed", {}, errorStack(e)));
   };
   // Adopt the canonical persisted-state slice the backend returned (the rest of
   // the store — service status, toasts, etc. — is UI-only and left untouched).
@@ -577,13 +578,13 @@ export const useAppStore = create<Store>((set, get) => {
       bridge.onStatus((service) => syncService(service));
       try {
         syncService(await bridge.status());
-      } catch {
-        /* ignore */
+      } catch (e: unknown) {
+        logWarn("status unavailable at startup", {}, errorStack(e));
       }
       try {
         set({ caps: await bridge.capabilities() });
-      } catch {
-        /* ignore */
+      } catch (e: unknown) {
+        logWarn("capabilities unavailable at startup", {}, errorStack(e));
       }
       // Post-hydrate: verify asset files on disk, write if migration needed.
       let assetFiles = assetFiles0;
@@ -592,8 +593,8 @@ export const useAppStore = create<Store>((set, get) => {
         assetFiles = assetFiles0.map((a) =>
           a.lastUpdated != null && !onDisk.has(a.remarks) ? { ...a, lastUpdated: null } : a,
         );
-      } catch {
-        /* ignore */
+      } catch (e: unknown) {
+        logWarn("could not list the asset files on disk", {}, errorStack(e));
       }
       if (
         needsMigration ||
@@ -1240,7 +1241,7 @@ useAppStore.subscribe((state, prev) => {
       );
       useAppStore.setState({ catchAllRules });
     })
-    .catch(() => {});
+    .catch((e: unknown) => logError("catch-all rules not loaded", {}, errorStack(e)));
 });
 
 export type StoreProfile = Profile & { subId: string | null };
