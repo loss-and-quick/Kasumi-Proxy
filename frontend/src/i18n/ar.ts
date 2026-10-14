@@ -1541,6 +1541,14 @@ const ar = {
   "routes.target.singBoxOnly":
     "هذا الملف الشخصي يعمل فقط على sing-box، والنشط يعمل على {core}: تمر هذه الحركة عبر الوكيل النشط.",
   "routes.target.cantStart": "تمر هذه الحركة عبر الوكيل النشط. {reason}",
+  "routes.target.ignored":
+    "على sing-box يتم تجاهل هذه الإعدادات، لذا قد لا تتصل هذه الحركة: {settings}.",
+  "routes.target.setting.vlessEncryption": "تشفير VLESS",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "نقل mKCP",
+  "routes.target.setting.xhttp": "نقل XHTTP",
+  "routes.target.setting.grpcServicePath": "مسار خدمة gRPC",
+  "routes.target.setting.verifyPeerCertName": "اسم الشهادة المراد التحقق منه",
   "profiles.label.deleted": "ملف محذوف",
   "profilePicker.title": "اختر ملفًا",
   "routingSheet.outboundDeletedHint":

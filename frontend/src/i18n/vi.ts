@@ -1262,6 +1262,14 @@ const vi = {
   "routes.target.singBoxOnly":
     "Hồ sơ này chỉ chạy trên sing-box, còn hồ sơ đang dùng chạy trên {core}: lưu lượng này đi qua proxy đang dùng.",
   "routes.target.cantStart": "Lưu lượng này đi qua proxy đang dùng. {reason}",
+  "routes.target.ignored":
+    "Trên sing-box các cài đặt này bị bỏ qua, nên lưu lượng này có thể không kết nối được: {settings}.",
+  "routes.target.setting.vlessEncryption": "mã hóa VLESS",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "giao thức truyền tải mKCP",
+  "routes.target.setting.xhttp": "giao thức truyền tải XHTTP",
+  "routes.target.setting.grpcServicePath": "đường dẫn dịch vụ gRPC",
+  "routes.target.setting.verifyPeerCertName": "tên chứng chỉ cần xác minh",
   "profiles.label.deleted": "Hồ sơ đã xóa",
   "profilePicker.title": "Chọn hồ sơ",
   "routingSheet.outboundDeletedHint":

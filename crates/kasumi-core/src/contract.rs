@@ -48,6 +48,28 @@ pub struct CoreResolution {
     /// core the rule's traffic goes through the active proxy instead.
     #[serde(default)]
     pub rule_target_fallback: BTreeMap<CoreEngine, TargetFallback>,
+    /// Settings of this profile that only xray can build and that stop it
+    /// connecting when sing-box builds it (`core::xray_only_settings`): sing-box
+    /// leaves them out of its config without saying so.
+    #[serde(default)]
+    pub xray_only_settings: Vec<XrayOnlySetting>,
+}
+
+/// A setting sing-box can't carry, left out of the config it builds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum XrayOnlySetting {
+    VlessEncryption,
+    /// The `xtls-rprx-vision-udp443` flow, which sing-box has no name for.
+    VisionUdp443Flow,
+    /// The mKCP transport.
+    Kcp,
+    /// The XHTTP transport.
+    Xhttp,
+    /// A gRPC service name starting with `/`, which xray reads as the whole path.
+    GrpcServicePath,
+    /// The name the server certificate is verified against, when it differs from the SNI.
+    VerifyPeerCertName,
 }
 
 /// Why a core can't build a profile as a routing-rule target.

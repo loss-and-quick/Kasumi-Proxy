@@ -1302,6 +1302,14 @@ const pt = {
   "routes.target.singBoxOnly":
     "Este perfil só roda no sing-box, e o ativo roda no {core}: este tráfego vai pelo proxy ativo.",
   "routes.target.cantStart": "Este tráfego vai pelo proxy ativo. {reason}",
+  "routes.target.ignored":
+    "No sing-box estas configurações são ignoradas, então este tráfego pode não conectar: {settings}.",
+  "routes.target.setting.vlessEncryption": "criptografia VLESS",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "transporte mKCP",
+  "routes.target.setting.xhttp": "transporte XHTTP",
+  "routes.target.setting.grpcServicePath": "caminho de serviço gRPC",
+  "routes.target.setting.verifyPeerCertName": "nome do certificado a verificar",
   "profiles.label.deleted": "Perfil excluído",
   "profilePicker.title": "Escolha um perfil",
   "routingSheet.outboundDeletedHint":

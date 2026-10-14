@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use crate::chain::{chain_candidates, chain_hops};
-use crate::contract::{CoreConflict, HopConflict, TargetFallback};
+use crate::contract::{CoreConflict, HopConflict, TargetFallback, XrayOnlySetting};
 use crate::custom_sanitize::{has_unpinned_allow_insecure, sanitize_provider_xray};
 use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
@@ -95,88 +95,136 @@ pub fn rule_target_fallbacks(target: &Profile) -> BTreeMap<CoreEngine, TargetFal
         .collect()
 }
 
+/// One setting that pins a core: the core it needs and, for an xray-only setting,
+/// the one to warn about when sing-box builds the profile anyway (`None` for an
+/// xray-only setting whose loss leaves the connection working).
+type Pin = (CoreEngine, Option<XrayOnlySetting>);
+
 fn capability_core(p: &Profile) -> Option<CoreEngine> {
+    capability_pins(p).first().map(|&(core, _)| core)
+}
+
+/// The xray-only settings of `p` that sing-box can't carry and that break the
+/// connection without them. A profile that another setting pins to sing-box still
+/// lists them, as does one a routing rule sends to sing-box.
+pub fn xray_only_settings(p: &Profile) -> Vec<XrayOnlySetting> {
+    let mut found = Vec::new();
+    for (core, setting) in capability_pins(p) {
+        if let (CoreEngine::Xray, Some(setting)) = (core, setting)
+            && !found.contains(&setting)
+        {
+            found.push(setting);
+        }
+    }
+    found
+}
+
+/// Every setting that pins a core, in precedence order: the first decides
+/// [`capability_core`].
+fn capability_pins(p: &Profile) -> Vec<Pin> {
     use CoreEngine::{SingBox, Xray};
     let proto = p.protocol();
     if proto == Protocol::Custom {
-        return Some(Xray);
+        return vec![(Xray, None)];
     }
     if is_singbox_only(proto) {
-        return Some(SingBox);
+        return vec![(SingBox, None)];
     }
+    let mut pins: Vec<Pin> = Vec::new();
+    let pin = |pins: &mut Vec<Pin>, when: bool, core, setting| {
+        if when {
+            pins.push((core, setting));
+        }
+    };
 
     // ── Protocol-level differences ──
     match p {
         Profile::Vless(v) => {
-            if v.flow == Flow::VisionUdp443 {
-                return Some(Xray);
-            }
-            if !v.encryption.is_empty() && v.encryption != "none" {
-                return Some(Xray);
-            }
-            if v.packet_encoding == PacketEncoding::Packetaddr {
-                return Some(SingBox);
-            }
+            pin(
+                &mut pins,
+                v.flow == Flow::VisionUdp443,
+                Xray,
+                Some(XrayOnlySetting::VisionUdp443Flow),
+            );
+            pin(
+                &mut pins,
+                !v.encryption.is_empty() && v.encryption != "none",
+                Xray,
+                Some(XrayOnlySetting::VlessEncryption),
+            );
+            pin(
+                &mut pins,
+                v.packet_encoding == PacketEncoding::Packetaddr,
+                SingBox,
+                None,
+            );
         }
-        Profile::Vmess(v) => {
-            if v.packet_encoding == PacketEncoding::Packetaddr {
-                return Some(SingBox);
-            }
-            if v.vmess_global_padding || v.vmess_authenticated_length {
-                return Some(SingBox);
-            }
-        }
-        Profile::Shadowsocks(ss) => {
+        Profile::Vmess(v) => pin(
+            &mut pins,
+            v.packet_encoding == PacketEncoding::Packetaddr
+                || v.vmess_global_padding
+                || v.vmess_authenticated_length,
+            SingBox,
+            None,
+        ),
+        Profile::Shadowsocks(ss) => pin(
             // Xray dropped its QUIC transport, so v2ray-plugin's QUIC mode runs only
-            // on sing-box, whatever the cipher.
-            if matches!(ss.transport, Transport::Quic(_)) {
-                return Some(SingBox);
-            }
-            // Every cipher runs on both cores (sing-box under its own names for
-            // Xray's `plain` / `chacha20-poly1305` / `xchacha20-poly1305`), so
-            // only a v2ray-plugin or obfs-local transport, or the plugin's TLS,
-            // pins sing-box.
-            if ss.tls.security == Security::Tls
+            // on sing-box, whatever the cipher. Every cipher runs on both cores
+            // (sing-box under its own names for Xray's `plain` / `chacha20-poly1305` /
+            // `xchacha20-poly1305`), so only a v2ray-plugin or obfs-local transport,
+            // or the plugin's TLS, pins sing-box.
+            &mut pins,
+            matches!(ss.transport, Transport::Quic(_))
+                || ss.tls.security == Security::Tls
                 || ss.transport.network() != Network::Tcp
-                || ss.transport.header_type() == HeaderType::Http
-            {
-                return Some(SingBox);
-            }
-        }
+                || ss.transport.header_type() == HeaderType::Http,
+            SingBox,
+            None,
+        ),
         _ => {}
     }
 
     // ── Transport-level differences ──
     if let Some(t) = p.transport() {
         match t {
-            Transport::H2(_) | Transport::Quic(_) => return Some(SingBox),
-            Transport::Kcp(_) | Transport::Xhttp(_) => return Some(Xray),
+            Transport::H2(_) | Transport::Quic(_) => pins.push((SingBox, None)),
+            Transport::Kcp(_) => pins.push((Xray, Some(XrayOnlySetting::Kcp))),
+            Transport::Xhttp(_) => pins.push((Xray, Some(XrayOnlySetting::Xhttp))),
             Transport::Httpupgrade(h) => {
-                if h.accept_proxy_protocol || h.early_data > 0 {
-                    return Some(Xray);
-                }
+                pin(
+                    &mut pins,
+                    h.accept_proxy_protocol || h.early_data > 0,
+                    Xray,
+                    None,
+                );
             }
             Transport::Ws(w) => {
-                if w.heartbeat_period > 0 || w.accept_proxy_protocol {
-                    return Some(Xray);
-                }
+                pin(
+                    &mut pins,
+                    w.heartbeat_period > 0 || w.accept_proxy_protocol,
+                    Xray,
+                    None,
+                );
             }
             Transport::Grpc(g) => {
                 // The parser folds the path fallback into `service_name`.
-                if g.service_name.starts_with('/') {
-                    return Some(Xray);
-                }
-                if g.ping_timeout > 0 {
-                    return Some(SingBox);
-                }
-                if !g.authority.is_empty()
-                    || g.mode == "multi"
-                    || g.health_check_timeout > 0
-                    || g.initial_window_size > 0
-                    || !g.user_agent.is_empty()
-                {
-                    return Some(Xray);
-                }
+                pin(
+                    &mut pins,
+                    g.service_name.starts_with('/'),
+                    Xray,
+                    Some(XrayOnlySetting::GrpcServicePath),
+                );
+                pin(&mut pins, g.ping_timeout > 0, SingBox, None);
+                pin(
+                    &mut pins,
+                    !g.authority.is_empty()
+                        || g.mode == "multi"
+                        || g.health_check_timeout > 0
+                        || g.initial_window_size > 0
+                        || !g.user_agent.is_empty(),
+                    Xray,
+                    None,
+                );
             }
             Transport::Tcp(_) => {}
         }
@@ -184,15 +232,22 @@ fn capability_core(p: &Profile) -> Option<CoreEngine> {
 
     // ── TLS / Reality-level differences (Xray-only fields) ──
     if let Some(tls) = p.tls() {
-        if tls.reject_unknown_sni || tls.enable_session_resumption || !tls.vcn.is_empty() {
-            return Some(Xray);
-        }
-        if tls.security == Security::Reality && !tls.pqv.is_empty() {
-            return Some(Xray);
-        }
+        pin(
+            &mut pins,
+            !tls.vcn.is_empty(),
+            Xray,
+            Some(XrayOnlySetting::VerifyPeerCertName),
+        );
+        pin(
+            &mut pins,
+            tls.reject_unknown_sni
+                || tls.enable_session_resumption
+                || (tls.security == Security::Reality && !tls.pqv.is_empty()),
+            Xray,
+            None,
+        );
     }
-
-    None
+    pins
 }
 
 /// The core a profile's proxy chain must run on, and the profile (`p` itself or
@@ -511,6 +566,37 @@ mod tests {
                 (SingBox, TargetFallback::CustomConfig),
             ])
         );
+    }
+
+    #[test]
+    fn xray_only_settings_list_what_breaks_on_singbox() {
+        use XrayOnlySetting::{GrpcServicePath, Kcp, VerifyPeerCertName, VlessEncryption, Xhttp};
+        let found = |uri: &str| xray_only_settings(&p(uri));
+        assert_eq!(found("vless://u@e.x:443?type=xhttp&security=tls"), [Xhttp]);
+        assert_eq!(found("vless://u@e.x:443?type=kcp"), [Kcp]);
+        assert_eq!(
+            found("vless://u@e.x:443?type=tcp&security=tls&encryption=mlkem768"),
+            [VlessEncryption]
+        );
+        assert_eq!(
+            found("vless://u@e.x:443?type=grpc&security=tls&serviceName=/x/Tun"),
+            [GrpcServicePath]
+        );
+        assert_eq!(
+            found("vless://u@e.x:443?type=xhttp&security=tls&vcn=a.x"),
+            [Xhttp, VerifyPeerCertName]
+        );
+        // Xray-only, but sing-box connects without them.
+        assert!(found("vless://u@e.x:443?type=ws&heartbeatPeriod=30").is_empty());
+        assert!(found("tuic://u:pw@t.ex:443?sni=t.ex").is_empty());
+        // A sing-box pin that comes first doesn't hide what sing-box then drops.
+        let mut both = p("vless://u@e.x:443?type=kcp");
+        let Profile::Vless(v) = &mut both else {
+            unreachable!()
+        };
+        v.packet_encoding = PacketEncoding::Packetaddr;
+        assert_eq!(forced_core(&both), Some(CoreEngine::SingBox));
+        assert_eq!(xray_only_settings(&both), [Kcp]);
     }
 
     #[test]

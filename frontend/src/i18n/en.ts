@@ -1289,6 +1289,14 @@ const en = {
   "routes.target.singBoxOnly":
     "This profile runs only on sing-box, and the active one runs on {core}: this traffic goes through the active proxy.",
   "routes.target.cantStart": "This traffic goes through the active proxy. {reason}",
+  "routes.target.ignored":
+    "On sing-box these settings are ignored, so this traffic may not connect: {settings}.",
+  "routes.target.setting.vlessEncryption": "VLESS encryption",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "mKCP transport",
+  "routes.target.setting.xhttp": "XHTTP transport",
+  "routes.target.setting.grpcServicePath": "gRPC service path",
+  "routes.target.setting.verifyPeerCertName": "certificate name to verify",
   "profiles.label.deleted": "Deleted profile",
   "profilePicker.title": "Choose a profile",
   "routingSheet.outboundDeletedHint":

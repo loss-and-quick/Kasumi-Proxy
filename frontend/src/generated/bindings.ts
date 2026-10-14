@@ -720,6 +720,12 @@ export type CoreResolution = {
 	 *  core the rule's traffic goes through the active proxy instead.
 	 */
 	ruleTargetFallback?: Partial<{ [key in CoreEngine]: TargetFallback }>,
+	/**
+	 *  Settings of this profile that only xray can build and that stop it
+	 *  connecting when sing-box builds it (`core::xray_only_settings`): sing-box
+	 *  leaves them out of its config without saying so.
+	 */
+	xrayOnlySettings?: XrayOnlySetting[],
 };
 
 export type Custom = {
@@ -2219,6 +2225,19 @@ export type XhttpTransport = {
 	mode?: string,
 	extra?: string,
 };
+
+/**  A setting sing-box can't carry, left out of the config it builds. */
+export type XrayOnlySetting = "vlessEncryption" | 
+/**  The `xtls-rprx-vision-udp443` flow, which sing-box has no name for. */
+"visionUdp443Flow" | 
+/**  The mKCP transport. */
+"kcp" | 
+/**  The XHTTP transport. */
+"xhttp" | 
+/**  A gRPC service name starting with `/`, which xray reads as the whole path. */
+"grpcServicePath" | 
+/**  The name the server certificate is verified against, when it differs from the SNI. */
+"verifyPeerCertName";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

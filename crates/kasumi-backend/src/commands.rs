@@ -21,7 +21,7 @@ use kasumi_core::contract::{
 };
 use kasumi_core::core::{
     chain_conflicts, chain_forced_core, core_conflict, forced_core, preferred_core,
-    rule_target_fallbacks,
+    rule_target_fallbacks, xray_only_settings,
 };
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::data_path_plan::AppRouting;
@@ -667,6 +667,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
                                 resolved, &settings,
                             ),
                             rule_target_fallback: rule_target_fallbacks(p),
+                            xray_only_settings: xray_only_settings(p),
                         }
                     })
                     .collect(),

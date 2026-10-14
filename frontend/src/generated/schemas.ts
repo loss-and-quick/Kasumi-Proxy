@@ -651,6 +651,7 @@ export const XhttpTransportSchema = z.object({
 });
 export type XhttpTransport = z.infer<typeof XhttpTransportSchema>;
 
+
 export const WsTransportSchema = z.object({
 	host: z.string().optional(),
 	path: z.string().optional(),
@@ -1727,6 +1728,9 @@ export const CoreConflictSchema = z.union([z.object({
 export type CoreConflict = z.infer<typeof CoreConflictSchema>;
 
 
+export const XrayOnlySettingSchema = z.union([z.literal("grpcServicePath"), z.literal("kcp"), z.literal("verifyPeerCertName"), z.literal("visionUdp443Flow"), z.literal("vlessEncryption"), z.literal("xhttp")]);
+export type XrayOnlySetting = z.infer<typeof XrayOnlySettingSchema>;
+
 export const TargetFallbackSchema = z.union([z.object({
 	kind: z.literal("cantStart"),
 	conflict: CoreConflictSchema,
@@ -1745,6 +1749,7 @@ export const CoreResolutionSchema = z.object({
 	conflict: CoreConflictSchema.nullable().optional(),
 	seesProcesses: z.boolean().optional(),
 	ruleTargetFallback: z.partialRecord(CoreEngineSchema, TargetFallbackSchema).optional(),
+	xrayOnlySettings: z.array(XrayOnlySettingSchema).optional(),
 });
 export type CoreResolution = z.infer<typeof CoreResolutionSchema>;
 

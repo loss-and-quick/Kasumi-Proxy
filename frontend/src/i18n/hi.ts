@@ -1250,6 +1250,14 @@ const hi = {
   "routes.target.singBoxOnly":
     "यह प्रोफ़ाइल केवल sing-box पर चलती है, और सक्रिय प्रोफ़ाइल {core} पर: यह ट्रैफ़िक सक्रिय प्रॉक्सी से जाएगा।",
   "routes.target.cantStart": "यह ट्रैफ़िक सक्रिय प्रॉक्सी से जाएगा। {reason}",
+  "routes.target.ignored":
+    "sing-box पर ये सेटिंग्स अनदेखी की जाती हैं, इसलिए यह ट्रैफ़िक कनेक्ट न हो सकता है: {settings}।",
+  "routes.target.setting.vlessEncryption": "VLESS एन्क्रिप्शन",
+  "routes.target.setting.visionUdp443Flow": "flow xtls-rprx-vision-udp443",
+  "routes.target.setting.kcp": "mKCP ट्रांसपोर्ट",
+  "routes.target.setting.xhttp": "XHTTP ट्रांसपोर्ट",
+  "routes.target.setting.grpcServicePath": "gRPC सेवा पथ",
+  "routes.target.setting.verifyPeerCertName": "सत्यापित किया जाने वाला प्रमाणपत्र नाम",
   "profiles.label.deleted": "हटाई गई प्रोफ़ाइल",
   "profilePicker.title": "प्रोफ़ाइल चुनें",
   "routingSheet.outboundDeletedHint":
