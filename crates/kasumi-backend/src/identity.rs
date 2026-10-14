@@ -268,7 +268,7 @@ mod tests {
     fn incy_id(android_id: &str) -> String {
         let material = format!("{android_id}|Google|Pixel 9|google|tokay|tokay|tokay|tokay");
         let seed = hex(&Sha256::digest(material.as_bytes()));
-        let digest = hex(&Sha256::digest(format!("afcy_hwidS{seed}").as_bytes())).to_uppercase();
+        let digest = hex(&Sha256::digest(format!("incy_hwid_{seed}").as_bytes())).to_uppercase();
         format!(
             "{}-{}-{}-{}-{}",
             &digest[..8],
