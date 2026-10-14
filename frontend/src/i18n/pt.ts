@@ -224,6 +224,7 @@ const pt = {
   "editor.engineForcedByHop": "“{hop}” na cadeia só roda no {core}, então este perfil também",
   "editor.engineChainConflict":
     "Esta cadeia não pode iniciar: “{xray}” só roda no xray e “{singBox}” só no sing-box. Escolha outro salto.",
+  "editor.viaConflict": "Indisponível: “{xray}” exige xray e “{singBox}” exige sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Ofuscação",
   "editor.obfsPassword": "Senha do obfs",

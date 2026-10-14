@@ -153,6 +153,33 @@ export default function Editor({
     };
   }, [draft]);
 
+  // The candidates whose own core need clashes with the draft's chain stay listed
+  // but unpickable, with the backend's reason.
+  const [viaConflicts, setViaConflicts] = useState<ReadonlyMap<string, string>>(() => new Map());
+  useEffect(() => {
+    let alive = true;
+    bridge
+      .chainConflicts(draft)
+      .then(
+        (found) =>
+          alive &&
+          setViaConflicts(
+            new Map(
+              found.map(({ id, conflict }) => [
+                id,
+                conflict.kind === "chainCoreConflict"
+                  ? t("editor.viaConflict", { xray: conflict.xray, singBox: conflict.singBox })
+                  : coreConflictText(t, conflict),
+              ]),
+            ),
+          ),
+      )
+      .catch(() => alive && setViaConflicts(new Map()));
+    return () => {
+      alive = false;
+    };
+  }, [draft, t]);
+
   const save = async () => {
     const result = schemaFor(draft.protocol).safeParse(draft);
     const next: FieldErrors = {};
@@ -265,6 +292,7 @@ export default function Editor({
         group={group}
         setGroup={setGroup}
         viaCandidates={viaCandidates}
+        viaConflicts={viaConflicts}
         changeProtocol={changeProtocol}
         engineForced={engineForced}
         engineHint={engineHint}

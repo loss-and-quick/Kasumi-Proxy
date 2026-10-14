@@ -1361,6 +1361,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("chainCandidates"),
 	profile: ProfileSchema,
 }), z.object({
+	cmd: z.literal("chainConflicts"),
+	profile: ProfileSchema,
+}), z.object({
 	cmd: z.literal("checkLocalPorts"),
 	settings: AdvancedSettings_SerializeSchema,
 }), z.object({
@@ -1602,6 +1605,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("chainCandidates"),
 	profile: ProfileSchema,
 }), z.object({
+	cmd: z.literal("chainConflicts"),
+	profile: ProfileSchema,
+}), z.object({
 	cmd: z.literal("checkLocalPorts"),
 	settings: AdvancedSettings_DeserializeSchema,
 }), z.object({
@@ -1761,6 +1767,13 @@ export const HeaderPreviewSchema = z.object({
 	value: z.string(),
 });
 export type HeaderPreview = z.infer<typeof HeaderPreviewSchema>;
+
+
+export const HopConflictSchema = z.object({
+	id: z.string(),
+	conflict: CoreConflictSchema,
+});
+export type HopConflict = z.infer<typeof HopConflictSchema>;
 
 
 export const HwidSourceSchema = z.union([z.literal("deviceId"), z.literal("happComputed"), z.literal("happStored"), z.literal("machineId"), z.literal("settings"), z.literal("subscription")]);
@@ -1960,6 +1973,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("flags"),
 	value: z.array(z.boolean()),
 }), z.object({
+	kind: z.literal("hopConflicts"),
+	value: z.array(HopConflictSchema),
+}), z.object({
 	kind: z.literal("importInput"),
 	value: ResolvedImport_SerializeSchema,
 }), z.object({
@@ -2034,6 +2050,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("flags"),
 	value: z.array(z.boolean()),
+}), z.object({
+	kind: z.literal("hopConflicts"),
+	value: z.array(HopConflictSchema),
 }), z.object({
 	kind: z.literal("importInput"),
 	value: ResolvedImport_DeserializeSchema,

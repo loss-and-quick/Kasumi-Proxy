@@ -75,4 +75,25 @@ describe("ProfilePickerList", () => {
     expect(withChoice[0]).toMatchObject({ selected: true, name: "Proxy" });
     expect(withChoice.filter((r) => r.selected)).toHaveLength(1);
   });
+
+  it("keeps a blocked profile listed, disabled and with its reason", () => {
+    const html = renderToStaticMarkup(
+      <ProfilePickerList
+        sections={pickerSections(profiles, groups, "")}
+        choices={[]}
+        value="a"
+        tests={{}}
+        blocked={
+          new Map([
+            ["b", "needs sing-box"],
+            ["a", "ignored while picked"],
+          ])
+        }
+        onPick={() => {}}
+      />,
+    );
+    expect(html.match(/<button[^>]*disabled=""/g)).toHaveLength(1);
+    expect(html).toContain("needs sing-box");
+    expect(html).not.toContain("ignored while picked");
+  });
 });

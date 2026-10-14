@@ -3,8 +3,8 @@
 
 use std::collections::BTreeMap;
 
-use crate::chain::chain_hops;
-use crate::contract::{CoreConflict, TargetFallback};
+use crate::chain::{chain_candidates, chain_hops};
+use crate::contract::{CoreConflict, HopConflict, TargetFallback};
 use crate::custom_sanitize::{has_unpinned_allow_insecure, sanitize_provider_xray};
 use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
 use crate::mixins::Transport;
@@ -221,6 +221,28 @@ pub fn chain_forced_core<'a>(
         (None, Some(s)) => Ok(Some((CoreEngine::SingBox, s))),
         (None, None) => Ok(None),
     }
+}
+
+/// The chain candidates of `p` ([`chain_candidates`]) that would leave it with no
+/// core able to build the chain, each with the conflict it would cause. `p` may be
+/// an unsaved draft; it stands in for its stored copy (same id).
+pub fn chain_conflicts(p: &Profile, profiles: &[Profile]) -> Vec<HopConflict> {
+    let mut state: Vec<Profile> = profiles
+        .iter()
+        .filter(|x| x.meta().id != p.meta().id)
+        .cloned()
+        .collect();
+    state.push(p.clone());
+    let draft_idx = state.len() - 1;
+    chain_candidates(p, profiles)
+        .into_iter()
+        .filter_map(|id| {
+            state[draft_idx].meta_mut().via = Some(id.clone());
+            chain_forced_core(&state[draft_idx], &state)
+                .err()
+                .map(|conflict| HopConflict { id, conflict })
+        })
+        .collect()
 }
 
 /// The core a profile runs on when nothing forces it: its override, else the
@@ -693,6 +715,28 @@ mod tests {
             resolve_core(&all[1], &s, &all).unwrap(),
             CoreEngine::SingBox
         );
+    }
+
+    #[test]
+    fn chain_conflicts_name_the_hops_that_need_the_other_core() {
+        let all = vec![
+            chained("vless://u@e.x:443?type=xhttp&security=tls", "exit", None),
+            chained("tuic://u:pw@t.ex:443?sni=t.ex", "tuic", None),
+            chained("trojan://pw@h.x:443?security=tls", "plain", None),
+        ];
+        assert_eq!(
+            chain_conflicts(&all[0], &all),
+            [HopConflict {
+                id: "tuic".into(),
+                conflict: CoreConflict::ChainCoreConflict {
+                    xray: "exit".into(),
+                    sing_box: "tuic".into(),
+                },
+            }]
+        );
+        // An unsaved draft stands in for its stored copy.
+        let draft = chained("trojan://pw@d.x:443?security=tls", "plain", None);
+        assert!(chain_conflicts(&draft, &all).is_empty());
     }
 
     #[test]

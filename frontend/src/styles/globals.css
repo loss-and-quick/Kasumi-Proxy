@@ -678,6 +678,9 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 .picker-row.selected { background: var(--primary-container); }
 .picker-row-text { flex: 1 1 auto; min-width: 0; display: block; }
 .picker-row-name { display: block; font-size: 14.5px; font-weight: 600; }
+.picker-row-why { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--warn); }
+.picker-row:disabled { opacity: 0.6; cursor: default; }
+.picker-row:disabled:hover { background: var(--sc-lowest); }
 .picker-row.selected .picker-row-name { color: var(--on-primary-container); }
 .picker-row-icon { font-size: 20px; color: var(--on-surface-variant); flex: 0 0 auto; }
 .picker-check { font-size: 20px; color: var(--primary); flex: 0 0 auto; }

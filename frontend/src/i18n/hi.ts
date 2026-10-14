@@ -220,6 +220,7 @@ const hi = {
   "editor.engineForcedByHop": "चेन में “{hop}” केवल {core} पर चलता है, इसलिए यह प्रोफ़ाइल भी",
   "editor.engineChainConflict":
     "यह चेन शुरू नहीं हो सकती: “{xray}” केवल xray पर और “{singBox}” केवल sing-box पर चलता है। कोई दूसरा हॉप चुनें।",
+  "editor.viaConflict": "उपलब्ध नहीं: “{xray}” को xray चाहिए, “{singBox}” को sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Obfs पासवर्ड",

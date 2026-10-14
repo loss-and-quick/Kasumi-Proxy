@@ -260,6 +260,7 @@ const ar = {
     "«{hop}» في السلسلة يعمل فقط على {core}، لذا يعمل هذا الملف الشخصي عليه أيضًا",
   "editor.engineChainConflict":
     "لا يمكن تشغيل هذه السلسلة: «{xray}» يعمل فقط على xray و«{singBox}» فقط على sing-box. اختر قفزة أخرى.",
+  "editor.viaConflict": "غير متاح: «{xray}» يتطلب xray و«{singBox}» يتطلب sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "التعمية",
   "editor.obfsPassword": "كلمة مرور obfs",

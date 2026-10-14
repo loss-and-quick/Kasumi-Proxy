@@ -226,6 +226,7 @@ const es = {
     "«{hop}» en su cadena solo se ejecuta en {core}, así que este perfil también",
   "editor.engineChainConflict":
     "Esta cadena no puede iniciarse: «{xray}» solo funciona en xray y «{singBox}» solo en sing-box. Elige otro salto.",
+  "editor.viaConflict": "No disponible: «{xray}» requiere xray y «{singBox}» sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Ofuscación",
   "editor.obfsPassword": "Contraseña de obfs",

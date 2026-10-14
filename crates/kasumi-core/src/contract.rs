@@ -84,6 +84,15 @@ pub enum CoreConflict {
     },
 }
 
+/// A chain hop that can't be dialled through because its core requirement
+/// conflicts with the profile's chain (`core::chain_conflicts`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HopConflict {
+    pub id: String,
+    pub conflict: CoreConflict,
+}
+
 impl std::fmt::Display for CoreConflict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

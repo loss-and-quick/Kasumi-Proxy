@@ -221,6 +221,7 @@ const vi = {
   "editor.engineForcedByHop": "“{hop}” trong chuỗi chỉ chạy trên {core}, nên hồ sơ này cũng vậy",
   "editor.engineChainConflict":
     "Chuỗi này không thể khởi động: “{xray}” chỉ chạy trên xray còn “{singBox}” chỉ chạy trên sing-box. Hãy chọn chặng khác.",
+  "editor.viaConflict": "Không dùng được: “{xray}” cần xray, “{singBox}” cần sing-box",
   // editor — hysteria2 / tuic
   "editor.obfsType": "Obfuscation",
   "editor.obfsPassword": "Mật khẩu obfs",

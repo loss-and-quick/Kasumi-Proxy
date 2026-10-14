@@ -16,11 +16,12 @@ use serde::{Deserialize, Serialize};
 
 use kasumi_core::chain::chain_candidates;
 use kasumi_core::contract::{
-    Capabilities, ConnectionProbe, CoreResolution, FetchMode, LogTarget, ServiceState, TestKind,
-    WsInfo,
+    Capabilities, ConnectionProbe, CoreResolution, FetchMode, HopConflict, LogTarget, ServiceState,
+    TestKind, WsInfo,
 };
 use kasumi_core::core::{
-    chain_forced_core, core_conflict, forced_core, preferred_core, rule_target_fallbacks,
+    chain_conflicts, chain_forced_core, core_conflict, forced_core, preferred_core,
+    rule_target_fallbacks,
 };
 use kasumi_core::core_config::{CoreConfig, build_core_config};
 use kasumi_core::data_path_plan::AppRouting;
@@ -168,6 +169,11 @@ pub enum Command {
     ChainCandidates {
         profile: Box<Profile>,
     },
+    /// Of those candidates, the ones whose core requirement conflicts with the
+    /// (possibly unsaved) profile's chain, by `core::chain_conflicts`.
+    ChainConflicts {
+        profile: Box<Profile>,
+    },
     /// The local-port clash these (possibly unsaved) settings would have on this
     /// platform, by `AdvancedSettings::port_collision` — the check a settings
     /// write is refused by.
@@ -253,6 +259,8 @@ pub enum Response {
     CoreResolutions(Vec<CoreResolution>),
     /// Profile ids, in stored order.
     ProfileIds(Vec<String>),
+    /// Chain hops ruled out by a core conflict.
+    HopConflicts(Vec<HopConflict>),
     /// Two local listeners on one port, or `null` when the ports are fine.
     PortCollision(Option<PortCollision>),
     /// One answer per item of the request, in its order.
@@ -602,6 +610,11 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         Command::ChainCandidates { profile } => {
             let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
             Ok(Response::ProfileIds(chain_candidates(&profile, &profiles)))
+        }
+
+        Command::ChainConflicts { profile } => {
+            let profiles: Vec<Profile> = read_json(&paths.profiles).await.unwrap_or_default();
+            Ok(Response::HopConflicts(chain_conflicts(&profile, &profiles)))
         }
 
         Command::CheckLocalPorts { settings } => Ok(Response::PortCollision(
@@ -1323,6 +1336,36 @@ mod tests {
             panic!()
         };
         assert_eq!(ids, ["a", "b"]);
+    }
+
+    #[tokio::test]
+    async fn chain_conflicts_lists_stored_hops_on_the_other_core() {
+        use kasumi_core::share::parse_share_link;
+
+        let (p, _d) = TestPlatform::new();
+        let mut tuic = parse_share_link("tuic://u:pw@t.ex:443?sni=t.ex#T", None).unwrap();
+        tuic.meta_mut().id = "tuic".into();
+        let mut plain = parse_share_link("trojan://pw@p.ex:443#P", None).unwrap();
+        plain.meta_mut().id = "plain".into();
+        write_json_atomic(&p.paths().profiles, &vec![tuic, plain])
+            .await
+            .unwrap();
+        let mut draft =
+            parse_share_link("vless://u@e.x:443?type=xhttp&security=tls#E", None).unwrap();
+        draft.meta_mut().id = "draft".into();
+
+        let Response::HopConflicts(found) = dispatch(
+            &p,
+            Command::ChainConflicts {
+                profile: Box::new(draft),
+            },
+        )
+        .await
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].id, "tuic");
     }
 
     #[tokio::test]
