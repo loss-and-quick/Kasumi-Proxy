@@ -142,6 +142,16 @@ impl Platform for RemotePlatform {
         self.local.tune_config(engine, config);
     }
 
+    async fn open_url(&self, url: &str) -> anyhow::Result<()> {
+        // The browser opens in the user's session, which is this process's.
+        self.local.open_url(url).await
+    }
+
+    fn watch_system_resume(&self) -> Option<mpsc::Receiver<()>> {
+        // logind's `PrepareForSleep` is a system-bus signal any user may watch.
+        self.local.watch_system_resume()
+    }
+
     fn app_filter(&self) -> Option<&dyn AppFilterCapability> {
         self.local.app_filter()
     }
