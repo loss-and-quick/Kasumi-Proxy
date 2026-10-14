@@ -80,6 +80,19 @@ describe("ws-rpc push stream", () => {
     expect(seen).toEqual([{ uptimeSec: 7 }]);
   });
 
+  it("doesn't reconnect once nobody listens", async () => {
+    const { subscribeStatus } = await import("../ws-rpc");
+    const unsubscribe = subscribeStatus(() => {});
+    await settle();
+    last().open();
+    await settle();
+
+    last().close();
+    unsubscribe();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(FakeSocket.instances).toHaveLength(1);
+  });
+
   it("reconnects after a drop, back on the short delay", async () => {
     const { subscribeStatus } = await import("../ws-rpc");
     subscribeStatus(() => {});

@@ -93,6 +93,8 @@ function scheduleReconnect(): void {
   if (reconnectTimer || !hasListeners()) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
+    // Everyone may have unsubscribed while it waited.
+    if (!hasListeners()) return;
     ensureSocket().catch(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
       scheduleReconnect();
