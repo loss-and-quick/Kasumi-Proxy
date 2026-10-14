@@ -20,16 +20,15 @@ pub fn url(raw: &str) -> String {
         // token argument usually sits.
         return query_free(raw).into_owned();
     };
-    let (authority, path) = match rest.find('/') {
-        Some(i) => (&rest[..i], &rest[i..]),
-        None => (rest, ""),
-    };
+    let auth_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..auth_end];
+    let remainder = &rest[auth_end..];
     // Everything before the last `@` is userinfo; hostnames cannot contain one.
     let authority = match authority.rsplit_once('@') {
         Some((_, host)) => host,
         None => authority,
     };
-    let path = path.split(['?', '#']).next().unwrap_or("");
+    let path = remainder.split(['?', '#']).next().unwrap_or("");
     format!("{scheme}://{authority}{path}")
 }
 
@@ -40,10 +39,8 @@ pub fn origin(raw: &str) -> String {
     let Some((scheme, rest)) = raw.split_once("://") else {
         return query_free(raw).into_owned();
     };
-    let authority = match rest.find('/') {
-        Some(i) => &rest[..i],
-        None => rest,
-    };
+    let auth_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..auth_end];
     let authority = match authority.rsplit_once('@') {
         Some((_, host)) => host,
         None => authority,
@@ -112,6 +109,14 @@ mod tests {
         assert_eq!(
             url("https://user:pass@sub.example.com:8443/list?token=abc#frag"),
             "https://sub.example.com:8443/list"
+        );
+        assert_eq!(
+            url("https://example.com?token=secret#frag"),
+            "https://example.com"
+        );
+        assert_eq!(
+            origin("https://user:pass@example.com?token=secret"),
+            "https://example.com"
         );
     }
 

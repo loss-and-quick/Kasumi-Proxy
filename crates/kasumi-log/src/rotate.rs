@@ -12,26 +12,32 @@
 //! kilobytes, and the callers are either the boot path or a periodic tick.
 
 use std::fs;
-use std::io::{self, Read, Write};
-use std::path::{Path, PathBuf};
+use std::io::{self, Read, Seek, Write};
+use std::path::Path;
 
 /// Keep the newest `max_bytes / 2` of `path` once the file grows past `max_bytes`.
 /// A file that does not exist is not an error — the app has simply not logged yet.
 ///
+/// The trim rewrites the existing file in place and truncates it, preserving the
+/// inode/handle so running writers (fern in this process, or cores logging via
+/// redirected descriptors) continue appending to the trimmed file rather than
+/// an unlinked former inode.
+///
 /// The cut lands on a record boundary: the first partial line in the kept tail is
 /// dropped rather than kept, so every line in the file is still a whole record.
 pub fn trim_in_place(path: &Path, max_bytes: u64) -> io::Result<()> {
-    let len = match fs::metadata(path) {
-        Ok(meta) => meta.len(),
+    let mut file = match fs::OpenOptions::new().read(true).write(true).open(path) {
+        Ok(f) => f,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e),
     };
+    let len = file.metadata()?.len();
     if len <= max_bytes {
         return Ok(());
     }
 
     let mut content = Vec::new();
-    fs::File::open(path)?.read_to_end(&mut content)?;
+    file.read_to_end(&mut content)?;
     let keep = ((max_bytes / 2) as usize).clamp(1, content.len());
     let mut start = content.len() - keep;
     if start > 0
@@ -40,35 +46,18 @@ pub fn trim_in_place(path: &Path, max_bytes: u64) -> io::Result<()> {
         start += offset + 1;
     }
 
-    let temp = temp_path(path);
-    {
-        let mut file = fs::File::create(&temp)?;
-        file.write_all(&content[start..])?;
-        file.sync_all()?;
-    }
-    match fs::rename(&temp, path) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            // Never leave the scratch file behind for the next run to trip over.
-            let _ = fs::remove_file(&temp);
-            Err(e)
-        }
-    }
+    let slice = &content[start..];
+    file.seek(io::SeekFrom::Start(0))?;
+    file.write_all(slice)?;
+    file.set_len(slice.len() as u64)?;
+    file.sync_all()?;
+    Ok(())
 }
 
 /// How many bytes the file would keep after trimming — exposed for tests and for
 /// callers that want to log how much was dropped.
 pub fn kept_bytes(path: &Path) -> Option<usize> {
     fs::metadata(path).ok().map(|m| m.len() as usize)
-}
-
-/// Same directory as `path` so the final rename stays on one filesystem.
-fn temp_path(path: &Path) -> PathBuf {
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "log".to_string());
-    path.with_file_name(format!(".{name}.trim"))
 }
 
 #[cfg(test)]
@@ -141,5 +130,30 @@ mod tests {
         trim_in_place(&path, 1).unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "");
         assert!(!dir.path().join(".daemon.log.trim").exists());
+    }
+
+    #[test]
+    fn preserves_file_inode_and_appends_continue() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("daemon.log");
+        let mut appender = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .unwrap();
+        appender
+            .write_all(b"line 1\nline 2\nline 3\nline 4\n")
+            .unwrap();
+        appender.sync_all().unwrap();
+
+        trim_in_place(&path, 15).unwrap();
+
+        // An already-open append descriptor must keep appending to the trimmed file.
+        appender.write_all(b"line 5\n").unwrap();
+        appender.sync_all().unwrap();
+
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(after.ends_with("line 5\n"));
+        assert!(!after.starts_with("line 1\n"));
     }
 }

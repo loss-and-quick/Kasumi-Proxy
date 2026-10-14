@@ -22,11 +22,21 @@ klog() {
 	_level=$1
 	shift
 	[ -d "$KASUMI_DATADIR" ] || mkdir -p "$KASUMI_DATADIR" 2>/dev/null || return 0
+	_lockdir="$KASUMI_DATADIR/.module.log.lock"
+	_tries=0
+	while ! mkdir "$_lockdir" 2>/dev/null; do
+		_tries=$((_tries + 1))
+		if [ "$_tries" -ge 5 ]; then
+			rmdir "$_lockdir" 2>/dev/null
+			break
+		fi
+		sleep 1 2>/dev/null || break
+	done
 	printf '%s %-5s %s: %s\n' \
 		"$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null)" \
 		"$_level" \
 		"${KASUMI_SCRIPT:-module}" \
-		"$*" >>"$KASUMI_LOG_FILE" 2>/dev/null || return 0
+		"$*" >>"$KASUMI_LOG_FILE" 2>/dev/null
 
 	_size=$(wc -c <"$KASUMI_LOG_FILE" 2>/dev/null || echo 0)
 	if [ "$_size" -gt "$KASUMI_LOG_MAX_BYTES" ] 2>/dev/null; then
@@ -36,6 +46,7 @@ klog() {
 		tail -c "$((KASUMI_LOG_MAX_BYTES / 2))" "$KASUMI_LOG_FILE" 2>/dev/null | tail -n +2 >"$KASUMI_LOG_FILE.trim" &&
 			mv "$KASUMI_LOG_FILE.trim" "$KASUMI_LOG_FILE" 2>/dev/null
 	fi
-	unset _level _size
+	rmdir "$_lockdir" 2>/dev/null
+	unset _level _size _lockdir _tries
 	return 0
 }

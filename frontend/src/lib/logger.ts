@@ -37,15 +37,17 @@ export function logEvent(
   stack?: string,
 ): void {
   try {
-    const record: LogRecord = { at: new Date().toISOString(), level, message };
+    const cleanMessage = redactInText(message);
+    const cleanStack = stack ? redactInText(stack) : undefined;
+    const record: LogRecord = { at: new Date().toISOString(), level, message: cleanMessage };
     if (fields && Object.keys(fields).length > 0) record.fields = fields;
-    if (stack) record.stack = stack;
+    if (cleanStack) record.stack = cleanStack;
     records.push(record);
     if (records.length > LIMIT) records.shift();
     if (consoleWorthy(level)) {
-      const suffix = record.fields ? ` ${JSON.stringify(record.fields)}` : "";
+      const suffix = record.fields ? ` ${safeFields(record.fields)}` : "";
       const line = `[kasumi] ${record.message}${suffix}`;
-      if (level === "error") console.error(line, stack ?? "");
+      if (level === "error") console.error(line, cleanStack ?? "");
       else if (level === "warn") console.warn(line);
       else if (level === "info") console.info(line);
       else console.debug(line);
@@ -73,12 +75,43 @@ export function clearLogs(): void {
   records.length = 0;
 }
 
+/** Strip query parameters and user credentials from URLs in free text. */
+export function redactInText(text: string): string {
+  return text.replace(/https?:\/\/[^\s"'`<>]+/g, (match) => {
+    try {
+      const u = new URL(match);
+      u.username = "";
+      u.password = "";
+      u.search = "";
+      u.hash = "";
+      return u.toString();
+    } catch {
+      return match.split(/[?#]/)[0] ?? match;
+    }
+  });
+}
+
+function safeFields(fields: Record<string, unknown>): string {
+  try {
+    return JSON.stringify(fields);
+  } catch {
+    return '{"error":"[unserializable fields]"}';
+  }
+}
+
 /** One record per line, the shape the diagnostics sheet shows and copies. */
 export function formatLogs(entries: LogRecord[]): string {
   return entries
     .map((r) => {
-      const fields = r.fields ? ` ${JSON.stringify(r.fields)}` : "";
-      return `${r.at} ${r.level.toUpperCase().padEnd(5)} ${r.message}${fields}`;
+      const fields = r.fields ? ` ${safeFields(r.fields)}` : "";
+      const base = `${r.at} ${r.level.toUpperCase().padEnd(5)} ${r.message}${fields}`;
+      if (!r.stack) return base;
+      const indented = r.stack
+        .trim()
+        .split("\n")
+        .map((l) => `    ${l}`)
+        .join("\n");
+      return `${base}\n${indented}`;
     })
     .join("\n");
 }
@@ -100,18 +133,21 @@ export function errorStack(e: unknown): string | undefined {
 export function installGlobalHandlers(): void {
   if (typeof window === "undefined") return;
   window.addEventListener("error", (event) => {
+    const stack = event.error instanceof Error ? event.error.stack : undefined;
     logError(
-      event.message || "uncaught error",
+      redactInText(event.message || "uncaught error"),
       { source: event.filename, line: event.lineno },
-      event.error instanceof Error ? event.error.stack : undefined,
+      stack ? redactInText(stack) : undefined,
     );
   });
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
     logError(
-      reason instanceof Error ? reason.message : String(reason),
+      redactInText(msg),
       { kind: "unhandledrejection" },
-      reason instanceof Error ? reason.stack : undefined,
+      stack ? redactInText(stack) : undefined,
     );
   });
 }

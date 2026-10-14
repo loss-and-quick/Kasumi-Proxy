@@ -49,6 +49,21 @@ describe("logger", () => {
     cyclic.self = cyclic;
     expect(() => logEvent("error", "boom", cyclic)).not.toThrow();
     expect(recentLogs()).toHaveLength(1);
+    expect(formatLogs(recentLogs())).toContain("unserializable");
+  });
+
+  it("redacts query and credentials from URLs in free text", () => {
+    logEvent("error", "fetch failed: https://user:pass@example.com/api?token=secret#hash");
+    expect(formatLogs(recentLogs())).not.toContain("secret");
+    expect(formatLogs(recentLogs())).not.toContain("user:pass");
+    expect(formatLogs(recentLogs())).toContain("https://example.com/api");
+  });
+
+  it("includes indented stack in formatted logs when present", () => {
+    logEvent("error", "failed", undefined, "Error: failed\n    at test.ts:1:1");
+    const formatted = formatLogs(recentLogs());
+    expect(formatted).toContain("ERROR failed");
+    expect(formatted).toContain("    Error: failed\n        at test.ts:1:1");
   });
 
   it("reads a stack only off an Error", () => {

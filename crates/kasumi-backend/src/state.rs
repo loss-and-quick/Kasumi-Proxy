@@ -75,6 +75,8 @@ pub fn level_filter(level: Option<LogLevel>) -> Option<LevelFilter> {
 pub async fn apply_app_log_level(platform: &dyn Platform) {
     if let Some(level) = read_app_log_level(platform).await {
         kasumi_log::set_level(level);
+    } else {
+        kasumi_log::reset_level();
     }
 }
 

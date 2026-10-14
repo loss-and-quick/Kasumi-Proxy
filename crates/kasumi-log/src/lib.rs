@@ -273,6 +273,17 @@ pub fn set_level(level: LevelFilter) {
     set_directives(&level_directives(level));
 }
 
+/// Reset the runtime filter back to the boot default (`RUST_LOG` or [`DEFAULT_DIRECTIVES`]).
+/// Called when the application log level setting is cleared or set back to Default.
+pub fn reset_level() {
+    let initial = std::env::var("RUST_LOG")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_DIRECTIVES.to_string());
+    set_directives(&initial);
+}
+
 fn enabled(metadata: &Metadata) -> bool {
     // Fail open: a poisoned filter must not silently stop all diagnostics.
     filter_slot()
@@ -392,17 +403,34 @@ fn started() -> Instant {
 /// arrive with embedded newlines and, occasionally, a megabyte of them.
 fn escape(message: &str) -> String {
     let mut out = String::with_capacity(message.len().min(MAX_MESSAGE_CHARS) + 16);
+    let mut count = 0;
+    let mut truncated = false;
     for ch in message.chars() {
-        match ch {
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c if (c as u32) < 0x20 && c != '\t' => out.push(' '),
-            c => out.push(c),
-        }
-        if out.chars().count() >= MAX_MESSAGE_CHARS {
-            out.push('…');
+        if count >= MAX_MESSAGE_CHARS {
+            truncated = true;
             break;
         }
+        match ch {
+            '\n' => {
+                out.push_str("\\n");
+                count += 2;
+            }
+            '\r' => {
+                out.push_str("\\r");
+                count += 2;
+            }
+            c if (c as u32) < 0x20 && c != '\t' => {
+                out.push(' ');
+                count += 1;
+            }
+            c => {
+                out.push(c);
+                count += 1;
+            }
+        }
+    }
+    if truncated {
+        out.push('…');
     }
     out
 }
