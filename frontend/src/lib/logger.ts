@@ -29,16 +29,29 @@ function consoleWorthy(level: LogLevel): boolean {
   return level === "error" || level === "warn" || Boolean(import.meta.env?.DEV);
 }
 
-function redactFields(fields: Record<string, unknown>): Record<string, unknown> {
+function redactValue(val: unknown, visited = new WeakSet<object>()): unknown {
+  if (typeof val === "string") {
+    return redactInText(val);
+  }
+  if (typeof val !== "object" || val === null) {
+    return val;
+  }
+  if (visited.has(val)) {
+    return "[circular]";
+  }
+  visited.add(val);
+  if (Array.isArray(val)) {
+    return val.map((item) => redactValue(item, visited));
+  }
   const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(fields)) {
-    if (typeof v === "string") {
-      result[k] = redactInText(v);
-    } else {
-      result[k] = v;
-    }
+  for (const [k, v] of Object.entries(val)) {
+    result[k] = redactValue(v, visited);
   }
   return result;
+}
+
+function redactFields(fields: Record<string, unknown>): Record<string, unknown> {
+  return redactValue(fields) as Record<string, unknown>;
 }
 
 /** Record one event. Never throws: a logger that breaks the app is worse than none. */

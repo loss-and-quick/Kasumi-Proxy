@@ -44,12 +44,20 @@ describe("logger", () => {
     expect(formatLogs(recentLogs())).not.toContain("{}");
   });
 
-  it("survives a field that cannot be serialised", () => {
-    const cyclic: Record<string, unknown> = {};
-    cyclic.self = cyclic;
-    expect(() => logEvent("error", "boom", cyclic)).not.toThrow();
-    expect(recentLogs()).toHaveLength(1);
-    expect(formatLogs(recentLogs())).toContain("unserializable");
+  it("redacts nested string values in fields and handles cycles", () => {
+    const nested: Record<string, unknown> = {
+      user: { sub: "https://user:pass@example.com?token=secret" },
+      endpoints: ["https://api.example.com/check?key=12345"],
+    };
+    nested.cycle = nested;
+    logEvent("error", "nested error", nested);
+    const logs = formatLogs(recentLogs());
+    expect(logs).not.toContain("secret");
+    expect(logs).not.toContain("user:pass");
+    expect(logs).not.toContain("12345");
+    expect(logs).toContain("https://example.com");
+    expect(logs).toContain("https://api.example.com/check");
+    expect(logs).toContain("[circular]");
   });
 
   it("redacts query and credentials from URLs in free text", () => {

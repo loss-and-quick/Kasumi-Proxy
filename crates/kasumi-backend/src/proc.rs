@@ -201,7 +201,11 @@ fn build_logged_command(
     log_path: impl AsRef<Path>,
     kill_on_drop: bool,
 ) -> std::io::Result<Command> {
-    let log = std::fs::File::create(log_path)?;
+    // Truncate the file so a fresh spawn starts with a clean log, then open in
+    // append mode so any in-place trim during this run keeps writes at EOF rather
+    // than at a stale file offset.
+    std::fs::File::create(&log_path)?;
+    let log = std::fs::OpenOptions::new().append(true).open(&log_path)?;
     let err = log.try_clone()?;
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]);
