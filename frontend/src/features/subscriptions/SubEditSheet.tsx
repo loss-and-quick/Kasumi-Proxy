@@ -16,7 +16,7 @@ import { NEW_SUB_DEFAULTS } from "../../generated/defaults";
 import { useT } from "../../i18n";
 import {
   checkSubscriptionUrl,
-  isHappLink,
+  isDeeplink,
   makeSubscription,
   type SubDraft,
   type SubscriptionUrlCheck,
@@ -105,10 +105,10 @@ export function SubEditSheet({
     setD(makeSubscription({ url: "" }, NEW_SUB_DEFAULTS));
   }, [open, sub, draft]);
 
-  // A typed `happ://` address is read by the backend before it can name anything.
+  // A typed `happ://` or `incy://` address is read by the backend before it can name anything.
   const typedUrl = d?.url.trim() ?? "";
   useEffect(() => {
-    if (!isHappLink(typedUrl)) return;
+    if (!isDeeplink(typedUrl)) return;
     let alive = true;
     const timer = window.setTimeout(async () => {
       const check = await checkSubscriptionUrl(typedUrl, bridge);

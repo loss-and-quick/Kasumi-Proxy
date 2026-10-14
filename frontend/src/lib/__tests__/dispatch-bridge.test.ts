@@ -336,7 +336,7 @@ describe("dispatch-bridge request identity", () => {
 describe("dispatch-bridge import input", () => {
   it("resolveImportInput returns the backend's sorting", async () => {
     const value = {
-      subscriptions: [{ url: "happ://crypt5/abc", encrypted: true }],
+      subscriptions: [{ url: "happ://crypt5/abc", encrypted: true, name: null }],
       routing: [],
       unsupported: [{ text: "happ://toggle", kind: "control" as const }],
       shareText: "vless://x",

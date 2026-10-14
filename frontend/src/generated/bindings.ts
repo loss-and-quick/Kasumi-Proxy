@@ -1879,6 +1879,8 @@ export type SubscriptionApplied = SubAppliedEvent;
 export type SubscriptionLink = {
 	url: string,
 	encrypted: boolean,
+	/**  The provider name an `incy://` link carries, for the new subscription. */
+	name: string | null,
 };
 
 /**  A subscription source (`SubscriptionSchema`). */

@@ -69,7 +69,7 @@ describe("import entry points", () => {
     describe(entry, () => {
       it("keeps a crypt5 link encrypted, as one subscription", async () => {
         const { value, input } = await outcome(feed(SAMPLES.crypt5));
-        expect(value.subscriptions).toEqual([{ url: SAMPLES.crypt5, encrypted: true }]);
+        expect(value.subscriptions).toEqual([{ url: SAMPLES.crypt5, encrypted: true, name: null }]);
         expect(input.subs[0]).toMatchObject({
           url: SAMPLES.crypt5,
           remarks: "Encrypted subscription",
@@ -80,7 +80,7 @@ describe("import entry points", () => {
       it("unwraps happ://add into the plain subscription URL", async () => {
         const { value, input } = await outcome(feed(SAMPLES.add));
         expect(value.subscriptions).toEqual([
-          { url: "https://sub.provider.example/s/9f2c7e41", encrypted: false },
+          { url: "https://sub.provider.example/s/9f2c7e41", encrypted: false, name: null },
         ]);
         expect(input.subs[0].remarks).toBe("sub.provider.example");
       });
@@ -118,7 +118,7 @@ describe("import entry points", () => {
     const text = appendScanned(`${SAMPLES.vless}\n`, SAMPLES.crypt5);
     expect(text).toBe(`${SAMPLES.vless}\n${SAMPLES.crypt5}`);
     const { value, profileCount } = await outcome(text);
-    expect(value.subscriptions).toEqual([{ url: SAMPLES.crypt5, encrypted: true }]);
+    expect(value.subscriptions).toEqual([{ url: SAMPLES.crypt5, encrypted: true, name: null }]);
     expect(profileCount).toBe(1);
   });
 
@@ -168,6 +168,7 @@ describe("subscription URL field", () => {
       kind: "url",
       url: "https://a.example/s",
       encrypted: false,
+      name: null,
     });
     expect(await checkSubscriptionUrl(SAMPLES.vless, mockBridge)).toEqual({ kind: "other" });
     expect(
@@ -266,6 +267,15 @@ describe("name a typed subscription URL suggests", () => {
   it("suggests nothing for a happ:// link the backend hasn't read yet", () => {
     expect(subscriptionNameFrom(SAMPLES.add, null, enc)).toBe("");
     expect(subscriptionNameFrom(` ${SAMPLES.routing}`, null, enc)).toBe("");
+    expect(subscriptionNameFrom("incy://crypt1/abc", null, enc)).toBe("");
+  });
+
+  it("names an encrypted link after the provider it carries", () => {
+    const check = { kind: "url", url: "incy://crypt1/abc", encrypted: true } as const;
+    expect(subscriptionNameFrom(check.url, { ...check, name: "Example VPN" }, enc)).toBe(
+      "Example VPN",
+    );
+    expect(subscriptionNameFrom(check.url, { ...check, name: null }, enc)).toBe(enc);
   });
 
   it("names a plain URL after its host before and after the check", async () => {

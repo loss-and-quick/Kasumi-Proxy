@@ -96,16 +96,17 @@ export function parseSubscriptionDump(text: string, defaults: SubDefaults): Subs
 }
 
 /** What the add sheet adds from the backend's sorting of a paste. An encrypted
- *  link is named `encryptedName` until the provider sends a title. */
+ *  link is named after the provider the link names, or `encryptedName`, until the
+ *  provider sends a title. */
 export function addInputFrom(
   resolved: ResolvedImport,
   defaults: SubDefaults,
   encryptedName: string,
 ): AddInput {
   return {
-    subs: resolved.subscriptions.map(({ url, encrypted }) =>
+    subs: resolved.subscriptions.map(({ url, encrypted, name }) =>
       makeSubscription(
-        encrypted ? { url, remarks: encryptedName, manualTitle: false } : { url },
+        encrypted ? { url, remarks: name ?? encryptedName, manualTitle: false } : { url },
         defaults,
       ),
     ),
@@ -238,7 +239,7 @@ export function withClipboard(current: string, clip: string | null): string {
  *  encrypted one kept), a `happ://` link that is no subscription, or anything else,
  *  saved as typed. */
 export type SubscriptionUrlCheck =
-  | { kind: "url"; url: string; encrypted: boolean }
+  | { kind: "url"; url: string; encrypted: boolean; name: string | null }
   | { kind: "routing" }
   | { kind: "unsupported"; reason: UnsupportedKind }
   | { kind: "other" };
@@ -261,20 +262,22 @@ export async function checkSubscriptionUrl(
 }
 
 /** The name a subscription gets from its address when none is typed: the host it
- *  fetches from, or the encrypted-link name. A `happ://` link that isn't read yet,
- *  or isn't a subscription, gives none: its scheme words (`add`, `routing`) are no
- *  name. */
+ *  fetches from, or for an encrypted link, the provider it names or `encryptedName`.
+ *  A `happ://` or `incy://` link that isn't read yet, or isn't a subscription, gives
+ *  none: its scheme words (`add`, `routing`) are no name. */
 export function subscriptionNameFrom(
   url: string,
   check: SubscriptionUrlCheck | null,
   encryptedName: string,
 ): string {
-  if (check?.kind === "url") return check.encrypted ? encryptedName : hostOf(check.url);
+  if (check?.kind === "url")
+    return check.encrypted ? (check.name ?? encryptedName) : hostOf(check.url);
   if (check?.kind === "routing" || check?.kind === "unsupported") return "";
-  return isHappLink(url) ? "" : hostOf(url);
+  return isDeeplink(url) ? "" : hostOf(url);
 }
 
-export const isHappLink = (text: string) => /^\s*happ:\/\//i.test(text);
+/** A `happ://` or `incy://` link, which only the backend can read. */
+export const isDeeplink = (text: string) => /^\s*(happ|incy):\/\//i.test(text);
 
 /** Links pasted where JSON is expected: routing profiles alone, a `happ://` link
  *  Kasumi skips, or anything else the add sheet takes. */

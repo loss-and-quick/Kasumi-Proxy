@@ -113,18 +113,20 @@ function simFetchSub(url: string): Profile[] {
   ];
 }
 
+const isEncryptedLink = (s: string) => /^(happ:\/\/crypt[2-5]?|incy:\/\/crypt1)\//i.test(s);
+
 /** Dev stand-in for the backend's `import_input`: the same sorting, roughly, without
- *  decrypting (any `happ://crypt` link passes) and with a lenient routing decode. */
+ *  decrypting (any `happ://crypt` or `incy://crypt1` link passes) and with a lenient routing decode. */
 function simResolveToken(token: string): MockInput {
   const lower = token.toLowerCase();
   const plainUrl = (s: string) => /^https?:\/\/[^@/]+(\/|$)/i.test(s);
+  if (isEncryptedLink(token)) return { sub: token, encrypted: true };
   if (!lower.startsWith("happ://"))
     return plainUrl(token) ? { sub: token, encrypted: false } : null;
   const rest = token.slice("happ://".length);
-  if (/^crypt[2-5]?\//i.test(rest)) return { sub: token, encrypted: true };
   if (/^add\//i.test(rest)) {
     const inner = decodeURIComponent(rest.slice(4));
-    if (/^happ:\/\/crypt[2-5]?\//i.test(inner)) return { sub: inner, encrypted: true };
+    if (isEncryptedLink(inner)) return { sub: inner, encrypted: true };
     return plainUrl(inner) ? { sub: inner, encrypted: false } : { unsupported: "invalid" };
   }
   if (/^routing\/off\/?$/i.test(rest)) return { unsupported: "routingOff" };
@@ -186,7 +188,7 @@ function simResolveImport(text: string): ResolvedImport {
     }
     inputs.forEach((x, i) => {
       if (!x) return;
-      if ("sub" in x) out.subscriptions.push({ url: x.sub, encrypted: x.encrypted });
+      if ("sub" in x) out.subscriptions.push({ url: x.sub, encrypted: x.encrypted, name: null });
       else if ("routing" in x)
         out.routing.push({
           routing: x.routing,
@@ -581,7 +583,7 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
 
   // Dev stub: a fixed address stands in for the decrypted one.
   async revealSubscriptionUrl(url: string): Promise<string> {
-    if (!/^happ:\/\/crypt/i.test(url)) throw new Error("not an encrypted link");
+    if (!isEncryptedLink(url)) throw new Error("not an encrypted link");
     return "https://sub.provider.example/api/v1/sub/9f2c7e41?token=a8d3";
   },
 

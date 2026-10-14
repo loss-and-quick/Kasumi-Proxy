@@ -17,7 +17,7 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 strum = { version = "0.26", features = ["derive"] }
 yaml_serde = "0.10.4"
-happ-sub = { workspace = true, features = ["url-crypt", "builtin-url-keys"] }
+happ-sub = { workspace = true, features = ["url-crypt", "builtin-url-keys", "incy-crypt", "builtin-incy-keys", "happ-request"] }
 sha2 = "0.10"
 
 [dev-dependencies]

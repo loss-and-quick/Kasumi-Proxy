@@ -111,7 +111,7 @@ pub fn apply_auto(
     sub.provider = (info != ProviderInfo::default()).then_some(info);
 }
 
-fn clean_title(raw: &str) -> Option<String> {
+pub(crate) fn clean_title(raw: &str) -> Option<String> {
     let title = truncate_title(&single_line(&normalize_untrusted_text(raw)));
     let title = title.trim();
     (!title.is_empty()).then(|| title.to_owned())

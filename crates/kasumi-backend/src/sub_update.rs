@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{SecondsFormat, Utc};
-use happ_sub::request::{RequestProfile, RetryCause};
+use happ_sub::happ_request::{RequestProfile, RetryCause};
 use happ_sub::{MergeMode, MetaMap, RoutingAction};
 use tokio::sync::Mutex;
 
@@ -1204,6 +1204,21 @@ mod tests {
         assert_eq!(s.remarks, "Hidden");
         let stored = sub_meta::read_all(&p).await.remove("s1").unwrap();
         assert_eq!(stored.source_url, link);
+    }
+
+    #[tokio::test]
+    async fn stored_incy_link_is_decrypted_at_fetch() {
+        let (p, _d) = TestPlatform::new();
+        let (base, requests) = serve(vec![http_response(200, &[], LINK)]).await;
+        let link = crate::testutil::incy_link(&format!("{base}/s?t=1"), Some("Example VPN"));
+        with_old_profile(&p, &link).await;
+        let after = update(&p).await;
+
+        assert!(requests.lock().unwrap()[0].starts_with("GET /s?t=1 HTTP/1.1"));
+        let s = &after.subscriptions[0];
+        assert_eq!(s.url, link, "the link stays encrypted");
+        assert_eq!(s.last_error, None);
+        assert_eq!(after.profiles[0].meta().remarks, "Fresh");
     }
 
     #[tokio::test]

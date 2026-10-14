@@ -1261,6 +1261,14 @@ mod tests {
             panic!()
         };
         assert_eq!(url, "https://sub.example.com/s?t=1");
+        let incy = crate::testutil::incy_link("https://sub.example.com/i", None);
+        let Response::Text(url) = dispatch(&p, Command::RevealSubscriptionUrl { url: incy })
+            .await
+            .unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(url, "https://sub.example.com/i");
         let plain = "https://sub.example.com/s".to_owned();
         assert!(
             dispatch(&p, Command::RevealSubscriptionUrl { url: plain })
