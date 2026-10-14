@@ -92,7 +92,9 @@ export default function Overview({
   const starting = busy && service.state === "connecting";
   const connecting = service.state === "connecting" || busy;
   const up = isServiceUp(service.state); // core is up: connecting | connected | noInternet
-  const onSteady = connected || noInternet; // settled "on" — stoppable / restartable
+  // The core runs and no action of ours is in flight: it can be stopped or restarted,
+  // also while its first connectivity check is still pending.
+  const stoppable = up && !busy;
   const warn = (connecting || noInternet) && !connected; // amber tone
   const stateLabel = connected
     ? t("overview.running")
@@ -105,7 +107,7 @@ export default function Overview({
           : failed
             ? t("overview.failed")
             : t("overview.stopped");
-  const actionLabel = onSteady
+  const actionLabel = stoppable
     ? t("overview.stop")
     : starting
       ? t("overview.starting_btn")
@@ -300,26 +302,28 @@ export default function Overview({
             )}
             <div className="primary-actions" style={{ display: "flex", gap: 10 }}>
               <Btn
-                variant={onSteady ? "error" : "filled"}
+                variant={stoppable ? "error" : "filled"}
                 onClick={toggleService}
-                disabled={connecting || (!up && (!activeId || needsAssets))}
+                disabled={busy || (!up && (!activeId || needsAssets))}
                 style={{
                   flex: 2,
                   height: 52,
                   fontSize: 15,
-                  ...(onSteady ? {} : { background: "var(--running)", color: "var(--on-running)" }),
+                  ...(stoppable
+                    ? {}
+                    : { background: "var(--running)", color: "var(--on-running)" }),
                 }}
               >
                 <Icon
-                  name={onSteady ? "stop" : connecting ? "autorenew" : "play_arrow"}
-                  className={connecting ? "spin" : ""}
+                  name={stoppable ? "stop" : connecting ? "autorenew" : "play_arrow"}
+                  className={connecting && !stoppable ? "spin" : ""}
                 />
                 {actionLabel}
               </Btn>
               <Btn
                 variant="tonal"
                 onClick={restart}
-                disabled={!onSteady}
+                disabled={!stoppable}
                 style={{
                   flex: 1,
                   height: 52,
