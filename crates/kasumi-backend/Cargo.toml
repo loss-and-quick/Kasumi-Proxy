@@ -59,6 +59,8 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [dev-dependencies]
+# A paused clock for tests of fetch deadlines.
+tokio = { version = "1", features = ["test-util"] }
 tempfile = "3"
 # Builds `happ://crypt` links to local test servers.
 rsa = "0.9"

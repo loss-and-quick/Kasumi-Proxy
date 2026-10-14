@@ -36,7 +36,11 @@ pub struct FetchUrlOptions {
     pub user_agent: Option<String>,
     /// Skip TLS certificate verification.
     pub allow_insecure: bool,
+    /// One attempt's limit; `None` means 30 s.
     pub timeout: Option<Duration>,
+    /// When every attempt must be over; `None` means [`FETCH_BUDGET`] from the call.
+    /// Callers that chain fetches (a retry, a fallback URL) share one deadline.
+    pub deadline: Option<tokio::time::Instant>,
     /// Extra request headers, in wire order.
     pub headers: Vec<(String, String)>,
     /// Stop reading once the body exceeds this; `None` = unbounded.
@@ -108,6 +112,33 @@ impl std::fmt::Display for BodyTooLarge {
 }
 
 impl std::error::Error for BodyTooLarge {}
+
+/// The deadline passed before an attempt could start.
+#[derive(Debug)]
+pub struct OutOfTime;
+
+impl std::fmt::Display for OutOfTime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("no time left for the request")
+    }
+}
+
+impl std::error::Error for OutOfTime {}
+
+/// The most one [`fetch`], or one chain of them, may take unless the caller sets
+/// a deadline. Whoever asked is waiting: the request must end with its own error
+/// well before the caller gives up on it.
+pub const FETCH_BUDGET: Duration = Duration::from_secs(60);
+
+/// A fresh deadline [`FETCH_BUDGET`] from now.
+pub fn fetch_deadline() -> tokio::time::Instant {
+    tokio::time::Instant::now() + FETCH_BUDGET
+}
+
+/// Whether `deadline` has passed.
+pub fn out_of_time(deadline: Option<tokio::time::Instant>) -> bool {
+    deadline.is_some_and(|d| tokio::time::Instant::now() >= d)
+}
 
 /// A resolver that drops every IPv6 address.
 struct Ipv4Only;
@@ -216,6 +247,12 @@ async fn fetch_once(
 /// and falls back to direct; `Proxy` requires it; `Direct` never uses it.
 pub async fn fetch(url: &str, opts: FetchUrlOptions) -> anyhow::Result<FetchResponse> {
     let timeout = opts.timeout.unwrap_or(Duration::from_secs(30));
+    let deadline = opts.deadline.unwrap_or_else(fetch_deadline);
+    // Each attempt gets its own limit or what is left, whichever is shorter.
+    let attempt_timeout = || {
+        let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+        (!left.is_zero()).then(|| timeout.min(left))
+    };
     let running = opts.proxy.map(|p| p.running).unwrap_or(false);
     let try_proxy = opts.mode == FetchMode::Proxy || (opts.mode == FetchMode::Auto && running);
 
@@ -224,19 +261,26 @@ pub async fn fetch(url: &str, opts: FetchUrlOptions) -> anyhow::Result<FetchResp
         let Some(proxy) = proxy else {
             anyhow::bail!("proxy not running");
         };
+        let Some(timeout) = attempt_timeout() else {
+            return Err(OutOfTime.into());
+        };
         // Force-proxy: route the attempt through `force-in`, which bypasses the geo
         // rules — a proxied fetch should always traverse the tunnel, never be sent
         // `direct` by a `geoip:ru`-style rule. Auto still falls back to direct below.
         match fetch_once(url, Some(socks_url(proxy.force_port)), &opts, timeout).await {
             Ok(res) => return Ok(res),
             Err(err) => {
-                if opts.mode == FetchMode::Proxy {
+                // Out of time, the proxy's error is the one to report.
+                if opts.mode == FetchMode::Proxy || attempt_timeout().is_none() {
                     return Err(err);
                 }
             }
         }
     }
 
+    let Some(timeout) = attempt_timeout() else {
+        return Err(OutOfTime.into());
+    };
     fetch_once(url, None, &opts, timeout).await
 }
 
@@ -421,6 +465,55 @@ mod tests {
             timeout: Some(Duration::from_secs(5)),
             ..Default::default()
         }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn fetch_ends_at_its_deadline() {
+        let (base, requests) = serve(vec![crate::testutil::STALL.to_vec()]).await;
+        let start = tokio::time::Instant::now();
+        let opts = FetchUrlOptions {
+            timeout: Some(Duration::from_secs(30)),
+            deadline: Some(start + Duration::from_secs(5)),
+            ..direct()
+        };
+        assert!(fetch(&format!("{base}/s"), opts.clone()).await.is_err());
+        assert_eq!(start.elapsed(), Duration::from_secs(5));
+
+        // A deadline already gone starts nothing.
+        let err = fetch(&format!("{base}/s"), opts).await.unwrap_err();
+        assert!(err.is::<OutOfTime>(), "{err:#}");
+        assert_eq!(requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn auto_fetch_fits_proxy_and_direct_in_the_budget() {
+        // Accepts and never answers: the proxy handshake and the request both stall.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((sock, _)) = listener.accept().await {
+                held.push(sock);
+            }
+        });
+        let start = tokio::time::Instant::now();
+        let opts = FetchUrlOptions {
+            mode: FetchMode::Auto,
+            proxy: Some(ProxyStatus {
+                running: true,
+                socks_port: port,
+                http_port: port,
+                force_port: port,
+            }),
+            timeout: Some(Duration::from_secs(50)),
+            ..Default::default()
+        };
+        assert!(
+            fetch(&format!("http://127.0.0.1:{port}/s"), opts)
+                .await
+                .is_err()
+        );
+        assert_eq!(start.elapsed(), FETCH_BUDGET);
     }
 
     #[tokio::test]

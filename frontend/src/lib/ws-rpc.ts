@@ -9,6 +9,7 @@
 // ============================================================
 
 import type { Command_Deserialize, Response_Serialize, WsInfo } from "../generated/bindings";
+import { WS_HEARTBEAT_MS } from "../generated/defaults";
 import { execNative, getModuleId, hasKsuNativeApi } from "./ksu-webui";
 import { logDebug, logWarn } from "./logger";
 
@@ -21,7 +22,9 @@ interface ReplyFrame {
   event?: string;
 }
 
-const RPC_TIMEOUT_MS = 90_000;
+/** How long a socket may stay silent before it counts as dead: three missed
+ *  heartbeats. */
+const SILENCE_LIMIT_MS = WS_HEARTBEAT_MS * 3;
 
 let socket: WebSocket | null = null;
 let connecting: Promise<WebSocket> | null = null;
@@ -56,7 +59,30 @@ async function endpoint(): Promise<string> {
   return `${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`;
 }
 
-function handleMessage(ev: MessageEvent): void {
+let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Restart the silence check. A request has no timeout of its own, since the daemon
+ *  bounds its own work: it fails when its socket closes, or when the socket stays
+ *  silent past the limit and so is dead even if the OS never reports it. */
+function noteAlive(ws: WebSocket): void {
+  if (ws !== socket) return;
+  if (silenceTimer) clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(() => {
+    silenceTimer = null;
+    // A hidden page's frames may just be held back; judge it once it shows again.
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      noteAlive(ws);
+      return;
+    }
+    // The one failure the UI cannot explain on its own.
+    logWarn("ws: the daemon stopped answering", { silentMs: SILENCE_LIMIT_MS });
+    onClose(ws, "the daemon stopped responding");
+    ws.close();
+  }, SILENCE_LIMIT_MS);
+}
+
+function handleMessage(ws: WebSocket, ev: MessageEvent): void {
+  noteAlive(ws);
   let msg: ReplyFrame;
   try {
     msg = JSON.parse(typeof ev.data === "string" ? ev.data : "") as ReplyFrame;
@@ -113,11 +139,11 @@ function scheduleReconnect(): void {
 
 /** A closing socket settles only what it owns: one replaced while it was still
  *  closing must not drop the socket that took over. */
-function onClose(closed: WebSocket): void {
+function onClose(closed: WebSocket, reason = "connection closed"): void {
   let dropped = 0;
   for (const [id, waiter] of pending) {
     if (waiter.socket !== closed) continue;
-    waiter.reject(new Error("connection closed"));
+    waiter.reject(new Error(reason));
     pending.delete(id);
     dropped += 1;
   }
@@ -128,6 +154,10 @@ function onClose(closed: WebSocket): void {
   }
   if (socket !== closed) return;
   socket = null;
+  if (silenceTimer) {
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+  }
   scheduleReconnect();
 }
 
@@ -155,9 +185,10 @@ async function ensureSocket(): Promise<WebSocket> {
         once: true,
       });
     });
-    ws.addEventListener("message", handleMessage);
+    ws.addEventListener("message", (ev) => handleMessage(ws, ev));
     ws.addEventListener("close", () => onClose(ws));
     socket = ws;
+    noteAlive(ws);
     connecting = null;
     reconnectDelay = RECONNECT_FIRST_MS;
     return ws;
@@ -173,25 +204,7 @@ export async function wsDispatch(cmd: Command_Deserialize): Promise<Response_Ser
   const ws = await ensureSocket();
   const id = nextId++;
   return new Promise<Response_Serialize>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      const name = (cmd as { cmd: string }).cmd;
-      // A reply that never came is the one failure the UI cannot explain on its
-      // own: the caller sees a timeout with nothing behind it.
-      logWarn("ws: a command timed out", { cmd: name, timeoutMs: RPC_TIMEOUT_MS });
-      reject(new Error(`rpc ${name} timed out`));
-    }, RPC_TIMEOUT_MS);
-    pending.set(id, {
-      socket: ws,
-      resolve: (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      reject: (e) => {
-        clearTimeout(timer);
-        reject(e);
-      },
-    });
+    pending.set(id, { socket: ws, resolve, reject });
     ws.send(JSON.stringify({ id, ...cmd }));
   });
 }

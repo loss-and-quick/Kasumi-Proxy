@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WS_HEARTBEAT_MS } from "../../generated/defaults";
 
 vi.mock("../ksu-webui", () => ({
   hasKsuNativeApi: () => true,
@@ -39,7 +40,16 @@ class FakeSocket {
   push(value: unknown) {
     this.emit("message", { data: JSON.stringify({ event: "status", value }) });
   }
-  send() {}
+  beat() {
+    this.emit("message", { data: JSON.stringify({ event: "heartbeat" }) });
+  }
+  sent: { id: number }[] = [];
+  send(data: string) {
+    this.sent.push(JSON.parse(data) as { id: number });
+  }
+  reply(id: number, value: unknown) {
+    this.emit("message", { data: JSON.stringify({ id, ok: true, value }) });
+  }
 }
 
 const last = () => FakeSocket.instances[FakeSocket.instances.length - 1];
@@ -122,6 +132,43 @@ describe("ws-rpc push stream", () => {
     // No reconnect, and the request on the new socket is still waiting for its reply.
     expect(FakeSocket.instances).toHaveLength(2);
     expect(settled).toBe(false);
+  });
+
+  it("a request waits as long as the daemon keeps beating", async () => {
+    const { subscribeStatus, wsDispatch } = await import("../ws-rpc");
+    subscribeStatus(() => {});
+    await settle();
+    const ws = last();
+    ws.open();
+    await settle();
+
+    const reply = wsDispatch({ cmd: "status" } as never);
+    await settle();
+    // Five minutes of work, well past any fixed timeout.
+    for (let i = 0; i < 30; i++) {
+      await vi.advanceTimersByTimeAsync(WS_HEARTBEAT_MS);
+      ws.beat();
+    }
+    ws.reply(ws.sent[0].id, { kind: "ok" });
+    await expect(reply).resolves.toEqual({ kind: "ok" });
+    expect(FakeSocket.instances).toHaveLength(1);
+  });
+
+  it("a socket silent from the start fails its requests and reconnects", async () => {
+    const { subscribeStatus, wsDispatch } = await import("../ws-rpc");
+    subscribeStatus(() => {});
+    await settle();
+    last().open();
+    await settle();
+
+    const reply = wsDispatch({ cmd: "status" } as never);
+    const failed = expect(reply).rejects.toThrow("the daemon stopped responding");
+    await vi.advanceTimersByTimeAsync(3 * WS_HEARTBEAT_MS - 1);
+    expect(FakeSocket.instances).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await failed;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(FakeSocket.instances).toHaveLength(2);
   });
 
   it("reconnects after a drop, back on the short delay", async () => {
