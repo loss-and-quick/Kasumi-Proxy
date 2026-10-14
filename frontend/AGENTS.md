@@ -26,10 +26,11 @@ bun run build       # tsc -b && vite build
   the implementation: `tauri-bridge.ts` (desktop), `ws-bridge.ts` (WebSocket RPC to the Android
   daemon) or `mock-bridge.ts` (dev). The UI never builds shell strings. A new call is a
   `Bridge` method plus its implementations.
-- **Live data is pushed, not polled.** The backend pushes status, traffic, logs and job
-  progress, and the UI subscribes to them. Long tasks (tcping, realping, speed test, asset
-  downloads) run as backend jobs, and their results arrive through callbacks such as
-  `realPingAll(ids, onResult)`.
+- **Live data is pushed, not polled.** The backend pushes status, sub-applied and asset-update
+  events, and the UI subscribes to them. Logs are not pushed: the UI asks for a log file when it
+  opens the viewer and keeps its own records in `src/lib/logger.ts`. Long tasks (tcping,
+  realping, speed test, asset downloads) run as backend jobs, and their results arrive through
+  callbacks such as `realPingAll(ids, onResult)`.
 - `vite.config.ts` keeps `base: "./"`. The bundle is served by the daemon and by the WebView, so
   absolute paths break it.
 

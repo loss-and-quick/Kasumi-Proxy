@@ -38,6 +38,23 @@ setting overrides both, applied to the running process without a restart.
 
 Inside a loop, ask first: `if kasumi_log::ks_enabled!(Area::Net, log::Level::Debug)`.
 
+## Coverage you get for free
+
+Most instrumentation does not need a call site, because the interesting failures
+all pass through a few funnels:
+
+- `Service::run_lifecycle` records every start, stop, restart and auto-update —
+  which profile and mode, whether it finished, and why it failed.
+- `crate::fs` / `crate::fsjson` separate "no file" (silent) from "cannot read it"
+  (debug) and "not valid JSON" (warn), so a corrupt state file stops looking like a
+  fresh install.
+- `spawn_core` records that it truncated the core's log file, which is the one thing
+  that makes a core that keeps dying look silent.
+- The Android shell wrappers (`silent`, `run_out`) cover the whole `ip`/`iptables`
+  layer: a failed invocation is a debug record, a command that could not start is a
+  warning.
+- `verify_core_alive` records both verdicts — "up" and "exited within N ms".
+
 ## What never goes in
 
 A proxy configuration is mostly secrets.
