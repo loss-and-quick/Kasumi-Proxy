@@ -979,6 +979,16 @@ fn settings_variants() -> Vec<(&'static str, AdvancedSettings, Vec<RoutingRule>,
             vec![],
             false,
         ),
+        (
+            "domestic-doh-with-hosts",
+            AdvancedSettings {
+                domestic_dns: Some("https://dns.alidns.com/dns-query".into()),
+                dns_hosts: Some("dns.alidns.com=223.5.5.5".into()),
+                ..Default::default()
+            },
+            vec![],
+            false,
+        ),
         // IPv6 enabled — changes DNS query strategy (UseIP vs UseIPv4) and the
         // tun address list (sing-box).
         (
