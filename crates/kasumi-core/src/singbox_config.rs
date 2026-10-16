@@ -742,7 +742,11 @@ fn build_singbox_dns_server(tag: &str, addr: &str, hosts: Option<&Value>) -> Val
     if is_domain {
         let is_in_hosts = hosts
             .and_then(Value::as_object)
-            .and_then(|m| server["server"].as_str().map(|h| m.contains_key(h)))
+            .and_then(|m| {
+                server["server"]
+                    .as_str()
+                    .map(|h| m.keys().any(|k| k.eq_ignore_ascii_case(h)))
+            })
             .unwrap_or(false);
         if is_in_hosts {
             server["domain_resolver"] = json!({ "server": "hosts" });
@@ -2157,12 +2161,13 @@ mod tests {
                 "server_port": 853, "domain_resolver": { "server": "hosts" }
             })
         );
-        // Domestic DNS with a domain name mapped in static hosts bootstraps via hosts.
+        // Domestic DNS with a domain name mapped in static hosts bootstraps via hosts,
+        // matching hostnames case-insensitively.
         assert_eq!(
             build_singbox_dns_server(
                 "local",
                 "https://dns.alidns.com/dns-query",
-                Some(&json!({ "dns.alidns.com": "223.5.5.5" }))
+                Some(&json!({ "DNS.ALIDNS.COM": "223.5.5.5" }))
             ),
             json!({
                 "type": "https", "tag": "local", "server": "dns.alidns.com",
