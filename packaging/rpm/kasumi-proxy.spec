@@ -7,6 +7,9 @@ License:        GPL-3.0-or-later
 URL:            https://github.com/loss-and-quick/Kasumi-Proxy
 Source0:        %{name}-%{version}.tar.gz
 
+# Linux desktop bundles sidecars fetched for x86_64
+ExclusiveArch:  x86_64
+
 BuildRequires:  gcc
 BuildRequires:  gcc-c++
 BuildRequires:  make
@@ -39,6 +42,9 @@ TUN and policy routing, managed from a clean React UI.
 %autosetup -n %{name}-%{version}
 
 %build
+# Note: Builds require outbound internet access to install tools and download pinned cores.
+# Ensure "Enable internet access during builds" is enabled in Copr project settings.
+
 # 1. Install or configure Rust toolchain if not available in chroot
 if ! command -v cargo >/dev/null 2>&1; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.95.0
@@ -105,16 +111,9 @@ install -p -m 0644 src-tauri/icons/32x32.png %{buildroot}%{_datadir}/icons/hicol
 install -p -m 0644 src-tauri/icons/128x128.png %{buildroot}%{_datadir}/icons/hicolor/128x128/apps/kasumi-desktop.png
 install -p -m 0644 src-tauri/icons/128x128@2x.png %{buildroot}%{_datadir}/icons/hicolor/256x256@2/apps/kasumi-desktop.png
 
-%post
-# Grant network & routing capabilities to kasumi-helper so it runs without pkexec
-caps="cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep"
-if command -v setcap >/dev/null 2>&1; then
-    setcap "$caps" %{_bindir}/kasumi-helper || true
-fi
-
 %files
 %{_bindir}/kasumi-desktop
-%{_bindir}/kasumi-helper
+%caps(cap_net_admin,cap_net_raw,cap_chown,cap_dac_override=ep) %{_bindir}/kasumi-helper
 %{_bindir}/xray
 %{_bindir}/sing-box
 %{_bindir}/tun2socks

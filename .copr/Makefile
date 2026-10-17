@@ -15,7 +15,7 @@ TARBALL := $(PKGNAME)-$(VERSION).tar.gz
 srpm:
 	@echo "==> Building SRPM for $(PKGNAME)-$(VERSION)..."
 	mkdir -p $(outdir)
-	mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+	mkdir -p rpmbuild/BUILD rpmbuild/RPMS rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS
 	# Pack git repository archive without .git and build artifacts
 	tar --exclude='.git' \
 	    --exclude='target' \
