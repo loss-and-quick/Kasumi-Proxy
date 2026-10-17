@@ -120,36 +120,39 @@ export default function Profiles({
       });
     }
 
-    clearLocate();
-
     const targetId = locateTargetId;
-    const frame = requestAnimationFrame(() => {
+
+    // Small delay allows tab transition and DOM layout to settle before scrolling
+    const timer = setTimeout(() => {
       const row = targetRowRef.current;
       const list = listScrollRef.current;
       if (row && list) {
-        const rowRect = row.getBoundingClientRect();
-        const listRect = list.getBoundingClientRect();
-        const top =
-          list.scrollTop +
-          rowRect.top -
-          listRect.top -
-          list.clientTop -
-          (list.clientHeight - rowRect.height) / 2;
-
         const prefersReducedMotion =
           typeof window !== "undefined" &&
           window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-        list.scrollTo({
-          top: Math.max(0, Math.min(top, list.scrollHeight - list.clientHeight)),
-          behavior: prefersReducedMotion ? "auto" : "smooth",
-        });
+        try {
+          row.scrollIntoView({
+            behavior: prefersReducedMotion ? "auto" : "smooth",
+            block: "center",
+          });
+        } catch {
+          const rowRect = row.getBoundingClientRect();
+          const listRect = list.getBoundingClientRect();
+          const top =
+            list.scrollTop + rowRect.top - listRect.top - (list.clientHeight - rowRect.height) / 2;
+          list.scrollTo({
+            top: Math.max(0, top),
+            behavior: prefersReducedMotion ? "auto" : "smooth",
+          });
+        }
 
         setHighlightId(targetId);
       }
-    });
+      clearLocate();
+    }, 60);
 
-    return () => cancelAnimationFrame(frame);
+    return () => clearTimeout(timer);
   }, [locateTargetId, profiles, groupFilter, query, groups, clearLocate, setFilters]);
 
   useEffect(() => {
