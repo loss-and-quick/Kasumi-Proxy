@@ -118,6 +118,7 @@ export default function Profiles({
         ...(plan.nextGroupFilter !== undefined ? { groupFilter: plan.nextGroupFilter } : {}),
         ...(plan.nextQuery !== undefined ? { query: plan.nextQuery } : {}),
       });
+      return;
     }
 
     const targetId = locateTargetId;
