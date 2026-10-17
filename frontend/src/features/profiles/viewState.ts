@@ -11,10 +11,15 @@ type ProfilesView = {
   sort: SortMode;
   query: string;
   searchOpen: boolean;
+  /** A profile id to scroll to and highlight when Profiles opens. */
+  locateTargetId: string | null;
   setGroupFilter: (groupFilter: string) => void;
   setSort: (sort: SortMode) => void;
   setQuery: (query: string) => void;
   setSearchOpen: (searchOpen: boolean) => void;
+  setFilters: (filters: { groupFilter?: string; query?: string }) => void;
+  requestLocate: (id: string) => void;
+  clearLocate: () => void;
 };
 
 export const useProfilesView = create<ProfilesView>()((set) => ({
@@ -22,8 +27,12 @@ export const useProfilesView = create<ProfilesView>()((set) => ({
   sort: "name",
   query: "",
   searchOpen: false,
+  locateTargetId: null,
   setGroupFilter: (groupFilter) => set({ groupFilter }),
   setSort: (sort) => set({ sort }),
   setQuery: (query) => set({ query }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
+  setFilters: (filters) => set((state) => ({ ...state, ...filters })),
+  requestLocate: (id) => set({ locateTargetId: id }),
+  clearLocate: () => set({ locateTargetId: null }),
 }));
