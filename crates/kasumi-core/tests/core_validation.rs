@@ -219,6 +219,33 @@ fn generate() -> Vec<(String, Profile)> {
             cases.push((name, Profile::Vless(v)));
         }
     }
+    {
+        let name = "ech/vless-ws-dynamic-domain".to_string();
+        if let Some(Profile::Vless(mut v)) =
+            make(Protocol::Vless, Some(Network::Ws), Security::Tls, &name)
+        {
+            v.tls.ech = "cloudflare-ech.com".to_string();
+            cases.push((name, Profile::Vless(v)));
+        }
+    }
+    {
+        let name = "ech/vless-ws-dynamic-xray".to_string();
+        if let Some(Profile::Vless(mut v)) =
+            make(Protocol::Vless, Some(Network::Ws), Security::Tls, &name)
+        {
+            v.tls.ech = "cloudflare-ech.com+https://cloudflare-dns.com/dns-query".to_string();
+            cases.push((name, Profile::Vless(v)));
+        }
+    }
+    {
+        let name = "ech/vless-ws-dynamic-flag".to_string();
+        if let Some(Profile::Vless(mut v)) =
+            make(Protocol::Vless, Some(Network::Ws), Security::Tls, &name)
+        {
+            v.tls.ech = "1".to_string();
+            cases.push((name, Profile::Vless(v)));
+        }
+    }
 
     // ── explicit per-field cases ──
     //
