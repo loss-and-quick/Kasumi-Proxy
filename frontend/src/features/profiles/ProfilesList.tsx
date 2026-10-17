@@ -1,10 +1,14 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { EmptyHint, Icon, SectionLabel } from "../../components";
 import type { Group, Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { ProfileRow } from "./ProfileRow";
 
 export function ProfilesList({
+  scrollRef,
+  targetRowRef,
+  targetId,
+  highlightId,
   groups,
   byGroup,
   activeId,
@@ -19,6 +23,10 @@ export function ProfilesList({
   onMore,
   onShowTestLog,
 }: {
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  targetRowRef?: RefObject<HTMLDivElement | null>;
+  targetId?: string | null;
+  highlightId?: string | null;
   groups: Group[];
   byGroup: Record<string, Profile[]>;
   activeId: string | null;
@@ -37,7 +45,7 @@ export function ProfilesList({
 }) {
   const t = useT();
   return (
-    <div className="scroll with-fab" style={{ paddingTop: 0 }}>
+    <div ref={scrollRef} className="scroll with-fab" style={{ paddingTop: 0 }}>
       {groups.length === 0 && (empty ?? <EmptyHint icon="search_off" text={emptyText} />)}
       {groups.map((group) => {
         const ids = byGroup[group.id].map((p) => p.meta.id);
@@ -74,20 +82,33 @@ export function ProfilesList({
               {group.name}
             </SectionLabel>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {byGroup[group.id].map((profile) => (
-                <ProfileRow
-                  key={profile.meta.id}
-                  profile={profile}
-                  active={profile.meta.id === activeId}
-                  bulkMode={bulkMode}
-                  selected={!!selected[profile.meta.id]}
-                  onToggleSelected={() => onToggleSelected(profile.meta.id)}
-                  onUse={() => onUse(profile.meta.id)}
-                  onEdit={() => onEdit(profile.meta.id)}
-                  onMore={() => onMore(profile)}
-                  onShowTestLog={(kind) => onShowTestLog(profile, kind)}
-                />
-              ))}
+              {byGroup[group.id].map((profile) => {
+                const isTarget = profile.meta.id === targetId;
+                const isHighlighted = profile.meta.id === highlightId;
+                return (
+                  <div
+                    key={profile.meta.id}
+                    ref={isTarget ? targetRowRef : undefined}
+                    data-profile-id={profile.meta.id}
+                    style={{ position: "relative" }}
+                  >
+                    <ProfileRow
+                      profile={profile}
+                      active={profile.meta.id === activeId}
+                      bulkMode={bulkMode}
+                      selected={!!selected[profile.meta.id]}
+                      onToggleSelected={() => onToggleSelected(profile.meta.id)}
+                      onUse={() => onUse(profile.meta.id)}
+                      onEdit={() => onEdit(profile.meta.id)}
+                      onMore={() => onMore(profile)}
+                      onShowTestLog={(kind) => onShowTestLog(profile, kind)}
+                    />
+                    {isHighlighted && (
+                      <div className="profile-locate-feedback" aria-hidden="true" />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );

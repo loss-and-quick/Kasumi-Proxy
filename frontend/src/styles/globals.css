@@ -241,6 +241,20 @@ body {
 .card.flat { background: var(--sc-lowest); }
 .card.tonal { background: var(--sc); }
 
+.profile-locate-feedback {
+  position: absolute; inset: 0; border-radius: var(--card-radius); pointer-events: none;
+  box-shadow: 0 0 0 2px var(--primary), 0 0 16px var(--primary-dim);
+  animation: profile-locate-pulse 1.8s ease-out forwards;
+}
+@keyframes profile-locate-pulse {
+  0% { opacity: 1; }
+  60% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-locate-feedback { animation: none; opacity: 0.8; }
+}
+
 .btn {
   font-family: var(--font-ui); font-size: 14px; font-weight: 600; letter-spacing: 0.1px; border-radius: 100px; border: none;
   padding: 0 20px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;

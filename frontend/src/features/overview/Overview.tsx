@@ -24,6 +24,7 @@ import { routeFor } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
 import { askRemoveUnreachable } from "../profiles/confirmations";
 import { PingActionsSheet } from "../profiles/PingActionsSheet";
+import { useProfilesView } from "../profiles/viewState";
 import { routeName } from "../routes/labels";
 import { openRoute } from "../routes/viewState";
 
@@ -184,7 +185,14 @@ export default function Overview({
             </div>
 
             {active ? (
-              <button type="button" className="btn-reset" onClick={() => onNavigate("profiles")}>
+              <button
+                type="button"
+                className="btn-reset"
+                onClick={() => {
+                  useProfilesView.getState().requestLocate(active.meta.id);
+                  onNavigate("profiles");
+                }}
+              >
                 <div style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.2 }}>
                   {active.meta.remarks}
                 </div>

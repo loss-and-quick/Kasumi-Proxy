@@ -4,7 +4,7 @@
 // delete, share, import pasted links, and basic bulk actions.
 // ============================================================
 
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Btn, Card, confirm, Icon } from "../../components";
 import type { Profile, TestKind } from "../../generated/bindings";
 import { useT } from "../../i18n";
@@ -17,6 +17,7 @@ import { AddSheet } from "../add/AddSheet";
 import type { NewProfile } from "../editor/Editor";
 import { copyText } from "./clipboard";
 import { askRemoveUnreachable } from "./confirmations";
+import { planLocateActive } from "./locate";
 import { groupSections, sortProfiles } from "./order";
 import { PingActionsSheet } from "./PingActionsSheet";
 import { ProfilesList } from "./ProfilesList";
@@ -66,8 +67,23 @@ export default function Profiles({
 
   const [pingSheetOpen, setPingSheetOpen] = useState(false);
 
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const targetRowRef = useRef<HTMLDivElement | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
   const view = useProfilesView();
-  const { query, setQuery, searchOpen, setSearchOpen, sort, setSort, setGroupFilter } = view;
+  const {
+    query,
+    setQuery,
+    searchOpen,
+    setSearchOpen,
+    sort,
+    setSort,
+    setGroupFilter,
+    setFilters,
+    locateTargetId,
+    clearLocate,
+  } = view;
   // A remembered group that has since been deleted falls back to all of them.
   const groupFilter =
     view.groupFilter !== "all" && groups.some((g) => g.id === view.groupFilter)
@@ -78,6 +94,69 @@ export default function Profiles({
     const kept = useProfilesView.getState();
     if (kept.query.trim()) kept.setSearchOpen(true);
   }, []);
+
+  // When navigated to with a locate request (e.g. tapping active profile on Overview),
+  // ensure the profile is visible, scroll it into view, and briefly highlight it.
+  useEffect(() => {
+    if (!locateTargetId) return;
+
+    const targetProfile = profiles.find((p) => p.meta.id === locateTargetId);
+    if (!targetProfile) {
+      clearLocate();
+      return;
+    }
+
+    const plan = planLocateActive({
+      activeProfile: targetProfile,
+      currentGroupFilter: groupFilter,
+      currentQuery: query,
+      groups,
+    });
+
+    if (plan && (plan.nextGroupFilter !== undefined || plan.nextQuery !== undefined)) {
+      setFilters({
+        ...(plan.nextGroupFilter !== undefined ? { groupFilter: plan.nextGroupFilter } : {}),
+        ...(plan.nextQuery !== undefined ? { query: plan.nextQuery } : {}),
+      });
+    }
+
+    clearLocate();
+
+    const targetId = locateTargetId;
+    const frame = requestAnimationFrame(() => {
+      const row = targetRowRef.current;
+      const list = listScrollRef.current;
+      if (row && list) {
+        const rowRect = row.getBoundingClientRect();
+        const listRect = list.getBoundingClientRect();
+        const top =
+          list.scrollTop +
+          rowRect.top -
+          listRect.top -
+          list.clientTop -
+          (list.clientHeight - rowRect.height) / 2;
+
+        const prefersReducedMotion =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        list.scrollTo({
+          top: Math.max(0, Math.min(top, list.scrollHeight - list.clientHeight)),
+          behavior: prefersReducedMotion ? "auto" : "smooth",
+        });
+
+        setHighlightId(targetId);
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [locateTargetId, profiles, groupFilter, query, groups, clearLocate, setFilters]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = setTimeout(() => setHighlightId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightId]);
   const [sheetProfile, setSheetProfile] = useState<Profile | null>(null);
   const [confirmDel, setConfirmDel] = useState<Profile | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -258,6 +337,10 @@ export default function Profiles({
       />
 
       <ProfilesList
+        scrollRef={listScrollRef}
+        targetRowRef={targetRowRef}
+        targetId={locateTargetId ?? highlightId ?? activeId}
+        highlightId={highlightId}
         groups={orderedGroups}
         byGroup={byGroup}
         activeId={activeId}
