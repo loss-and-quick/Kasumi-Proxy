@@ -318,14 +318,25 @@ fn tls(o: &Value, always: bool) -> Tls {
         tls.public_key = text(r, "public_key");
         tls.short_id = text(r, "short_id");
     }
-    // Share links carry the bare base64 ECHConfigList; sing-box wraps it in PEM.
+    // Share links carry the bare base64 ECHConfigList; sing-box wraps it in PEM,
+    // or specifies `query_server_name` for dynamic ECH.
     if let Some(e) = t.get("ech").filter(|e| flag(e, "enabled")) {
-        tls.ech = strings(e, "config")
-            .iter()
-            .flat_map(|l| l.lines())
-            .map(str::trim)
-            .filter(|l| !l.starts_with("-----"))
-            .collect();
+        let qsn = text(e, "query_server_name");
+        if !qsn.is_empty() {
+            tls.ech = qsn;
+        } else {
+            let config_b64: String = strings(e, "config")
+                .iter()
+                .flat_map(|l| l.lines())
+                .map(str::trim)
+                .filter(|l| !l.starts_with("-----"))
+                .collect();
+            if !config_b64.is_empty() {
+                tls.ech = config_b64;
+            } else {
+                tls.ech = "1".to_string();
+            }
+        }
     }
     tls
 }
@@ -658,6 +669,53 @@ mod tests {
         }));
         assert!(imported.profiles.is_empty());
         assert_eq!(imported.skipped, 1);
+    }
+
+    #[test]
+    fn ech_dynamic_query_server_name_is_imported() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "vless",
+                "tag": "ech-dyn",
+                "server": "example.com",
+                "server_port": 443,
+                "uuid": UUID,
+                "tls": {
+                    "enabled": true,
+                    "server_name": "example.com",
+                    "ech": {
+                        "enabled": true,
+                        "query_server_name": "cloudflare-ech.com"
+                    }
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let tls = imported.profiles[0].tls().unwrap();
+        assert_eq!(tls.ech, "cloudflare-ech.com");
+    }
+
+    #[test]
+    fn ech_dynamic_flag_is_imported_as_1() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "vless",
+                "tag": "ech-flag",
+                "server": "example.com",
+                "server_port": 443,
+                "uuid": UUID,
+                "tls": {
+                    "enabled": true,
+                    "server_name": "example.com",
+                    "ech": {
+                        "enabled": true
+                    }
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let tls = imported.profiles[0].tls().unwrap();
+        assert_eq!(tls.ech, "1");
     }
 
     #[test]

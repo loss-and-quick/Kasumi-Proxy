@@ -111,6 +111,49 @@ fn has_match_fields(rule: &Value, keys: &[&str]) -> bool {
 
 // ---------- TLS ----------
 
+/// Builds the sing-box `tls.ech` block from Kasumi's `tls.ech` field.
+///
+/// Share links, subscription generators, and core formats represent ECH in several ways:
+/// 1. A boolean flag (`"1"`, `"true"`, `"yes"`): dynamic ECH querying the outbound's `server_name`.
+/// 2. A domain or Xray dynamic ECH specifier (e.g. `"cloudflare-ech.com"` or
+///    `"cloudflare-ech.com+https://cloudflare-dns.com/dns-query"`): sing-box requires this in
+///    `query_server_name` rather than `config`.
+/// 3. PEM armor: already static ECH configs PEM.
+/// 4. Raw base64 `ECHConfigList`: wrapped in a `-----BEGIN ECH CONFIGS-----` PEM block.
+fn build_singbox_ech(ech: &str) -> Option<Value> {
+    let trimmed = ech.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if trimmed == "1" || trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("yes")
+    {
+        return Some(json!({ "enabled": true }));
+    }
+
+    if trimmed.contains("-----BEGIN ECH CONFIGS-----") {
+        return Some(json!({
+            "enabled": true,
+            "config": ech_config_pem(trimmed),
+        }));
+    }
+
+    // Dynamic ECH target domain. In Xray syntax this may be suffixed with `+<doh_url>`.
+    // Valid domain names contain '.' and no '/', whereas raw base64 ECHConfigLists do not contain '.'.
+    let candidate = trimmed.split('+').next().unwrap_or("").trim();
+    if candidate.contains('.') && !candidate.contains('/') {
+        return Some(json!({
+            "enabled": true,
+            "query_server_name": candidate,
+        }));
+    }
+
+    Some(json!({
+        "enabled": true,
+        "config": ech_config_pem(trimmed),
+    }))
+}
+
 /// Accepts either a raw base64 ECHConfigList (share-link form) or a value that
 /// already carries the PEM armor.
 fn ech_config_pem(ech: &str) -> Vec<String> {
@@ -210,12 +253,8 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
     if !pin.is_empty() {
         t["certificate_public_key_sha256"] = json!([pin]);
     }
-    if !tls.ech.is_empty() {
-        // sing-box joins `config` with "\n" and runs `pem.Decode`, demanding a
-        // `ECH CONFIGS` PEM block (common/tls/ech.go). Share links carry the raw
-        // base64 ECHConfigList (what xray's `echConfigList` wants), so wrap it in
-        // a PEM block here unless it already is one.
-        t["ech"] = json!({ "enabled": true, "config": ech_config_pem(&tls.ech) });
+    if let Some(ech_val) = build_singbox_ech(&tls.ech) {
+        t["ech"] = ech_val;
     }
     // Some outbounds reject a uTLS config: hysteria2/tuic drive their own QUIC TLS
     // stack (sing-box errors `unsupported usage for uTLS` on every dial), and the
@@ -2038,6 +2077,41 @@ mod tests {
             .and_then(|s| s.strip_suffix("\n-----END ECH CONFIGS-----"))
             .unwrap();
         assert_eq!(body.replace('\n', ""), "AEX+DQBB...base64...");
+    }
+
+    #[test]
+    fn ech_dynamic_domain_sets_query_server_name() {
+        let val = build_singbox_ech("cloudflare-ech.com").unwrap();
+        assert_eq!(val["enabled"], true);
+        assert_eq!(val["query_server_name"], "cloudflare-ech.com");
+        assert!(val.get("config").is_none());
+    }
+
+    #[test]
+    fn ech_dynamic_xray_syntax_sets_query_server_name() {
+        let val =
+            build_singbox_ech("cloudflare-ech.com+https://cloudflare-dns.com/dns-query").unwrap();
+        assert_eq!(val["enabled"], true);
+        assert_eq!(val["query_server_name"], "cloudflare-ech.com");
+        assert!(val.get("config").is_none());
+    }
+
+    #[test]
+    fn ech_dynamic_flag_enables_without_query_server_name() {
+        let val = build_singbox_ech("1").unwrap();
+        assert_eq!(val["enabled"], true);
+        assert!(val.get("query_server_name").is_none());
+        assert!(val.get("config").is_none());
+
+        let val_true = build_singbox_ech("true").unwrap();
+        assert_eq!(val_true["enabled"], true);
+        assert!(val_true.get("query_server_name").is_none());
+    }
+
+    #[test]
+    fn ech_empty_returns_none() {
+        assert!(build_singbox_ech("").is_none());
+        assert!(build_singbox_ech("   ").is_none());
     }
 
     #[test]
