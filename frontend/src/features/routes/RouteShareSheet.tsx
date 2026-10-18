@@ -54,6 +54,7 @@ export function RouteShareSheet({
     namesProfiles: false,
   });
   useEffect(() => {
+    setSharePayload({ exportJson: "", flatJson: "", namesProfiles: false });
     let active = true;
     bridge
       .buildRouteShare(route, ruleBlocks)
@@ -71,8 +72,8 @@ export function RouteShareSheet({
   const [pkg, setPkg] = useState<RoutePackage | null>(null);
   useEffect(() => {
     let active = true;
+    setPkg(null);
     if (!importText.trim()) {
-      setPkg(null);
       return;
     }
     const timer = setTimeout(() => {
