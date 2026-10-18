@@ -18,6 +18,7 @@ import type {
   Protocol,
   ResolvedImport_Serialize as ResolvedImport,
   RoutingRule,
+  SubscriptionUrlSecurity,
   Tls,
   Transport,
 } from "../generated/bindings";
@@ -765,6 +766,57 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
       return rules;
     } catch {
       return [];
+    }
+  },
+
+  async validateFilterRegex(pattern: string): Promise<boolean> {
+    const trimmed = pattern.trim();
+    if (!trimmed) return true;
+    try {
+      const source = trimmed.startsWith("(?i)") ? trimmed.slice(4) : trimmed;
+      const flags = trimmed.startsWith("(?i)") ? "i" : "";
+      new RegExp(source, flags);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async checkSubscriptionUrlSecurity(urlString: string): Promise<SubscriptionUrlSecurity> {
+    try {
+      const parsed = new URL(urlString.trim());
+      const isInsecureHttp = parsed.protocol === "http:";
+      const host = parsed.hostname.toLowerCase();
+      let isLocalOrPrivate =
+        host === "localhost" ||
+        host.endsWith(".localhost") ||
+        host === "local" ||
+        host.endsWith(".local") ||
+        host === "::1";
+      if (!isLocalOrPrivate) {
+        const parts = host.split(".").map(Number);
+        if (parts.length === 4 && !parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
+          if (
+            parts[0] === 10 ||
+            (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+            (parts[0] === 192 && parts[1] === 168) ||
+            parts[0] === 127
+          ) {
+            isLocalOrPrivate = true;
+          }
+        }
+      }
+      return {
+        isInsecureHttp,
+        isLocalOrPrivate,
+        suggestAllowInsecure: isLocalOrPrivate,
+      };
+    } catch {
+      return {
+        isInsecureHttp: false,
+        isLocalOrPrivate: false,
+        suggestAllowInsecure: false,
+      };
     }
   },
 

@@ -205,6 +205,14 @@ pub enum Command {
     ParseRoutingRules {
         text: String,
     },
+    #[serde(rename_all = "camelCase")]
+    ValidateFilterRegex {
+        pattern: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    CheckSubscriptionUrlSecurity {
+        url: String,
+    },
     /// Resolve which core each profile runs on (`core::resolve_core` under the
     /// persisted settings) plus its capability force, so the UI never re-implements
     /// the resolution matrix. Batch: one call covers a whole profile list.
@@ -336,6 +344,8 @@ pub enum Response {
     AssetDraftIssues(Vec<AssetDraftIssue>),
     BlockCatchAllReports(Vec<BlockCatchAllReport>),
     RoutingRules(Vec<RoutingRule>),
+    FilterRegexValid(bool),
+    SubscriptionUrlSecurity(kasumi_core::sub_policy::SubscriptionUrlSecurity),
 }
 
 /// A restored backup: the new state and how many of its profiles were left out.
@@ -769,6 +779,16 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         Command::ParseRoutingRules { text } => {
             let rules = parse_routing_rules_json(&text);
             Ok(Response::RoutingRules(rules))
+        }
+
+        Command::ValidateFilterRegex { pattern } => {
+            let valid = kasumi_core::sub_apply::validate_filter_regex(&pattern);
+            Ok(Response::FilterRegexValid(valid))
+        }
+
+        Command::CheckSubscriptionUrlSecurity { url } => {
+            let sec = kasumi_core::sub_policy::check_subscription_url_security(&url);
+            Ok(Response::SubscriptionUrlSecurity(sec))
         }
 
         Command::OpenUrl { url } => {
@@ -2138,5 +2158,46 @@ mod tests {
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].outbound_tag, "direct");
         assert!(!rules[0].id.is_empty());
+
+        let res_regex = dispatch(
+            &p,
+            Command::ValidateFilterRegex {
+                pattern: "(?i)germany".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::FilterRegexValid(valid) = res_regex else {
+            panic!("expected FilterRegexValid response");
+        };
+        assert!(valid);
+
+        let res_regex_bad = dispatch(
+            &p,
+            Command::ValidateFilterRegex {
+                pattern: "[a-z".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::FilterRegexValid(valid) = res_regex_bad else {
+            panic!("expected FilterRegexValid response");
+        };
+        assert!(!valid);
+
+        let res_sec = dispatch(
+            &p,
+            Command::CheckSubscriptionUrlSecurity {
+                url: "http://192.168.1.1/sub".into(),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::SubscriptionUrlSecurity(sec) = res_sec else {
+            panic!("expected SubscriptionUrlSecurity response");
+        };
+        assert!(sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+        assert!(sec.suggest_allow_insecure);
     }
 }

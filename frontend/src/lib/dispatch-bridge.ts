@@ -379,6 +379,16 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "routingRules" ? r.value : wrongKind(r, "routingRules");
     },
 
+    async validateFilterRegex(pattern) {
+      const r = await dispatch({ cmd: "validateFilterRegex", pattern });
+      return r.kind === "filterRegexValid" ? r.value : wrongKind(r, "filterRegexValid");
+    },
+
+    async checkSubscriptionUrlSecurity(url) {
+      const r = await dispatch({ cmd: "checkSubscriptionUrlSecurity", url });
+      return r.kind === "subscriptionUrlSecurity" ? r.value : wrongKind(r, "subscriptionUrlSecurity");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);

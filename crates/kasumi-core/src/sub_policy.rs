@@ -6,8 +6,65 @@
 use happ_sub::MetaMap;
 use happ_sub::meta::{normalize_untrusted_text, single_line, truncate_title, validate_url_safety};
 use percent_encoding::percent_decode_str;
+use serde::{Deserialize, Serialize};
 
 use crate::state::{NoticeColor, ProviderInfo, ProviderNotice, Subscription, TrafficInfo};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionUrlSecurity {
+    pub is_insecure_http: bool,
+    pub is_local_or_private: bool,
+    pub suggest_allow_insecure: bool,
+}
+
+/// Classify subscription URL security: detects insecure HTTP protocol and
+/// local or private network host destinations.
+pub fn check_subscription_url_security(url_str: &str) -> SubscriptionUrlSecurity {
+    let Ok(parsed) = url::Url::parse(url_str.trim()) else {
+        return SubscriptionUrlSecurity {
+            is_insecure_http: false,
+            is_local_or_private: false,
+            suggest_allow_insecure: false,
+        };
+    };
+    let is_insecure_http = parsed.scheme() == "http";
+    let is_local_or_private = parsed.host_str().is_some_and(is_local_or_private_host);
+    SubscriptionUrlSecurity {
+        is_insecure_http,
+        is_local_or_private,
+        suggest_allow_insecure: is_local_or_private,
+    }
+}
+
+/// Whether the given host is localhost, a .local mDNS host, or a private/loopback IP.
+pub fn is_local_or_private_host(host: &str) -> bool {
+    let host = host.trim().to_ascii_lowercase();
+    if host == "localhost"
+        || host.ends_with(".localhost")
+        || host == "local"
+        || host.ends_with(".local")
+        || host == "::1"
+    {
+        return true;
+    }
+    let host_unbracketed = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(&host);
+    if let Ok(ip) = host_unbracketed.parse::<std::net::IpAddr>() {
+        match ip {
+            std::net::IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local(),
+            std::net::IpAddr::V6(v6) => {
+                v6.is_loopback()
+                    || (v6.segments()[0] & 0xfe00) == 0xfc00
+                    || (v6.segments()[0] & 0xffc0) == 0xfe80
+            }
+        }
+    } else {
+        false
+    }
+}
 
 /// Longest announcement kept, in characters; a provider banner is a few lines.
 const ANNOUNCE_MAX_CHARS: usize = 2000;
@@ -468,5 +525,39 @@ mod tests {
         assert_eq!(info.title.as_deref(), Some("Header"));
         let info = provider_info(&meta(&[]), cd);
         assert_eq!(info.title.as_deref(), Some("from-cd"));
+    }
+
+    #[test]
+    fn subscription_url_security_checks() {
+        let sec = check_subscription_url_security("http://192.168.1.10:8080/sub");
+        assert!(sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+        assert!(sec.suggest_allow_insecure);
+
+        let sec = check_subscription_url_security("https://router.local/sub");
+        assert!(!sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+        assert!(sec.suggest_allow_insecure);
+
+        let sec = check_subscription_url_security("https://127.0.0.1/sub");
+        assert!(!sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+
+        let sec = check_subscription_url_security("http://box.localhost/sub");
+        assert!(sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+
+        let sec = check_subscription_url_security("http://[fe80::1]/sub");
+        assert!(sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+
+        let sec = check_subscription_url_security("http://[fd00::1]/sub");
+        assert!(sec.is_insecure_http);
+        assert!(sec.is_local_or_private);
+
+        let sec = check_subscription_url_security("https://sub.example.com/sub");
+        assert!(!sec.is_insecure_http);
+        assert!(!sec.is_local_or_private);
+        assert!(!sec.suggest_allow_insecure);
     }
 }

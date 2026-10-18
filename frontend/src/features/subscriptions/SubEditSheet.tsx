@@ -23,7 +23,7 @@ import {
   subscriptionNameFrom,
   UNSUPPORTED_TEXT,
 } from "../../lib/add-input";
-import type { Subscription } from "../../lib/bridge";
+import type { Subscription, SubscriptionUrlSecurity } from "../../lib/bridge";
 import { bridge } from "../../lib/bridge-provider";
 import {
   BASE_GROUP_ID,
@@ -31,7 +31,6 @@ import {
   groupChoiceReady,
   providerConfigsOf,
 } from "../../lib/groups";
-import { isInsecureHttpUrl, isLocalOrPrivateHost } from "../../lib/utils";
 import { useAppStore } from "../../store/useAppStore";
 import { SubIdentitySection } from "./SubIdentitySection";
 import { savedName } from "./sub-edit";
@@ -62,6 +61,30 @@ export function SubEditSheet({
   // and the address behind it once the user asks to see it.
   const [encrypted, setEncrypted] = useState<boolean | null>(false);
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [urlSecurity, setUrlSecurity] = useState<SubscriptionUrlSecurity>({
+    isInsecureHttp: false,
+    isLocalOrPrivate: false,
+    suggestAllowInsecure: false,
+  });
+
+  useEffect(() => {
+    let alive = true;
+    if (!d.url.trim()) {
+      setUrlSecurity({
+        isInsecureHttp: false,
+        isLocalOrPrivate: false,
+        suggestAllowInsecure: false,
+      });
+      return;
+    }
+    bridge
+      .checkSubscriptionUrlSecurity(d.url)
+      .then((sec) => alive && setUrlSecurity(sec))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [d.url]);
   const [urlCheck, setUrlCheck] = useState<{ url: string; check: SubscriptionUrlCheck } | null>(
     null,
   );
@@ -160,11 +183,8 @@ export function SubEditSheet({
     if (d.autoUpdate && ownInterval && (!Number.isFinite(d.interval) || d.interval <= 0))
       nextErrors.interval = t("subs.edit.validationInterval");
     if (d.filter.trim()) {
-      try {
-        const source = d.filter.trim().startsWith("(?i)") ? d.filter.trim().slice(4) : d.filter;
-        const flags = d.filter.trim().startsWith("(?i)") ? "i" : "";
-        new RegExp(source, flags);
-      } catch {
+      const valid = await bridge.validateFilterRegex(d.filter).catch(() => true);
+      if (!valid) {
         nextErrors.filter = t("subs.edit.validationFilter");
       }
     }
@@ -173,6 +193,9 @@ export function SubEditSheet({
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
     try {
+      const sec = url
+        ? await bridge.checkSubscriptionUrlSecurity(url).catch(() => urlSecurity)
+        : urlSecurity;
       // TLS verification is skipped only for localhost / private hosts (self-signed
       // certs are normal there); public URLs are always verified strictly.
       await onSave(
@@ -181,7 +204,7 @@ export function SubEditSheet({
           url,
           ...savedName(d.remarks, sub, saveName, defaultName),
           // An accepted provider `insecure` stays until the user turns it off below.
-          allowInsecure: d.insecureByProvider ? d.allowInsecure : isLocalOrPrivateHost(url),
+          allowInsecure: d.insecureByProvider ? d.allowInsecure : sec.suggestAllowInsecure,
         },
         group,
       );
@@ -218,7 +241,7 @@ export function SubEditSheet({
   };
 
   const showInsecureHint =
-    d.url.trim() !== "" && isInsecureHttpUrl(d.url) && !isLocalOrPrivateHost(d.url);
+    d.url.trim() !== "" && urlSecurity.isInsecureHttp && !urlSecurity.isLocalOrPrivate;
 
   return (
     <Sheet

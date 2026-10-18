@@ -472,3 +472,31 @@ describe("dispatch-bridge check readiness", () => {
     expect(dispatch).toHaveBeenLastCalledWith({ cmd: "checkReadiness", profileId: null });
   });
 });
+
+describe("dispatch-bridge subscription filter and security", () => {
+  it("validateFilterRegex dispatches command and returns boolean", async () => {
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "filterRegexValid", value: true }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.validateFilterRegex("(?i)germany")).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith({ cmd: "validateFilterRegex", pattern: "(?i)germany" });
+  });
+
+  it("checkSubscriptionUrlSecurity dispatches command and returns report", async () => {
+    const sec = {
+      isInsecureHttp: true,
+      isLocalOrPrivate: true,
+      suggestAllowInsecure: true,
+    };
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "subscriptionUrlSecurity", value: sec }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.checkSubscriptionUrlSecurity("http://192.168.1.1/sub")).toEqual(sec);
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "checkSubscriptionUrlSecurity",
+      url: "http://192.168.1.1/sub",
+    });
+  });
+});

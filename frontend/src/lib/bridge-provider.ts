@@ -197,6 +197,12 @@ export const bridge: Bridge = {
   async parseRoutingRules(text) {
     return (await loadBridge()).parseRoutingRules(text);
   },
+  async validateFilterRegex(pattern) {
+    return (await loadBridge()).validateFilterRegex(pattern);
+  },
+  async checkSubscriptionUrlSecurity(url) {
+    return (await loadBridge()).checkSubscriptionUrlSecurity(url);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

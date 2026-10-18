@@ -79,6 +79,7 @@ export type {
   SubAppliedEvent,
   SubRequestOverrides_Serialize as SubRequestOverrides,
   Subscription_Serialize as Subscription,
+  SubscriptionUrlSecurity,
   TestKind,
   TunnelSetting,
 } from "../generated/bindings";
@@ -243,6 +244,10 @@ export interface Bridge {
   // Routing rule parsing and block analysis
   analyzeRuleBlocks(blocks: RuleBlock[]): Promise<BlockCatchAllReport[]>;
   parseRoutingRules(text: string): Promise<RoutingRule[]>;
+
+  // Subscription filter regex and URL security policy
+  validateFilterRegex(pattern: string): Promise<boolean>;
+  checkSubscriptionUrlSecurity(url: string): Promise<SubscriptionUrlSecurity>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription
