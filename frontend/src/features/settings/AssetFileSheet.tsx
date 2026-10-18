@@ -63,10 +63,9 @@ export function AssetFileSheet({
 
   const save = async () => {
     setTried(true);
-    const issues = await bridge.validateAssetDraft(
-      { remarks: draft.remarks, url: draft.url },
-      takenNames,
-    );
+    const issues = await bridge
+      .validateAssetDraft({ remarks: draft.remarks, url: draft.url }, takenNames)
+      .catch(() => []);
     const currentErrors = issuesToAssetErrors(issues, t);
     setErrors(currentErrors);
     if (Object.keys(currentErrors).length > 0) return;
