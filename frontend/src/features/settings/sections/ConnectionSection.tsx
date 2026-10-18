@@ -107,11 +107,11 @@ export function ConnectionSection({
               mono={false}
             />
             <SettingRow
+              stacked
               title={t("settings.singboxFragment")}
               hint={t("settings.singboxFragmentSub")}
             >
               <Segmented
-                size="sm"
                 ariaLabel={t("settings.singboxFragment")}
                 value={settings.singboxFragment}
                 onChange={(v) => set("singboxFragment", v)}
