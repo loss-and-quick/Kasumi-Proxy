@@ -1025,6 +1025,15 @@ const zh = {
   "settings.routingRulePort": "端口：{value}",
   "settings.routingRuleNetwork": "网络：{value}",
   "settings.routingRuleProtocols": "协议：{value}",
+  "settings.routingRuleProcesses": plural("count", {
+    other: "# 个进程",
+  }),
+  "settings.routingRulePackages": plural("count", {
+    other: "# 个应用包",
+  }),
+  "settings.routingRuleSourceIps": plural("count", {
+    other: "# 个来源 IP",
+  }),
   "settings.routingRuleNoMatch": "无匹配字段",
   "settings.routingReorder": "重新排序规则",
   "settings.assetFiles": "资源文件",

@@ -1101,6 +1101,18 @@ const es = {
   "settings.routingRulePort": "puerto: {value}",
   "settings.routingRuleNetwork": "red: {value}",
   "settings.routingRuleProtocols": "protocolos: {value}",
+  "settings.routingRuleProcesses": plural("count", {
+    one: "# proceso",
+    other: "# procesos",
+  }),
+  "settings.routingRulePackages": plural("count", {
+    one: "# paquete",
+    other: "# paquetes",
+  }),
+  "settings.routingRuleSourceIps": plural("count", {
+    one: "# IP de origen",
+    other: "# IPs de origen",
+  }),
   "settings.routingRuleNoMatch": "No hay campos de coincidencia",
   "settings.routingReorder": "Reordenar regla",
   "settings.assetFiles": "Archivos de recursos",

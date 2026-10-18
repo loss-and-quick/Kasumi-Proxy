@@ -1062,6 +1062,15 @@ const vi = {
   "settings.routingRulePort": "cổng: {value}",
   "settings.routingRuleNetwork": "mạng: {value}",
   "settings.routingRuleProtocols": "giao thức: {value}",
+  "settings.routingRuleProcesses": plural("count", {
+    other: "# tiến trình",
+  }),
+  "settings.routingRulePackages": plural("count", {
+    other: "# gói",
+  }),
+  "settings.routingRuleSourceIps": plural("count", {
+    other: "# IP nguồn",
+  }),
   "settings.routingRuleNoMatch": "Không có trường khớp",
   "settings.routingReorder": "Sắp xếp lại quy tắc",
   "settings.assetFiles": "Tệp tài nguyên",
