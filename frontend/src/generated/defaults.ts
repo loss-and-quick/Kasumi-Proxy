@@ -701,14 +701,11 @@ export const DEFAULT_CORE_BY_PROTOCOL = {
 } as Record<Protocol, CoreEngine>;
 
 /** Protocols only one core implements, single-sourced from Rust capability guards. */
-export const LOCKED_CORE_PROTOCOLS: readonly Protocol[] = ["hysteria2","tuic","anytls","naive","shadowtls","custom"] as readonly Protocol[];
+export const LOCKED_CORE_PROTOCOLS: readonly Protocol[] = ["hysteria2","tuic","custom"] as readonly Protocol[];
 
 /** The single core a locked protocol can run on, single-sourced from Rust `locked_core_for`. */
 export const LOCKED_CORE_BY_PROTOCOL = {
-  "anytls": "sing-box",
   "custom": "xray",
   "hysteria2": "sing-box",
-  "naive": "sing-box",
-  "shadowtls": "sing-box",
   "tuic": "sing-box"
 } as Partial<Record<Protocol, CoreEngine>>;

@@ -18,14 +18,12 @@ fn is_singbox_only(proto: Protocol) -> bool {
     )
 }
 
-/// Which core a protocol is locked to, if it cannot run on all engines.
+/// Which core a protocol is locked to for core presets, if it cannot be reassigned.
 pub fn locked_core_for(proto: Protocol) -> Option<CoreEngine> {
-    if proto == Protocol::Custom {
-        Some(CoreEngine::Xray)
-    } else if proto == Protocol::Hysteria2 || is_singbox_only(proto) {
-        Some(CoreEngine::SingBox)
-    } else {
-        None
+    match proto {
+        Protocol::Custom => Some(CoreEngine::Xray),
+        Protocol::Hysteria2 | Protocol::Tuic => Some(CoreEngine::SingBox),
+        _ => None,
     }
 }
 

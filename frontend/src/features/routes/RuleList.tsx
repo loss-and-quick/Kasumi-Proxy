@@ -12,7 +12,7 @@ import { useFormatters, useT } from "../../i18n";
 import type { RuleBlock } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
 import { useProfileLabels } from "../profiles/labels";
-import { isRedundantCatchAll, ruleIcon, ruleSummary } from "../settings/helpers";
+import { ruleIcon, ruleSummary } from "../settings/helpers";
 import { makeQuickRule, QUICK_RULES } from "../settings/rule-presets";
 import { outboundLabel, useTargetFallbackText } from "./labels";
 
@@ -43,7 +43,7 @@ export function RuleList({
   };
   const catchAllIds = useAppStore((s) => s.catchAllRules[block.id]);
   const catchAllIndex = rules.findIndex((r) => catchAllIds?.includes(r.id) ?? false);
-  const catchAllRedundant = isRedundantCatchAll(rules, catchAllIndex);
+  const catchAllRedundant = useAppStore((s) => s.redundantCatchAll[block.id] ?? false);
 
   return (
     <>
