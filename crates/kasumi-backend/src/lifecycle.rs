@@ -121,6 +121,7 @@ pub async fn resolve_and_write_config(
     };
     let cfg_text =
         serde_json::to_string_pretty(&built.config).map_err(|e| CommandError(e.to_string()))?;
+    validate_geo_assets(&paths.dat_dir, engine, &cfg_text)?;
     write_text_atomic(cfg_path, &cfg_text)
         .await
         .map_err(|e| CommandError(e.to_string()))?;
@@ -128,6 +129,56 @@ pub async fn resolve_and_write_config(
 }
 
 // ---------- geo assets (geodat2srs) ----------
+
+/// The geo asset `.dat` basenames a built core config requires to run.
+pub fn required_geo_assets(engine: CoreEngine, cfg_text: &str) -> HashSet<&'static str> {
+    let mut needed = HashSet::new();
+    match engine {
+        CoreEngine::SingBox => {
+            let srs = referenced_srs(cfg_text);
+            for name in srs {
+                if name.starts_with("geosite-") {
+                    needed.insert("geosite.dat");
+                } else if name.starts_with("geoip-") {
+                    needed.insert("geoip.dat");
+                }
+            }
+        }
+        CoreEngine::Xray => {
+            if cfg_text.contains("\"geosite:") || cfg_text.contains("geosite.dat") {
+                needed.insert("geosite.dat");
+            }
+            if cfg_text.contains("\"geoip:") || cfg_text.contains("geoip.dat") {
+                needed.insert("geoip.dat");
+            }
+        }
+    }
+    needed
+}
+
+/// Verify that every geo asset file required by the config is present in `dat_dir`.
+pub fn validate_geo_assets(
+    dat_dir: &Path,
+    engine: CoreEngine,
+    cfg_text: &str,
+) -> Result<(), CommandError> {
+    let needed = required_geo_assets(engine, cfg_text);
+    if needed.is_empty() {
+        return Ok(());
+    }
+    let mut missing: Vec<&str> = needed
+        .into_iter()
+        .filter(|filename| !dat_dir.join(filename).is_file())
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    missing.sort();
+    Err(CommandError(format!(
+        "missing required geo asset(s): {}",
+        missing.join(", ")
+    )))
+}
 
 /// Matches a `"path": "…/foo.srs"` value in a config.
 fn srs_path_re() -> Regex {
@@ -139,7 +190,7 @@ pub fn referenced_srs(cfg_text: &str) -> HashSet<String> {
     let re = srs_path_re();
     re.captures_iter(cfg_text)
         .filter_map(|c| c.get(1))
-        .filter_map(|m| m.as_str().rsplit('/').next())
+        .filter_map(|m| m.as_str().rsplit(['/', '\\']).next())
         .map(str::to_owned)
         .collect()
 }
@@ -503,7 +554,8 @@ mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
     use crate::testutil::{TestPlatform, sample_vless};
-    use kasumi_core::state::{ProxyMode, default_app_state};
+    use kasumi_core::route::{RouteBlockRef, RuleBlock};
+    use kasumi_core::state::{ProxyMode, RoutingMode, RoutingRule, default_app_state};
 
     #[test]
     fn random_iface_is_letter_then_hex() {
@@ -686,5 +738,90 @@ mod tests {
         let exe = exe.to_string_lossy().into_owned();
         assert!(verify_core_alive(me, &exe, 1, Duration::from_millis(1)).await);
         assert!(!verify_core_alive(me, "/bin/sh", 1, Duration::from_millis(1)).await);
+    }
+
+    #[test]
+    fn required_geo_assets_detects_singbox_and_xray() {
+        let sb_cfg = r#"{"route":{"rule_set":[{"path":"/srs/geosite-ru.srs"},{"path":"/srs/geoip-ru.srs"}]}}"#;
+        let got_sb = required_geo_assets(CoreEngine::SingBox, sb_cfg);
+        assert!(got_sb.contains("geosite.dat"));
+        assert!(got_sb.contains("geoip.dat"));
+
+        let sb_plain = r#"{"route":{"rule_set":[]}}"#;
+        assert!(required_geo_assets(CoreEngine::SingBox, sb_plain).is_empty());
+
+        let xray_geo = r#"{"routing":{"rules":[{"domain":["geosite:ru"]},{"ip":["geoip:ru"]}]}}"#;
+        let got_xray = required_geo_assets(CoreEngine::Xray, xray_geo);
+        assert!(got_xray.contains("geosite.dat"));
+        assert!(got_xray.contains("geoip.dat"));
+
+        let xray_fakeip =
+            r#"{"dns":{"servers":[{"address":"fakeip","expectIPs":["geoip:!private"]}]}}"#;
+        let got_fakeip = required_geo_assets(CoreEngine::Xray, xray_fakeip);
+        assert_eq!(got_fakeip, std::collections::HashSet::from(["geoip.dat"]));
+
+        let xray_plain = r#"{"routing":{"rules":[{"domain":["example.com"]},{"ip":["1.1.1.1"]}]}}"#;
+        assert!(required_geo_assets(CoreEngine::Xray, xray_plain).is_empty());
+    }
+
+    #[test]
+    fn validate_geo_assets_rejects_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = r#"{"routing":{"rules":[{"domain":["geosite:ru"]}]}}"#;
+        let err = validate_geo_assets(dir.path(), CoreEngine::Xray, cfg).unwrap_err();
+        assert!(err.0.contains("geosite.dat"));
+
+        // When present, succeeds.
+        std::fs::write(dir.path().join("geosite.dat"), b"geo").unwrap();
+        assert!(validate_geo_assets(dir.path(), CoreEngine::Xray, cfg).is_ok());
+    }
+
+    #[tokio::test]
+    async fn resolve_and_write_config_blocks_when_geo_missing() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let id = prof.meta().id.clone();
+        let mut state = default_app_state();
+        state.active_id = Some(id.clone());
+        state.settings.routing_mode = RoutingMode::Rules;
+        let rule = RoutingRule {
+            id: "r1".into(),
+            remarks: "geo rule".into(),
+            enabled: true,
+            outbound_tag: "direct".into(),
+            domain: Some(vec!["geosite:ru".into()]),
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        };
+        state.rule_blocks = vec![RuleBlock {
+            id: "b1".into(),
+            name: "block1".into(),
+            rules: vec![rule],
+            source_sub_id: None,
+        }];
+        state.routes[0].blocks = vec![RouteBlockRef {
+            block_id: "b1".into(),
+            enabled: true,
+        }];
+        write_json_atomic(&p.paths().app_state, &state)
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![prof])
+            .await
+            .unwrap();
+
+        let err = resolve_and_write_config(&p, None).await.unwrap_err();
+        assert!(err.0.contains("geosite.dat"));
+
+        // If the geo file exists, it succeeds.
+        tokio::fs::write(p.paths().dat_dir.join("geosite.dat"), b"geo")
+            .await
+            .unwrap();
+        assert!(resolve_and_write_config(&p, None).await.is_ok());
     }
 }

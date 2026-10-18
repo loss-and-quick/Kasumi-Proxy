@@ -14,7 +14,7 @@ use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::{read_data_path_state, write_data_path_state};
 use kasumi_backend::lifecycle::{
     TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core,
-    spawn_tun_engine, sync_geo_asset, verify_core_alive,
+    spawn_tun_engine, sync_geo_asset, validate_geo_assets, verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -438,10 +438,14 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
     }
     let native = matches!(plan.tun, TunPlan::Native { .. });
 
+    let cfg_text = read_text(cfg).await.unwrap_or_default();
+    if let Err(e) = validate_geo_assets(Path::new(DATADIR), plan.engine, &cfg_text) {
+        return fail(&e.0).await;
+    }
+
     if plan.engine == CoreEngine::SingBox {
         // Generate/keep only the .srs this config references (needed even when
         // sing-box runs socks-only — its route rules still reference rule-sets).
-        let cfg_text = read_text(cfg).await.unwrap_or_default();
         let needed = referenced_srs(&cfg_text);
         let geo = Path::new(GEODAT2SRS_BIN);
         let dat = Path::new(DATADIR);

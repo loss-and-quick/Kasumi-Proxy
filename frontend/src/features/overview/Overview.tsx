@@ -19,6 +19,7 @@ import {
 import { useT } from "../../i18n";
 import { isServiceUp } from "../../lib/bridge";
 import { formatRate, formatUptime } from "../../lib/format";
+import { getMissingGeoAssets } from "../../lib/geo-assets";
 import { profileEndpointLabel } from "../../lib/profile-utils";
 import { routeFor } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
@@ -74,18 +75,26 @@ export default function Overview({
     };
   }, []);
 
-  const needsAssets =
-    settings.routingMode !== "global" && !assetFiles.some((a) => a.lastUpdated != null);
-
   const active = profiles.find((p) => p.meta.id === activeId);
   const routes = useAppStore((s) => s.routes);
-  // Only worth a line when rules are on and there is more than one route to be on.
-  const activeRoute =
-    settings.routingMode === "rules" && routes.length > 1 ? routeFor(routes, active) : undefined;
+  const ruleBlocks = useAppStore((s) => s.ruleBlocks);
   // Backend-resolved core of the active profile (`resolveCores` cache in the store).
   const resolvedCore = useAppStore((s) =>
     activeId ? (s.coreResolutions[activeId]?.resolved ?? null) : null,
   );
+  const missingAssets = getMissingGeoAssets({
+    settings,
+    routes,
+    ruleBlocks,
+    activeProfile: active,
+    assetFiles,
+    resolvedCore,
+  });
+  const needsAssets = missingAssets.length > 0;
+
+  // Only worth a line when rules are on and there is more than one route to be on.
+  const activeRoute =
+    settings.routingMode === "rules" && routes.length > 1 ? routeFor(routes, active) : undefined;
   const enabledSubs = subs.filter((s) => s.enabled).length;
   const connected = service.state === "connected";
   const noInternet = service.state === "noInternet";
