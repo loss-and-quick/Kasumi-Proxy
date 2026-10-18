@@ -6,18 +6,13 @@
 // `happ://routing` link comes in the same way, as a route of its own.
 // ============================================================
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Btn, Field, SectionLabel, Segmented, Sheet } from "../../components";
-import type { Route } from "../../generated/bindings";
+import type { Route, RoutePackage, RouteSharePayload } from "../../generated/bindings";
 import { useFormatters, useT } from "../../i18n";
 import { linkInputText } from "../../lib/add-input";
+import { bridge } from "../../lib/bridge-provider";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
-import {
-  exportRoutePackage,
-  flattenRoute,
-  parseRoutePackage,
-  routeNamesProfiles,
-} from "../../lib/routes";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { useLinkInput } from "../add/useLinkInput";
@@ -53,12 +48,51 @@ export function RouteShareSheet({
   const [qrOpen, setQrOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  const exportJson = useMemo(
-    () =>
-      format === "route" ? exportRoutePackage(route, ruleBlocks) : flattenRoute(route, ruleBlocks),
-    [format, route, ruleBlocks],
-  );
-  const pkg = useMemo(() => parseRoutePackage(importText), [importText]);
+  const [sharePayload, setSharePayload] = useState<RouteSharePayload>({
+    exportJson: "",
+    flatJson: "",
+    namesProfiles: false,
+  });
+  useEffect(() => {
+    setSharePayload({ exportJson: "", flatJson: "", namesProfiles: false });
+    let active = true;
+    bridge
+      .buildRouteShare(route, ruleBlocks)
+      .then((payload) => {
+        if (active) setSharePayload(payload);
+      })
+      .catch((e: unknown) => {
+        if (active) notify(t("store.service.error", { error: errorMessage(e) }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [route, ruleBlocks, notify, t]);
+
+  const [pkg, setPkg] = useState<RoutePackage | null>(null);
+  useEffect(() => {
+    let active = true;
+    setPkg(null);
+    if (!importText.trim()) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      bridge
+        .parseRoutePackage(importText)
+        .then((parsed) => {
+          if (active) setPkg(parsed);
+        })
+        .catch(() => {
+          if (active) setPkg(null);
+        });
+    }, 200);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [importText]);
+
+  const exportJson = format === "route" ? sharePayload.exportJson : sharePayload.flatJson;
   const link = useLinkInput(importText);
   const happLinks = link?.kind === "routing" ? link.links : [];
   // A Happ routing link comes in the way a shared route does.
@@ -117,7 +151,7 @@ export function RouteShareSheet({
         />
         <div className="hint" style={{ margin: "6px 0 8px" }}>
           {t(format === "route" ? "routes.share.asRouteHint" : "routes.share.asListHint")}
-          {routeNamesProfiles(route, ruleBlocks) && ` ${t("routes.share.profilesNote")}`}
+          {sharePayload.namesProfiles && ` ${t("routes.share.profilesNote")}`}
         </div>
         <Field
           label={t("routes.share.exportLabel")}
@@ -129,16 +163,22 @@ export function RouteShareSheet({
         <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
           <Btn
             variant="tonal"
+            disabled={!exportJson}
             onClick={async () =>
               notify((await copyText(exportJson)) ? t("rulesIo.copied") : t("backup.copyFailed"))
             }
           >
             {t("backup.copyJson")}
           </Btn>
-          <Btn variant="outline" icon="qr_code_2" onClick={() => setQrOpen(true)}>
+          <Btn
+            variant="outline"
+            icon="qr_code_2"
+            disabled={!exportJson}
+            onClick={() => setQrOpen(true)}
+          >
             {t("backup.showQr")}
           </Btn>
-          <Btn variant="outline" icon="download" onClick={download}>
+          <Btn variant="outline" icon="download" disabled={!exportJson} onClick={download}>
             {t("backup.download")}
           </Btn>
         </div>

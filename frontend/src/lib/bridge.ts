@@ -25,7 +25,11 @@ import type {
   ReadinessReport,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
+  Route,
+  RoutePackage_Serialize as RoutePackage,
+  RouteSharePayload,
   RoutingRule,
+  RuleBlock_Serialize as RuleBlock,
   RunState,
   SubAppliedEvent,
   TestKind,
@@ -63,8 +67,12 @@ export type {
   RequestIdentityDefaults_Serialize as RequestIdentityDefaults,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
+  Route,
+  RoutePackage_Serialize as RoutePackage,
+  RouteSharePayload,
   RoutingImport_Serialize as RoutingImport,
   RoutingRule,
+  RuleBlock_Serialize as RuleBlock,
   SubAppliedEvent,
   SubRequestOverrides_Serialize as SubRequestOverrides,
   Subscription_Serialize as Subscription,
@@ -221,6 +229,10 @@ export interface Bridge {
   // Profile validation and protocol switching
   validateProfile(profile: Profile): Promise<ProfileFieldIssue[]>;
   switchProfileProtocol(profile: Profile, protocol: Protocol): Promise<Profile>;
+
+  // Route sharing and package parsing
+  buildRouteShare(route: Route, blocks: RuleBlock[]): Promise<RouteSharePayload>;
+  parseRoutePackage(text: string): Promise<RoutePackage | null>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription

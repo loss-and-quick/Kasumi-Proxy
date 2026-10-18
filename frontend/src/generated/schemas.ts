@@ -1228,6 +1228,22 @@ export const TestKindSchema = z.union([z.literal("realPing"), z.literal("speed")
 export type TestKind = z.infer<typeof TestKindSchema>;
 
 
+export const PackageBlock_SerializeSchema = z.object({
+	name: z.string(),
+	enabled: z.boolean(),
+	rules: z.array(RoutingRule_SerializeSchema),
+});
+export type PackageBlock_Serialize = z.infer<typeof PackageBlock_SerializeSchema>;
+
+
+export const RoutePackage_SerializeSchema = z.object({
+	name: z.string(),
+	finalOutbound: z.string(),
+	blocks: z.array(PackageBlock_SerializeSchema),
+});
+export type RoutePackage_Serialize = z.infer<typeof RoutePackage_SerializeSchema>;
+
+
 export const ImportModeSchema = z.union([z.literal("merge"), z.literal("replace")]);
 export type ImportMode = z.infer<typeof ImportModeSchema>;
 
@@ -1253,6 +1269,10 @@ export const MutationIntent_SerializeSchema = z.union([z.object({
 	kind: z.literal("importBackup"),
 	incoming: AppState_SerializeSchema,
 	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("importRoutePackage"),
+	id: z.string().nullable(),
+	package: RoutePackage_SerializeSchema,
 }), z.object({
 	kind: z.literal("importRoutingLink"),
 	routing: RoutingImport_SerializeSchema,
@@ -1371,6 +1391,10 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("applySubscription"),
 	subId: z.string(),
 }), z.object({
+	cmd: z.literal("buildRouteShare"),
+	route: RouteSchema,
+	blocks: z.array(RuleBlock_SerializeSchema),
+}), z.object({
 	cmd: z.literal("buildShareLink"),
 	profile: ProfileSchema,
 }), z.object({
@@ -1429,6 +1453,9 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("openUrl"),
 	url: z.string(),
+}), z.object({
+	cmd: z.literal("parseRoutePackage"),
+	text: z.string(),
 }), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
@@ -1491,6 +1518,22 @@ export const Command_SerializeSchema = z.union([z.object({
 export type Command_Serialize = z.infer<typeof Command_SerializeSchema>;
 
 
+export const PackageBlock_DeserializeSchema = z.object({
+	name: z.string(),
+	enabled: z.boolean(),
+	rules: z.array(RoutingRule_DeserializeSchema),
+});
+export type PackageBlock_Deserialize = z.infer<typeof PackageBlock_DeserializeSchema>;
+
+
+export const RoutePackage_DeserializeSchema = z.object({
+	name: z.string(),
+	finalOutbound: z.string(),
+	blocks: z.array(PackageBlock_DeserializeSchema),
+});
+export type RoutePackage_Deserialize = z.infer<typeof RoutePackage_DeserializeSchema>;
+
+
 export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("addGroup"),
 	id: z.string(),
@@ -1512,6 +1555,10 @@ export const MutationIntent_DeserializeSchema = z.union([z.object({
 	kind: z.literal("importBackup"),
 	incoming: AppState_DeserializeSchema,
 	mode: ImportModeSchema,
+}), z.object({
+	kind: z.literal("importRoutePackage"),
+	id: z.string().nullable().optional(),
+	package: RoutePackage_DeserializeSchema,
 }), z.object({
 	kind: z.literal("importRoutingLink"),
 	routing: RoutingImport_DeserializeSchema,
@@ -1626,6 +1673,10 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("applySubscription"),
 	subId: z.string(),
 }), z.object({
+	cmd: z.literal("buildRouteShare"),
+	route: RouteSchema,
+	blocks: z.array(RuleBlock_DeserializeSchema),
+}), z.object({
 	cmd: z.literal("buildShareLink"),
 	profile: ProfileSchema,
 }), z.object({
@@ -1684,6 +1735,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("openUrl"),
 	url: z.string(),
+}), z.object({
+	cmd: z.literal("parseRoutePackage"),
+	text: z.string(),
 }), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
@@ -1867,22 +1921,6 @@ export const MutationIntentSchema = z.union([MutationIntent_DeserializeSchema, M
 export type MutationIntent = z.infer<typeof MutationIntentSchema>;
 
 
-export const PackageBlock_SerializeSchema = z.object({
-	name: z.string(),
-	enabled: z.boolean(),
-	rules: z.array(RoutingRule_SerializeSchema),
-});
-export type PackageBlock_Serialize = z.infer<typeof PackageBlock_SerializeSchema>;
-
-
-export const PackageBlock_DeserializeSchema = z.object({
-	name: z.string(),
-	enabled: z.boolean(),
-	rules: z.array(RoutingRule_DeserializeSchema),
-});
-export type PackageBlock_Deserialize = z.infer<typeof PackageBlock_DeserializeSchema>;
-
-
 export const PackageBlockSchema = z.union([PackageBlock_DeserializeSchema, PackageBlock_SerializeSchema]);
 export type PackageBlock = z.infer<typeof PackageBlockSchema>;
 
@@ -2010,14 +2048,6 @@ export const SubscriptionLinkSchema = z.object({
 export type SubscriptionLink = z.infer<typeof SubscriptionLinkSchema>;
 
 
-export const RoutePackage_SerializeSchema = z.object({
-	name: z.string(),
-	finalOutbound: z.string(),
-	blocks: z.array(PackageBlock_SerializeSchema),
-});
-export type RoutePackage_Serialize = z.infer<typeof RoutePackage_SerializeSchema>;
-
-
 export const RoutingLink_SerializeSchema = z.object({
 	routing: RoutingImport_SerializeSchema,
 	package: RoutePackage_SerializeSchema,
@@ -2033,14 +2063,6 @@ export const ResolvedImport_SerializeSchema = z.object({
 	shareText: z.string(),
 });
 export type ResolvedImport_Serialize = z.infer<typeof ResolvedImport_SerializeSchema>;
-
-
-export const RoutePackage_DeserializeSchema = z.object({
-	name: z.string(),
-	finalOutbound: z.string(),
-	blocks: z.array(PackageBlock_DeserializeSchema),
-});
-export type RoutePackage_Deserialize = z.infer<typeof RoutePackage_DeserializeSchema>;
 
 
 export const RoutingLink_DeserializeSchema = z.object({
@@ -2085,6 +2107,14 @@ export const ServiceState_SerializeSchema = z.object({
 	tetherOffloadBypass: z.boolean(),
 });
 export type ServiceState_Serialize = z.infer<typeof ServiceState_SerializeSchema>;
+
+
+export const RouteSharePayloadSchema = z.object({
+	exportJson: z.string(),
+	flatJson: z.string(),
+	namesProfiles: z.boolean(),
+});
+export type RouteSharePayload = z.infer<typeof RouteSharePayloadSchema>;
 
 
 export const Response_SerializeSchema = z.union([z.object({
@@ -2143,6 +2173,12 @@ export const Response_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("requestIdentity"),
 	value: ResolvedIdentity_SerializeSchema,
+}), z.object({
+	kind: z.literal("routePackage"),
+	value: RoutePackage_SerializeSchema.nullable(),
+}), z.object({
+	kind: z.literal("routeShare"),
+	value: RouteSharePayloadSchema,
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),
@@ -2230,6 +2266,12 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("requestIdentity"),
 	value: ResolvedIdentity_DeserializeSchema,
+}), z.object({
+	kind: z.literal("routePackage"),
+	value: RoutePackage_DeserializeSchema.nullable(),
+}), z.object({
+	kind: z.literal("routeShare"),
+	value: RouteSharePayloadSchema,
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),

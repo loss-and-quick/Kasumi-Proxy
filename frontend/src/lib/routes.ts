@@ -12,13 +12,14 @@ import type {
   RouteBlockRef,
   RoutePackage_Serialize,
   RoutingRule,
+  RuleBlock_Serialize,
 } from "../generated/bindings";
 import { DEFAULT_ROUTE_ID } from "../generated/defaults";
 
 export { DEFAULT_ROUTE_ID };
 
 /** A block as the UI holds it (every field present). */
-export type RuleBlock = { id: string; name: string; rules: RoutingRule[] };
+export type RuleBlock = RuleBlock_Serialize;
 
 /** Unmatched traffic goes here unless a route names another outbound. */
 export const PROXY_OUTBOUND = "proxy";
@@ -264,6 +265,7 @@ export function parseRoutePackage(text: string): RoutePackage | null {
   }
   if (!value || typeof value !== "object" || !(PACKAGE_KEY in value)) return null;
   const raw = value as Record<string, unknown>;
+  if (raw[PACKAGE_KEY] !== PACKAGE_VERSION) return null;
   if (!Array.isArray(raw.blocks)) return null;
   const blocks: RoutePackage["blocks"] = [];
   for (const item of raw.blocks) {

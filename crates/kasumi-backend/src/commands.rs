@@ -35,6 +35,9 @@ use kasumi_core::profile::{
     Profile, ProfileFieldIssue, Protocol, switch_protocol, validate_profile,
 };
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
+use kasumi_core::route::{
+    Route, RoutePackage, RouteSharePayload, RuleBlock, build_route_share, parse_route_package,
+};
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::{apply_singbox_cache_file, matches_every_connection};
 use kasumi_core::state::{
@@ -178,6 +181,15 @@ pub enum Command {
         profile: Box<Profile>,
         protocol: Protocol,
     },
+    #[serde(rename_all = "camelCase")]
+    BuildRouteShare {
+        route: Box<Route>,
+        blocks: Vec<RuleBlock>,
+    },
+    #[serde(rename_all = "camelCase")]
+    ParseRoutePackage {
+        text: String,
+    },
     /// Resolve which core each profile runs on (`core::resolve_core` under the
     /// persisted settings) plus its capability force, so the UI never re-implements
     /// the resolution matrix. Batch: one call covers a whole profile list.
@@ -304,6 +316,8 @@ pub enum Response {
     ImportInput(Box<ResolvedImport>),
     BackupRestored(Box<BackupRestored>),
     Readiness(Box<ReadinessReport>),
+    RouteShare(Box<RouteSharePayload>),
+    RoutePackage(Option<Box<RoutePackage>>),
 }
 
 /// A restored backup: the new state and how many of its profiles were left out.
@@ -715,6 +729,16 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         Command::SwitchProfileProtocol { profile, protocol } => {
             let next = switch_protocol(&profile, protocol);
             Ok(Response::Profile(Box::new(next)))
+        }
+
+        Command::BuildRouteShare { route, blocks } => {
+            let share = build_route_share(&route, &blocks);
+            Ok(Response::RouteShare(Box::new(share)))
+        }
+
+        Command::ParseRoutePackage { text } => {
+            let pkg = parse_route_package(&text);
+            Ok(Response::RoutePackage(pkg.map(Box::new)))
         }
 
         Command::OpenUrl { url } => {
@@ -1972,5 +1996,42 @@ mod tests {
         };
         assert_eq!(switched.protocol(), Protocol::Trojan);
         assert_eq!(switched.meta().remarks, "Custom Name");
+    }
+
+    #[tokio::test]
+    async fn route_share_and_parse_commands_dispatch() {
+        use kasumi_core::route::default_route;
+
+        let (p, _d) = TestPlatform::new();
+        let r = default_route();
+
+        let res = dispatch(
+            &p,
+            Command::BuildRouteShare {
+                route: Box::new(r),
+                blocks: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::RouteShare(payload) = res else {
+            panic!("expected RouteShare response");
+        };
+        assert!(!payload.names_profiles);
+        assert!(!payload.export_json.is_empty());
+
+        let res2 = dispatch(
+            &p,
+            Command::ParseRoutePackage {
+                text: payload.export_json,
+            },
+        )
+        .await
+        .unwrap();
+        let Response::RoutePackage(pkg) = res2 else {
+            panic!("expected RoutePackage response");
+        };
+        let pkg = pkg.expect("valid parsed package");
+        assert_eq!(pkg.name, "Default");
     }
 }

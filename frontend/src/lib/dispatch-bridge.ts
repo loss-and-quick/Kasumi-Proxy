@@ -354,6 +354,16 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "profile" ? r.value : wrongKind(r, "profile");
     },
 
+    async buildRouteShare(route, blocks) {
+      const r = await dispatch({ cmd: "buildRouteShare", route, blocks });
+      return r.kind === "routeShare" ? r.value : wrongKind(r, "routeShare");
+    },
+
+    async parseRoutePackage(text) {
+      const r = await dispatch({ cmd: "parseRoutePackage", text });
+      return r.kind === "routePackage" ? r.value : wrongKind(r, "routePackage");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);

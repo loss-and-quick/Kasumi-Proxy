@@ -32,9 +32,14 @@ import type {
   ConnectionProbe,
   ReadinessReport,
   ResourceUpdateMode,
+  Route,
+  RoutePackage,
+  RouteSharePayload,
+  RuleBlock,
   ServiceStatus,
 } from "./bridge";
 import { emptyProfile, type ProfileOf, profileAddress, profilePort } from "./profile-utils";
+import { exportRoutePackage, flattenRoute, parseRoutePackage, routeNamesProfiles } from "./routes";
 import { seedAppState } from "./seed";
 import { uid } from "./utils";
 
@@ -690,6 +695,18 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     if ("congestionControl" in cur && "congestionControl" in next)
       next.congestionControl = cur.congestionControl;
     return next;
+  },
+
+  async buildRouteShare(route: Route, blocks: RuleBlock[]): Promise<RouteSharePayload> {
+    return {
+      exportJson: exportRoutePackage(route, blocks),
+      flatJson: flattenRoute(route, blocks),
+      namesProfiles: routeNamesProfiles(route, blocks),
+    };
+  },
+
+  async parseRoutePackage(text: string): Promise<RoutePackage | null> {
+    return parseRoutePackage(text);
   },
 
   // Dev stub: one nested placeholder profile per line that holds a share link.

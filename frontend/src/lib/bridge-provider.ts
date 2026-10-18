@@ -182,6 +182,12 @@ export const bridge: Bridge = {
   async switchProfileProtocol(profile, protocol) {
     return (await loadBridge()).switchProfileProtocol(profile, protocol);
   },
+  async buildRouteShare(route, blocks) {
+    return (await loadBridge()).buildRouteShare(route, blocks);
+  },
+  async parseRoutePackage(text) {
+    return (await loadBridge()).parseRoutePackage(text);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },
