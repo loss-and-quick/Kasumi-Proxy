@@ -14,7 +14,7 @@ use kasumi_backend::fs::{exists, read_text, remove_file, write_text};
 use kasumi_backend::fsjson::{read_data_path_state, write_data_path_state};
 use kasumi_backend::lifecycle::{
     TunSpawn, inject_singbox_ifaces, missing_rule_sets, referenced_srs, spawn_core,
-    spawn_tun_engine, sync_geo_asset, verify_core_alive,
+    spawn_tun_engine, sync_geo_asset, validate_geo_assets, verify_core_alive,
 };
 use kasumi_backend::net::ProxyStatus;
 use kasumi_backend::platform::{
@@ -426,7 +426,13 @@ async fn fail(reason: &str) -> anyhow::Result<()> {
     anyhow::bail!("{reason}")
 }
 
-async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> anyhow::Result<()> {
+async fn start_inner(
+    platform: &AndroidPlatform,
+    plan: &DataPathPlan,
+    bin: &str,
+    cfg: &str,
+    log: &str,
+) -> anyhow::Result<()> {
     if !exists(bin).await {
         return fail("core binary missing").await;
     }
@@ -438,10 +444,14 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
     }
     let native = matches!(plan.tun, TunPlan::Native { .. });
 
+    let cfg_text = read_text(cfg).await.unwrap_or_default();
+    if let Err(e) = validate_geo_assets(platform, plan.engine, &cfg_text) {
+        return fail(&e.0).await;
+    }
+
     if plan.engine == CoreEngine::SingBox {
         // Generate/keep only the .srs this config references (needed even when
         // sing-box runs socks-only — its route rules still reference rule-sets).
-        let cfg_text = read_text(cfg).await.unwrap_or_default();
         let needed = referenced_srs(&cfg_text);
         let geo = Path::new(GEODAT2SRS_BIN);
         let dat = Path::new(DATADIR);
@@ -618,7 +628,7 @@ impl Platform for AndroidPlatform {
         ensure_tun_node().await;
 
         let (bin, cfg, log) = core_files(plan.engine);
-        if let Err(e) = start_inner(plan, bin, &cfg, &log).await {
+        if let Err(e) = start_inner(self, plan, bin, &cfg, &log).await {
             ks_error!(Area::Platform, "data-path start failed: {e}");
             // Roll back the half-built data-path so a failed start leaves no orphans.
             let already_failed = read_state()
