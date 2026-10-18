@@ -1095,6 +1095,18 @@ const pt = {
   "settings.routingRulePort": "porta: {value}",
   "settings.routingRuleNetwork": "rede: {value}",
   "settings.routingRuleProtocols": "protocolos: {value}",
+  "settings.routingRuleProcesses": plural("count", {
+    one: "# processo",
+    other: "# processos",
+  }),
+  "settings.routingRulePackages": plural("count", {
+    one: "# pacote",
+    other: "# pacotes",
+  }),
+  "settings.routingRuleSourceIps": plural("count", {
+    one: "# IP de origem",
+    other: "# IPs de origem",
+  }),
   "settings.routingRuleNoMatch": "Nenhum campo de correspondência",
   "settings.routingReorder": "Reordenar regra",
   "settings.assetFiles": "Arquivos de recurso",

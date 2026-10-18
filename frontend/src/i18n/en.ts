@@ -1085,6 +1085,18 @@ const en = {
   "settings.routingRulePort": "port: {value}",
   "settings.routingRuleNetwork": "network: {value}",
   "settings.routingRuleProtocols": "protocols: {value}",
+  "settings.routingRuleProcesses": plural("count", {
+    one: "# process",
+    other: "# processes",
+  }),
+  "settings.routingRulePackages": plural("count", {
+    one: "# package",
+    other: "# packages",
+  }),
+  "settings.routingRuleSourceIps": plural("count", {
+    one: "# source IP",
+    other: "# source IPs",
+  }),
   "settings.routingRuleNoMatch": "No match fields",
   "settings.routingReorder": "Reorder rule",
   "settings.assetFiles": "Resource files",

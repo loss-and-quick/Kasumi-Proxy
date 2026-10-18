@@ -1053,6 +1053,18 @@ const hi = {
   "settings.routingRulePort": "पोर्ट: {value}",
   "settings.routingRuleNetwork": "नेटवर्क: {value}",
   "settings.routingRuleProtocols": "प्रोटोकॉल: {value}",
+  "settings.routingRuleProcesses": plural("count", {
+    one: "# प्रोसेस",
+    other: "# प्रोसेस",
+  }),
+  "settings.routingRulePackages": plural("count", {
+    one: "# पैकेज",
+    other: "# पैकेज",
+  }),
+  "settings.routingRuleSourceIps": plural("count", {
+    one: "# स्रोत IP",
+    other: "# स्रोत IP",
+  }),
   "settings.routingRuleNoMatch": "कोई मैच फ़ील्ड नहीं",
   "settings.routingReorder": "नियम का क्रम बदलें",
   "settings.assetFiles": "रिसोर्स फ़ाइलें",

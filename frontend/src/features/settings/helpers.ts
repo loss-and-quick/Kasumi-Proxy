@@ -59,6 +59,12 @@ export function ruleSummary(
         value: formatters.formatList(rule.protocol),
       }),
     );
+  if (rule.process?.length)
+    parts.push(t("settings.routingRuleProcesses", { count: rule.process.length }));
+  if (rule.packageName?.length)
+    parts.push(t("settings.routingRulePackages", { count: rule.packageName.length }));
+  if (rule.sourceIp?.length)
+    parts.push(t("settings.routingRuleSourceIps", { count: rule.sourceIp.length }));
   if (!parts.length) parts.push(t("settings.routingRuleNoMatch"));
   parts.push(`→ ${outboundLabel(rule.outboundTag, t, resolveOutboundName)}`);
   return parts.join(" · ");
