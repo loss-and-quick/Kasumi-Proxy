@@ -31,7 +31,9 @@ use kasumi_core::import_input::{
     withhold_unavailable,
 };
 use kasumi_core::mutate::{Backup, ImportMode, MutationIntent, apply_mutation};
-use kasumi_core::profile::{Profile, Protocol};
+use kasumi_core::profile::{
+    Profile, ProfileFieldIssue, Protocol, switch_protocol, validate_profile,
+};
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::{apply_singbox_cache_file, matches_every_connection};
@@ -169,6 +171,13 @@ pub enum Command {
     BuildShareLink {
         profile: Box<Profile>,
     },
+    ValidateProfile {
+        profile: Box<Profile>,
+    },
+    SwitchProfileProtocol {
+        profile: Box<Profile>,
+        protocol: Protocol,
+    },
     /// Resolve which core each profile runs on (`core::resolve_core` under the
     /// persisted settings) plus its capability force, so the UI never re-implements
     /// the resolution matrix. Batch: one call covers a whole profile list.
@@ -289,6 +298,8 @@ pub enum Response {
     Speed(Option<i64>),
     /// A bare acknowledgement (`{ok: true}` / no body in the old protocol).
     Ok,
+    ProfileIssues(Vec<ProfileFieldIssue>),
+    Profile(Box<Profile>),
     RequestIdentity(Box<ResolvedIdentity>),
     ImportInput(Box<ResolvedImport>),
     BackupRestored(Box<BackupRestored>),
@@ -695,6 +706,16 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         }
 
         Command::BuildShareLink { profile } => Ok(Response::Text(build_share_link(&profile))),
+
+        Command::ValidateProfile { profile } => {
+            let issues = validate_profile(&profile);
+            Ok(Response::ProfileIssues(issues))
+        }
+
+        Command::SwitchProfileProtocol { profile, protocol } => {
+            let next = switch_protocol(&profile, protocol);
+            Ok(Response::Profile(Box::new(next)))
+        }
 
         Command::OpenUrl { url } => {
             // The link came from a provider: only public http(s) reaches the OS.
@@ -1901,5 +1922,55 @@ mod tests {
         assert!(report.ok);
         assert!(report.issues.is_empty());
         assert!(report.engine.is_some());
+    }
+
+    #[tokio::test]
+    async fn validate_profile_command_dispatches() {
+        use kasumi_core::profile::{ProfileValidationIssue, empty_profile};
+
+        let (p, _d) = TestPlatform::new();
+        let mut prof = empty_profile(Protocol::Vless, "g-main");
+        prof.meta_mut().remarks = "".into();
+
+        let res = dispatch(
+            &p,
+            Command::ValidateProfile {
+                profile: Box::new(prof),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::ProfileIssues(issues) = res else {
+            panic!("expected ProfileIssues response");
+        };
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.field == "remarks" && i.issue == ProfileValidationIssue::RemarksRequired)
+        );
+    }
+
+    #[tokio::test]
+    async fn switch_profile_protocol_command_dispatches() {
+        use kasumi_core::profile::empty_profile;
+
+        let (p, _d) = TestPlatform::new();
+        let mut prof = empty_profile(Protocol::Vless, "g-main");
+        prof.meta_mut().remarks = "Custom Name".into();
+
+        let res = dispatch(
+            &p,
+            Command::SwitchProfileProtocol {
+                profile: Box::new(prof),
+                protocol: Protocol::Trojan,
+            },
+        )
+        .await
+        .unwrap();
+        let Response::Profile(switched) = res else {
+            panic!("expected Profile response");
+        };
+        assert_eq!(switched.protocol(), Protocol::Trojan);
+        assert_eq!(switched.meta().remarks, "Custom Name");
     }
 }

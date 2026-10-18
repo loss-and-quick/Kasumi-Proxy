@@ -11,6 +11,7 @@ import type {
   Endpoint,
   Meta,
   Profile,
+  ProfileFieldIssue,
   Protocol,
   ResolvedImport_Serialize as ResolvedImport,
   Tls,
@@ -608,6 +609,87 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
   // `catchAllRules`).
   async catchAllRules(rules) {
     return rules.map(() => false);
+  },
+
+  async validateProfile(profile: Profile): Promise<ProfileFieldIssue[]> {
+    const issues: ProfileFieldIssue[] = [];
+    if (!profile.meta.remarks.trim()) issues.push({ field: "remarks", issue: "remarksRequired" });
+    if ("endpoint" in profile && profile.endpoint) {
+      if (!profile.endpoint.address.trim())
+        issues.push({ field: "address", issue: "addressRequired" });
+      if (profile.endpoint.port < 1 || profile.endpoint.port > 65535)
+        issues.push({ field: "port", issue: "portOutOfRange" });
+    }
+    if ("uuid" in profile && typeof profile.uuid === "string" && !profile.uuid.trim()) {
+      issues.push({ field: "uuid", issue: "uuidRequired" });
+    }
+    const passwordNeeded =
+      ["trojan", "shadowsocks", "hysteria2", "tuic", "anytls"].includes(profile.protocol) ||
+      (profile.protocol === "shadowtls" && "version" in profile && profile.version !== 1);
+    if (
+      passwordNeeded &&
+      "password" in profile &&
+      typeof profile.password === "string" &&
+      !profile.password.trim()
+    ) {
+      issues.push({ field: "password", issue: "passwordRequired" });
+    }
+    if (profile.protocol === "wireguard") {
+      if (!profile.secretKey.trim())
+        issues.push({ field: "secretKey", issue: "secretKeyRequired" });
+      if (!profile.peerPublicKey.trim())
+        issues.push({ field: "peerPublicKey", issue: "peerPublicKeyRequired" });
+    }
+    if (
+      "transport" in profile &&
+      profile.transport &&
+      ["ws", "httpupgrade", "xhttp"].includes(profile.transport.kind)
+    ) {
+      const path = "path" in profile.transport ? profile.transport.path : "";
+      if (!path?.trim()) issues.push({ field: "path", issue: "pathRequired" });
+    }
+    if ("tls" in profile && profile.tls && profile.tls.security === "reality") {
+      if (!profile.tls.sni?.trim()) issues.push({ field: "sni", issue: "realitySniRequired" });
+      if (!profile.tls.publicKey?.trim())
+        issues.push({ field: "publicKey", issue: "publicKeyRequired" });
+    }
+    if (profile.protocol === "custom" && !profile.raw?.trim()) {
+      issues.push({ field: "raw", issue: "rawConfigRequired" });
+    }
+    return issues;
+  },
+
+  async switchProfileProtocol(cur: Profile, proto: Protocol): Promise<Profile> {
+    const next = emptyProfile(proto, cur.meta.groupId);
+    next.meta = {
+      ...next.meta,
+      id: cur.meta.id,
+      remarks: cur.meta.remarks,
+      subId: cur.meta.subId,
+      coreType: cur.meta.coreType,
+      via: cur.meta.via,
+    };
+    if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
+    if ("tls" in next && next.tls && "tls" in cur && cur.tls) {
+      const security =
+        proto === "shadowsocks"
+          ? "none"
+          : cur.tls.security === "none"
+            ? next.tls.security
+            : cur.tls.security;
+      next.tls = { ...cur.tls, security };
+    }
+    if ("transport" in next && "transport" in cur && cur.transport) next.transport = cur.transport;
+    if ("uuid" in cur && "uuid" in next) next.uuid = cur.uuid;
+    if ("password" in cur && "password" in next) next.password = cur.password;
+    if ("username" in cur && "username" in next) next.username = cur.username;
+    if ("muxEnabled" in cur && "muxEnabled" in next) next.muxEnabled = cur.muxEnabled;
+    if ("flow" in cur && "flow" in next) next.flow = cur.flow;
+    if ("packetEncoding" in cur && "packetEncoding" in next)
+      next.packetEncoding = cur.packetEncoding;
+    if ("congestionControl" in cur && "congestionControl" in next)
+      next.congestionControl = cur.congestionControl;
+    return next;
   },
 
   // Dev stub: one nested placeholder profile per line that holds a share link.

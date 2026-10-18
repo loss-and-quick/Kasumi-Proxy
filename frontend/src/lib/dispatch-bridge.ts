@@ -344,6 +344,16 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "flags" ? r.value : wrongKind(r, "flags");
     },
 
+    async validateProfile(profile) {
+      const r = await dispatch({ cmd: "validateProfile", profile });
+      return r.kind === "profileIssues" ? r.value : wrongKind(r, "profileIssues");
+    },
+
+    async switchProfileProtocol(profile, protocol) {
+      const r = await dispatch({ cmd: "switchProfileProtocol", profile, protocol });
+      return r.kind === "profile" ? r.value : wrongKind(r, "profile");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);

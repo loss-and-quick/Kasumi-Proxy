@@ -395,6 +395,17 @@ impl Profile {
         }
     }
 
+    /// Mutable access to the stream-transport settings.
+    pub fn transport_mut(&mut self) -> Option<&mut Transport> {
+        match self {
+            Profile::Vless(p) => Some(&mut p.transport),
+            Profile::Vmess(p) => Some(&mut p.transport),
+            Profile::Trojan(p) => Some(&mut p.transport),
+            Profile::Shadowsocks(p) => Some(&mut p.transport),
+            _ => None,
+        }
+    }
+
     /// Whether outbound multiplexing is requested (the transport-carrying
     /// protocols only).
     pub fn mux_enabled(&self) -> bool {
@@ -456,6 +467,25 @@ impl Profile {
             Profile::Anytls(p) => Some(&p.endpoint),
             Profile::Naive(p) => Some(&p.endpoint),
             Profile::Shadowtls(p) => Some(&p.endpoint),
+            Profile::Custom(_) => None,
+        }
+    }
+
+    /// Mutable access to the server endpoint, for the protocols that carry one.
+    pub fn endpoint_mut(&mut self) -> Option<&mut Endpoint> {
+        match self {
+            Profile::Vless(p) => Some(&mut p.endpoint),
+            Profile::Vmess(p) => Some(&mut p.endpoint),
+            Profile::Trojan(p) => Some(&mut p.endpoint),
+            Profile::Shadowsocks(p) => Some(&mut p.endpoint),
+            Profile::Socks(p) => Some(&mut p.endpoint),
+            Profile::Http(p) => Some(&mut p.endpoint),
+            Profile::Wireguard(p) => Some(&mut p.endpoint),
+            Profile::Hysteria2(p) => Some(&mut p.endpoint),
+            Profile::Tuic(p) => Some(&mut p.endpoint),
+            Profile::Anytls(p) => Some(&mut p.endpoint),
+            Profile::Naive(p) => Some(&mut p.endpoint),
+            Profile::Shadowtls(p) => Some(&mut p.endpoint),
             Profile::Custom(_) => None,
         }
     }
@@ -533,6 +563,267 @@ impl Profile {
             _ => None,
         }
     }
+}
+
+/// A specific validation problem with a profile field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ProfileValidationIssue {
+    RemarksRequired,
+    AddressRequired,
+    PortOutOfRange,
+    UuidRequired,
+    PasswordRequired,
+    SecretKeyRequired,
+    PeerPublicKeyRequired,
+    PathRequired,
+    RealitySniRequired,
+    PublicKeyRequired,
+    RawConfigRequired,
+}
+
+/// A validation issue associated with a specific profile field name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileFieldIssue {
+    pub field: String,
+    pub issue: ProfileValidationIssue,
+}
+
+/// Validate protocol-specific required fields, endpoint ranges, credentials,
+/// transport paths, Reality TLS settings, and custom configs.
+pub fn validate_profile(p: &Profile) -> Vec<ProfileFieldIssue> {
+    let mut issues = Vec::new();
+
+    if p.meta().remarks.trim().is_empty() {
+        issues.push(ProfileFieldIssue {
+            field: "remarks".into(),
+            issue: ProfileValidationIssue::RemarksRequired,
+        });
+    }
+
+    if let Some(endpoint) = p.endpoint() {
+        if endpoint.address.trim().is_empty() {
+            issues.push(ProfileFieldIssue {
+                field: "address".into(),
+                issue: ProfileValidationIssue::AddressRequired,
+            });
+        }
+        if endpoint.port == 0 {
+            issues.push(ProfileFieldIssue {
+                field: "port".into(),
+                issue: ProfileValidationIssue::PortOutOfRange,
+            });
+        }
+    }
+
+    if let Some(uuid) = p.uuid()
+        && uuid.trim().is_empty()
+    {
+        issues.push(ProfileFieldIssue {
+            field: "uuid".into(),
+            issue: ProfileValidationIssue::UuidRequired,
+        });
+    }
+
+    let password_needed = match p {
+        Profile::Trojan(t) => t.password.trim().is_empty(),
+        Profile::Shadowsocks(ss) => ss.password.trim().is_empty(),
+        Profile::Hysteria2(h2) => h2.password.trim().is_empty(),
+        Profile::Tuic(t) => t.password.trim().is_empty(),
+        Profile::Anytls(a) => a.password.trim().is_empty(),
+        Profile::Shadowtls(st) => st.version != 1 && st.password.trim().is_empty(),
+        _ => false,
+    };
+    if password_needed {
+        issues.push(ProfileFieldIssue {
+            field: "password".into(),
+            issue: ProfileValidationIssue::PasswordRequired,
+        });
+    }
+
+    if let Profile::Wireguard(wg) = p {
+        if wg.secret_key.trim().is_empty() {
+            issues.push(ProfileFieldIssue {
+                field: "secretKey".into(),
+                issue: ProfileValidationIssue::SecretKeyRequired,
+            });
+        }
+        if wg.peer_public_key.trim().is_empty() {
+            issues.push(ProfileFieldIssue {
+                field: "peerPublicKey".into(),
+                issue: ProfileValidationIssue::PeerPublicKeyRequired,
+            });
+        }
+    }
+
+    if let Some(transport) = p.transport() {
+        let path_needed = match transport {
+            Transport::Ws(t) => t.path.trim().is_empty(),
+            Transport::Httpupgrade(t) => t.path.trim().is_empty(),
+            Transport::Xhttp(t) => t.path.trim().is_empty(),
+            _ => false,
+        };
+        if path_needed {
+            issues.push(ProfileFieldIssue {
+                field: "path".into(),
+                issue: ProfileValidationIssue::PathRequired,
+            });
+        }
+    }
+
+    if let Some(tls) = p.tls()
+        && tls.security == Security::Reality
+    {
+        if tls.sni.trim().is_empty() {
+            issues.push(ProfileFieldIssue {
+                field: "sni".into(),
+                issue: ProfileValidationIssue::RealitySniRequired,
+            });
+        }
+        if tls.public_key.trim().is_empty() {
+            issues.push(ProfileFieldIssue {
+                field: "publicKey".into(),
+                issue: ProfileValidationIssue::PublicKeyRequired,
+            });
+        }
+    }
+
+    if let Profile::Custom(c) = p
+        && c.raw.trim().is_empty()
+    {
+        issues.push(ProfileFieldIssue {
+            field: "raw".into(),
+            issue: ProfileValidationIssue::RawConfigRequired,
+        });
+    }
+
+    issues
+}
+
+/// The profile after switching its protocol: a fresh per-protocol skeleton that
+/// carries over the identity, the endpoint/tls/transport sub-objects, and any
+/// overlapping root credential fields. The TLS mode carries over, except that
+/// Shadowsocks starts with it off (there TLS is a v2ray-plugin option) and a
+/// protocol that needs TLS gets its template's mode when the draft had none.
+pub fn switch_protocol(cur: &Profile, next_proto: Protocol) -> Profile {
+    let mut next = empty_profile(next_proto, &cur.meta().group_id);
+    let cur_meta = cur.meta();
+    let next_meta = next.meta_mut();
+    next_meta.id = cur_meta.id.clone();
+    next_meta.remarks = cur_meta.remarks.clone();
+    next_meta.sub_id = cur_meta.sub_id.clone();
+    next_meta.core_type = cur_meta.core_type;
+    next_meta.via = cur_meta.via.clone();
+
+    if let (Some(cur_ep), Some(next_ep)) = (cur.endpoint(), next.endpoint_mut()) {
+        *next_ep = cur_ep.clone();
+    }
+
+    if let (Some(cur_tls), Some(next_tls)) = (cur.tls(), next.tls_mut()) {
+        let security = if next_proto == Protocol::Shadowsocks {
+            Security::None
+        } else if cur_tls.security == Security::None {
+            next_tls.security
+        } else {
+            cur_tls.security
+        };
+        let mut new_tls = cur_tls.clone();
+        new_tls.security = security;
+        *next_tls = new_tls;
+    }
+
+    if let (Some(cur_tr), Some(next_tr)) = (cur.transport(), next.transport_mut()) {
+        *next_tr = cur_tr.clone();
+    }
+
+    if let Some(uuid) = cur.uuid() {
+        match &mut next {
+            Profile::Vless(p) => p.uuid = uuid.to_string(),
+            Profile::Vmess(p) => p.uuid = uuid.to_string(),
+            Profile::Tuic(p) => p.uuid = uuid.to_string(),
+            _ => {}
+        }
+    }
+
+    if let Some(password) = cur.password() {
+        match &mut next {
+            Profile::Trojan(p) => p.password = password.to_string(),
+            Profile::Shadowsocks(p) => p.password = password.to_string(),
+            Profile::Socks(p) => p.password = password.to_string(),
+            Profile::Http(p) => p.password = password.to_string(),
+            Profile::Hysteria2(p) => p.password = password.to_string(),
+            Profile::Tuic(p) => p.password = password.to_string(),
+            Profile::Anytls(p) => p.password = password.to_string(),
+            Profile::Naive(p) => p.password = password.to_string(),
+            Profile::Shadowtls(p) => p.password = password.to_string(),
+            _ => {}
+        }
+    }
+
+    let cur_username = match cur {
+        Profile::Socks(p) => Some(&p.username),
+        Profile::Http(p) => Some(&p.username),
+        Profile::Naive(p) => Some(&p.username),
+        _ => None,
+    };
+    if let Some(username) = cur_username {
+        match &mut next {
+            Profile::Socks(p) => p.username = username.clone(),
+            Profile::Http(p) => p.username = username.clone(),
+            Profile::Naive(p) => p.username = username.clone(),
+            _ => {}
+        }
+    }
+
+    let cur_flow = match cur {
+        Profile::Vless(p) => Some(p.flow),
+        Profile::Trojan(p) => Some(p.flow),
+        _ => None,
+    };
+    if let Some(flow) = cur_flow {
+        match &mut next {
+            Profile::Vless(p) => p.flow = flow,
+            Profile::Trojan(p) => p.flow = flow,
+            _ => {}
+        }
+    }
+
+    let cur_pe = match cur {
+        Profile::Vless(p) => Some(p.packet_encoding),
+        Profile::Vmess(p) => Some(p.packet_encoding),
+        _ => None,
+    };
+    if let Some(pe) = cur_pe {
+        match &mut next {
+            Profile::Vless(p) => p.packet_encoding = pe,
+            Profile::Vmess(p) => p.packet_encoding = pe,
+            _ => {}
+        }
+    }
+
+    let cur_cc = match cur {
+        Profile::Tuic(p) => Some(p.congestion_control),
+        Profile::Naive(p) => Some(p.congestion_control),
+        _ => None,
+    };
+    if let Some(cc) = cur_cc {
+        match &mut next {
+            Profile::Tuic(p) => p.congestion_control = cc,
+            Profile::Naive(p) => p.congestion_control = cc,
+            _ => {}
+        }
+    }
+
+    match &mut next {
+        Profile::Vless(p) => p.mux_enabled = cur.mux_enabled(),
+        Profile::Vmess(p) => p.mux_enabled = cur.mux_enabled(),
+        Profile::Trojan(p) => p.mux_enabled = cur.mux_enabled(),
+        Profile::Shadowsocks(p) => p.mux_enabled = cur.mux_enabled(),
+        _ => {}
+    }
+
+    next
 }
 
 #[cfg(test)]
@@ -662,5 +953,277 @@ mod tests {
             .unwrap();
             assert_eq!(p.tls().unwrap().security, Security::Tls, "{proto}");
         }
+    }
+
+    #[test]
+    fn validate_blank_profile_reports_issues() {
+        let mut p = empty_profile(Protocol::Vless, "g-main");
+        p.meta_mut().remarks = "".into();
+        p.endpoint_mut().unwrap().port = 0;
+        let issues = validate_profile(&p);
+        let fields: Vec<&str> = issues.iter().map(|i| i.field.as_str()).collect();
+        assert!(fields.contains(&"remarks"));
+        assert!(fields.contains(&"address"));
+        assert!(fields.contains(&"port"));
+        assert!(fields.contains(&"uuid"));
+        assert_eq!(
+            issues.iter().find(|i| i.field == "remarks").unwrap().issue,
+            ProfileValidationIssue::RemarksRequired
+        );
+        assert_eq!(
+            issues.iter().find(|i| i.field == "address").unwrap().issue,
+            ProfileValidationIssue::AddressRequired
+        );
+        assert_eq!(
+            issues.iter().find(|i| i.field == "port").unwrap().issue,
+            ProfileValidationIssue::PortOutOfRange
+        );
+        assert_eq!(
+            issues.iter().find(|i| i.field == "uuid").unwrap().issue,
+            ProfileValidationIssue::UuidRequired
+        );
+    }
+
+    #[test]
+    fn validate_filled_trojan_has_no_issues() {
+        let mut p = empty_profile(Protocol::Trojan, "g-main");
+        p.meta_mut().remarks = "Home".into();
+        let ep = p.endpoint_mut().unwrap();
+        ep.address = "example.com".into();
+        ep.port = 443;
+        let Profile::Trojan(t) = &mut p else { panic!() };
+        t.password = "secret".into();
+        let issues = validate_profile(&p);
+        assert!(issues.is_empty(), "expected no issues, got: {issues:?}");
+    }
+
+    #[test]
+    fn validate_shadowtls_v1_no_password_v2_needs_password() {
+        let mut p = empty_profile(Protocol::Shadowtls, "g-main");
+        p.meta_mut().remarks = "ST".into();
+        let ep = p.endpoint_mut().unwrap();
+        ep.address = "example.com".into();
+        ep.port = 443;
+
+        let Profile::Shadowtls(st) = &mut p else {
+            panic!()
+        };
+        st.version = 1;
+        st.password = "".into();
+        let issues = validate_profile(&p);
+        assert!(!issues.iter().any(|i| i.field == "password"));
+
+        let Profile::Shadowtls(st) = &mut p else {
+            panic!()
+        };
+        st.version = 2;
+        let issues = validate_profile(&p);
+        assert_eq!(
+            issues.iter().find(|i| i.field == "password").unwrap().issue,
+            ProfileValidationIssue::PasswordRequired
+        );
+    }
+
+    #[test]
+    fn validate_wireguard_keys() {
+        let mut p = empty_profile(Protocol::Wireguard, "g-main");
+        p.meta_mut().remarks = "WG".into();
+        p.endpoint_mut().unwrap().address = "wg.example".into();
+        p.endpoint_mut().unwrap().port = 51820;
+
+        let issues = validate_profile(&p);
+        assert_eq!(
+            issues
+                .iter()
+                .find(|i| i.field == "secretKey")
+                .unwrap()
+                .issue,
+            ProfileValidationIssue::SecretKeyRequired
+        );
+        assert_eq!(
+            issues
+                .iter()
+                .find(|i| i.field == "peerPublicKey")
+                .unwrap()
+                .issue,
+            ProfileValidationIssue::PeerPublicKeyRequired
+        );
+
+        let Profile::Wireguard(wg) = &mut p else {
+            panic!()
+        };
+        wg.secret_key = "sk".into();
+        wg.peer_public_key = "pk".into();
+        assert!(validate_profile(&p).is_empty());
+    }
+
+    #[test]
+    fn validate_transport_path_requirement() {
+        let mut p = empty_profile(Protocol::Vless, "g-main");
+        p.meta_mut().remarks = "WS".into();
+        p.endpoint_mut().unwrap().address = "example.com".into();
+        let Profile::Vless(v) = &mut p else { panic!() };
+        v.uuid = "11111111-2222-3333-4444-555555555555".into();
+        v.transport = Transport::Ws(crate::mixins::WsTransport {
+            path: "".into(),
+            ..Default::default()
+        });
+
+        let issues = validate_profile(&p);
+        assert_eq!(
+            issues.iter().find(|i| i.field == "path").unwrap().issue,
+            ProfileValidationIssue::PathRequired
+        );
+
+        let Profile::Vless(v) = &mut p else { panic!() };
+        v.transport = Transport::Ws(crate::mixins::WsTransport {
+            path: "/ws".into(),
+            ..Default::default()
+        });
+        assert!(validate_profile(&p).is_empty());
+    }
+
+    #[test]
+    fn validate_reality_tls_fields() {
+        let mut p = empty_profile(Protocol::Vless, "g-main");
+        p.meta_mut().remarks = "Reality".into();
+        p.endpoint_mut().unwrap().address = "example.com".into();
+        let Profile::Vless(v) = &mut p else { panic!() };
+        v.uuid = "11111111-2222-3333-4444-555555555555".into();
+        v.tls.security = Security::Reality;
+        v.tls.sni = "".into();
+        v.tls.public_key = "".into();
+
+        let issues = validate_profile(&p);
+        assert_eq!(
+            issues.iter().find(|i| i.field == "sni").unwrap().issue,
+            ProfileValidationIssue::RealitySniRequired
+        );
+        assert_eq!(
+            issues
+                .iter()
+                .find(|i| i.field == "publicKey")
+                .unwrap()
+                .issue,
+            ProfileValidationIssue::PublicKeyRequired
+        );
+
+        let Profile::Vless(v) = &mut p else { panic!() };
+        v.tls.sni = "example.com".into();
+        v.tls.public_key = "pk".into();
+        assert!(validate_profile(&p).is_empty());
+    }
+
+    #[test]
+    fn validate_custom_raw_config() {
+        let mut p = empty_profile(Protocol::Custom, "g-main");
+        p.meta_mut().remarks = "Custom".into();
+        let issues = validate_profile(&p);
+        assert_eq!(
+            issues.iter().find(|i| i.field == "raw").unwrap().issue,
+            ProfileValidationIssue::RawConfigRequired
+        );
+
+        let Profile::Custom(c) = &mut p else { panic!() };
+        c.raw = "{\"outbounds\": []}".into();
+        assert!(validate_profile(&p).is_empty());
+    }
+
+    #[test]
+    fn switch_protocol_preserves_meta_and_endpoint() {
+        let mut vless = empty_profile(Protocol::Vless, "g-other");
+        vless.meta_mut().id = "p-custom".into();
+        vless.meta_mut().remarks = "My Server".into();
+        vless.meta_mut().sub_id = Some("sub-1".into());
+        vless.meta_mut().via = Some("hop-1".into());
+        let ep = vless.endpoint_mut().unwrap();
+        ep.address = "server.example".into();
+        ep.port = 8443;
+        let Profile::Vless(v) = &mut vless else {
+            panic!()
+        };
+        v.uuid = "uuid-1234".into();
+
+        let switched = switch_protocol(&vless, Protocol::Trojan);
+        assert_eq!(switched.protocol(), Protocol::Trojan);
+        assert_eq!(switched.meta().id, "p-custom");
+        assert_eq!(switched.meta().remarks, "My Server");
+        assert_eq!(switched.meta().group_id, "g-other");
+        assert_eq!(switched.meta().sub_id.as_deref(), Some("sub-1"));
+        assert_eq!(switched.meta().via.as_deref(), Some("hop-1"));
+        assert_eq!(switched.address(), "server.example");
+        assert_eq!(switched.port(), Some(8443));
+    }
+
+    #[test]
+    fn switch_protocol_tls_and_shadowsocks_rules() {
+        let fresh_vless = empty_profile(Protocol::Vless, "g-main");
+        assert_eq!(
+            switch_protocol(&fresh_vless, Protocol::Trojan)
+                .tls()
+                .unwrap()
+                .security,
+            Security::Tls
+        );
+        assert_eq!(
+            switch_protocol(&fresh_vless, Protocol::Vmess)
+                .tls()
+                .unwrap()
+                .security,
+            Security::None
+        );
+        assert_eq!(
+            switch_protocol(&fresh_vless, Protocol::Http)
+                .tls()
+                .unwrap()
+                .security,
+            Security::None
+        );
+
+        let mut vless_with_tls = empty_profile(Protocol::Vless, "g-main");
+        vless_with_tls.tls_mut().unwrap().security = Security::Tls;
+        vless_with_tls.tls_mut().unwrap().sni = "s.example".into();
+
+        let vmess = switch_protocol(&vless_with_tls, Protocol::Vmess);
+        assert_eq!(vmess.tls().unwrap().security, Security::Tls);
+        assert_eq!(vmess.tls().unwrap().sni, "s.example");
+
+        let ss = switch_protocol(&vless_with_tls, Protocol::Shadowsocks);
+        assert_eq!(ss.tls().unwrap().security, Security::None);
+        assert_eq!(ss.tls().unwrap().sni, "s.example");
+
+        let mut vless_reality = empty_profile(Protocol::Vless, "g-main");
+        vless_reality.tls_mut().unwrap().security = Security::Reality;
+        vless_reality.tls_mut().unwrap().sni = "r.example".into();
+        let trojan = switch_protocol(&vless_reality, Protocol::Trojan);
+        assert_eq!(trojan.tls().unwrap().security, Security::Reality);
+        assert_eq!(trojan.tls().unwrap().sni, "r.example");
+    }
+
+    #[test]
+    fn switch_protocol_carries_overlapping_credentials() {
+        let mut vless = empty_profile(Protocol::Vless, "g-main");
+        let Profile::Vless(v) = &mut vless else {
+            panic!()
+        };
+        v.uuid = "my-uuid".into();
+
+        let vmess = switch_protocol(&vless, Protocol::Vmess);
+        assert_eq!(vmess.uuid(), Some("my-uuid"));
+
+        let tuic = switch_protocol(&vless, Protocol::Tuic);
+        assert_eq!(tuic.uuid(), Some("my-uuid"));
+
+        let mut trojan = empty_profile(Protocol::Trojan, "g-main");
+        let Profile::Trojan(t) = &mut trojan else {
+            panic!()
+        };
+        t.password = "my-password".into();
+
+        let ss = switch_protocol(&trojan, Protocol::Shadowsocks);
+        assert_eq!(ss.password(), Some("my-password"));
+
+        let h2 = switch_protocol(&trojan, Protocol::Hysteria2);
+        assert_eq!(h2.password(), Some("my-password"));
     }
 }

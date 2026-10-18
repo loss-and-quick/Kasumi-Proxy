@@ -9,7 +9,13 @@
 // ============================================================
 
 import { z } from "zod";
-import type { Profile, Protocol, Security, Transport } from "../generated/bindings";
+import type {
+  Profile,
+  ProfileValidationIssue,
+  Protocol,
+  Security,
+  Transport,
+} from "../generated/bindings";
 import { EMPTY_PROFILES } from "../generated/defaults";
 import {
   AnytlsSchema,
@@ -27,6 +33,7 @@ import {
   WireguardSchema,
 } from "../generated/schemas";
 import { translateCurrent } from "../i18n";
+import type { DictKey } from "../i18n/types";
 
 /** Stable unique id generator (crypto.randomUUID with a non-crypto fallback). */
 export const uid = (): string =>
@@ -116,62 +123,32 @@ const PROTOCOL_SCHEMA = {
   custom: CustomSchema,
 } as const;
 
-const TRANSPORT_NEEDS_PATH = new Set(["ws", "httpupgrade", "xhttp"]);
-
-const UUID_PROTOCOLS = new Set<Protocol>(["vless", "vmess", "tuic"]);
-const PASSWORD_PROTOCOLS = new Set<Protocol>([
-  "trojan",
-  "shadowsocks",
-  "hysteria2",
-  "tuic",
-  "anytls",
-]);
-
-// Same cross-field rules as the Rust schema, plus the fields a profile can't
-// connect without, read off the nested draft. Issue paths use the leaf field
-// name so the editor sections can key errors by field.
-function refineProfile(value: unknown, ctx: z.RefinementCtx): void {
-  const p = value as Profile;
-  const need = (field: string, key: Parameters<typeof translateCurrent>[0]) =>
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: translateCurrent(key) });
-  const blank = (v: unknown) => typeof v !== "string" || !v.trim();
-
-  if (blank(p.meta.remarks)) need("remarks", "editor.validation.remarks");
-  if ("endpoint" in p && p.endpoint) {
-    if (blank(p.endpoint.address)) need("address", "editor.validation.address");
-    const port = Number(p.endpoint.port);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) need("port", "editor.validation.port");
-  }
-  if (UUID_PROTOCOLS.has(p.protocol) && "uuid" in p && blank(p.uuid))
-    need("uuid", "editor.validation.uuid");
-  const passwordNeeded =
-    PASSWORD_PROTOCOLS.has(p.protocol) ||
-    // ShadowTLS v1 has no password; v2 and v3 authenticate with one.
-    (p.protocol === "shadowtls" && p.version !== 1);
-  if (passwordNeeded && "password" in p && blank(p.password))
-    need("password", "editor.validation.password");
-  if (p.protocol === "wireguard") {
-    if (blank(p.secretKey)) need("secretKey", "editor.validation.secretKey");
-    if (blank(p.peerPublicKey)) need("peerPublicKey", "editor.validation.peerPublicKey");
-  }
-
-  if ("transport" in p && p.transport && TRANSPORT_NEEDS_PATH.has(p.transport.kind)) {
-    const path = "path" in p.transport ? p.transport.path : "";
-    if (!path) need("path", "editor.validation.path");
-  }
-  if ("tls" in p && p.tls && p.tls.security === "reality") {
-    if (!p.tls.sni) need("sni", "editor.validation.realitySni");
-    if (!p.tls.publicKey) need("publicKey", "editor.validation.publicKey");
-  }
-  if (p.protocol === "custom" && !p.raw?.trim()) need("raw", "editor.validation.raw");
-}
-
-/** Pick the right single-protocol schema for the editor form resolver. */
+/** Pick the right single-protocol schema for structural parsing. */
 export const schemaFor = (p: Protocol) =>
-  z
-    .object({ protocol: z.literal(p) })
-    .and(PROTOCOL_SCHEMA[p])
-    .superRefine(refineProfile);
+  z.object({ protocol: z.literal(p) }).and(PROTOCOL_SCHEMA[p]);
+
+const ISSUE_TRANSLATION_KEYS: Record<ProfileValidationIssue, DictKey> = {
+  remarksRequired: "editor.validation.remarks",
+  addressRequired: "editor.validation.address",
+  portOutOfRange: "editor.validation.port",
+  uuidRequired: "editor.validation.uuid",
+  passwordRequired: "editor.validation.password",
+  secretKeyRequired: "editor.validation.secretKey",
+  peerPublicKeyRequired: "editor.validation.peerPublicKey",
+  pathRequired: "editor.validation.path",
+  realitySniRequired: "editor.validation.realitySni",
+  publicKeyRequired: "editor.validation.publicKey",
+  rawConfigRequired: "editor.validation.raw",
+};
+
+/** Map a backend validation issue to localized error text. */
+export function translateIssue(
+  issue: ProfileValidationIssue,
+  t?: (key: DictKey) => string,
+): string {
+  const key = ISSUE_TRANSLATION_KEYS[issue];
+  return t ? t(key) : translateCurrent(key);
+}
 
 /* ---------- nested emptyProfile factory ---------- */
 
@@ -184,43 +161,6 @@ export function emptyProfile(protocol: Protocol, groupId = "g-main"): Profile {
   const base = structuredClone(EMPTY_PROFILES[protocol]);
   base.meta = { ...base.meta, id: uid(), groupId };
   return base;
-}
-
-/**
- * The draft after switching its protocol: a fresh per-protocol skeleton that
- * carries over the identity, the endpoint/tls/transport sub-objects, and any
- * overlapping root credential field. The TLS mode carries over, except that
- * Shadowsocks starts with it off (there TLS is a v2ray-plugin option) and a
- * protocol that needs TLS gets its template's mode when the draft had none.
- */
-export function switchProtocol(cur: Profile, proto: Protocol): Profile {
-  const next = emptyProfile(proto, cur.meta.groupId);
-  next.meta = {
-    ...next.meta,
-    id: cur.meta.id,
-    remarks: cur.meta.remarks,
-    subId: cur.meta.subId,
-    coreType: cur.meta.coreType,
-    via: cur.meta.via,
-  };
-  if ("endpoint" in next && "endpoint" in cur) next.endpoint = { ...cur.endpoint };
-  if ("tls" in next && next.tls && "tls" in cur && cur.tls) {
-    const security =
-      proto === "shadowsocks"
-        ? "none"
-        : cur.tls.security === "none"
-          ? next.tls.security
-          : cur.tls.security;
-    next.tls = { ...cur.tls, security };
-  }
-  if ("transport" in next && "transport" in cur && cur.transport) next.transport = cur.transport;
-  const skip = new Set(["meta", "endpoint", "tls", "transport", "protocol"]);
-  const from = cur as Record<string, unknown>;
-  const into = next as Record<string, unknown>;
-  for (const key of Object.keys(into)) {
-    if (!skip.has(key) && from[key] !== undefined) into[key] = from[key];
-  }
-  return next;
 }
 
 /** A custom profile whose raw config came from a subscription, not the user. */

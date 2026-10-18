@@ -1475,9 +1475,16 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("stop"),
 }), z.object({
+	cmd: z.literal("switchProfileProtocol"),
+	profile: ProfileSchema,
+	protocol: ProtocolSchema,
+}), z.object({
 	cmd: z.literal("testLog"),
 	profileId: z.string(),
 	kind: TestKindSchema,
+}), z.object({
+	cmd: z.literal("validateProfile"),
+	profile: ProfileSchema,
 }), z.object({
 	cmd: z.literal("wsInfo"),
 })]);
@@ -1723,9 +1730,16 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("stop"),
 }), z.object({
+	cmd: z.literal("switchProfileProtocol"),
+	profile: ProfileSchema,
+	protocol: ProtocolSchema,
+}), z.object({
 	cmd: z.literal("testLog"),
 	profileId: z.string(),
 	kind: TestKindSchema,
+}), z.object({
+	cmd: z.literal("validateProfile"),
+	profile: ProfileSchema,
 }), z.object({
 	cmd: z.literal("wsInfo"),
 })]);
@@ -1883,6 +1897,17 @@ export const PortCollisionSchema = z.object({
 	second: LocalPortSchema,
 });
 export type PortCollision = z.infer<typeof PortCollisionSchema>;
+
+
+export const ProfileValidationIssueSchema = z.union([z.literal("addressRequired"), z.literal("passwordRequired"), z.literal("pathRequired"), z.literal("peerPublicKeyRequired"), z.literal("portOutOfRange"), z.literal("publicKeyRequired"), z.literal("rawConfigRequired"), z.literal("realitySniRequired"), z.literal("remarksRequired"), z.literal("secretKeyRequired"), z.literal("uuidRequired")]);
+export type ProfileValidationIssue = z.infer<typeof ProfileValidationIssueSchema>;
+
+
+export const ProfileFieldIssueSchema = z.object({
+	field: z.string(),
+	issue: ProfileValidationIssueSchema,
+});
+export type ProfileFieldIssue = z.infer<typeof ProfileFieldIssueSchema>;
 
 
 export const ProviderInfoSchema = z.union([ProviderInfo_DeserializeSchema, ProviderInfo_SerializeSchema]);
@@ -2101,8 +2126,14 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("probe"),
 	value: ConnectionProbeSchema,
 }), z.object({
+	kind: z.literal("profile"),
+	value: ProfileSchema,
+}), z.object({
 	kind: z.literal("profileIds"),
 	value: z.array(z.string()),
+}), z.object({
+	kind: z.literal("profileIssues"),
+	value: z.array(ProfileFieldIssueSchema),
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
@@ -2182,8 +2213,14 @@ export const Response_DeserializeSchema = z.union([z.object({
 	kind: z.literal("probe"),
 	value: ConnectionProbeSchema,
 }), z.object({
+	kind: z.literal("profile"),
+	value: ProfileSchema,
+}), z.object({
 	kind: z.literal("profileIds"),
 	value: z.array(z.string()),
+}), z.object({
+	kind: z.literal("profileIssues"),
+	value: z.array(ProfileFieldIssueSchema),
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),

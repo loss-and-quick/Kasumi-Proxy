@@ -20,6 +20,8 @@ import type {
   LogTarget,
   PortCollision,
   Profile,
+  ProfileFieldIssue,
+  Protocol,
   ReadinessReport,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
@@ -51,6 +53,10 @@ export type {
   MutationIntent_Serialize as MutationIntent,
   PendingChange_Serialize as PendingChange,
   PortCollision,
+  Profile,
+  ProfileFieldIssue,
+  ProfileValidationIssue,
+  Protocol,
   ReadinessIssue,
   ReadinessReport,
   RequestClient,
@@ -211,6 +217,10 @@ export interface Bridge {
   // Which of `rules` match every connection once built, by the backend's rule
   // builder; one flag per rule, in order.
   catchAllRules(rules: RoutingRule[]): Promise<boolean[]>;
+
+  // Profile validation and protocol switching
+  validateProfile(profile: Profile): Promise<ProfileFieldIssue[]>;
+  switchProfileProtocol(profile: Profile, protocol: Protocol): Promise<Profile>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription
