@@ -43,9 +43,9 @@ describe("checkSubscriptionUrlSecurity", () => {
   });
 
   it("flags plain http only", async () => {
-    expect((await mockBridge.checkSubscriptionUrlSecurity("http://example.com")).isInsecureHttp).toBe(
-      true,
-    );
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("http://example.com")).isInsecureHttp,
+    ).toBe(true);
     expect(
       (await mockBridge.checkSubscriptionUrlSecurity("https://example.com")).isInsecureHttp,
     ).toBe(false);

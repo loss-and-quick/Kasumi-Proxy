@@ -215,6 +215,12 @@ function createBridgeMock(): BridgeMock {
       })),
     ),
     parseRoutingRules: vi.fn<Bridge["parseRoutingRules"]>(async () => []),
+    validateFilterRegex: vi.fn<Bridge["validateFilterRegex"]>(async () => true),
+    checkSubscriptionUrlSecurity: vi.fn<Bridge["checkSubscriptionUrlSecurity"]>(async () => ({
+      isInsecureHttp: false,
+      isLocalOrPrivate: false,
+      suggestAllowInsecure: false,
+    })),
     validateProfile: vi.fn<Bridge["validateProfile"]>(async () => []),
     switchProfileProtocol: vi.fn<Bridge["switchProfileProtocol"]>(async (profile) => profile),
     buildRouteShare: vi.fn<Bridge["buildRouteShare"]>(async (route, blocks) => ({

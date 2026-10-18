@@ -69,7 +69,8 @@ export function SubEditSheet({
 
   useEffect(() => {
     let alive = true;
-    if (!d.url.trim()) {
+    const url = d?.url.trim();
+    if (!url) {
       setUrlSecurity({
         isInsecureHttp: false,
         isLocalOrPrivate: false,
@@ -78,13 +79,13 @@ export function SubEditSheet({
       return;
     }
     bridge
-      .checkSubscriptionUrlSecurity(d.url)
+      .checkSubscriptionUrlSecurity(url)
       .then((sec) => alive && setUrlSecurity(sec))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [d.url]);
+  }, [d?.url]);
   const [urlCheck, setUrlCheck] = useState<{ url: string; check: SubscriptionUrlCheck } | null>(
     null,
   );
@@ -240,8 +241,9 @@ export function SubEditSheet({
     }
   };
 
-  const showInsecureHint =
-    d.url.trim() !== "" && urlSecurity.isInsecureHttp && !urlSecurity.isLocalOrPrivate;
+  const showInsecureHint = Boolean(
+    d?.url.trim() && urlSecurity.isInsecureHttp && !urlSecurity.isLocalOrPrivate,
+  );
 
   return (
     <Sheet

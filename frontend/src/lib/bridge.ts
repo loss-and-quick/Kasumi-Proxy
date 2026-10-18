@@ -79,12 +79,15 @@ export type {
   SubAppliedEvent,
   SubRequestOverrides_Serialize as SubRequestOverrides,
   Subscription_Serialize as Subscription,
-  SubscriptionUrlSecurity,
   TestKind,
   TunnelSetting,
 } from "../generated/bindings";
 
-import type { AppState_Serialize, MutationIntent_Serialize } from "../generated/bindings";
+import type {
+  AppState_Serialize,
+  MutationIntent_Serialize,
+  SubscriptionUrlSecurity,
+} from "../generated/bindings";
 import { PROTOCOL_OPTS } from "../generated/defaults";
 
 // The persisted app state as the UI holds it. `schemaVersion` is an on-disk
@@ -123,6 +126,8 @@ export interface ServiceStatus extends Omit<WireServiceStatus, "state"> {
 }
 
 export type ResourceUpdateMode = FetchMode;
+
+export type { SubscriptionUrlSecurity } from "../generated/bindings";
 
 export type BatchProgress = (profileId: string, value: number) => void;
 

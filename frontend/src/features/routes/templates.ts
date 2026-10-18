@@ -29,6 +29,22 @@ export type BlockTemplate = {
 /** The ready-made blocks, single-sourced from Rust (`builtin_block_templates`). */
 export const BLOCK_TEMPLATES = GENERATED_BLOCK_TEMPLATES as unknown as BlockTemplate[];
 
+/** Compile-time type check ensuring Rust template keys match known i18n dictionary keys. */
+export const TEMPLATE_I18N_KEYS = [
+  "routes.template.ads",
+  "routes.template.adsHint",
+  "routes.template.lan",
+  "routes.template.lanHint",
+  "routes.template.ru",
+  "routes.template.ruHint",
+  "routes.template.cn",
+  "routes.template.cnHint",
+  "routes.template.quic",
+  "routes.template.quicHint",
+  "routes.template.sites",
+  "routes.template.addresses",
+] as const satisfies readonly DictKey[];
+
 /** The template's rules with names in the user's language (ids are given on save). */
 export function templateRules(template: BlockTemplate, t: (key: DictKey) => string): RoutingRule[] {
   return template.rules.map(({ remarksKey, ...rule }) => ({

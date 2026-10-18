@@ -386,7 +386,9 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
 
     async checkSubscriptionUrlSecurity(url) {
       const r = await dispatch({ cmd: "checkSubscriptionUrlSecurity", url });
-      return r.kind === "subscriptionUrlSecurity" ? r.value : wrongKind(r, "subscriptionUrlSecurity");
+      return r.kind === "subscriptionUrlSecurity"
+        ? r.value
+        : wrongKind(r, "subscriptionUrlSecurity");
     },
 
     async parseShareLinks(text) {
