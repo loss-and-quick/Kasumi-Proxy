@@ -88,6 +88,8 @@ interface Store extends AppState {
   // (`catchAllRules`), refreshed whenever the rule blocks change.
   catchAllRules: CatchAllRules;
   readinessReport: ReadinessReport | null;
+  readinessChecking: boolean;
+  readinessFailed: boolean;
   toasts: ToastItem[];
   recentActivity: ActivityEvent[];
   recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
@@ -546,6 +548,8 @@ export const useAppStore = create<Store>((set, get) => {
     coreResolutions: {},
     catchAllRules: {},
     readinessReport: null,
+    readinessChecking: false,
+    readinessFailed: false,
     toasts: [],
     recentActivity: [],
     recentProfileIds: [],
@@ -637,7 +641,11 @@ export const useAppStore = create<Store>((set, get) => {
     refreshReadiness() {
       const targetId = get().activeId;
       const seq = ++readinessSeq;
-      set({ readinessReport: null });
+      set({
+        readinessReport: null,
+        readinessChecking: true,
+        readinessFailed: false,
+      });
       bridge
         .checkReadiness(targetId ?? undefined)
         .then((report) => {
@@ -646,12 +654,20 @@ export const useAppStore = create<Store>((set, get) => {
             get().activeId === targetId &&
             (report.profileId == null || report.profileId === targetId)
           ) {
-            set({ readinessReport: report });
+            set({
+              readinessReport: report,
+              readinessChecking: false,
+              readinessFailed: false,
+            });
           }
         })
         .catch((e: unknown) => {
           if (seq === readinessSeq && get().activeId === targetId) {
-            set({ readinessReport: null });
+            set({
+              readinessReport: null,
+              readinessChecking: false,
+              readinessFailed: true,
+            });
           }
           logError("readiness check failed", {}, errorStack(e));
         });

@@ -84,6 +84,8 @@ export default function Overview({
   const active = profiles.find((p) => p.meta.id === activeId);
   const routes = useAppStore((s) => s.routes);
   const readinessReport = useAppStore((s) => s.readinessReport);
+  const readinessChecking = useAppStore((s) => s.readinessChecking);
+  const readinessFailed = useAppStore((s) => s.readinessFailed);
   const refreshReadiness = useAppStore((s) => s.refreshReadiness);
   // Backend-resolved core of the active profile (`resolveCores` cache in the store).
   const resolvedCore = useAppStore((s) =>
@@ -365,10 +367,17 @@ export default function Overview({
                 </span>
               </div>
             )}
-            {activeId && !readinessReport && !up && !busy && (
+            {activeId && readinessChecking && !up && !busy && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--muted)" }}>
                   {t("settings.updateChecking")}
+                </span>
+              </div>
+            )}
+            {activeId && readinessFailed && !up && !busy && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--error)" }}>
+                  {t("overview.failed")}
                 </span>
                 <Btn variant="tonal" sm icon="refresh" onClick={() => refreshReadiness()}>
                   {t("common.retry")}
