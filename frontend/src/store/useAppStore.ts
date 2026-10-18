@@ -1147,7 +1147,10 @@ export const useAppStore = create<Store>((set, get) => {
       return mutate({ kind: "setProfileRoute", profileId, routeId });
     },
     async importRoutePackage(pkg) {
-      const id = uid();
+      let id = uid();
+      while (get().routes.some((route) => route.id === id)) {
+        id = uid();
+      }
       await mutate({ kind: "importRoutePackage", id, package: pkg });
       return id;
     },
