@@ -79,9 +79,8 @@ export function ConnectionSection({
         />
         {settings.fragment && (
           <SettingGroup>
-            <SettingRow title={t("settings.fragmentPackets")}>
+            <SettingRow stacked title={t("settings.fragmentPackets")}>
               <Segmented
-                size="sm"
                 ariaLabel={t("settings.fragmentPackets")}
                 value={settings.fragmentPackets}
                 onChange={(v) => set("fragmentPackets", v)}

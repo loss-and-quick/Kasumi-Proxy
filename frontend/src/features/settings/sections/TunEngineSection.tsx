@@ -210,11 +210,11 @@ function TunKnobRow({
   const write = (value: string | number) =>
     set(spec.field as keyof AdvancedSettings, value as never);
 
+  const isChoice = spec.kind === "choice";
   return (
-    <SettingRow title={label} hint={hint}>
-      {spec.kind === "choice" ? (
+    <SettingRow stacked={isChoice} title={label} hint={hint}>
+      {isChoice ? (
         <Segmented
-          size="sm"
           ariaLabel={label}
           value={String(current ?? "")}
           onChange={write}
