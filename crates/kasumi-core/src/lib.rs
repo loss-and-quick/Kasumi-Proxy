@@ -27,6 +27,7 @@
 //! - [`import_input`] — pasted subscription URLs, `happ://` links and share links
 
 pub mod app_process;
+pub mod asset;
 pub mod chain;
 pub mod config_shared;
 pub mod contract;

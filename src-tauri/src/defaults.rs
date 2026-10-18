@@ -245,6 +245,35 @@ pub fn render() -> String {
     out.push_str(&by_proto_json);
     out.push_str(" as Record<Protocol, CoreEngine>;\n");
 
+    // Protocols locked to a single core engine (single-sourced from Rust `locked_core_for`).
+    let locked_protos: Vec<String> = kasumi_core::core::locked_core_protocols()
+        .into_iter()
+        .map(wire)
+        .collect();
+    let locked_json = serde_json::to_string(&locked_protos).expect("locked protos");
+    out.push_str(
+        "\n/** Protocols only one core implements, single-sourced from Rust capability guards. */\n",
+    );
+    out.push_str(&format!(
+        "export const LOCKED_CORE_PROTOCOLS: readonly Protocol[] = {locked_json} as readonly Protocol[];\n"
+    ));
+
+    let mut locked_by_proto = serde_json::Map::new();
+    for proto in Protocol::iter() {
+        if let Some(engine) = kasumi_core::core::locked_core_for(proto) {
+            locked_by_proto.insert(wire(proto), serde_json::Value::String(wire(engine)));
+        }
+    }
+    let locked_by_proto_json =
+        serde_json::to_string_pretty(&serde_json::Value::Object(locked_by_proto))
+            .expect("pretty locked core map");
+    out.push_str(
+        "\n/** The single core a locked protocol can run on, single-sourced from Rust `locked_core_for`. */\n",
+    );
+    out.push_str("export const LOCKED_CORE_BY_PROTOCOL = ");
+    out.push_str(&locked_by_proto_json);
+    out.push_str(" as Partial<Record<Protocol, CoreEngine>>;\n");
+
     out
 }
 

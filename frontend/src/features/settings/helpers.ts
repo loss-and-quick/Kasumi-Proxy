@@ -1,9 +1,23 @@
 import { z } from "zod";
-import type { CoreEngine, Protocol, RoutingRule } from "../../generated/bindings";
-import { DEFAULT_CORE_BY_PROTOCOL, PROTOCOL_OPTS } from "../../generated/defaults";
+import type {
+  AssetDraftInput,
+  AssetDraftIssue,
+  AssetDraftIssueKind,
+  CoreEngine,
+  Protocol,
+  RoutingRule,
+} from "../../generated/bindings";
+import {
+  DEFAULT_CORE_BY_PROTOCOL,
+  LOCKED_CORE_BY_PROTOCOL,
+  LOCKED_CORE_PROTOCOLS,
+  PROTOCOL_OPTS,
+} from "../../generated/defaults";
 import { RoutingRule_DeserializeSchema, RoutingRuleSchema } from "../../generated/schemas";
 import type { DictKey, I18nFormatters, Translate } from "../../i18n";
 import { uid } from "../../lib/utils";
+
+export { LOCKED_CORE_BY_PROTOCOL, LOCKED_CORE_PROTOCOLS };
 
 const PROTOCOL_LABEL_KEYS: Record<Protocol, DictKey> = {
   anytls: "settings.protocol.anytls",
@@ -124,10 +138,6 @@ export function parseRoutingRulesJson(text: string): { ok: boolean; rules: Routi
 // Core-per-protocol presets
 // ------------------------------------------------------------
 
-/** Protocols only one core implements (hysteria2/tuic are sing-box-only; a custom
- *  config is written for its own core), so the user can't reassign them. */
-export const LOCKED_CORE_PROTOCOLS: readonly Protocol[] = ["hysteria2", "tuic", "custom"];
-
 export type CoresPreset = "default" | CoreEngine | "custom";
 type CoreMap = Partial<Record<Protocol, CoreEngine>>;
 
@@ -158,6 +168,35 @@ export function applyCoresPreset(preset: Exclude<CoresPreset, "custom">): CoreMa
 export type AssetDraft = { remarks: string; url: string };
 
 type Errors = Partial<Record<keyof AssetDraft, string>>;
+
+export function translateAssetIssue(
+  issue: AssetDraftIssueKind,
+  t: (key: AssetErrorKey) => string,
+): string {
+  switch (issue) {
+    case "filenameEmpty":
+      return t("assetSheet.validation.filename");
+    case "filenameUnsafe":
+      return t("assetSheet.validation.filenameUnsafe");
+    case "filenameTaken":
+      return t("assetSheet.validation.filenameTaken");
+    case "urlInvalid":
+      return t("assetSheet.validation.url");
+  }
+}
+
+export function issuesToAssetErrors(
+  issues: AssetDraftIssue[],
+  t: (key: AssetErrorKey) => string,
+): Errors {
+  const errors: Errors = {};
+  for (const issue of issues) {
+    if (issue.field === "remarks" || issue.field === "url") {
+      errors[issue.field] = translateAssetIssue(issue.issue, t);
+    }
+  }
+  return errors;
+}
 
 /** What's wrong with a draft, mirroring the backend's `safe_filename`, which
  *  refuses to download into a name that could leave the assets folder. */

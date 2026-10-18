@@ -1192,6 +1192,24 @@ export const AppStateSchema = z.union([AppState_DeserializeSchema, AppState_Seri
 export type AppState = z.infer<typeof AppStateSchema>;
 
 
+export const AssetDraftInputSchema = z.object({
+	remarks: z.string(),
+	url: z.string(),
+});
+export type AssetDraftInput = z.infer<typeof AssetDraftInputSchema>;
+
+
+export const AssetDraftIssueKindSchema = z.union([z.literal("filenameEmpty"), z.literal("filenameTaken"), z.literal("filenameUnsafe"), z.literal("urlInvalid")]);
+export type AssetDraftIssueKind = z.infer<typeof AssetDraftIssueKindSchema>;
+
+
+export const AssetDraftIssueSchema = z.object({
+	field: z.string(),
+	issue: AssetDraftIssueKindSchema,
+});
+export type AssetDraftIssue = z.infer<typeof AssetDraftIssueSchema>;
+
+
 export const BackupRestored_SerializeSchema = z.object({
 	state: AppState_SerializeSchema,
 	skippedProfiles: z.number(),
@@ -1208,6 +1226,14 @@ export type BackupRestored_Deserialize = z.infer<typeof BackupRestored_Deseriali
 
 export const BackupRestoredSchema = z.union([BackupRestored_DeserializeSchema, BackupRestored_SerializeSchema]);
 export type BackupRestored = z.infer<typeof BackupRestoredSchema>;
+
+
+export const BlockCatchAllReportSchema = z.object({
+	blockId: z.string(),
+	catchAllRuleIds: z.array(z.string()),
+	redundant: z.boolean(),
+});
+export type BlockCatchAllReport = z.infer<typeof BlockCatchAllReportSchema>;
 
 
 export const CapabilitiesSchema = z.object({
@@ -1388,6 +1414,9 @@ export type IdentityInput_Serialize = z.infer<typeof IdentityInput_SerializeSche
 
 
 export const Command_SerializeSchema = z.union([z.object({
+	cmd: z.literal("analyzeRuleBlocks"),
+	blocks: z.array(RuleBlock_SerializeSchema),
+}), z.object({
 	cmd: z.literal("applySubscription"),
 	subId: z.string(),
 }), z.object({
@@ -1457,6 +1486,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("parseRoutePackage"),
 	text: z.string(),
 }), z.object({
+	cmd: z.literal("parseRoutingRules"),
+	text: z.string(),
+}), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
 	groupId: z.string().nullable(),
@@ -1509,6 +1541,10 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("testLog"),
 	profileId: z.string(),
 	kind: TestKindSchema,
+}), z.object({
+	cmd: z.literal("validateAssetDraft"),
+	draft: AssetDraftInputSchema,
+	takenNames: z.array(z.string()),
 }), z.object({
 	cmd: z.literal("validateProfile"),
 	profile: ProfileSchema,
@@ -1670,6 +1706,9 @@ export type IdentityInput_Deserialize = z.infer<typeof IdentityInput_Deserialize
 
 
 export const Command_DeserializeSchema = z.union([z.object({
+	cmd: z.literal("analyzeRuleBlocks"),
+	blocks: z.array(RuleBlock_DeserializeSchema),
+}), z.object({
 	cmd: z.literal("applySubscription"),
 	subId: z.string(),
 }), z.object({
@@ -1739,6 +1778,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("parseRoutePackage"),
 	text: z.string(),
 }), z.object({
+	cmd: z.literal("parseRoutingRules"),
+	text: z.string(),
+}), z.object({
 	cmd: z.literal("parseShareLinks"),
 	text: z.string(),
 	groupId: z.string().nullable().optional(),
@@ -1791,6 +1833,10 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("testLog"),
 	profileId: z.string(),
 	kind: TestKindSchema,
+}), z.object({
+	cmd: z.literal("validateAssetDraft"),
+	draft: AssetDraftInputSchema,
+	takenNames: z.array(z.string()),
 }), z.object({
 	cmd: z.literal("validateProfile"),
 	profile: ProfileSchema,
@@ -2121,11 +2167,17 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("apps"),
 	value: z.array(AppInfo_SerializeSchema),
 }), z.object({
+	kind: z.literal("assetDraftIssues"),
+	value: z.array(AssetDraftIssueSchema),
+}), z.object({
 	kind: z.literal("assets"),
 	value: z.array(z.string()),
 }), z.object({
 	kind: z.literal("backupRestored"),
 	value: BackupRestored_SerializeSchema,
+}), z.object({
+	kind: z.literal("blockCatchAllReports"),
+	value: z.array(BlockCatchAllReportSchema),
 }), z.object({
 	kind: z.literal("capabilities"),
 	value: CapabilitiesSchema,
@@ -2180,6 +2232,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("routeShare"),
 	value: RouteSharePayloadSchema,
 }), z.object({
+	kind: z.literal("routingRules"),
+	value: z.array(RoutingRule_SerializeSchema),
+}), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),
 }), z.object({
@@ -2214,11 +2269,17 @@ export const Response_DeserializeSchema = z.union([z.object({
 	kind: z.literal("apps"),
 	value: z.array(AppInfo_DeserializeSchema),
 }), z.object({
+	kind: z.literal("assetDraftIssues"),
+	value: z.array(AssetDraftIssueSchema),
+}), z.object({
 	kind: z.literal("assets"),
 	value: z.array(z.string()),
 }), z.object({
 	kind: z.literal("backupRestored"),
 	value: BackupRestored_DeserializeSchema,
+}), z.object({
+	kind: z.literal("blockCatchAllReports"),
+	value: z.array(BlockCatchAllReportSchema),
 }), z.object({
 	kind: z.literal("capabilities"),
 	value: CapabilitiesSchema,
@@ -2272,6 +2333,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("routeShare"),
 	value: RouteSharePayloadSchema,
+}), z.object({
+	kind: z.literal("routingRules"),
+	value: z.array(RoutingRule_DeserializeSchema),
 }), z.object({
 	kind: z.literal("speed"),
 	value: z.number().nullable(),

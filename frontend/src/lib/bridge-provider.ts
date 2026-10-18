@@ -188,6 +188,15 @@ export const bridge: Bridge = {
   async parseRoutePackage(text) {
     return (await loadBridge()).parseRoutePackage(text);
   },
+  async validateAssetDraft(draft, takenNames) {
+    return (await loadBridge()).validateAssetDraft(draft, takenNames);
+  },
+  async analyzeRuleBlocks(blocks) {
+    return (await loadBridge()).analyzeRuleBlocks(blocks);
+  },
+  async parseRoutingRules(text) {
+    return (await loadBridge()).parseRoutingRules(text);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

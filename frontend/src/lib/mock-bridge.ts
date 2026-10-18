@@ -8,12 +8,16 @@
 // ============================================================
 
 import type {
+  AssetDraftInput,
+  AssetDraftIssue,
+  BlockCatchAllReport,
   Endpoint,
   Meta,
   Profile,
   ProfileFieldIssue,
   Protocol,
   ResolvedImport_Serialize as ResolvedImport,
+  RoutingRule,
   Tls,
   Transport,
 } from "../generated/bindings";
@@ -707,6 +711,58 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
 
   async parseRoutePackage(text: string): Promise<RoutePackage | null> {
     return parseRoutePackage(text);
+  },
+
+  async validateAssetDraft(draft: AssetDraftInput, takenNames: string[]): Promise<AssetDraftIssue[]> {
+    const issues: AssetDraftIssue[] = [];
+    const name = draft.remarks.trim();
+    if (!name) {
+      issues.push({ field: "remarks", issue: "filenameEmpty" });
+    } else if (/[/\\"]/.test(name) || name.includes("..")) {
+      issues.push({ field: "remarks", issue: "filenameUnsafe" });
+    } else if (takenNames.includes(name)) {
+      issues.push({ field: "remarks", issue: "filenameTaken" });
+    }
+    if (!/^https?:\/\/\S+$/i.test(draft.url.trim())) {
+      issues.push({ field: "url", issue: "urlInvalid" });
+    }
+    return issues;
+  },
+
+  async analyzeRuleBlocks(blocks: RuleBlock[]): Promise<BlockCatchAllReport[]> {
+    return blocks.map((b) => ({
+      blockId: b.id,
+      catchAllRuleIds: [],
+      redundant: false,
+    }));
+  },
+
+  async parseRoutingRules(text: string): Promise<RoutingRule[]> {
+    try {
+      const val = JSON.parse(text);
+      if (!Array.isArray(val) || val.length === 0) return [];
+      const rules: RoutingRule[] = [];
+      for (const item of val) {
+        if (!item || typeof item !== "object" || typeof item.outboundTag !== "string") return [];
+        rules.push({
+          id: typeof item.id === "string" && item.id.trim() ? item.id : uid(),
+          remarks: typeof item.remarks === "string" ? item.remarks : "",
+          enabled: item.enabled !== false,
+          outboundTag: item.outboundTag,
+          domain: Array.isArray(item.domain) ? item.domain : undefined,
+          ip: Array.isArray(item.ip) ? item.ip : undefined,
+          port: typeof item.port === "string" ? item.port : undefined,
+          network: item.network,
+          protocol: Array.isArray(item.protocol) ? item.protocol : undefined,
+          process: Array.isArray(item.process) ? item.process : undefined,
+          packageName: Array.isArray(item.packageName) ? item.packageName : undefined,
+          sourceIp: Array.isArray(item.sourceIp) ? item.sourceIp : undefined,
+        });
+      }
+      return rules;
+    } catch {
+      return [];
+    }
   },
 
   // Dev stub: one nested placeholder profile per line that holds a share link.

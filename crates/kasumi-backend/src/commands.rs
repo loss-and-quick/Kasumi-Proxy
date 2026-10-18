@@ -14,6 +14,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use kasumi_core::asset::{AssetDraftInput, AssetDraftIssue, validate_asset_draft};
 use kasumi_core::chain::chain_candidates;
 use kasumi_core::contract::{
     Capabilities, ConnectionProbe, CoreConflict, CoreResolution, FetchMode, HopConflict, LogTarget,
@@ -36,7 +37,8 @@ use kasumi_core::profile::{
 };
 use kasumi_core::request_identity::{IdentityInput, ResolvedIdentity};
 use kasumi_core::route::{
-    Route, RoutePackage, RouteSharePayload, RuleBlock, build_route_share, parse_route_package,
+    BlockCatchAllReport, Route, RoutePackage, RouteSharePayload, RuleBlock, analyze_rule_block,
+    build_route_share, parse_route_package, parse_routing_rules_json,
 };
 use kasumi_core::share::{build_share_link, parse_share_links};
 use kasumi_core::singbox_config::{apply_singbox_cache_file, matches_every_connection};
@@ -190,6 +192,19 @@ pub enum Command {
     ParseRoutePackage {
         text: String,
     },
+    #[serde(rename_all = "camelCase")]
+    ValidateAssetDraft {
+        draft: AssetDraftInput,
+        taken_names: Vec<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    AnalyzeRuleBlocks {
+        blocks: Vec<RuleBlock>,
+    },
+    #[serde(rename_all = "camelCase")]
+    ParseRoutingRules {
+        text: String,
+    },
     /// Resolve which core each profile runs on (`core::resolve_core` under the
     /// persisted settings) plus its capability force, so the UI never re-implements
     /// the resolution matrix. Batch: one call covers a whole profile list.
@@ -318,6 +333,9 @@ pub enum Response {
     Readiness(Box<ReadinessReport>),
     RouteShare(Box<RouteSharePayload>),
     RoutePackage(Option<Box<RoutePackage>>),
+    AssetDraftIssues(Vec<AssetDraftIssue>),
+    BlockCatchAllReports(Vec<BlockCatchAllReport>),
+    RoutingRules(Vec<RoutingRule>),
 }
 
 /// A restored backup: the new state and how many of its profiles were left out.
@@ -349,14 +367,8 @@ pub struct ReadinessReport {
     pub issues: Vec<ReadinessIssue>,
 }
 
-/// Reject path traversal / quoting tricks in asset filenames.
-pub(crate) fn safe_filename(name: &str) -> bool {
-    !name.is_empty()
-        && !name.contains('/')
-        && !name.contains("..")
-        && !name.contains('"')
-        && !name.contains('\\')
-}
+/// Re-export path traversal / quoting tricks rejection in asset filenames.
+pub(crate) use kasumi_core::asset::safe_filename;
 
 /// Names of files in `dir` ending in `suffix`, alphabetically. Missing dir → empty.
 async fn list_dir(dir: &Path, suffix: &str) -> Vec<String> {
@@ -739,6 +751,24 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         Command::ParseRoutePackage { text } => {
             let pkg = parse_route_package(&text);
             Ok(Response::RoutePackage(pkg.map(Box::new)))
+        }
+
+        Command::ValidateAssetDraft { draft, taken_names } => {
+            let issues = validate_asset_draft(&draft, &taken_names);
+            Ok(Response::AssetDraftIssues(issues))
+        }
+
+        Command::AnalyzeRuleBlocks { blocks } => {
+            let reports = blocks
+                .iter()
+                .map(|b| analyze_rule_block(&b.id, &b.rules))
+                .collect();
+            Ok(Response::BlockCatchAllReports(reports))
+        }
+
+        Command::ParseRoutingRules { text } => {
+            let rules = parse_routing_rules_json(&text);
+            Ok(Response::RoutingRules(rules))
         }
 
         Command::OpenUrl { url } => {
@@ -2033,5 +2063,80 @@ mod tests {
         };
         let pkg = pkg.expect("valid parsed package");
         assert_eq!(pkg.name, "Default");
+    }
+
+    #[tokio::test]
+    async fn asset_draft_validation_command_dispatches() {
+        let (p, _d) = TestPlatform::new();
+        let draft = AssetDraftInput {
+            remarks: "geoip.dat".into(),
+            url: "https://example.com/geoip.dat".into(),
+        };
+        let res = dispatch(
+            &p,
+            Command::ValidateAssetDraft {
+                draft,
+                taken_names: vec!["geoip.dat".into()],
+            },
+        )
+        .await
+        .unwrap();
+        let Response::AssetDraftIssues(issues) = res else {
+            panic!("expected AssetDraftIssues response");
+        };
+        assert_eq!(issues.len(), 1);
+        assert_eq!(
+            issues[0].issue,
+            kasumi_core::asset::AssetDraftIssueKind::FilenameTaken
+        );
+    }
+
+    #[tokio::test]
+    async fn analyze_rule_blocks_and_parse_rules_commands_dispatch() {
+        let (p, _d) = TestPlatform::new();
+        let b = RuleBlock {
+            id: "b1".into(),
+            name: "block1".into(),
+            rules: vec![RoutingRule {
+                id: "r1".into(),
+                remarks: "".into(),
+                enabled: true,
+                outbound_tag: "proxy".into(),
+                domain: None,
+                ip: None,
+                port: Some("0-65535".into()),
+                network: None,
+                protocol: None,
+                process: None,
+                package_name: None,
+                source_ip: None,
+            }],
+            source_sub_id: None,
+        };
+        let res = dispatch(&p, Command::AnalyzeRuleBlocks { blocks: vec![b] })
+            .await
+            .unwrap();
+        let Response::BlockCatchAllReports(reports) = res else {
+            panic!("expected BlockCatchAllReports response");
+        };
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].block_id, "b1");
+        assert_eq!(reports[0].catch_all_rule_ids, vec!["r1"]);
+        assert!(reports[0].redundant);
+
+        let res2 = dispatch(
+            &p,
+            Command::ParseRoutingRules {
+                text: r#"[{"outboundTag": "direct", "ip": ["geoip:cn"]}]"#.into(),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::RoutingRules(rules) = res2 else {
+            panic!("expected RoutingRules response");
+        };
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].outbound_tag, "direct");
+        assert!(!rules[0].id.is_empty());
     }
 }
