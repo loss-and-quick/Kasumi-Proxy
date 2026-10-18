@@ -8,8 +8,11 @@
 // ============================================================
 import type {
   AdvancedSettings_Serialize as AdvancedSettings,
+  AssetDraftInput,
+  AssetDraftIssue,
   AssetsUpdatedEvent,
   BackupRestored_Serialize as BackupRestored,
+  BlockCatchAllReport,
   Capabilities,
   ConnectionProbe,
   CoreResolution,
@@ -233,6 +236,13 @@ export interface Bridge {
   // Route sharing and package parsing
   buildRouteShare(route: Route, blocks: RuleBlock[]): Promise<RouteSharePayload>;
   parseRoutePackage(text: string): Promise<RoutePackage | null>;
+
+  // Asset draft validation
+  validateAssetDraft(draft: AssetDraftInput, takenNames: string[]): Promise<AssetDraftIssue[]>;
+
+  // Routing rule parsing and block analysis
+  analyzeRuleBlocks(blocks: RuleBlock[]): Promise<BlockCatchAllReport[]>;
+  parseRoutingRules(text: string): Promise<RoutingRule[]>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription

@@ -364,6 +364,21 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "routePackage" ? r.value : wrongKind(r, "routePackage");
     },
 
+    async validateAssetDraft(draft, takenNames) {
+      const r = await dispatch({ cmd: "validateAssetDraft", draft, takenNames });
+      return r.kind === "assetDraftIssues" ? r.value : wrongKind(r, "assetDraftIssues");
+    },
+
+    async analyzeRuleBlocks(blocks) {
+      const r = await dispatch({ cmd: "analyzeRuleBlocks", blocks });
+      return r.kind === "blockCatchAllReports" ? r.value : wrongKind(r, "blockCatchAllReports");
+    },
+
+    async parseRoutingRules(text) {
+      const r = await dispatch({ cmd: "parseRoutingRules", text });
+      return r.kind === "routingRules" ? r.value : wrongKind(r, "routingRules");
+    },
+
     async parseShareLinks(text) {
       const r = await dispatch({ cmd: "parseShareLinks", text });
       return asProfiles(r);

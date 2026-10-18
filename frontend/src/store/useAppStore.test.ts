@@ -206,6 +206,15 @@ function createBridgeMock(): BridgeMock {
     catchAllRules: vi.fn(async (rules: RoutingRule[]) =>
       rules.map((r) => r.enabled && r.port === "1-65535"),
     ),
+    validateAssetDraft: vi.fn<Bridge["validateAssetDraft"]>(async () => []),
+    analyzeRuleBlocks: vi.fn<Bridge["analyzeRuleBlocks"]>(async (blocks) =>
+      blocks.map((b) => ({
+        blockId: b.id,
+        catchAllRuleIds: b.rules.filter((r) => r.enabled && r.port === "1-65535").map((r) => r.id),
+        redundant: false,
+      })),
+    ),
+    parseRoutingRules: vi.fn<Bridge["parseRoutingRules"]>(async () => []),
     validateProfile: vi.fn<Bridge["validateProfile"]>(async () => []),
     switchProfileProtocol: vi.fn<Bridge["switchProfileProtocol"]>(async (profile) => profile),
     buildRouteShare: vi.fn<Bridge["buildRouteShare"]>(async (route, blocks) => ({
@@ -722,10 +731,15 @@ describe("useAppStore", () => {
     // knows that, so its answer is what the store keeps.
     const ads = { id: "r1", remarks: "Ads", enabled: true, outboundTag: "block", domain: ["x"] };
     const commented = { ...ads, id: "r2", domain: ["# x"], port: "0-65535" };
-    bridge.catchAllRules.mockResolvedValueOnce([false, true]);
+    bridge.analyzeRuleBlocks.mockResolvedValueOnce([
+      { blockId: "b1", catchAllRuleIds: ["r2"], redundant: true },
+    ]);
     useAppStore.setState({ ...withBlock([ads, commented]), catchAllRules: {} });
     await vi.waitFor(() => expect(useAppStore.getState().catchAllRules).toEqual({ b1: ["r2"] }));
-    expect(bridge.catchAllRules).toHaveBeenLastCalledWith([ads, commented]);
+    expect(useAppStore.getState().redundantCatchAll).toEqual({ b1: true });
+    expect(bridge.analyzeRuleBlocks).toHaveBeenLastCalledWith([
+      expect.objectContaining({ id: "b1" }),
+    ]);
   });
 
   it("a new rule goes above a rule that catches everything", async () => {

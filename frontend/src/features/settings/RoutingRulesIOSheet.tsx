@@ -4,17 +4,17 @@
 // copy / QR / download to export, paste / scan QR with merge / replace to import.
 // ============================================================
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Btn, confirm, Field, SectionLabel, Sheet } from "../../components";
 import type { RoutingRule } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { linkInputText } from "../../lib/add-input";
+import { bridge } from "../../lib/bridge-provider";
 import { nativeDialogsAvailable, openTextFile, saveTextFile } from "../../lib/native-dialog";
 import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { useLinkInput } from "../add/useLinkInput";
 import { copyText } from "../profiles/clipboard";
-import { parseRoutingRulesJson } from "./helpers";
 
 const JSON_FILTER = [{ name: "JSON", extensions: ["json"] }];
 
@@ -50,15 +50,45 @@ export function RoutingRulesIOSheet({
   const hasRules = routingRules.length > 0;
   const link = useLinkInput(importText);
 
-  const parsed = useMemo(() => {
+  const [parsed, setParsed] = useState<{
+    ok: boolean;
+    rules: RoutingRule[];
+    hint: string;
+  }>({
+    ok: false,
+    rules: [],
+    hint: t("rulesIo.importLabel"),
+  });
+
+  useEffect(() => {
+    let active = true;
     if (!importText.trim()) {
-      return { ok: false as const, rules: [] as RoutingRule[], hint: t("rulesIo.importLabel") };
+      setParsed({ ok: false, rules: [], hint: t("rulesIo.importLabel") });
+      return;
     }
-    const { ok, rules } = parseRoutingRulesJson(importText);
-    if (ok)
-      return { ok: true as const, rules, hint: t("rulesIo.summary", { count: rules.length }) };
-    const hint = link === undefined ? "" : t(link ? linkInputText(link) : "rulesIo.invalid");
-    return { ok: false as const, rules: [] as RoutingRule[], hint };
+    setParsed((p) => (p.ok ? { ok: false, rules: [], hint: p.hint } : p));
+    const timer = setTimeout(() => {
+      bridge
+        .parseRoutingRules(importText)
+        .then((rules) => {
+          if (!active) return;
+          if (rules.length > 0) {
+            setParsed({ ok: true, rules, hint: t("rulesIo.summary", { count: rules.length }) });
+            return;
+          }
+          const hint = link === undefined ? "" : t(link ? linkInputText(link) : "rulesIo.invalid");
+          setParsed({ ok: false, rules: [], hint });
+        })
+        .catch(() => {
+          if (!active) return;
+          const hint = link === undefined ? "" : t(link ? linkInputText(link) : "rulesIo.invalid");
+          setParsed({ ok: false, rules: [], hint });
+        });
+    }, 150);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [importText, link, t]);
 
   const doImport = (mode: "merge" | "replace") => {

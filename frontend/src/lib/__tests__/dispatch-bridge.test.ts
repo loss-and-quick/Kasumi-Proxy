@@ -395,6 +395,48 @@ describe("dispatch-bridge route sharing and parsing", () => {
       text: '{"kasumiRoute": 1}',
     });
   });
+
+  it("dispatches validateAssetDraft and returns issues", async () => {
+    const issues = [{ field: "remarks", issue: "filenameEmpty" as const }];
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "assetDraftIssues", value: issues }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    const draft = { remarks: "", url: "https://example.com" };
+    expect(await bridge.validateAssetDraft(draft, ["taken.dat"])).toEqual(issues);
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "validateAssetDraft",
+      draft,
+      takenNames: ["taken.dat"],
+    });
+  });
+
+  it("dispatches analyzeRuleBlocks and returns reports", async () => {
+    const reports = [{ blockId: "b1", catchAllRuleIds: ["r1"], redundant: true }];
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "blockCatchAllReports", value: reports }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    const blocks = [{ id: "b1", name: "B1", rules: [] }];
+    expect(await bridge.analyzeRuleBlocks(blocks)).toEqual(reports);
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "analyzeRuleBlocks",
+      blocks,
+    });
+  });
+
+  it("dispatches parseRoutingRules and returns parsed rules", async () => {
+    const rules = [{ id: "r1", remarks: "", enabled: true, outboundTag: "direct" }];
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "routingRules", value: rules }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.parseRoutingRules('[{"outboundTag":"direct"}]')).toEqual(rules);
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "parseRoutingRules",
+      text: '[{"outboundTag":"direct"}]',
+    });
+  });
 });
 
 describe("dispatch-bridge backup restore", () => {

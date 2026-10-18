@@ -80,6 +80,8 @@ interface Store extends AppState {
   // Which rules match every connection, per block: the backend's answer
   // (`catchAllRules`), refreshed whenever the rule blocks change.
   catchAllRules: CatchAllRules;
+  // Whether the first catch-all rule in each block is redundant (repeating proxy fallback).
+  redundantCatchAll: Record<string, boolean>;
   readinessReport: ReadinessReport | null;
   readinessChecking: boolean;
   readinessFailed: boolean;
@@ -540,6 +542,7 @@ export const useAppStore = create<Store>((set, get) => {
     testResults: {},
     coreResolutions: {},
     catchAllRules: {},
+    redundantCatchAll: {},
     readinessReport: null,
     readinessChecking: false,
     readinessFailed: false,
@@ -1266,21 +1269,27 @@ export const useAppStore = create<Store>((set, get) => {
 });
 
 // Every path that replaces the rule blocks (a mutation, hydrate, a subscription
-// refresh) re-asks the backend which rules catch everything.
+// refresh) re-asks the backend which rules catch everything and whether they are redundant.
 useAppStore.subscribe((state, prev) => {
   if (state.ruleBlocks === prev.ruleBlocks) return;
   const blocks = state.ruleBlocks;
   bridge
-    .catchAllRules(blocks.flatMap((b) => b.rules))
-    .then((flags) => {
+    .analyzeRuleBlocks(blocks)
+    .then((reports) => {
       if (useAppStore.getState().ruleBlocks !== blocks) return;
-      let i = 0;
-      const catchAllRules = Object.fromEntries(
-        blocks.map((b) => [b.id, b.rules.filter(() => flags[i++]).map((r) => r.id)]),
-      );
-      useAppStore.setState({ catchAllRules });
+      const catchAllRules: CatchAllRules = {};
+      const redundantCatchAll: Record<string, boolean> = {};
+      for (const r of reports) {
+        catchAllRules[r.blockId] = r.catchAllRuleIds;
+        redundantCatchAll[r.blockId] = r.redundant;
+      }
+      useAppStore.setState({ catchAllRules, redundantCatchAll });
     })
-    .catch((e: unknown) => logError("catch-all rules not loaded", {}, errorStack(e)));
+    .catch((e: unknown) => {
+      logError("catch-all rules not loaded", {}, errorStack(e));
+      if (useAppStore.getState().ruleBlocks !== blocks) return;
+      useAppStore.setState({ catchAllRules: {}, redundantCatchAll: {} });
+    });
 });
 
 export type StoreProfile = Profile & { subId: string | null };

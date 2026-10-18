@@ -18,6 +18,29 @@ fn is_singbox_only(proto: Protocol) -> bool {
     )
 }
 
+/// Which core a protocol is locked to for core presets, if it cannot be reassigned.
+pub fn locked_core_for(proto: Protocol) -> Option<CoreEngine> {
+    match proto {
+        Protocol::Custom => Some(CoreEngine::Xray),
+        Protocol::Hysteria2 => Some(CoreEngine::SingBox),
+        p if is_singbox_only(p) => Some(CoreEngine::SingBox),
+        _ => None,
+    }
+}
+
+/// Whether the protocol is locked to a single core engine by capability.
+pub fn is_locked_core_protocol(proto: Protocol) -> bool {
+    locked_core_for(proto).is_some()
+}
+
+/// All protocols that are locked to a single core engine.
+pub fn locked_core_protocols() -> Vec<Protocol> {
+    use strum::IntoEnumIterator;
+    Protocol::iter()
+        .filter(|&p| is_locked_core_protocol(p))
+        .collect()
+}
+
 /// Engine a protocol uses when nothing overrides it.
 pub fn default_core_for(proto: Protocol) -> CoreEngine {
     if proto == Protocol::Hysteria2 || is_singbox_only(proto) {

@@ -499,6 +499,93 @@ pub fn repoint_profile_ids(state: &mut AppState, refreshed: &dyn Fn(&str) -> Opt
     }
 }
 
+/// Analysis of a rule block's catch-all rules and whether the primary catch-all is redundant.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockCatchAllReport {
+    pub block_id: String,
+    pub catch_all_rule_ids: Vec<String>,
+    pub redundant: bool,
+}
+
+/// Analyze a block's rules for catch-all matching and whether the first catch-all is redundant.
+pub fn analyze_rule_block(block_id: &str, rules: &[RoutingRule]) -> BlockCatchAllReport {
+    let mut catch_all_rule_ids = Vec::new();
+    let mut first_catch_all_idx = None;
+
+    for (idx, rule) in rules.iter().enumerate() {
+        if crate::singbox_config::matches_every_connection(rule) {
+            catch_all_rule_ids.push(rule.id.clone());
+            if first_catch_all_idx.is_none() {
+                first_catch_all_idx = Some(idx);
+            }
+        }
+    }
+
+    let redundant = match first_catch_all_idx {
+        Some(idx) => {
+            let tag = rules[idx].outbound_tag.trim();
+            (tag.is_empty() || tag == PROXY_OUTBOUND) && !rules[idx + 1..].iter().any(|r| r.enabled)
+        }
+        None => false,
+    };
+
+    BlockCatchAllReport {
+        block_id: block_id.to_string(),
+        catch_all_rule_ids,
+        redundant,
+    }
+}
+
+/// Parse routing rules from JSON, accepting native Kasumi rules or third-party (e.g. V2rayNG) format.
+pub fn parse_routing_rules_json(text: &str) -> Vec<RoutingRule> {
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(text) else {
+        return Vec::new();
+    };
+    let Some(arr) = val.as_array() else {
+        return Vec::new();
+    };
+    if arr.is_empty() {
+        return Vec::new();
+    }
+
+    let mut rules = Vec::with_capacity(arr.len());
+    for item in arr {
+        let Some(obj) = item.as_object() else {
+            return Vec::new();
+        };
+        let Some(outbound_tag) = obj.get("outboundTag").and_then(|v| v.as_str()) else {
+            return Vec::new();
+        };
+        if outbound_tag.is_empty() {
+            return Vec::new();
+        }
+
+        let mut rule_val = serde_json::Value::Object(obj.clone());
+        let id_is_valid = obj
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+
+        if !id_is_valid {
+            rule_val["id"] = serde_json::Value::String(uuid::Uuid::new_v4().to_string());
+        }
+        if !obj.contains_key("remarks") {
+            rule_val["remarks"] = serde_json::Value::String(String::new());
+        }
+        if !obj.contains_key("enabled") {
+            rule_val["enabled"] = serde_json::Value::Bool(true);
+        }
+
+        let Ok(rule) = serde_json::from_value::<RoutingRule>(rule_val) else {
+            return Vec::new();
+        };
+        rules.push(rule);
+    }
+    rules
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -825,5 +912,80 @@ mod tests {
 
         // Different name
         assert!(!same_block(&b1, "b2", &b1.rules));
+    }
+
+    #[test]
+    fn analyze_rule_block_finds_catch_alls_and_redundancy() {
+        let mut r_dns = rule("dns", "direct");
+        r_dns.port = Some("53".into());
+
+        let mut r_catchall_proxy = rule("all-proxy", "proxy");
+        r_catchall_proxy.ip = Some(vec!["geoip:private".into()]); // not catch all
+        let mut r_plain_catchall = rule("plain-all", "proxy");
+        r_plain_catchall.domain = None;
+        r_plain_catchall.port = Some("0-65535".into()); // matches every connection
+
+        // No catch-all
+        let rep1 = analyze_rule_block("b1", &[r_dns.clone(), r_catchall_proxy.clone()]);
+        assert_eq!(rep1.catch_all_rule_ids.len(), 0);
+        assert!(!rep1.redundant);
+
+        // Catch-all to proxy with no enabled rule after -> redundant
+        let rep2 = analyze_rule_block("b2", &[r_dns.clone(), r_plain_catchall.clone()]);
+        assert_eq!(rep2.catch_all_rule_ids, vec!["plain-all"]);
+        assert!(rep2.redundant);
+
+        // Catch-all to proxy with enabled rule after -> not redundant
+        let rep3 = analyze_rule_block("b3", &[r_plain_catchall.clone(), r_dns.clone()]);
+        assert_eq!(rep3.catch_all_rule_ids, vec!["plain-all"]);
+        assert!(!rep3.redundant);
+
+        // Catch-all to direct -> not redundant
+        let mut r_catchall_direct = r_plain_catchall.clone();
+        r_catchall_direct.outbound_tag = "direct".into();
+        let rep4 = analyze_rule_block("b4", &[r_catchall_direct]);
+        assert!(!rep4.redundant);
+    }
+
+    #[test]
+    fn parse_routing_rules_json_accepts_native_and_v2rayng() {
+        let native = r#"[{
+            "id": "abc-123",
+            "remarks": "block ads",
+            "enabled": true,
+            "outboundTag": "block",
+            "domain": ["geosite:category-ads"]
+        }]"#;
+        let rules = parse_routing_rules_json(native);
+        assert_eq!(rules.len(), 1);
+        assert_eq!(rules[0].id, "abc-123");
+        assert_eq!(rules[0].remarks, "block ads");
+        assert_eq!(rules[0].outbound_tag, "block");
+
+        let v2rayng = r#"[{
+            "remarks": "direct cn",
+            "enabled": true,
+            "outboundTag": "direct",
+            "ip": ["geoip:cn"]
+        }]"#;
+        let rules = parse_routing_rules_json(v2rayng);
+        assert_eq!(rules.len(), 1);
+        assert!(!rules[0].id.is_empty());
+        assert_eq!(rules[0].remarks, "direct cn");
+        assert_eq!(rules[0].outbound_tag, "direct");
+
+        // Unique IDs for v2rayng items
+        let multi = format!(
+            r#"[{v2rayng_inner}, {v2rayng_inner}]"#,
+            v2rayng_inner = r#"{"outboundTag": "proxy"}"#
+        );
+        let multi_rules = parse_routing_rules_json(&multi);
+        assert_eq!(multi_rules.len(), 2);
+        assert_ne!(multi_rules[0].id, multi_rules[1].id);
+
+        // Invalid cases
+        assert!(parse_routing_rules_json("[]").is_empty());
+        assert!(parse_routing_rules_json("not json").is_empty());
+        assert!(parse_routing_rules_json(r#"[{"foo": "bar"}]"#).is_empty());
     }
 }

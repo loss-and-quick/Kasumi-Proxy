@@ -7,6 +7,7 @@ import {
   applyCoresPreset,
   type CoresPreset,
   coresPreset,
+  LOCKED_CORE_BY_PROTOCOL,
   LOCKED_CORE_PROTOCOLS,
   protocolLabel,
 } from "../helpers";
@@ -59,15 +60,12 @@ export function CoresSection({
         {preset === "custom" &&
           PROTOCOL_OPTS.map((protocol) => {
             const locked = LOCKED_CORE_PROTOCOLS.includes(protocol);
+            const lockedCore = LOCKED_CORE_BY_PROTOCOL[protocol];
             return (
               <SettingRow
                 key={protocol}
                 title={protocolLabel(t, protocol)}
-                hint={
-                  protocol === "hysteria2" || protocol === "tuic"
-                    ? t("settings.coreLockedSingbox")
-                    : undefined
-                }
+                hint={lockedCore === "sing-box" ? t("settings.coreLockedSingbox") : undefined}
               >
                 <Segmented
                   size="sm"
