@@ -194,6 +194,12 @@ function createBridgeMock(): BridgeMock {
     ),
     chainCandidates: vi.fn(async (_profile: Profile) => []),
     chainConflicts: vi.fn(async (_profile: Profile) => []),
+    checkReadiness: vi.fn<Bridge["checkReadiness"]>(async (profileId) => ({
+      profileId: profileId ?? null,
+      engine: null,
+      ok: true,
+      issues: [],
+    })),
     checkLocalPorts: vi.fn(async () => null),
     // Stands in for the backend's rule builder: the tests' only catch-all is a
     // full port range.

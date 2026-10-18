@@ -18,8 +18,8 @@ import {
 } from "../../components";
 import { useT } from "../../i18n";
 import { isServiceUp } from "../../lib/bridge";
+import { coreConflictText } from "../../lib/core-conflict";
 import { formatRate, formatUptime } from "../../lib/format";
-import { getMissingGeoAssets } from "../../lib/geo-assets";
 import { profileEndpointLabel } from "../../lib/profile-utils";
 import { routeFor } from "../../lib/routes";
 import { useAppStore } from "../../store/useAppStore";
@@ -28,6 +28,13 @@ import { PingActionsSheet } from "../profiles/PingActionsSheet";
 import { useProfilesView } from "../profiles/viewState";
 import { routeName } from "../routes/labels";
 import { openRoute } from "../routes/viewState";
+
+const PORT_LABEL = {
+  socks: "settings.socks",
+  http: "settings.http",
+  pac: "settings.pac",
+  force: "settings.portForce",
+} as const;
 
 export default function Overview({
   onNavigate,
@@ -44,7 +51,6 @@ export default function Overview({
   const service = useAppStore((s) => s.service);
   const downloadRate = useAppStore((s) => s.downloadRate);
   const uploadRate = useAppStore((s) => s.uploadRate);
-  const assetFiles = useAppStore((s) => s.assetFiles);
   const activeId = useAppStore((s) => s.activeId);
   const activePing = useAppStore((s) =>
     activeId ? (s.testResults[activeId]?.ping ?? null) : null,
@@ -77,20 +83,27 @@ export default function Overview({
 
   const active = profiles.find((p) => p.meta.id === activeId);
   const routes = useAppStore((s) => s.routes);
-  const ruleBlocks = useAppStore((s) => s.ruleBlocks);
+  const readinessReport = useAppStore((s) => s.readinessReport);
+  const readinessChecking = useAppStore((s) => s.readinessChecking);
+  const readinessFailed = useAppStore((s) => s.readinessFailed);
+  const refreshReadiness = useAppStore((s) => s.refreshReadiness);
   // Backend-resolved core of the active profile (`resolveCores` cache in the store).
   const resolvedCore = useAppStore((s) =>
     activeId ? (s.coreResolutions[activeId]?.resolved ?? null) : null,
   );
-  const missingAssets = getMissingGeoAssets({
-    settings,
-    routes,
-    ruleBlocks,
-    activeProfile: active,
-    assetFiles,
-    resolvedCore,
-  });
+  const ready = Boolean(
+    activeId &&
+      readinessReport?.ok &&
+      (readinessReport.profileId == null || readinessReport.profileId === activeId),
+  );
+  const missingAssets =
+    readinessReport?.issues.find((i) => i.kind === "missingGeoAssets")?.assets ?? [];
   const needsAssets = missingAssets.length > 0;
+  const portClash = readinessReport?.issues.find((i) => i.kind === "portCollision");
+  const coreConflictIssue = readinessReport?.issues.find((i) => i.kind === "coreConflict");
+  const coreConflict =
+    coreConflictIssue?.kind === "coreConflict" ? coreConflictIssue.conflict : null;
+  const configError = readinessReport?.issues.find((i) => i.kind === "configError")?.message;
 
   // Only worth a line when rules are on and there is more than one route to be on.
   const activeRoute =
@@ -317,11 +330,65 @@ export default function Overview({
                 </Btn>
               </div>
             )}
+            {portClash && !up && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--error)" }}>
+                  {t("settings.portCollision", {
+                    port: portClash.port,
+                    first: t(PORT_LABEL[portClash.first]),
+                    second: t(PORT_LABEL[portClash.second]),
+                  })}
+                </span>
+                <Btn variant="tonal" sm icon="refresh" onClick={() => refreshReadiness()}>
+                  {t("common.retry")}
+                </Btn>
+                <Btn
+                  variant="tonal"
+                  sm
+                  onClick={() => {
+                    window.location.hash = "settings";
+                  }}
+                >
+                  {t("settings.title")}
+                </Btn>
+              </div>
+            )}
+            {coreConflict && !up && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--error)" }}>
+                  {coreConflictText(t, coreConflict)}
+                </span>
+              </div>
+            )}
+            {configError && !up && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--error)" }}>
+                  {configError}
+                </span>
+              </div>
+            )}
+            {activeId && readinessChecking && !up && !busy && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--muted)" }}>
+                  {t("settings.updateChecking")}
+                </span>
+              </div>
+            )}
+            {activeId && readinessFailed && !up && !busy && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--error)" }}>
+                  {t("overview.failed")}
+                </span>
+                <Btn variant="tonal" sm icon="refresh" onClick={() => refreshReadiness()}>
+                  {t("common.retry")}
+                </Btn>
+              </div>
+            )}
             <div className="primary-actions" style={{ display: "flex", gap: 10 }}>
               <Btn
                 variant={stoppable ? "error" : "filled"}
                 onClick={toggleService}
-                disabled={busy || (!up && (!activeId || needsAssets))}
+                disabled={busy || (!up && !ready)}
                 style={{
                   flex: 2,
                   height: 52,

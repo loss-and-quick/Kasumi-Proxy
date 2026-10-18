@@ -24,6 +24,7 @@ import type {
   Capabilities,
   CoreResolution,
   MutationIntent,
+  ReadinessReport,
   ResourceUpdateMode,
   RoutingImport,
   RoutingRule,
@@ -86,11 +87,15 @@ interface Store extends AppState {
   // Which rules match every connection, per block: the backend's answer
   // (`catchAllRules`), refreshed whenever the rule blocks change.
   catchAllRules: CatchAllRules;
+  readinessReport: ReadinessReport | null;
+  readinessChecking: boolean;
+  readinessFailed: boolean;
   toasts: ToastItem[];
   recentActivity: ActivityEvent[];
   recentProfileIds: string[]; // most-recently-activated first, for the tray quick-switch
 
   hydrate: () => Promise<void>;
+  refreshReadiness: () => void;
   notify: (msg: string) => void;
   dismissToast: (id: string) => void;
 
@@ -257,6 +262,7 @@ export const useAppStore = create<Store>((set, get) => {
         testResults,
       };
     });
+    get().refreshReadiness();
   };
   // The single write path: dispatch one domain intent and render the canonical
   // AppState the backend returns. No local invariant logic, no full-state shipping.
@@ -391,6 +397,7 @@ export const useAppStore = create<Store>((set, get) => {
   // hydrate() can run more than once (tests, dev StrictMode) — register the
   // background watchers a single time.
   let daemonPushWatchStarted = false;
+  let readinessSeq = 0;
   const syncService = (service: ServiceStatus) => {
     const now = Date.now();
     let uploadRate = 0;
@@ -450,6 +457,7 @@ export const useAppStore = create<Store>((set, get) => {
         activeId: state.activeId,
       });
       refreshCoreResolutions(state.profiles);
+      get().refreshReadiness();
     } catch {
       return;
     }
@@ -462,6 +470,7 @@ export const useAppStore = create<Store>((set, get) => {
     try {
       const state = await bridge.readState();
       set({ assetFiles: state.assetFiles, settings: mergeSettings(state.settings) });
+      get().refreshReadiness();
     } catch {
       return;
     }
@@ -538,6 +547,9 @@ export const useAppStore = create<Store>((set, get) => {
     testResults: {},
     coreResolutions: {},
     catchAllRules: {},
+    readinessReport: null,
+    readinessChecking: false,
+    readinessFailed: false,
     toasts: [],
     recentActivity: [],
     recentProfileIds: [],
@@ -574,6 +586,7 @@ export const useAppStore = create<Store>((set, get) => {
         recentProfileIds: state.activeId ? [state.activeId] : [],
       });
       refreshCoreResolutions(state.profiles);
+      get().refreshReadiness();
       // Status/caps first — fast and needed for UI responsiveness.
       bridge.onStatus((service) => syncService(service));
       try {
@@ -625,6 +638,41 @@ export const useAppStore = create<Store>((set, get) => {
         bridge.onAssetsUpdated((info) => void onDaemonAssetsUpdated(info));
       }
     },
+    refreshReadiness() {
+      const targetId = get().activeId;
+      const seq = ++readinessSeq;
+      set({
+        readinessReport: null,
+        readinessChecking: true,
+        readinessFailed: false,
+      });
+      bridge
+        .checkReadiness(targetId ?? undefined)
+        .then((report) => {
+          if (
+            seq === readinessSeq &&
+            get().activeId === targetId &&
+            (report.profileId == null || report.profileId === targetId)
+          ) {
+            set({
+              readinessReport: report,
+              readinessChecking: false,
+              readinessFailed: false,
+            });
+          }
+        })
+        .catch((e: unknown) => {
+          if (seq === readinessSeq && get().activeId === targetId) {
+            set({
+              readinessReport: null,
+              readinessChecking: false,
+              readinessFailed: true,
+            });
+          }
+          logError("readiness check failed", {}, errorStack(e));
+        });
+    },
+
     notify(msg) {
       showNativeToast(msg);
       const id = uid();
@@ -1148,6 +1196,7 @@ export const useAppStore = create<Store>((set, get) => {
         kind: "upsertAssetFile",
         asset: { ...asset, lastUpdated: Date.now() },
       });
+      get().refreshReadiness();
       pushActivity(
         "file_download_done",
         translateCurrent("activity.assetDownloaded", { name: asset.remarks }),

@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use kasumi_core::chain::chain_candidates;
 use kasumi_core::contract::{
-    Capabilities, ConnectionProbe, CoreResolution, FetchMode, HopConflict, LogTarget, ServiceState,
-    TestKind, WsInfo,
+    Capabilities, ConnectionProbe, CoreConflict, CoreResolution, FetchMode, HopConflict, LogTarget,
+    ServiceState, TestKind, WsInfo,
 };
 use kasumi_core::core::{
     chain_conflicts, chain_forced_core, core_conflict, forced_core, preferred_core,
@@ -217,6 +217,11 @@ pub enum Command {
     /// its round trip and the profile it measured (`Probe`). Stateful: it updates
     /// the Service's verdict.
     ProbeConnection,
+    #[serde(rename_all = "camelCase")]
+    CheckReadiness {
+        #[serde(default)]
+        profile_id: Option<String>,
+    },
     // Lifecycle: stateful, owned by the Service's serialized chain. The stateless
     // `dispatch` rejects them; `Service::dispatch` intercepts and runs them.
     #[serde(rename_all = "camelCase")]
@@ -287,6 +292,7 @@ pub enum Response {
     RequestIdentity(Box<ResolvedIdentity>),
     ImportInput(Box<ResolvedImport>),
     BackupRestored(Box<BackupRestored>),
+    Readiness(Box<ReadinessReport>),
 }
 
 /// A restored backup: the new state and how many of its profiles were left out.
@@ -295,6 +301,27 @@ pub enum Response {
 pub struct BackupRestored {
     pub state: AppState,
     pub skipped_profiles: u32,
+}
+
+/// A condition preventing or impeding proxy startup.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ReadinessIssue {
+    NoActiveProfile,
+    CoreConflict { conflict: CoreConflict },
+    PortCollision(PortCollision),
+    MissingGeoAssets { assets: Vec<String> },
+    ConfigError { message: String },
+}
+
+/// Unified startup readiness report for a profile under current settings and routes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadinessReport {
+    pub profile_id: Option<String>,
+    pub engine: Option<CoreEngine>,
+    pub ok: bool,
+    pub issues: Vec<ReadinessIssue>,
 }
 
 /// Reject path traversal / quoting tricks in asset filenames.
@@ -396,6 +423,77 @@ fn unavailable_reason(p: &Profile) -> String {
             wire_value(&other)
         ),
     }
+}
+
+/// Unified startup readiness check for a profile under current settings and routes.
+pub(crate) async fn check_readiness(
+    platform: &dyn Platform,
+    profile_id: Option<&str>,
+) -> Result<ReadinessReport, CommandError> {
+    let state = crate::state::read_app_state(platform)
+        .await
+        .unwrap_or_else(default_app_state);
+
+    let id = profile_id
+        .filter(|s| !s.is_empty())
+        .or(state.active_id.as_deref());
+    let Some(id) = id else {
+        return Ok(ReadinessReport {
+            profile_id: None,
+            engine: None,
+            ok: false,
+            issues: vec![ReadinessIssue::NoActiveProfile],
+        });
+    };
+    let Some(profile) = state.profiles.iter().find(|p| p.meta().id == id) else {
+        return Ok(ReadinessReport {
+            profile_id: Some(id.to_string()),
+            engine: None,
+            ok: false,
+            issues: vec![ReadinessIssue::NoActiveProfile],
+        });
+    };
+
+    let mut issues = Vec::new();
+
+    if let Some(c) = state
+        .settings
+        .port_collision(platform.supports_proxy_modes())
+    {
+        issues.push(ReadinessIssue::PortCollision(c));
+    }
+
+    let engine = match kasumi_core::core::resolve_core(profile, &state.settings, &state.profiles) {
+        Ok(engine) => Some(engine),
+        Err(conflict) => {
+            issues.push(ReadinessIssue::CoreConflict { conflict });
+            None
+        }
+    };
+
+    if let Some(engine) = engine {
+        match build_profile_config(platform, id).await {
+            Ok(built) => {
+                let cfg_text = serde_json::to_string_pretty(&built.config)
+                    .map_err(|e| CommandError(e.to_string()))?;
+                let missing = crate::lifecycle::missing_geo_assets(platform, engine, &cfg_text);
+                if !missing.is_empty() {
+                    issues.push(ReadinessIssue::MissingGeoAssets { assets: missing });
+                }
+            }
+            Err(e) => {
+                issues.push(ReadinessIssue::ConfigError { message: e.0 });
+            }
+        }
+    }
+
+    let ok = issues.is_empty();
+    Ok(ReadinessReport {
+        profile_id: Some(id.to_string()),
+        engine,
+        ok,
+        issues,
+    })
 }
 
 /// Run one command against `platform`, returning its typed reply.
@@ -712,6 +810,10 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             .await
             .map(Response::Speed)
             .map_err(err),
+        Command::CheckReadiness { profile_id } => {
+            let report = check_readiness(platform, profile_id.as_deref()).await?;
+            Ok(Response::Readiness(Box::new(report)))
+        }
 
         Command::Mutate { .. }
         | Command::ImportBackup { .. }
@@ -1653,5 +1755,151 @@ mod tests {
             serde_json::to_value(Response::Ok).unwrap(),
             serde_json::json!({ "kind": "ok" })
         );
+    }
+
+    #[tokio::test]
+    async fn check_readiness_no_active_profile() {
+        let (p, _d) = TestPlatform::new();
+        write_json_atomic(&p.paths().app_state, &default_app_state())
+            .await
+            .unwrap();
+        let res = dispatch(&p, Command::CheckReadiness { profile_id: None })
+            .await
+            .unwrap();
+        let Response::Readiness(report) = res else {
+            panic!("expected Readiness response");
+        };
+        assert!(!report.ok);
+        assert_eq!(report.profile_id, None);
+        assert_eq!(report.engine, None);
+        assert_eq!(report.issues, vec![ReadinessIssue::NoActiveProfile]);
+
+        let res = dispatch(
+            &p,
+            Command::CheckReadiness {
+                profile_id: Some("nonexistent".into()),
+            },
+        )
+        .await
+        .unwrap();
+        let Response::Readiness(report) = res else {
+            panic!("expected Readiness response");
+        };
+        assert!(!report.ok);
+        assert_eq!(report.profile_id, Some("nonexistent".into()));
+        assert_eq!(report.engine, None);
+        assert_eq!(report.issues, vec![ReadinessIssue::NoActiveProfile]);
+    }
+
+    #[tokio::test]
+    async fn check_readiness_port_collision() {
+        let (p, _d) = TestPlatform::new();
+        let prof = vless();
+        let id = prof.meta().id.clone();
+        let mut state = default_app_state();
+        state.active_id = Some(id);
+        state.settings.local_http_port = Some(DEFAULT_LOCAL_SOCKS_PORT);
+        write_json_atomic(&p.paths().app_state, &state)
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![prof])
+            .await
+            .unwrap();
+
+        let res = dispatch(&p, Command::CheckReadiness { profile_id: None })
+            .await
+            .unwrap();
+        let Response::Readiness(report) = res else {
+            panic!("expected Readiness response");
+        };
+        assert!(!report.ok);
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| matches!(i, ReadinessIssue::PortCollision(_)))
+        );
+    }
+
+    #[tokio::test]
+    async fn check_readiness_missing_geo_assets() {
+        use kasumi_core::route::{RouteBlockRef, RuleBlock};
+        use kasumi_core::state::RoutingMode;
+
+        let (p, _d) = TestPlatform::new();
+        let prof = vless();
+        let id = prof.meta().id.clone();
+        let mut state = default_app_state();
+        state.active_id = Some(id.clone());
+        state.settings.routing_mode = RoutingMode::Rules;
+        let rule = RoutingRule {
+            id: "r1".into(),
+            remarks: "geo rule".into(),
+            enabled: true,
+            outbound_tag: "direct".into(),
+            domain: Some(vec!["geosite:ru".into()]),
+            ip: None,
+            port: None,
+            network: None,
+            protocol: None,
+            process: None,
+            package_name: None,
+            source_ip: None,
+        };
+        state.rule_blocks = vec![RuleBlock {
+            id: "b1".into(),
+            name: "block1".into(),
+            rules: vec![rule],
+            source_sub_id: None,
+        }];
+        state.routes[0].blocks = vec![RouteBlockRef {
+            block_id: "b1".into(),
+            enabled: true,
+        }];
+        write_json_atomic(&p.paths().app_state, &state)
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![prof])
+            .await
+            .unwrap();
+
+        let res = dispatch(&p, Command::CheckReadiness { profile_id: None })
+            .await
+            .unwrap();
+        let Response::Readiness(report) = res else {
+            panic!("expected Readiness response");
+        };
+        assert!(!report.ok);
+        assert_eq!(
+            report.issues,
+            vec![ReadinessIssue::MissingGeoAssets {
+                assets: vec!["geosite.dat".into()]
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn check_readiness_clean_ok() {
+        let (p, _d) = TestPlatform::new();
+        let prof = vless();
+        let id = prof.meta().id.clone();
+        let mut state = default_app_state();
+        state.active_id = Some(id.clone());
+        write_json_atomic(&p.paths().app_state, &state)
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![prof])
+            .await
+            .unwrap();
+
+        let res = dispatch(&p, Command::CheckReadiness { profile_id: None })
+            .await
+            .unwrap();
+        let Response::Readiness(report) = res else {
+            panic!("expected Readiness response");
+        };
+        assert!(report.ok);
+        assert!(report.issues.is_empty());
+        assert!(report.engine.is_some());
     }
 }

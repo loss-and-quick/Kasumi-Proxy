@@ -163,24 +163,35 @@ pub fn required_geo_assets(engine: CoreEngine, cfg_text: &str) -> HashSet<&'stat
     needed
 }
 
+/// Find which geo asset files required by the config are missing on the platform.
+pub fn missing_geo_assets(
+    platform: &dyn Platform,
+    engine: CoreEngine,
+    cfg_text: &str,
+) -> Vec<String> {
+    let needed = required_geo_assets(engine, cfg_text);
+    if needed.is_empty() {
+        return Vec::new();
+    }
+    let mut missing: Vec<String> = needed
+        .into_iter()
+        .filter(|filename| !platform.has_asset(filename))
+        .map(str::to_owned)
+        .collect();
+    missing.sort();
+    missing
+}
+
 /// Verify that every geo asset file required by the config is present on the platform.
 pub fn validate_geo_assets(
     platform: &dyn Platform,
     engine: CoreEngine,
     cfg_text: &str,
 ) -> Result<(), CommandError> {
-    let needed = required_geo_assets(engine, cfg_text);
-    if needed.is_empty() {
-        return Ok(());
-    }
-    let mut missing: Vec<&str> = needed
-        .into_iter()
-        .filter(|filename| !platform.has_asset(filename))
-        .collect();
+    let missing = missing_geo_assets(platform, engine, cfg_text);
     if missing.is_empty() {
         return Ok(());
     }
-    missing.sort();
     Err(CommandError(format!(
         "missing required geo asset(s): {}",
         missing.join(", ")

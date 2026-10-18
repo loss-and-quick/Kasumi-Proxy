@@ -29,6 +29,7 @@ import type {
   AppState,
   Bridge,
   ConnectionProbe,
+  ReadinessReport,
   ResourceUpdateMode,
   ServiceStatus,
 } from "./bridge";
@@ -591,6 +592,10 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
   // `chainConflicts`).
   async chainConflicts(_profile: Profile) {
     return [];
+  },
+
+  async checkReadiness(_profileId?: string): Promise<ReadinessReport> {
+    return { profileId: _profileId ?? null, engine: null, ok: true, issues: [] };
   },
 
   // Dev stub: no clash check (the real answer lives behind the backend's
