@@ -16,6 +16,9 @@ srpm:
 	@echo "==> Building SRPM for $(PKGNAME)-$(VERSION)..."
 	mkdir -p $(outdir)
 	mkdir -p rpmbuild/BUILD rpmbuild/RPMS rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS
+	# Instantiate spec file with the concrete release version so downstream Mock/Copr
+	# rebuilds from dist-git find the exact source tarball without unresolved macros.
+	sed "s/@VERSION@/$(VERSION)/g" $(SPEC) > rpmbuild/SPECS/$(notdir $(SPEC))
 	# Pack git repository archive without .git and build artifacts
 	tar --exclude='.git' \
 	    --exclude='target' \
@@ -24,11 +27,10 @@ srpm:
 	    --exclude='rpmbuild' \
 	    --transform 's,^,$(PKGNAME)-$(VERSION)/,' \
 	    -czf rpmbuild/SOURCES/$(TARBALL) .
-	# Run rpmbuild to generate the SRPM with dynamically injected version
+	# Run rpmbuild to generate the SRPM with the concrete spec
 	rpmbuild -bs \
 		--define "_topdir $(ROOT_DIR)/rpmbuild" \
-		--define "version $(VERSION)" \
-		$(SPEC)
+		rpmbuild/SPECS/$(notdir $(SPEC))
 	cp rpmbuild/SRPMS/*.src.rpm $(outdir)/
 	@echo "==> SRPM created in $(outdir):"
 	@ls -la $(outdir)/*.src.rpm

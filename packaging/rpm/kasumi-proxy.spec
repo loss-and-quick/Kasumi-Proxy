@@ -1,10 +1,5 @@
-# Fallback version for standalone spec parsers (e.g. Copr repo inspection)
-%if ! 0%{?version:1}
-%define version 0.0.0
-%endif
-
 Name:           kasumi-proxy
-Version:        %{version}
+Version:        @VERSION@
 Release:        1%{?dist}
 Summary:        System-wide transparent proxy (Xray-core / sing-box)
 
