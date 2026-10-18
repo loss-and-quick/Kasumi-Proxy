@@ -363,6 +363,40 @@ describe("dispatch-bridge import input", () => {
   });
 });
 
+describe("dispatch-bridge route sharing and parsing", () => {
+  it("dispatches buildRouteShare and returns route share payload", async () => {
+    const payload = {
+      exportJson: '{"kasumiRoute": 1}',
+      flatJson: "[]",
+      namesProfiles: false,
+    };
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "routeShare", value: payload }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    const route = { id: "r1", name: "Default" } as Parameters<typeof bridge.buildRouteShare>[0];
+    expect(await bridge.buildRouteShare(route, [])).toEqual(payload);
+    expect(dispatch).toHaveBeenCalledWith({ cmd: "buildRouteShare", route, blocks: [] });
+  });
+
+  it("dispatches parseRoutePackage and returns parsed package or null", async () => {
+    const pkg = {
+      name: "Default",
+      finalOutbound: "proxy",
+      blocks: [],
+    };
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "routePackage", value: pkg }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.parseRoutePackage('{"kasumiRoute": 1}')).toEqual(pkg);
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "parseRoutePackage",
+      text: '{"kasumiRoute": 1}',
+    });
+  });
+});
+
 describe("dispatch-bridge backup restore", () => {
   it("sends the backup as one command and returns what the backend left out", async () => {
     const restored = { state: { schemaVersion: 4 }, skippedProfiles: 1 };

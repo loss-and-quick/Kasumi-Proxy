@@ -208,6 +208,12 @@ function createBridgeMock(): BridgeMock {
     ),
     validateProfile: vi.fn<Bridge["validateProfile"]>(async () => []),
     switchProfileProtocol: vi.fn<Bridge["switchProfileProtocol"]>(async (profile) => profile),
+    buildRouteShare: vi.fn<Bridge["buildRouteShare"]>(async (route, blocks) => ({
+      exportJson: JSON.stringify({ route, blocks }),
+      flatJson: "[]",
+      namesProfiles: false,
+    })),
+    parseRoutePackage: vi.fn<Bridge["parseRoutePackage"]>(async () => null),
     parseShareLinks: vi.fn(async (_text: string) => []),
     resolveImportInput: vi.fn(async (_text: string) => ({
       subscriptions: [],

@@ -9,7 +9,7 @@
 // `crates/kasumi-core/src/mutate.rs`.
 // ============================================================
 
-import type { Profile, RoutingRule } from "../generated/bindings";
+import type { Profile, Route, RouteBlockRef, RoutingRule } from "../generated/bindings";
 import { mergeSettings } from "../store/defaults";
 import type { AppState, ChangeAction, MutationIntent, RoutingImport, Subscription } from "./bridge";
 import { providerConfigsOf } from "./groups";
@@ -18,6 +18,7 @@ import {
   DEFAULT_ROUTE_ID,
   normalizeRoutes,
   type RoutePackage,
+  sameBlock,
   setProfileRoute,
   upsertRoute,
 } from "./routes";
@@ -508,6 +509,37 @@ function applyIntent(state: AppState, intent: MutationIntent): AppState {
         : { ...state, routes: state.routes.filter((r) => r.id !== intent.id) };
     case "importRoutingLink":
       return importRouting(state, linkTarget(intent.groupId), intent.routing, intent.activate);
+    case "importRoutePackage": {
+      const pkg = intent.package;
+      const routeId = intent.id || uid();
+      const ruleBlocks = [...state.ruleBlocks];
+      const blocks: RouteBlockRef[] = [];
+      for (const incoming of pkg.blocks) {
+        const same = ruleBlocks.find((b) => !b.sourceSubId && sameBlock(b, incoming));
+        if (same) {
+          blocks.push({ blockId: same.id, enabled: incoming.enabled });
+        } else {
+          const blockId = uid();
+          ruleBlocks.push({
+            id: blockId,
+            name: incoming.name,
+            rules: incoming.rules,
+            sourceSubId: null,
+          });
+          blocks.push({ blockId, enabled: incoming.enabled });
+        }
+      }
+      const route: Route = {
+        id: routeId,
+        name: pkg.name,
+        enabled: true,
+        profiles: [],
+        groups: [],
+        blocks,
+        finalOutbound: pkg.finalOutbound,
+      };
+      return { ...state, ruleBlocks, routes: [...state.routes, route] };
+    }
     case "setProfileRoute":
       return {
         ...state,

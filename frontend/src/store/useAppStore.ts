@@ -6,13 +6,7 @@
 // ============================================================
 
 import { create } from "zustand";
-import type {
-  AppState_Serialize,
-  Profile,
-  Route,
-  RouteBlockRef,
-  TestKind,
-} from "../generated/bindings";
+import type { AppState_Serialize, Profile, Route, TestKind } from "../generated/bindings";
 import { SCHEMA_VERSION } from "../generated/defaults";
 import { translateCurrent } from "../i18n";
 import type {
@@ -43,7 +37,6 @@ import {
   type RoutePackage,
   routeBlocks,
   routeFor,
-  sameBlock,
 } from "../lib/routes";
 import { uid } from "../lib/utils";
 import type { ActivityEvent } from "./activity";
@@ -1154,15 +1147,9 @@ export const useAppStore = create<Store>((set, get) => {
       return mutate({ kind: "setProfileRoute", profileId, routeId });
     },
     async importRoutePackage(pkg) {
-      const blocks: RouteBlockRef[] = [];
-      for (const incoming of pkg.blocks) {
-        // A provider's block is rewritten or dropped with its subscription, so it
-        // is never shared with a route the user brought in.
-        const same = get().ruleBlocks.find((b) => !b.sourceSubId && sameBlock(b, incoming));
-        const blockId = same?.id ?? (await get().addRuleBlock(incoming.name, incoming.rules));
-        blocks.push({ blockId, enabled: incoming.enabled });
-      }
-      return get().addRoute(pkg.name, { blocks, finalOutbound: pkg.finalOutbound });
+      const id = uid();
+      await mutate({ kind: "importRoutePackage", id, package: pkg });
+      return id;
     },
 
     addAssetFile(asset) {

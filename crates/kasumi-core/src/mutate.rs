@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::profile::{CustomOrigin, Profile};
 use crate::route::{
-    DEFAULT_ROUTE_ID, Route, RuleBlock, fold_legacy_rules, set_profile_route, upsert_route,
+    DEFAULT_ROUTE_ID, Route, RouteBlockRef, RoutePackage, RuleBlock, fold_legacy_rules, same_block,
+    set_profile_route, unique_block_id, unique_route_id, upsert_route,
 };
 use crate::state::{
     AdvancedSettings, AppState, AssetFile, BASE_GROUP_ID, RoutingRule, Subscription,
@@ -201,6 +202,13 @@ pub enum MutationIntent {
         routing: Box<RoutingImport>,
         group_id: String,
         activate: bool,
+    },
+    /// Import a shared route package, creating or reusing rule blocks.
+    #[serde(rename_all = "camelCase")]
+    ImportRoutePackage {
+        #[serde(default)]
+        id: Option<String>,
+        package: Box<RoutePackage>,
     },
     /// Run profile `profile_id` with route `route_id` (`None` or the default:
     /// whatever its group gets).
@@ -535,6 +543,53 @@ pub fn apply_mutation(state: &mut AppState, intent: &MutationIntent) {
             group_id,
             activate,
         } => import_routing_link(state, group_id, routing, *activate),
+        MutationIntent::ImportRoutePackage { id, package } => {
+            let route_id = match id {
+                Some(given) if !given.trim().is_empty() => {
+                    let given = given.trim();
+                    if state.routes.iter().any(|r| r.id == given) {
+                        unique_route_id(state, given)
+                    } else {
+                        given.to_string()
+                    }
+                }
+                _ => unique_route_id(state, "route"),
+            };
+            let mut block_refs = Vec::new();
+            for incoming in &package.blocks {
+                let same = state.rule_blocks.iter().find(|b| {
+                    b.source_sub_id.is_none() && same_block(b, &incoming.name, &incoming.rules)
+                });
+                let block_id = match same {
+                    Some(existing) => existing.id.clone(),
+                    None => {
+                        let b_id = unique_block_id(state, "block");
+                        state.rule_blocks.push(RuleBlock {
+                            id: b_id.clone(),
+                            name: incoming.name.clone(),
+                            rules: incoming.rules.clone(),
+                            source_sub_id: None,
+                        });
+                        b_id
+                    }
+                };
+                block_refs.push(RouteBlockRef {
+                    block_id,
+                    enabled: incoming.enabled,
+                });
+            }
+            let route = Route {
+                id: route_id,
+                name: package.name.clone(),
+                enabled: true,
+                profiles: Vec::new(),
+                groups: Vec::new(),
+                blocks: block_refs,
+                final_outbound: package.final_outbound.clone(),
+                source_sub_id: None,
+            };
+            state.routes.push(route);
+        }
         MutationIntent::SetProfileRoute {
             profile_id,
             route_id,
@@ -931,6 +986,7 @@ fn move_item_by_index<T>(items: &mut [T], from: usize, to: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::route::PackageBlock;
     use crate::share::parse_share_link;
     use crate::state::{Group, default_app_state};
     use serde_json::{Value, json};
@@ -1602,6 +1658,51 @@ mod tests {
         apply_mutation(&mut s, &MutationIntent::RemoveRuleBlock { id: "b1".into() });
         assert!(s.rule_blocks.is_empty());
         assert!(s.routes.iter().all(|r| r.blocks.is_empty()));
+    }
+
+    #[test]
+    fn import_route_package_reuses_existing_matching_block() {
+        let mut s = with_block(&["r1"]);
+        let pkg = RoutePackage {
+            name: "Imported Route".into(),
+            final_outbound: "direct".into(),
+            blocks: vec![
+                PackageBlock {
+                    name: "B".into(),
+                    enabled: true,
+                    rules: vec![rule("r1")],
+                },
+                PackageBlock {
+                    name: "Fresh Block".into(),
+                    enabled: false,
+                    rules: vec![rule("r2")],
+                },
+            ],
+        };
+        apply_mutation(
+            &mut s,
+            &MutationIntent::ImportRoutePackage {
+                id: Some("custom-imported-id".into()),
+                package: Box::new(pkg),
+            },
+        );
+
+        assert_eq!(s.routes.len(), 2);
+        let imported = s
+            .routes
+            .iter()
+            .find(|r| r.id == "custom-imported-id")
+            .unwrap();
+        assert_eq!(imported.name, "Imported Route");
+        assert_eq!(imported.final_outbound, "direct");
+        assert_eq!(imported.blocks.len(), 2);
+        // The first block reused existing "b1"
+        assert_eq!(imported.blocks[0].block_id, "b1");
+        assert!(imported.blocks[0].enabled);
+        // The second block was created anew
+        assert_ne!(imported.blocks[1].block_id, "b1");
+        assert!(!imported.blocks[1].enabled);
+        assert_eq!(s.rule_blocks.len(), 2);
     }
 
     #[test]

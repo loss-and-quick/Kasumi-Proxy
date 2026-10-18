@@ -64,6 +64,15 @@ pub struct PackageBlock {
     pub rules: Vec<RoutingRule>,
 }
 
+/// The export texts and profile-outbound warning for sharing a route.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteSharePayload {
+    pub export_json: String,
+    pub flat_json: String,
+    pub names_profiles: bool,
+}
+
 /// One block's place in a route. Turning it off keeps it in place (and in
 /// other routes) while this route skips its rules.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -247,7 +256,7 @@ pub fn fold_legacy_rules(state: &mut AppState) {
     });
 }
 
-fn unique_block_id(state: &AppState, base: &str) -> String {
+pub fn unique_block_id(state: &AppState, base: &str) -> String {
     let taken = |id: &str| state.rule_blocks.iter().any(|b| b.id == id);
     if !taken(base) {
         return base.to_string();
@@ -256,6 +265,184 @@ fn unique_block_id(state: &AppState, base: &str) -> String {
         .map(|n| format!("{base}-{n}"))
         .find(|id| !taken(id))
         .expect("an unused id")
+}
+
+pub fn unique_route_id(state: &AppState, base: &str) -> String {
+    let taken = |id: &str| state.routes.iter().any(|r| r.id == id);
+    if !taken(base) {
+        return base.to_string();
+    }
+    (2..)
+        .map(|n| format!("{base}-{n}"))
+        .find(|id| !taken(id))
+        .expect("an unused id")
+}
+
+pub const PACKAGE_KEY: &str = "kasumiRoute";
+pub const PACKAGE_VERSION: u32 = 1;
+
+const SPECIAL_OUTBOUNDS: &[&str] = &["proxy", "direct", "block"];
+
+pub fn is_special_outbound(tag: &str) -> bool {
+    SPECIAL_OUTBOUNDS.contains(&tag)
+}
+
+pub fn portable_outbound(tag: &str) -> String {
+    if is_special_outbound(tag) {
+        tag.to_string()
+    } else {
+        PROXY_OUTBOUND.to_string()
+    }
+}
+
+/// Whether sharing the route turns some profile outbound into the proxy.
+pub fn route_names_profiles(route: &Route, blocks: &[RuleBlock]) -> bool {
+    let final_tag = route.final_outbound.trim();
+    let final_tag = if final_tag.is_empty() {
+        PROXY_OUTBOUND
+    } else {
+        final_tag
+    };
+    if !is_special_outbound(final_tag) {
+        return true;
+    }
+    route.blocks.iter().any(|r_ref| {
+        blocks
+            .iter()
+            .find(|b| b.id == r_ref.block_id)
+            .map(|b| {
+                b.rules.iter().any(|r| {
+                    let tag = r.outbound_tag.trim();
+                    let tag = if tag.is_empty() { PROXY_OUTBOUND } else { tag };
+                    !is_special_outbound(tag)
+                })
+            })
+            .unwrap_or(false)
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SerializedRoutePackage {
+    #[serde(rename = "kasumiRoute")]
+    version: u32,
+    name: String,
+    #[serde(default = "proxy_outbound")]
+    final_outbound: String,
+    blocks: Vec<PackageBlock>,
+}
+
+/// Export a route and its referenced blocks into a portable JSON package string.
+pub fn export_route_package(route: &Route, blocks: &[RuleBlock]) -> String {
+    let package_blocks: Vec<PackageBlock> = route
+        .blocks
+        .iter()
+        .filter_map(|r_ref| {
+            let block = blocks.iter().find(|b| b.id == r_ref.block_id)?;
+            let rules: Vec<RoutingRule> = block
+                .rules
+                .iter()
+                .cloned()
+                .map(|mut r| {
+                    r.outbound_tag = portable_outbound(&r.outbound_tag);
+                    r
+                })
+                .collect();
+            Some(PackageBlock {
+                name: block.name.clone(),
+                enabled: r_ref.enabled,
+                rules,
+            })
+        })
+        .collect();
+
+    let export = SerializedRoutePackage {
+        version: PACKAGE_VERSION,
+        name: route.name.clone(),
+        final_outbound: portable_outbound(&route.final_outbound),
+        blocks: package_blocks,
+    };
+
+    serde_json::to_string_pretty(&export).unwrap_or_default()
+}
+
+/// The route's rules as one flat list for clients taking a plain rule array.
+pub fn flatten_route(route: &Route, blocks: &[RuleBlock]) -> String {
+    let mut rules: Vec<RoutingRule> = route
+        .blocks
+        .iter()
+        .filter(|r_ref| r_ref.enabled)
+        .filter_map(|r_ref| blocks.iter().find(|b| b.id == r_ref.block_id))
+        .flat_map(|b| b.rules.iter().cloned())
+        .map(|mut r| {
+            r.outbound_tag = portable_outbound(&r.outbound_tag);
+            r
+        })
+        .collect();
+
+    let last = portable_outbound(&route.final_outbound);
+    if last != PROXY_OUTBOUND {
+        rules.push(catch_all_rule(&last));
+    }
+
+    serde_json::to_string_pretty(&rules).unwrap_or_default()
+}
+
+/// Parse a shared route package from JSON text, returning `None` if invalid.
+pub fn parse_route_package(text: &str) -> Option<RoutePackage> {
+    let raw: SerializedRoutePackage = serde_json::from_str(text).ok()?;
+    if raw.version != PACKAGE_VERSION {
+        return None;
+    }
+    let blocks: Vec<PackageBlock> = raw
+        .blocks
+        .into_iter()
+        .map(|mut b| {
+            for rule in &mut b.rules {
+                rule.outbound_tag = portable_outbound(&rule.outbound_tag);
+            }
+            b
+        })
+        .collect();
+    let name = if raw.name.trim().is_empty() {
+        "Route".to_string()
+    } else {
+        raw.name
+    };
+    Some(RoutePackage {
+        name,
+        final_outbound: portable_outbound(&raw.final_outbound),
+        blocks,
+    })
+}
+
+/// Build both the exported package JSON and flat JSON, with profile outbound detection.
+pub fn build_route_share(route: &Route, blocks: &[RuleBlock]) -> RouteSharePayload {
+    RouteSharePayload {
+        export_json: export_route_package(route, blocks),
+        flat_json: flatten_route(route, blocks),
+        names_profiles: route_names_profiles(route, blocks),
+    }
+}
+
+/// Check if an existing block has the same name and rule contents (ids aside).
+pub fn same_block(a: &RuleBlock, b_name: &str, b_rules: &[RoutingRule]) -> bool {
+    if a.name != b_name || a.rules.len() != b_rules.len() {
+        return false;
+    }
+    a.rules.iter().zip(b_rules.iter()).all(|(r1, r2)| {
+        r1.remarks == r2.remarks
+            && r1.enabled == r2.enabled
+            && r1.outbound_tag == r2.outbound_tag
+            && r1.domain == r2.domain
+            && r1.ip == r2.ip
+            && r1.port == r2.port
+            && r1.network == r2.network
+            && r1.protocol == r2.protocol
+            && r1.process == r2.process
+            && r1.package_name == r2.package_name
+            && r1.source_ip == r2.source_ip
+    })
 }
 
 /// List `route` as given, taking its profiles and groups away from every other
@@ -582,5 +769,61 @@ mod tests {
         assert_eq!(s.rule_blocks[1].rules[0].outbound_tag, "a2");
         assert_eq!(s.rule_blocks[0].rules[0].outbound_tag, PROXY_OUTBOUND);
         assert_eq!(s.rule_blocks[2].rules[0].outbound_tag, "direct");
+    }
+
+    #[test]
+    fn route_sharing_export_parse_roundtrip_and_flatten() {
+        let mut r = route("r1", &["ads", "work"]);
+        r.name = "My Route".into();
+        r.final_outbound = "direct".into();
+
+        let mut blocks = vec![block("ads", &["ad"]), block("work", &["corp"])];
+        // One rule points to a profile id
+        blocks[0].rules[0].outbound_tag = "profile-123".into();
+
+        assert!(route_names_profiles(&r, &blocks));
+
+        let payload = build_route_share(&r, &blocks);
+        assert!(payload.names_profiles);
+
+        let parsed = parse_route_package(&payload.export_json).expect("valid route package");
+        assert_eq!(parsed.name, "My Route");
+        assert_eq!(parsed.final_outbound, "direct");
+        assert_eq!(parsed.blocks.len(), 2);
+        // Profile id was ported to proxy
+        assert_eq!(parsed.blocks[0].rules[0].outbound_tag, "proxy");
+        assert_eq!(parsed.blocks[1].rules[0].outbound_tag, "direct");
+
+        let flat_rules: Vec<RoutingRule> =
+            serde_json::from_str(&payload.flat_json).expect("valid flat rules JSON");
+        assert_eq!(flat_rules.len(), 3); // 2 rules + 1 catch-all route-final
+        assert_eq!(flat_rules[0].outbound_tag, "proxy");
+        assert_eq!(flat_rules[1].outbound_tag, "direct");
+        assert_eq!(flat_rules[2].id, FINAL_RULE_ID);
+        assert_eq!(flat_rules[2].outbound_tag, "direct");
+
+        // Invalid package checks
+        assert!(parse_route_package("not json").is_none());
+        let missing_key = format!(r#"{{"otherKey": {PACKAGE_VERSION}}}"#);
+        assert!(parse_route_package(&missing_key).is_none());
+        let invalid_version = format!(r#"{{"{PACKAGE_KEY}": 99}}"#);
+        assert!(parse_route_package(&invalid_version).is_none());
+    }
+
+    #[test]
+    fn same_block_detects_equivalent_rules_regardless_of_ids() {
+        let b1 = block("b1", &["r1", "r2"]);
+        let mut b2_rules = b1.rules.clone();
+        b2_rules[0].id = "different-id-1".into();
+        b2_rules[1].id = "different-id-2".into();
+
+        assert!(same_block(&b1, "b1", &b2_rules));
+
+        // Different remarks
+        b2_rules[0].remarks = "Changed".into();
+        assert!(!same_block(&b1, "b1", &b2_rules));
+
+        // Different name
+        assert!(!same_block(&b1, "b2", &b1.rules));
     }
 }
