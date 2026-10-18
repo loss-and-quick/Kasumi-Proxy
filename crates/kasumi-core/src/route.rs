@@ -524,7 +524,8 @@ pub fn analyze_rule_block(block_id: &str, rules: &[RoutingRule]) -> BlockCatchAl
 
     let redundant = match first_catch_all_idx {
         Some(idx) => {
-            rules[idx].outbound_tag == PROXY_OUTBOUND && !rules[idx + 1..].iter().any(|r| r.enabled)
+            let tag = rules[idx].outbound_tag.trim();
+            (tag.is_empty() || tag == PROXY_OUTBOUND) && !rules[idx + 1..].iter().any(|r| r.enabled)
         }
         None => false,
     };

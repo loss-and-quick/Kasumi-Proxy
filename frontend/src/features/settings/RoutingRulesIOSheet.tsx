@@ -66,6 +66,7 @@ export function RoutingRulesIOSheet({
       setParsed({ ok: false, rules: [], hint: t("rulesIo.importLabel") });
       return;
     }
+    setParsed((p) => (p.ok ? { ok: false, rules: [], hint: p.hint } : p));
     const timer = setTimeout(() => {
       bridge
         .parseRoutingRules(importText)

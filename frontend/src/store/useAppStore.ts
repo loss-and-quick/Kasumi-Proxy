@@ -1285,7 +1285,11 @@ useAppStore.subscribe((state, prev) => {
       }
       useAppStore.setState({ catchAllRules, redundantCatchAll });
     })
-    .catch((e: unknown) => logError("catch-all rules not loaded", {}, errorStack(e)));
+    .catch((e: unknown) => {
+      logError("catch-all rules not loaded", {}, errorStack(e));
+      if (useAppStore.getState().ruleBlocks !== blocks) return;
+      useAppStore.setState({ catchAllRules: {}, redundantCatchAll: {} });
+    });
 });
 
 export type StoreProfile = Profile & { subId: string | null };

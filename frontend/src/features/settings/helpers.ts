@@ -148,7 +148,16 @@ const effectiveCore = (map: CoreMap | undefined, protocol: Protocol): CoreEngine
 /** Which preset the stored map amounts to. Only switchable protocols count, so a
  *  stale override on a locked protocol doesn't turn the map into "custom". */
 export function coresPreset(map: CoreMap | undefined): CoresPreset {
-  if (switchable.every((p) => effectiveCore(map, p) === DEFAULT_CORE_BY_PROTOCOL[p])) {
+  const hasSwitchableOverrides = switchable.some((p) => map?.[p] !== undefined);
+  if (!hasSwitchableOverrides) {
+    return "default";
+  }
+  if (
+    PROTOCOL_OPTS.every(
+      (p) => map?.[p] === undefined || map?.[p] === DEFAULT_CORE_BY_PROTOCOL[p],
+    ) &&
+    LOCKED_CORE_PROTOCOLS.some((p) => map?.[p] !== undefined)
+  ) {
     return "default";
   }
   for (const core of ["xray", "sing-box"] as const) {

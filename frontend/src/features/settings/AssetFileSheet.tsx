@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Btn, Field, Sheet } from "../../components";
-import type { AssetFile } from "../../generated/bindings";
+import type { AssetDraftIssue, AssetFile } from "../../generated/bindings";
 import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { uid } from "../../lib/utils";
+import { errorMessage } from "../../store/errors";
+import { useAppStore } from "../../store/useAppStore";
 import { confirmAssetDelete } from "./confirmations";
 import { type AssetDraft as Draft, issuesToAssetErrors } from "./helpers";
 
@@ -37,6 +39,9 @@ export function AssetFileSheet({
   const [tried, setTried] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const t = useT();
+  const notify = useAppStore((s) => s.notify);
+  const saveInFlight = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -62,23 +67,39 @@ export function AssetFileSheet({
   const shown = tried ? errors : {};
 
   const save = async () => {
-    setTried(true);
-    const issues = await bridge
-      .validateAssetDraft({ remarks: draft.remarks, url: draft.url }, takenNames)
-      .catch(() => []);
-    const currentErrors = issuesToAssetErrors(issues, t);
-    setErrors(currentErrors);
-    if (Object.keys(currentErrors).length > 0) return;
-    const name = draft.remarks.trim();
-    const url = draft.url.trim();
-    onSave({
-      id: asset?.id ?? uid(),
-      remarks: name,
-      url,
-      lastUpdated: asset?.lastUpdated ?? null,
-      locked: asset?.locked ?? false,
-    });
-    onClose();
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
+    setSaving(true);
+    try {
+      setTried(true);
+      const targetDraft = { remarks: draft.remarks, url: draft.url };
+      let issues: AssetDraftIssue[];
+      try {
+        issues = await bridge.validateAssetDraft(targetDraft, takenNames);
+      } catch (e) {
+        notify(errorMessage(e));
+        return;
+      }
+      if (draft.remarks !== targetDraft.remarks || draft.url !== targetDraft.url) {
+        return;
+      }
+      const currentErrors = issuesToAssetErrors(issues, t);
+      setErrors(currentErrors);
+      if (Object.keys(currentErrors).length > 0) return;
+      const name = targetDraft.remarks.trim();
+      const url = targetDraft.url.trim();
+      onSave({
+        id: asset?.id ?? uid(),
+        remarks: name,
+        url,
+        lastUpdated: asset?.lastUpdated ?? null,
+        locked: asset?.locked ?? false,
+      });
+      onClose();
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
+    }
   };
 
   return (
@@ -87,7 +108,7 @@ export function AssetFileSheet({
       title={asset ? t("assetSheet.editTitle") : t("assetSheet.addTitle")}
       onClose={onClose}
       headRight={
-        <Btn variant="filled" sm icon="check" onClick={() => void save()}>
+        <Btn variant="filled" sm icon="check" disabled={saving} onClick={() => void save()}>
           {t("assetSheet.save")}
         </Btn>
       }

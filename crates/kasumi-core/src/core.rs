@@ -22,7 +22,8 @@ fn is_singbox_only(proto: Protocol) -> bool {
 pub fn locked_core_for(proto: Protocol) -> Option<CoreEngine> {
     match proto {
         Protocol::Custom => Some(CoreEngine::Xray),
-        Protocol::Hysteria2 | Protocol::Tuic => Some(CoreEngine::SingBox),
+        Protocol::Hysteria2 => Some(CoreEngine::SingBox),
+        p if is_singbox_only(p) => Some(CoreEngine::SingBox),
         _ => None,
     }
 }
