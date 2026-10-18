@@ -1444,6 +1444,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("checkReadiness"),
 	profileId: z.string().nullable(),
 }), z.object({
+	cmd: z.literal("checkSubscriptionUrlSecurity"),
+	url: z.string(),
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1545,6 +1548,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("validateAssetDraft"),
 	draft: AssetDraftInputSchema,
 	takenNames: z.array(z.string()),
+}), z.object({
+	cmd: z.literal("validateFilterRegex"),
+	pattern: z.string(),
 }), z.object({
 	cmd: z.literal("validateProfile"),
 	profile: ProfileSchema,
@@ -1736,6 +1742,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("checkReadiness"),
 	profileId: z.string().nullable().optional(),
 }), z.object({
+	cmd: z.literal("checkSubscriptionUrlSecurity"),
+	url: z.string(),
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1837,6 +1846,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 	cmd: z.literal("validateAssetDraft"),
 	draft: AssetDraftInputSchema,
 	takenNames: z.array(z.string()),
+}), z.object({
+	cmd: z.literal("validateFilterRegex"),
+	pattern: z.string(),
 }), z.object({
 	cmd: z.literal("validateProfile"),
 	profile: ProfileSchema,
@@ -2139,6 +2151,14 @@ export const WsInfoSchema = z.object({
 export type WsInfo = z.infer<typeof WsInfoSchema>;
 
 
+export const SubscriptionUrlSecuritySchema = z.object({
+	isInsecureHttp: z.boolean(),
+	isLocalOrPrivate: z.boolean(),
+	suggestAllowInsecure: z.boolean(),
+});
+export type SubscriptionUrlSecurity = z.infer<typeof SubscriptionUrlSecuritySchema>;
+
+
 export const RunStateSchema = z.union([z.literal("connected"), z.literal("connecting"), z.literal("failed"), z.literal("noInternet"), z.literal("stopped")]);
 export type RunState = z.infer<typeof RunStateSchema>;
 
@@ -2184,6 +2204,9 @@ export const Response_SerializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("coreResolutions"),
 	value: z.array(CoreResolutionSchema),
+}), z.object({
+	kind: z.literal("filterRegexValid"),
+	value: z.boolean(),
 }), z.object({
 	kind: z.literal("flags"),
 	value: z.array(z.boolean()),
@@ -2244,6 +2267,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("status"),
 	value: ServiceState_SerializeSchema,
 }), z.object({
+	kind: z.literal("subscriptionUrlSecurity"),
+	value: SubscriptionUrlSecuritySchema,
+}), z.object({
 	kind: z.literal("text"),
 	value: z.string(),
 }), z.object({
@@ -2286,6 +2312,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("coreResolutions"),
 	value: z.array(CoreResolutionSchema),
+}), z.object({
+	kind: z.literal("filterRegexValid"),
+	value: z.boolean(),
 }), z.object({
 	kind: z.literal("flags"),
 	value: z.array(z.boolean()),
@@ -2345,6 +2374,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("status"),
 	value: ServiceState_DeserializeSchema,
+}), z.object({
+	kind: z.literal("subscriptionUrlSecurity"),
+	value: SubscriptionUrlSecuritySchema,
 }), z.object({
 	kind: z.literal("text"),
 	value: z.string(),

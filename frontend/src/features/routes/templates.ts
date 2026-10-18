@@ -4,90 +4,41 @@
 // becomes an ordinary block (named in the user's language) that can be
 // edited like any other.
 //
+// The templates themselves are single-sourced from Rust (`builtin_block_templates`)
+// and reach the frontend through `generated/defaults`; this module only types
+// them for the UI and turns them into rules.
+//
 // Domain and IP matches sit in separate rules: in one xray rule they would
 // both have to match, while "a Russian site or a Russian address" is meant.
 // ============================================================
 
 import type { RoutingRule } from "../../generated/bindings";
+import { BLOCK_TEMPLATES as GENERATED_BLOCK_TEMPLATES } from "../../generated/defaults";
 import type { DictKey } from "../../i18n";
 
-type TemplateRule = Omit<RoutingRule, "id" | "enabled" | "remarks"> & { remarksKey: DictKey };
+export type BlockTemplate = (typeof GENERATED_BLOCK_TEMPLATES)[number];
+export type TemplateRule = BlockTemplate["rules"][number];
 
-export type BlockTemplate = {
-  id: string;
-  nameKey: DictKey;
-  hintKey: DictKey;
-  icon: string;
-  rules: TemplateRule[];
-};
+/** The ready-made blocks, single-sourced from Rust (`builtin_block_templates`). */
+export const BLOCK_TEMPLATES: readonly BlockTemplate[] = GENERATED_BLOCK_TEMPLATES;
 
-export const BLOCK_TEMPLATES: BlockTemplate[] = [
-  {
-    id: "ads",
-    nameKey: "routes.template.ads",
-    hintKey: "routes.template.adsHint",
-    icon: "block",
-    rules: [
-      {
-        remarksKey: "routes.template.ads",
-        outboundTag: "block",
-        domain: ["geosite:category-ads-all"],
-      },
-    ],
-  },
-  {
-    id: "lan",
-    nameKey: "routes.template.lan",
-    hintKey: "routes.template.lanHint",
-    icon: "lan",
-    rules: [{ remarksKey: "routes.template.lan", outboundTag: "direct", ip: ["geoip:private"] }],
-  },
-  {
-    id: "ru",
-    nameKey: "routes.template.ru",
-    hintKey: "routes.template.ruHint",
-    icon: "public",
-    rules: [
-      {
-        remarksKey: "routes.template.sites",
-        outboundTag: "direct",
-        domain: ["geosite:category-ru"],
-      },
-      { remarksKey: "routes.template.addresses", outboundTag: "direct", ip: ["geoip:ru"] },
-    ],
-  },
-  {
-    id: "cn",
-    nameKey: "routes.template.cn",
-    hintKey: "routes.template.cnHint",
-    icon: "public",
-    rules: [
-      { remarksKey: "routes.template.sites", outboundTag: "direct", domain: ["geosite:cn"] },
-      { remarksKey: "routes.template.addresses", outboundTag: "direct", ip: ["geoip:cn"] },
-    ],
-  },
-  {
-    id: "quic",
-    nameKey: "routes.template.quic",
-    hintKey: "routes.template.quicHint",
-    icon: "block",
-    rules: [
-      {
-        remarksKey: "routes.template.quic",
-        outboundTag: "block",
-        network: "udp",
-        port: "443",
-      },
-    ],
-  },
-];
+/** Compile-time type check ensuring all Rust template keys match known i18n dictionary keys. */
+export const TEMPLATE_I18N_KEYS = GENERATED_BLOCK_TEMPLATES.flatMap((t) => [
+  t.nameKey,
+  t.hintKey,
+  ...t.rules.map((r) => r.remarksKey),
+]) satisfies readonly DictKey[];
 
 /** The template's rules with names in the user's language (ids are given on save). */
 export function templateRules(template: BlockTemplate, t: (key: DictKey) => string): RoutingRule[] {
-  return template.rules.map(({ remarksKey, ...rule }) => ({
-    ...rule,
+  return template.rules.map((rule) => ({
     id: "",
     enabled: true,
-    remarks: t(remarksKey),
+    remarks: t(rule.remarksKey as DictKey),
+    outboundTag: rule.outboundTag,
+    domain: "domain" in rule && rule.domain ? [...rule.domain] : undefined,
+    ip: "ip" in rule && rule.ip ? [...rule.ip] : undefined,
+    network: "network" in rule ? rule.network : undefined,
+    port: "port" in rule ? rule.port : undefined,
   }));
 }

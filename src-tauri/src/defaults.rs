@@ -274,6 +274,14 @@ pub fn render() -> String {
     out.push_str(&locked_by_proto_json);
     out.push_str(" as Partial<Record<Protocol, CoreEngine>>;\n");
 
+    let block_templates = kasumi_core::route::builtin_block_templates();
+    let block_templates_json =
+        serde_json::to_string_pretty(&block_templates).expect("pretty block templates");
+    out.push_str("/** Ready-made rule blocks offered when adding a block to a route, single-sourced from Rust core. */\n");
+    out.push_str(&format!(
+        "export const BLOCK_TEMPLATES = {block_templates_json} as const;\n\n"
+    ));
+
     out
 }
 

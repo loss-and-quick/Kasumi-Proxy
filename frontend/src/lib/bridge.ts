@@ -83,7 +83,11 @@ export type {
   TunnelSetting,
 } from "../generated/bindings";
 
-import type { AppState_Serialize, MutationIntent_Serialize } from "../generated/bindings";
+import type {
+  AppState_Serialize,
+  MutationIntent_Serialize,
+  SubscriptionUrlSecurity,
+} from "../generated/bindings";
 import { PROTOCOL_OPTS } from "../generated/defaults";
 
 // The persisted app state as the UI holds it. `schemaVersion` is an on-disk
@@ -122,6 +126,8 @@ export interface ServiceStatus extends Omit<WireServiceStatus, "state"> {
 }
 
 export type ResourceUpdateMode = FetchMode;
+
+export type { SubscriptionUrlSecurity } from "../generated/bindings";
 
 export type BatchProgress = (profileId: string, value: number) => void;
 
@@ -243,6 +249,10 @@ export interface Bridge {
   // Routing rule parsing and block analysis
   analyzeRuleBlocks(blocks: RuleBlock[]): Promise<BlockCatchAllReport[]>;
   parseRoutingRules(text: string): Promise<RoutingRule[]>;
+
+  // Subscription filter regex and URL security policy
+  validateFilterRegex(pattern: string): Promise<boolean>;
+  checkSubscriptionUrlSecurity(url: string): Promise<SubscriptionUrlSecurity>;
 
   // import / export / backup
   // What pasted or scanned text holds, sorted by the backend's grammar: subscription

@@ -48,6 +48,25 @@ pub fn profile_filter_regex(filter: &str) -> ProfileFilter {
     ProfileFilter(Regex::new(&pattern).ok())
 }
 
+/// Validate whether a filter string compiles under the linear `regex` engine using
+/// the same syntax rules as `profile_filter_regex` (including `(?i)` flag prefix).
+pub fn validate_filter_regex(filter: &str) -> bool {
+    let trimmed = filter.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    let (source, ci) = match trimmed.strip_prefix("(?i)") {
+        Some(rest) => (rest, true),
+        None => (trimmed, false),
+    };
+    let pattern = if ci {
+        format!("(?i){source}")
+    } else {
+        source.to_string()
+    };
+    Regex::new(&pattern).is_ok()
+}
+
 /// Lower-cased searchable haystack used by name/host filters.
 fn profile_search_text(p: &Profile) -> String {
     let mut parts: Vec<String> = vec![p.meta().remarks.clone(), wire(&p.protocol())];
@@ -401,6 +420,16 @@ mod tests {
 
     fn p(uri: &str) -> Profile {
         parse_share_link(uri, None).unwrap()
+    }
+
+    #[test]
+    fn filter_validation_syntax() {
+        assert!(validate_filter_regex(""));
+        assert!(validate_filter_regex("   "));
+        assert!(validate_filter_regex("de|nl|fr"));
+        assert!(validate_filter_regex("(?i)germany"));
+        assert!(!validate_filter_regex("[a-z"));
+        assert!(!validate_filter_regex("(?i)[a-z"));
     }
 
     #[test]

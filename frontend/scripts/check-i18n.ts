@@ -49,7 +49,9 @@ function readSources(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const haystack = readSources(srcDir).join("\n");
+const sources = readSources(srcDir);
+sources.push(readFileSync(join(srcDir, "generated/defaults.ts"), "utf8"));
+const haystack = sources.join("\n");
 const referenced = (key: string) =>
   haystack.includes(`"${key}"`) || haystack.includes(`'${key}'`) || haystack.includes(`\`${key}\``);
 

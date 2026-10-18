@@ -73,6 +73,133 @@ pub struct RouteSharePayload {
     pub names_profiles: bool,
 }
 
+/// One rule of a built-in block template: a [`RoutingRule`] without the id,
+/// enabled flag and remarks, which the frontend fills in when the block is
+/// created. `remarks_key` is a translation key, not user text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateRuleDef {
+    pub remarks_key: String,
+    pub outbound_tag: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub domain: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ip: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<String>,
+}
+
+/// A ready-made block offered when adding a block to a route. `name_key` /
+/// `hint_key` are translation keys; the block and its rules are named in the
+/// user's language. Single source for the frontend's `BLOCK_TEMPLATES`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockTemplateDef {
+    pub id: String,
+    pub name_key: String,
+    pub hint_key: String,
+    pub icon: String,
+    pub rules: Vec<TemplateRuleDef>,
+}
+
+/// The built-in blocks the "add a block" sheet offers, in display order.
+pub fn builtin_block_templates() -> Vec<BlockTemplateDef> {
+    vec![
+        BlockTemplateDef {
+            id: "ads".into(),
+            name_key: "routes.template.ads".into(),
+            hint_key: "routes.template.adsHint".into(),
+            icon: "block".into(),
+            rules: vec![TemplateRuleDef {
+                remarks_key: "routes.template.ads".into(),
+                outbound_tag: "block".into(),
+                domain: vec!["geosite:category-ads-all".into()],
+                ip: vec![],
+                network: None,
+                port: None,
+            }],
+        },
+        BlockTemplateDef {
+            id: "lan".into(),
+            name_key: "routes.template.lan".into(),
+            hint_key: "routes.template.lanHint".into(),
+            icon: "lan".into(),
+            rules: vec![TemplateRuleDef {
+                remarks_key: "routes.template.lan".into(),
+                outbound_tag: "direct".into(),
+                domain: vec![],
+                ip: vec!["geoip:private".into()],
+                network: None,
+                port: None,
+            }],
+        },
+        BlockTemplateDef {
+            id: "ru".into(),
+            name_key: "routes.template.ru".into(),
+            hint_key: "routes.template.ruHint".into(),
+            icon: "public".into(),
+            rules: vec![
+                TemplateRuleDef {
+                    remarks_key: "routes.template.sites".into(),
+                    outbound_tag: "direct".into(),
+                    domain: vec!["geosite:category-ru".into()],
+                    ip: vec![],
+                    network: None,
+                    port: None,
+                },
+                TemplateRuleDef {
+                    remarks_key: "routes.template.addresses".into(),
+                    outbound_tag: "direct".into(),
+                    domain: vec![],
+                    ip: vec!["geoip:ru".into()],
+                    network: None,
+                    port: None,
+                },
+            ],
+        },
+        BlockTemplateDef {
+            id: "cn".into(),
+            name_key: "routes.template.cn".into(),
+            hint_key: "routes.template.cnHint".into(),
+            icon: "public".into(),
+            rules: vec![
+                TemplateRuleDef {
+                    remarks_key: "routes.template.sites".into(),
+                    outbound_tag: "direct".into(),
+                    domain: vec!["geosite:cn".into()],
+                    ip: vec![],
+                    network: None,
+                    port: None,
+                },
+                TemplateRuleDef {
+                    remarks_key: "routes.template.addresses".into(),
+                    outbound_tag: "direct".into(),
+                    domain: vec![],
+                    ip: vec!["geoip:cn".into()],
+                    network: None,
+                    port: None,
+                },
+            ],
+        },
+        BlockTemplateDef {
+            id: "quic".into(),
+            name_key: "routes.template.quic".into(),
+            hint_key: "routes.template.quicHint".into(),
+            icon: "block".into(),
+            rules: vec![TemplateRuleDef {
+                remarks_key: "routes.template.quic".into(),
+                outbound_tag: "block".into(),
+                domain: vec![],
+                ip: vec![],
+                network: Some("udp".into()),
+                port: Some("443".into()),
+            }],
+        },
+    ]
+}
+
 /// One block's place in a route. Turning it off keeps it in place (and in
 /// other routes) while this route skips its rules.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
