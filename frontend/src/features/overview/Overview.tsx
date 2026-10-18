@@ -365,6 +365,16 @@ export default function Overview({
                 </span>
               </div>
             )}
+            {activeId && !readinessReport && !up && !busy && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 4 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: "var(--muted)" }}>
+                  {t("settings.updateChecking")}
+                </span>
+                <Btn variant="tonal" sm icon="refresh" onClick={() => refreshReadiness()}>
+                  {t("common.retry")}
+                </Btn>
+              </div>
+            )}
             <div className="primary-actions" style={{ display: "flex", gap: 10 }}>
               <Btn
                 variant={stoppable ? "error" : "filled"}

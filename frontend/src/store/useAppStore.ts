@@ -637,6 +637,7 @@ export const useAppStore = create<Store>((set, get) => {
     refreshReadiness() {
       const targetId = get().activeId;
       const seq = ++readinessSeq;
+      set({ readinessReport: null });
       bridge
         .checkReadiness(targetId ?? undefined)
         .then((report) => {
@@ -648,7 +649,12 @@ export const useAppStore = create<Store>((set, get) => {
             set({ readinessReport: report });
           }
         })
-        .catch((e: unknown) => logError("readiness check failed", {}, errorStack(e)));
+        .catch((e: unknown) => {
+          if (seq === readinessSeq && get().activeId === targetId) {
+            set({ readinessReport: null });
+          }
+          logError("readiness check failed", {}, errorStack(e));
+        });
     },
 
     notify(msg) {
