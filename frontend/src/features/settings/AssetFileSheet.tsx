@@ -42,9 +42,16 @@ export function AssetFileSheet({
   const notify = useAppStore((s) => s.notify);
   const saveInFlight = useRef(false);
   const [saving, setSaving] = useState(false);
+  const draftRef = useRef(draft);
+  const sessionRef = useRef(0);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   useEffect(() => {
     if (open) {
+      sessionRef.current += 1;
       setDraft(makeDraft(asset));
       setTried(false);
       setErrors({});
@@ -72,6 +79,7 @@ export function AssetFileSheet({
     setSaving(true);
     try {
       setTried(true);
+      const session = sessionRef.current;
       const targetDraft = { remarks: draft.remarks, url: draft.url };
       let issues: AssetDraftIssue[];
       try {
@@ -80,7 +88,12 @@ export function AssetFileSheet({
         notify(errorMessage(e));
         return;
       }
-      if (draft.remarks !== targetDraft.remarks || draft.url !== targetDraft.url) {
+      const latest = draftRef.current;
+      if (
+        sessionRef.current !== session ||
+        latest.remarks !== targetDraft.remarks ||
+        latest.url !== targetDraft.url
+      ) {
         return;
       }
       const currentErrors = issuesToAssetErrors(issues, t);
