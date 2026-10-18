@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Btn, Field, Sheet } from "../../components";
 import type { AssetFile } from "../../generated/bindings";
 import { useT } from "../../i18n";
+import { bridge } from "../../lib/bridge-provider";
 import { uid } from "../../lib/utils";
 import { confirmAssetDelete } from "./confirmations";
-import { assetDraftErrors, type AssetDraft as Draft } from "./helpers";
+import { type AssetDraft as Draft, issuesToAssetErrors } from "./helpers";
 
 function makeDraft(asset?: AssetFile | null): Draft {
   return {
@@ -12,6 +13,8 @@ function makeDraft(asset?: AssetFile | null): Draft {
     url: asset?.url ?? "",
   };
 }
+
+type Errors = ReturnType<typeof issuesToAssetErrors>;
 
 export function AssetFileSheet({
   open,
@@ -32,21 +35,41 @@ export function AssetFileSheet({
   const [draft, setDraft] = useState<Draft>(makeDraft(asset));
   // Errors show once Save was pressed, then follow the typing.
   const [tried, setTried] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
   const t = useT();
 
   useEffect(() => {
     if (open) {
       setDraft(makeDraft(asset));
       setTried(false);
+      setErrors({});
     }
   }, [open, asset]);
 
-  const errors = assetDraftErrors(draft, takenNames, t);
+  // The draft's problems are the backend's answer (the same rules the downloader
+  // applies to a file name), re-asked on every edit like the editor's previews.
+  useEffect(() => {
+    let alive = true;
+    bridge
+      .validateAssetDraft({ remarks: draft.remarks, url: draft.url }, takenNames)
+      .then((issues) => alive && setErrors(issuesToAssetErrors(issues, t)))
+      .catch(() => alive && setErrors({}));
+    return () => {
+      alive = false;
+    };
+  }, [draft.remarks, draft.url, takenNames, t]);
+
   const shown = tried ? errors : {};
 
-  const save = () => {
+  const save = async () => {
     setTried(true);
-    if (Object.keys(errors).length) return;
+    const issues = await bridge.validateAssetDraft(
+      { remarks: draft.remarks, url: draft.url },
+      takenNames,
+    );
+    const currentErrors = issuesToAssetErrors(issues, t);
+    setErrors(currentErrors);
+    if (Object.keys(currentErrors).length > 0) return;
     const name = draft.remarks.trim();
     const url = draft.url.trim();
     onSave({
@@ -65,7 +88,7 @@ export function AssetFileSheet({
       title={asset ? t("assetSheet.editTitle") : t("assetSheet.addTitle")}
       onClose={onClose}
       headRight={
-        <Btn variant="filled" sm icon="check" onClick={save}>
+        <Btn variant="filled" sm icon="check" onClick={() => void save()}>
           {t("assetSheet.save")}
         </Btn>
       }
