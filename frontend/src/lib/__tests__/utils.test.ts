@@ -31,6 +31,21 @@ describe("checkSubscriptionUrlSecurity", () => {
     expect(
       (await mockBridge.checkSubscriptionUrlSecurity("http://172.31.255.255/sub")).isLocalOrPrivate,
     ).toBe(true);
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("http://169.254.1.1/sub")).isLocalOrPrivate,
+    ).toBe(true);
+  });
+
+  it("treats IPv6 loopback / ULA / link-local as private", async () => {
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("http://[::1]:9000/sub")).isLocalOrPrivate,
+    ).toBe(true);
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("http://[fd00::1]/sub")).isLocalOrPrivate,
+    ).toBe(true);
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("http://[fe80::1]/sub")).isLocalOrPrivate,
+    ).toBe(true);
   });
 
   it("treats public hosts as not private", async () => {

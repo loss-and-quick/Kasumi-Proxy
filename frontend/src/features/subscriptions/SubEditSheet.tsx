@@ -31,6 +31,7 @@ import {
   groupChoiceReady,
   providerConfigsOf,
 } from "../../lib/groups";
+import { errorMessage } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
 import { SubIdentitySection } from "./SubIdentitySection";
 import { savedName } from "./sub-edit";
@@ -184,7 +185,14 @@ export function SubEditSheet({
     if (d.autoUpdate && ownInterval && (!Number.isFinite(d.interval) || d.interval <= 0))
       nextErrors.interval = t("subs.edit.validationInterval");
     if (d.filter.trim()) {
-      const valid = await bridge.validateFilterRegex(d.filter).catch(() => true);
+      let valid: boolean;
+      try {
+        valid = await bridge.validateFilterRegex(d.filter);
+      } catch (e) {
+        setSaving(false);
+        notify(errorMessage(e));
+        return;
+      }
       if (!valid) {
         nextErrors.filter = t("subs.edit.validationFilter");
       }
@@ -194,9 +202,13 @@ export function SubEditSheet({
     if (Object.keys(nextErrors).length) return;
     setSaving(true);
     try {
-      const sec = url
-        ? await bridge.checkSubscriptionUrlSecurity(url).catch(() => urlSecurity)
-        : urlSecurity;
+      let sec: SubscriptionUrlSecurity;
+      try {
+        sec = await bridge.checkSubscriptionUrlSecurity(url);
+      } catch (e) {
+        notify(errorMessage(e));
+        return;
+      }
       // TLS verification is skipped only for localhost / private hosts (self-signed
       // certs are normal there); public URLs are always verified strictly.
       await onSave(

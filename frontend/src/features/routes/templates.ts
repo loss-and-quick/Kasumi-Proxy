@@ -16,41 +16,29 @@ import type { RoutingRule } from "../../generated/bindings";
 import { BLOCK_TEMPLATES as GENERATED_BLOCK_TEMPLATES } from "../../generated/defaults";
 import type { DictKey } from "../../i18n";
 
-type TemplateRule = Omit<RoutingRule, "id" | "enabled" | "remarks"> & { remarksKey: DictKey };
-
-export type BlockTemplate = {
-  id: string;
-  nameKey: DictKey;
-  hintKey: DictKey;
-  icon: string;
-  rules: TemplateRule[];
-};
+export type BlockTemplate = (typeof GENERATED_BLOCK_TEMPLATES)[number];
+export type TemplateRule = BlockTemplate["rules"][number];
 
 /** The ready-made blocks, single-sourced from Rust (`builtin_block_templates`). */
-export const BLOCK_TEMPLATES = GENERATED_BLOCK_TEMPLATES as unknown as BlockTemplate[];
+export const BLOCK_TEMPLATES: readonly BlockTemplate[] = GENERATED_BLOCK_TEMPLATES;
 
-/** Compile-time type check ensuring Rust template keys match known i18n dictionary keys. */
-export const TEMPLATE_I18N_KEYS = [
-  "routes.template.ads",
-  "routes.template.adsHint",
-  "routes.template.lan",
-  "routes.template.lanHint",
-  "routes.template.ru",
-  "routes.template.ruHint",
-  "routes.template.cn",
-  "routes.template.cnHint",
-  "routes.template.quic",
-  "routes.template.quicHint",
-  "routes.template.sites",
-  "routes.template.addresses",
-] as const satisfies readonly DictKey[];
+/** Compile-time type check ensuring all Rust template keys match known i18n dictionary keys. */
+export const TEMPLATE_I18N_KEYS = GENERATED_BLOCK_TEMPLATES.flatMap((t) => [
+  t.nameKey,
+  t.hintKey,
+  ...t.rules.map((r) => r.remarksKey),
+]) satisfies readonly DictKey[];
 
 /** The template's rules with names in the user's language (ids are given on save). */
 export function templateRules(template: BlockTemplate, t: (key: DictKey) => string): RoutingRule[] {
-  return template.rules.map(({ remarksKey, ...rule }) => ({
-    ...rule,
+  return template.rules.map((rule) => ({
     id: "",
     enabled: true,
-    remarks: t(remarksKey),
+    remarks: t(rule.remarksKey as DictKey),
+    outboundTag: rule.outboundTag,
+    domain: "domain" in rule && rule.domain ? [...rule.domain] : undefined,
+    ip: "ip" in rule && rule.ip ? [...rule.ip] : undefined,
+    network: "network" in rule ? rule.network : undefined,
+    port: "port" in rule ? rule.port : undefined,
   }));
 }

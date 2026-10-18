@@ -49,7 +49,14 @@ function readSources(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const haystack = readSources(srcDir).join("\n");
+const sources = readSources(srcDir);
+const defaultsPath = join(srcDir, "generated/defaults.ts");
+try {
+  sources.push(readFileSync(defaultsPath, "utf8"));
+} catch {
+  // defaults file may not exist yet
+}
+const haystack = sources.join("\n");
 const referenced = (key: string) =>
   haystack.includes(`"${key}"`) || haystack.includes(`'${key}'`) || haystack.includes(`\`${key}\``);
 

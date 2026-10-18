@@ -791,16 +791,25 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
         host === "localhost" ||
         host.endsWith(".localhost") ||
         host === "local" ||
-        host.endsWith(".local") ||
-        host === "::1";
+        host.endsWith(".local");
+      const unbracketed = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+      if (
+        unbracketed === "::1" ||
+        unbracketed.startsWith("fc") ||
+        unbracketed.startsWith("fd") ||
+        unbracketed.startsWith("fe80")
+      ) {
+        isLocalOrPrivate = true;
+      }
       if (!isLocalOrPrivate) {
-        const parts = host.split(".").map(Number);
+        const parts = unbracketed.split(".").map(Number);
         if (parts.length === 4 && !parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) {
           if (
             parts[0] === 10 ||
             (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
             (parts[0] === 192 && parts[1] === 168) ||
-            parts[0] === 127
+            parts[0] === 127 ||
+            (parts[0] === 169 && parts[1] === 254)
           ) {
             isLocalOrPrivate = true;
           }
