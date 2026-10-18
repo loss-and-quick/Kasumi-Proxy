@@ -206,6 +206,8 @@ function createBridgeMock(): BridgeMock {
     catchAllRules: vi.fn(async (rules: RoutingRule[]) =>
       rules.map((r) => r.enabled && r.port === "1-65535"),
     ),
+    validateProfile: vi.fn<Bridge["validateProfile"]>(async () => []),
+    switchProfileProtocol: vi.fn<Bridge["switchProfileProtocol"]>(async (profile) => profile),
     parseShareLinks: vi.fn(async (_text: string) => []),
     resolveImportInput: vi.fn(async (_text: string) => ({
       subscriptions: [],

@@ -176,6 +176,12 @@ export const bridge: Bridge = {
   async catchAllRules(rules) {
     return (await loadBridge()).catchAllRules(rules);
   },
+  async validateProfile(profile) {
+    return (await loadBridge()).validateProfile(profile);
+  },
+  async switchProfileProtocol(profile, protocol) {
+    return (await loadBridge()).switchProfileProtocol(profile, protocol);
+  },
   async parseShareLinks(text) {
     return (await loadBridge()).parseShareLinks(text);
   },

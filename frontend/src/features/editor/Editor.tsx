@@ -21,7 +21,7 @@ import { useT } from "../../i18n";
 import { bridge } from "../../lib/bridge-provider";
 import { coreConflictText } from "../../lib/core-conflict";
 import { type GroupChoice, groupChoiceReady } from "../../lib/groups";
-import { emptyProfile, isProviderCustom, schemaFor, switchProtocol } from "../../lib/profile-utils";
+import { emptyProfile, isProviderCustom, translateIssue } from "../../lib/profile-utils";
 import { isDefaultRoute, routeEnabled, routeGroups, routeProfiles } from "../../lib/routes";
 import { wasReported } from "../../store/errors";
 import { useAppStore } from "../../store/useAppStore";
@@ -108,7 +108,22 @@ export default function Editor({
   const setRoot = (patch: Record<string, unknown>) =>
     setDraft((d) => ({ ...d, ...patch }) as Profile);
 
-  const changeProtocol = (proto: Protocol) => setDraft((cur) => switchProtocol(cur, proto));
+  const switchSeqRef = useRef(0);
+  const changeProtocol = (proto: Protocol) => {
+    const seq = ++switchSeqRef.current;
+    bridge
+      .switchProfileProtocol(draft, proto)
+      .then((next) => {
+        if (seq === switchSeqRef.current) {
+          setDraft(next);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!wasReported(e)) {
+          notify(t("store.service.error", { error: e instanceof Error ? e.message : String(e) }));
+        }
+      });
+  };
 
   // The canonical share-link build lives in Rust; render the preview through the
   // bridge command (async) instead of a flat frontend builder.
@@ -181,37 +196,45 @@ export default function Editor({
   }, [draft, t]);
 
   const save = async () => {
-    const result = schemaFor(draft.protocol).safeParse(draft);
     const next: FieldErrors = {};
-    if (!result.success) {
-      // Key errors by the leaf field name (sni/path/publicKey/…) so each section
-      // can surface them, regardless of the nested sub-object the field lives in.
-      for (const issue of result.error.issues)
-        next[String(issue.path[issue.path.length - 1])] = issue.message;
+    if ("endpoint" in draft && draft.endpoint) {
+      const p = Number(draft.endpoint.port);
+      if (!Number.isInteger(p) || p < 1 || p > 65535) {
+        next.port = t("editor.validation.port");
+      }
     }
     if (!groupChoiceReady(group)) next.group = t("groups.picker.needName");
-    if (!result.success || Object.keys(next).length) {
-      setErrors(next);
-      // The offending field may be scrolled out of view.
-      notify(t("editor.validation.fix"));
-      return;
-    }
-    const profile = result.data as Profile;
+
     setSaving(true);
     try {
+      // Validate via backend only if port is a valid number (so u16 deserialization succeeds).
+      if (!next.port) {
+        const issues = await bridge.validateProfile(draft);
+        for (const issue of issues) {
+          next[issue.field] = translateIssue(issue.issue, t);
+        }
+      }
+
+      if (Object.keys(next).length) {
+        setErrors(next);
+        // The offending field may be scrolled out of view.
+        notify(t("editor.validation.fix"));
+        return;
+      }
+
+      const profile = draft;
       const groupId = await resolveGroup(group, "");
       await upsert({ ...profile, meta: { ...profile.meta, groupId } });
       if (route !== listedRoute) await setProfileRoute(profile.meta.id, route || null);
       if (!existing) newProfile.onSaved?.();
+      onClose();
     } catch (e) {
       // Keep the form open so nothing typed is lost.
       if (!wasReported(e))
         notify(t("store.service.error", { error: e instanceof Error ? e.message : String(e) }));
-      return;
     } finally {
       setSaving(false);
     }
-    onClose();
   };
 
   // Without a route of its own the profile runs with its group's (or the default).
