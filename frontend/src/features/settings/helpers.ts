@@ -1,6 +1,5 @@
 import { z } from "zod";
 import type {
-  AssetDraftInput,
   AssetDraftIssue,
   AssetDraftIssueKind,
   CoreEngine,

@@ -713,7 +713,10 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     return parseRoutePackage(text);
   },
 
-  async validateAssetDraft(draft: AssetDraftInput, takenNames: string[]): Promise<AssetDraftIssue[]> {
+  async validateAssetDraft(
+    draft: AssetDraftInput,
+    takenNames: string[],
+  ): Promise<AssetDraftIssue[]> {
     const issues: AssetDraftIssue[] = [];
     const name = draft.remarks.trim();
     if (!name) {

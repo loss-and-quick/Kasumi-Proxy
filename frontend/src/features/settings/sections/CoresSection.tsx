@@ -65,11 +65,7 @@ export function CoresSection({
               <SettingRow
                 key={protocol}
                 title={protocolLabel(t, protocol)}
-                hint={
-                  lockedCore === "sing-box"
-                    ? t("settings.coreLockedSingbox")
-                    : undefined
-                }
+                hint={lockedCore === "sing-box" ? t("settings.coreLockedSingbox") : undefined}
               >
                 <Segmented
                   size="sm"
