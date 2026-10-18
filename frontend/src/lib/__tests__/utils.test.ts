@@ -46,11 +46,22 @@ describe("checkSubscriptionUrlSecurity", () => {
     expect(
       (await mockBridge.checkSubscriptionUrlSecurity("http://[fe80::1]/sub")).isLocalOrPrivate,
     ).toBe(true);
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("http://[feb0::1]/sub")).isLocalOrPrivate,
+    ).toBe(true);
   });
 
   it("treats public hosts as not private", async () => {
     expect(
       (await mockBridge.checkSubscriptionUrlSecurity("https://example.com/sub")).isLocalOrPrivate,
+    ).toBe(false);
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("https://fd.example.com/sub"))
+        .isLocalOrPrivate,
+    ).toBe(false);
+    expect(
+      (await mockBridge.checkSubscriptionUrlSecurity("https://fe80.example.com/sub"))
+        .isLocalOrPrivate,
     ).toBe(false);
     expect(
       (await mockBridge.checkSubscriptionUrlSecurity("http://8.8.8.8/sub")).isLocalOrPrivate,

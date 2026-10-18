@@ -795,9 +795,8 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
       const unbracketed = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
       if (
         unbracketed === "::1" ||
-        unbracketed.startsWith("fc") ||
-        unbracketed.startsWith("fd") ||
-        unbracketed.startsWith("fe80")
+        (unbracketed.includes(":") &&
+          /^(f[cd][0-9a-f]{0,2}|fe[89ab][0-9a-f]{0,2}):/i.test(unbracketed))
       ) {
         isLocalOrPrivate = true;
       }
