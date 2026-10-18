@@ -111,11 +111,22 @@ export default function Editor({
   const switchSeqRef = useRef(0);
   const changeProtocol = (proto: Protocol) => {
     const seq = ++switchSeqRef.current;
+    const typedPort = "endpoint" in draft && draft.endpoint ? draft.endpoint.port : undefined;
+    const portOk =
+      Number.isInteger(Number(typedPort)) && Number(typedPort) >= 0 && Number(typedPort) <= 65535;
+    const sent =
+      "endpoint" in draft && draft.endpoint && !portOk
+        ? ({ ...draft, endpoint: { ...draft.endpoint, port: 0 } } as Profile)
+        : draft;
     bridge
-      .switchProfileProtocol(draft, proto)
+      .switchProfileProtocol(sent, proto)
       .then((next) => {
         if (seq === switchSeqRef.current) {
-          setDraft(next);
+          setDraft(
+            !portOk && typedPort !== undefined && "endpoint" in next && next.endpoint
+              ? ({ ...next, endpoint: { ...next.endpoint, port: typedPort } } as Profile)
+              : next,
+          );
         }
       })
       .catch((e: unknown) => {
