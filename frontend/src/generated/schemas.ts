@@ -1388,6 +1388,9 @@ export const Command_SerializeSchema = z.union([z.object({
 	cmd: z.literal("checkLocalPorts"),
 	settings: AdvancedSettings_SerializeSchema,
 }), z.object({
+	cmd: z.literal("checkReadiness"),
+	profileId: z.string().nullable(),
+}), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
 	cmd: z.literal("downloadAsset"),
@@ -1632,6 +1635,9 @@ export const Command_DeserializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("checkLocalPorts"),
 	settings: AdvancedSettings_DeserializeSchema,
+}), z.object({
+	cmd: z.literal("checkReadiness"),
+	profileId: z.string().nullable().optional(),
 }), z.object({
 	cmd: z.literal("clearLogs"),
 }), z.object({
@@ -1895,6 +1901,32 @@ export const ProviderNoticeSchema = z.union([ProviderNotice_DeserializeSchema, P
 export type ProviderNotice = z.infer<typeof ProviderNoticeSchema>;
 
 
+export const ReadinessIssueSchema = z.union([z.object({
+	kind: z.literal("configError"),
+	message: z.string(),
+}), z.object({
+	kind: z.literal("coreConflict"),
+	conflict: CoreConflictSchema,
+}), z.object({
+	kind: z.literal("missingGeoAssets"),
+	assets: z.array(z.string()),
+}), z.object({
+	kind: z.literal("noActiveProfile"),
+}), z.object({
+	kind: z.literal("portCollision"),
+}).and(PortCollisionSchema)]);
+export type ReadinessIssue = z.infer<typeof ReadinessIssueSchema>;
+
+
+export const ReadinessReportSchema = z.object({
+	profileId: z.string().nullable(),
+	engine: CoreEngineSchema.nullable(),
+	ok: z.boolean(),
+	issues: z.array(ReadinessIssueSchema),
+});
+export type ReadinessReport = z.infer<typeof ReadinessReportSchema>;
+
+
 export const RequestIdentityDefaultsSchema = z.union([RequestIdentityDefaults_DeserializeSchema, RequestIdentityDefaults_SerializeSchema]);
 export type RequestIdentityDefaults = z.infer<typeof RequestIdentityDefaultsSchema>;
 
@@ -2075,6 +2107,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
 }), z.object({
+	kind: z.literal("readiness"),
+	value: ReadinessReportSchema,
+}), z.object({
 	kind: z.literal("requestIdentity"),
 	value: ResolvedIdentity_SerializeSchema,
 }), z.object({
@@ -2152,6 +2187,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("profiles"),
 	value: z.array(ProfileSchema),
+}), z.object({
+	kind: z.literal("readiness"),
+	value: ReadinessReportSchema,
 }), z.object({
 	kind: z.literal("requestIdentity"),
 	value: ResolvedIdentity_DeserializeSchema,

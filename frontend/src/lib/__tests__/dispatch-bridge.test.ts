@@ -376,3 +376,23 @@ describe("dispatch-bridge backup restore", () => {
     await expect(bridge.importBackup(backup, "merge")).resolves.toEqual(restored);
   });
 });
+
+describe("dispatch-bridge check readiness", () => {
+  it("dispatches checkReadiness with profileId and returns report", async () => {
+    const report = {
+      profileId: "p1",
+      engine: "sing-box" as const,
+      ok: true,
+      issues: [],
+    };
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "readiness", value: report }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    expect(await bridge.checkReadiness("p1")).toEqual(report);
+    expect(dispatch).toHaveBeenCalledWith({ cmd: "checkReadiness", profileId: "p1" });
+
+    await bridge.checkReadiness();
+    expect(dispatch).toHaveBeenLastCalledWith({ cmd: "checkReadiness", profileId: null });
+  });
+});

@@ -20,6 +20,7 @@ import type {
   LogTarget,
   PortCollision,
   Profile,
+  ReadinessReport,
   ResolvedIdentity,
   ResolvedImport_Serialize as ResolvedImport,
   RoutingRule,
@@ -50,6 +51,8 @@ export type {
   MutationIntent_Serialize as MutationIntent,
   PendingChange_Serialize as PendingChange,
   PortCollision,
+  ReadinessIssue,
+  ReadinessReport,
   RequestClient,
   RequestIdentityDefaults_Serialize as RequestIdentityDefaults,
   ResolvedIdentity,
@@ -191,6 +194,10 @@ export interface Bridge {
   // through, checked by the backend's `chain::chain_candidates` — the same rule
   // the config builders enforce, so the UI never re-implements chain validity.
   chainCandidates(profile: Profile): Promise<string[]>;
+
+  // Startup readiness: checks active/target profile, port collision, core resolution,
+  // config generation and missing geo assets in unified Rust backend.
+  checkReadiness(profileId?: string): Promise<ReadinessReport>;
 
   // Of those candidates, the hops whose core requirement conflicts with the
   // profile's chain (`core::chain_conflicts`), each with the conflict.
