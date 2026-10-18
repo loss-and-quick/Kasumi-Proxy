@@ -432,7 +432,7 @@ pub(crate) async fn check_readiness(
 ) -> Result<ReadinessReport, CommandError> {
     let state = crate::state::read_app_state(platform)
         .await
-        .ok_or_else(|| err("app-state not found"))?;
+        .unwrap_or_else(default_app_state);
 
     let id = profile_id
         .filter(|s| !s.is_empty())

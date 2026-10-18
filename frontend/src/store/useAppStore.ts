@@ -395,6 +395,7 @@ export const useAppStore = create<Store>((set, get) => {
   // hydrate() can run more than once (tests, dev StrictMode) — register the
   // background watchers a single time.
   let daemonPushWatchStarted = false;
+  let readinessSeq = 0;
   const syncService = (service: ServiceStatus) => {
     const now = Date.now();
     let uploadRate = 0;
@@ -635,10 +636,12 @@ export const useAppStore = create<Store>((set, get) => {
     },
     refreshReadiness() {
       const targetId = get().activeId;
+      const seq = ++readinessSeq;
       bridge
         .checkReadiness(targetId ?? undefined)
         .then((report) => {
           if (
+            seq === readinessSeq &&
             get().activeId === targetId &&
             (report.profileId == null || report.profileId === targetId)
           ) {

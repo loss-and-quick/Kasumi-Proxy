@@ -84,9 +84,15 @@ export default function Overview({
   const active = profiles.find((p) => p.meta.id === activeId);
   const routes = useAppStore((s) => s.routes);
   const readinessReport = useAppStore((s) => s.readinessReport);
+  const refreshReadiness = useAppStore((s) => s.refreshReadiness);
   // Backend-resolved core of the active profile (`resolveCores` cache in the store).
   const resolvedCore = useAppStore((s) =>
     activeId ? (s.coreResolutions[activeId]?.resolved ?? null) : null,
+  );
+  const ready = Boolean(
+    activeId &&
+      readinessReport?.ok &&
+      (readinessReport.profileId == null || readinessReport.profileId === activeId),
   );
   const missingAssets =
     readinessReport?.issues.find((i) => i.kind === "missingGeoAssets")?.assets ?? [];
@@ -331,6 +337,9 @@ export default function Overview({
                     second: t(PORT_LABEL[portClash.second]),
                   })}
                 </span>
+                <Btn variant="tonal" sm icon="refresh" onClick={() => refreshReadiness()}>
+                  {t("common.retry")}
+                </Btn>
                 <Btn
                   variant="tonal"
                   sm
@@ -360,9 +369,7 @@ export default function Overview({
               <Btn
                 variant={stoppable ? "error" : "filled"}
                 onClick={toggleService}
-                disabled={
-                  busy || (!up && (!activeId || (readinessReport ? !readinessReport.ok : false)))
-                }
+                disabled={busy || (!up && !ready)}
                 style={{
                   flex: 2,
                   height: 52,
