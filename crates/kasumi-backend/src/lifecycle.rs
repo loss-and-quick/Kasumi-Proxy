@@ -121,7 +121,7 @@ pub async fn resolve_and_write_config(
     };
     let cfg_text =
         serde_json::to_string_pretty(&built.config).map_err(|e| CommandError(e.to_string()))?;
-    validate_geo_assets(&paths.dat_dir, engine, &cfg_text)?;
+    validate_geo_assets(platform, engine, &cfg_text)?;
     write_text_atomic(cfg_path, &cfg_text)
         .await
         .map_err(|e| CommandError(e.to_string()))?;
@@ -145,10 +145,17 @@ pub fn required_geo_assets(engine: CoreEngine, cfg_text: &str) -> HashSet<&'stat
             }
         }
         CoreEngine::Xray => {
-            if cfg_text.contains("\"geosite:") || cfg_text.contains("geosite.dat") {
+            if cfg_text.contains("\"geosite:")
+                || cfg_text.contains("\"ext:geosite.dat:")
+                || cfg_text.contains("\"geosite.dat\"")
+            {
                 needed.insert("geosite.dat");
             }
-            if cfg_text.contains("\"geoip:") || cfg_text.contains("geoip.dat") {
+            if cfg_text.contains("\"geoip:")
+                || cfg_text.contains("\"!geoip:")
+                || cfg_text.contains("\"ext:geoip.dat:")
+                || cfg_text.contains("\"geoip.dat\"")
+            {
                 needed.insert("geoip.dat");
             }
         }
@@ -156,9 +163,9 @@ pub fn required_geo_assets(engine: CoreEngine, cfg_text: &str) -> HashSet<&'stat
     needed
 }
 
-/// Verify that every geo asset file required by the config is present in `dat_dir`.
+/// Verify that every geo asset file required by the config is present on the platform.
 pub fn validate_geo_assets(
-    dat_dir: &Path,
+    platform: &dyn Platform,
     engine: CoreEngine,
     cfg_text: &str,
 ) -> Result<(), CommandError> {
@@ -168,7 +175,7 @@ pub fn validate_geo_assets(
     }
     let mut missing: Vec<&str> = needed
         .into_iter()
-        .filter(|filename| !dat_dir.join(filename).is_file())
+        .filter(|filename| !platform.has_asset(filename))
         .collect();
     if missing.is_empty() {
         return Ok(());
@@ -755,6 +762,20 @@ mod tests {
         assert!(got_xray.contains("geosite.dat"));
         assert!(got_xray.contains("geoip.dat"));
 
+        // Negated selector
+        let xray_negated = r#"{"routing":{"rules":[{"ip":["!geoip:cn"]}]}}"#;
+        assert_eq!(
+            required_geo_assets(CoreEngine::Xray, xray_negated),
+            std::collections::HashSet::from(["geoip.dat"])
+        );
+
+        // Ext selector
+        let xray_ext = r#"{"routing":{"rules":[{"domain":["ext:geosite.dat:cn"]}]}}"#;
+        assert_eq!(
+            required_geo_assets(CoreEngine::Xray, xray_ext),
+            std::collections::HashSet::from(["geosite.dat"])
+        );
+
         let xray_fakeip =
             r#"{"dns":{"servers":[{"address":"fakeip","expectIPs":["geoip:!private"]}]}}"#;
         let got_fakeip = required_geo_assets(CoreEngine::Xray, xray_fakeip);
@@ -762,18 +783,23 @@ mod tests {
 
         let xray_plain = r#"{"routing":{"rules":[{"domain":["example.com"]},{"ip":["1.1.1.1"]}]}}"#;
         assert!(required_geo_assets(CoreEngine::Xray, xray_plain).is_empty());
+
+        // Domain with substring match must NOT be treated as geo asset
+        let xray_domain_db =
+            r#"{"routing":{"rules":[{"domain":["full:geosite.database.example.com"]}]}}"#;
+        assert!(required_geo_assets(CoreEngine::Xray, xray_domain_db).is_empty());
     }
 
     #[test]
     fn validate_geo_assets_rejects_missing() {
-        let dir = tempfile::tempdir().unwrap();
+        let (p, _d) = TestPlatform::new();
         let cfg = r#"{"routing":{"rules":[{"domain":["geosite:ru"]}]}}"#;
-        let err = validate_geo_assets(dir.path(), CoreEngine::Xray, cfg).unwrap_err();
+        let err = validate_geo_assets(&p, CoreEngine::Xray, cfg).unwrap_err();
         assert!(err.0.contains("geosite.dat"));
 
         // When present, succeeds.
-        std::fs::write(dir.path().join("geosite.dat"), b"geo").unwrap();
-        assert!(validate_geo_assets(dir.path(), CoreEngine::Xray, cfg).is_ok());
+        std::fs::write(p.paths().dat_dir.join("geosite.dat"), b"geo").unwrap();
+        assert!(validate_geo_assets(&p, CoreEngine::Xray, cfg).is_ok());
     }
 
     #[tokio::test]

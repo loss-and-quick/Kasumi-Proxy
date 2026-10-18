@@ -426,7 +426,13 @@ async fn fail(reason: &str) -> anyhow::Result<()> {
     anyhow::bail!("{reason}")
 }
 
-async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> anyhow::Result<()> {
+async fn start_inner(
+    platform: &AndroidPlatform,
+    plan: &DataPathPlan,
+    bin: &str,
+    cfg: &str,
+    log: &str,
+) -> anyhow::Result<()> {
     if !exists(bin).await {
         return fail("core binary missing").await;
     }
@@ -439,7 +445,7 @@ async fn start_inner(plan: &DataPathPlan, bin: &str, cfg: &str, log: &str) -> an
     let native = matches!(plan.tun, TunPlan::Native { .. });
 
     let cfg_text = read_text(cfg).await.unwrap_or_default();
-    if let Err(e) = validate_geo_assets(Path::new(DATADIR), plan.engine, &cfg_text) {
+    if let Err(e) = validate_geo_assets(platform, plan.engine, &cfg_text) {
         return fail(&e.0).await;
     }
 
@@ -622,7 +628,7 @@ impl Platform for AndroidPlatform {
         ensure_tun_node().await;
 
         let (bin, cfg, log) = core_files(plan.engine);
-        if let Err(e) = start_inner(plan, bin, &cfg, &log).await {
+        if let Err(e) = start_inner(self, plan, bin, &cfg, &log).await {
             ks_error!(Area::Platform, "data-path start failed: {e}");
             // Roll back the half-built data-path so a failed start leaves no orphans.
             let already_failed = read_state()

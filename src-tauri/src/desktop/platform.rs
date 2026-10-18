@@ -258,11 +258,7 @@ impl DesktopPlatform {
         }
 
         let cfg_text = read_text(&cfg).await.unwrap_or_default();
-        if let Err(e) = kasumi_backend::lifecycle::validate_geo_assets(
-            &self.p.backend.dat_dir,
-            engine,
-            &cfg_text,
-        ) {
+        if let Err(e) = kasumi_backend::lifecycle::validate_geo_assets(self, engine, &cfg_text) {
             return self.fail(&e.0).await;
         }
         if is_singbox {

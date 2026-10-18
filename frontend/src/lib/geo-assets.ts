@@ -34,18 +34,29 @@ export function getMissingGeoAssets({
   assetFiles,
   resolvedCore,
 }: MissingGeoCheckParams): string[] {
-  if (settings.routingMode === "global") {
-    return [];
-  }
-
   const needed = new Set<string>();
 
-  if (settings.routingMode === "custom") {
+  // Xray with fake-dns always emits expectIPs: ["geoip:!private"] in its DNS block
+  // across all routing modes (global, rules, custom).
+  if (resolvedCore === "xray" && settings.fakeDns) {
+    needed.add("geoip.dat");
+  }
+
+  if (settings.routingMode === "custom" && resolvedCore !== "sing-box") {
     const raw = settings.customRouting ?? "";
-    if (raw.includes("geosite:") || raw.includes("geosite.dat")) {
+    if (
+      raw.includes('"geosite:') ||
+      raw.includes('"ext:geosite.dat:') ||
+      raw.includes('"geosite.dat"')
+    ) {
       needed.add("geosite.dat");
     }
-    if (raw.includes("geoip:") || raw.includes("geoip.dat")) {
+    if (
+      raw.includes('"geoip:') ||
+      raw.includes('"!geoip:') ||
+      raw.includes('"ext:geoip.dat:') ||
+      raw.includes('"geoip.dat"')
+    ) {
       needed.add("geoip.dat");
     }
   } else if (settings.routingMode === "rules") {
@@ -58,13 +69,18 @@ export function getMissingGeoAssets({
         if (!block) continue;
         for (const rule of block.rules) {
           if (!rule.enabled) continue;
-          if (rule.domain?.some((d) => d.startsWith("geosite:") || d.includes("geosite.dat"))) {
+          if (
+            rule.domain?.some(
+              (d) =>
+                d.startsWith("geosite:") || d.startsWith("ext:geosite.dat:") || d === "geosite.dat",
+            )
+          ) {
             needed.add("geosite.dat");
           }
           if (
             rule.ip?.some((ip) => {
-              if (ip.includes("geoip.dat")) return true;
-              if (ip.startsWith("geoip:")) {
+              if (ip.startsWith("ext:geoip.dat:") || ip === "geoip.dat") return true;
+              if (ip.startsWith("geoip:") || ip.startsWith("!geoip:")) {
                 // On sing-box, geoip:private and geoip:!private are converted
                 // to built-in ip_is_private without requiring geoip.dat.
                 if (
@@ -82,10 +98,6 @@ export function getMissingGeoAssets({
           }
         }
       }
-    }
-    // Xray fake-dns generates expectIPs: ["geoip:!private"]
-    if (resolvedCore === "xray" && settings.fakeDns) {
-      needed.add("geoip.dat");
     }
   }
 

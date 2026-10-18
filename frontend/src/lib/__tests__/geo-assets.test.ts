@@ -147,4 +147,44 @@ describe("getMissingGeoAssets", () => {
     });
     expect(missing).toEqual(["geosite.dat"]);
   });
+
+  it("does not treat literal domains containing geosite as geo assets", () => {
+    const missing = getMissingGeoAssets({
+      settings: makeSettings(),
+      routes: [makeRoute(DEFAULT_ROUTE_ID, ["b1"])],
+      ruleBlocks: [
+        makeBlock("b1", [makeRule("r1", { domain: ["full:geosite.database.example.com"] })]),
+      ],
+      activeProfile: dummyProfile,
+      assetFiles: [],
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it("requires geoip.dat when fakeDns is enabled for Xray even in global mode", () => {
+    const missing = getMissingGeoAssets({
+      settings: makeSettings({ routingMode: "global", fakeDns: true }),
+      routes: [],
+      ruleBlocks: [],
+      activeProfile: dummyProfile,
+      assetFiles: [],
+      resolvedCore: "xray",
+    });
+    expect(missing).toEqual(["geoip.dat"]);
+  });
+
+  it("ignores custom routing when resolved core is sing-box", () => {
+    const missing = getMissingGeoAssets({
+      settings: makeSettings({
+        routingMode: "custom",
+        customRouting: JSON.stringify([{ domain: ["geosite:cn"] }]),
+      }),
+      routes: [],
+      ruleBlocks: [],
+      activeProfile: dummyProfile,
+      assetFiles: [],
+      resolvedCore: "sing-box",
+    });
+    expect(missing).toEqual([]);
+  });
 });

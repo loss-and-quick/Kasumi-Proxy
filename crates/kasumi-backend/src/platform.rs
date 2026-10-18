@@ -267,6 +267,11 @@ pub trait Platform: Send + Sync {
         Ok(())
     }
 
+    /// Whether a geo asset file exists in the platform's dat directory.
+    fn has_asset(&self, filename: &str) -> bool {
+        self.paths().dat_dir.join(filename).is_file()
+    }
+
     /// Mutate a freshly built core config in place to apply OS-specific knobs the
     /// neutral builder must not assume (e.g. sing-box's root-binary tun needs
     /// `auto_redirect` + `strict_route` on Android).
