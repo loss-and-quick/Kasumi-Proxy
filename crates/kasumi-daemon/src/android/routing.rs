@@ -450,7 +450,11 @@ pub(super) async fn apply_listener_return(table: &str, cidrs: &[&str]) {
     for (v6, rule) in listener_return_rules(table, cidrs) {
         let mut args: Vec<&str> = rule.iter().map(String::as_str).collect();
         args[1] = "del";
-        while ip_rule(v6, &args).await == 0 {}
+        for _ in 0..4 {
+            if ip_rule(v6, &args).await != 0 {
+                break;
+            }
+        }
         args[1] = "add";
         ip_rule(v6, &args).await;
     }
