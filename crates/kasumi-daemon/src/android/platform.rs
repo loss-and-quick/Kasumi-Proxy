@@ -30,8 +30,9 @@ use kasumi_core::data_path_state::{DataPathState, HelperSlot, TunSlot};
 use kasumi_core::enums::{CoreEngine, TunEngine, wire_value};
 use kasumi_core::profile::Protocol;
 use kasumi_core::request_identity::{AndroidBuild, DeviceFacts};
+use kasumi_core::singbox_config::{SINGBOX_FORCE_TABLE, SINGBOX_MAIN_TABLE};
 use kasumi_core::state::{AdvancedSettings, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT};
-use kasumi_core::tun::TunOptions;
+use kasumi_core::tun::{TUN_IPV4_CIDR, TUN_IPV6_CIDR, TUN2_IPV4_CIDR, TUN2_IPV6_CIDR, TunOptions};
 use kasumi_log::{Area, ks_error, ks_info, ks_warn};
 
 use super::network::run_watcher;
@@ -42,8 +43,8 @@ use super::paths::{
     TUN2SOCKS2_PIDFILE, XRAY_BIN, backend_paths,
 };
 use super::routing::{
-    AppFilter, RoutingState, apply_external_tun_routing, apply_guards, clear_orphaned_tun_rules,
-    clear_routing_rules,
+    AppFilter, RoutingState, apply_external_tun_routing, apply_guards, apply_listener_return,
+    clear_orphaned_tun_rules, clear_routing_rules,
 };
 use super::sysctl::{lock_tun_iface, setup_sysctl_locks};
 use super::tether_offload::{hw_offload_bypass, restore_hw_offload};
@@ -499,6 +500,18 @@ async fn start_inner(
         );
         tokio::time::sleep(delay).await;
         attempt += 1;
+    }
+
+    // A native tun on the system/mixed stack answers tethered clients from a kernel
+    // listener as root, which its uid-0 exemption would send out the uplink (the
+    // external path installs the same rules with its routing).
+    if let TunPlan::Native { force_tun } = plan.tun {
+        let main = SINGBOX_MAIN_TABLE.to_string();
+        apply_listener_return(&main, &[TUN_IPV4_CIDR, TUN_IPV6_CIDR]).await;
+        if force_tun {
+            let force = SINGBOX_FORCE_TABLE.to_string();
+            apply_listener_return(&force, &[TUN2_IPV4_CIDR, TUN2_IPV6_CIDR]).await;
+        }
     }
 
     // Guard the proxy against apps kept outside it (both engines): no local proxy
