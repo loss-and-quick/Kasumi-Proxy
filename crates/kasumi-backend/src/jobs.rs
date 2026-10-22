@@ -4,9 +4,9 @@
 //! probe through fetch means no `curl` and no Start/Status polling: one async call
 //! returns the result.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
-
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -119,6 +119,20 @@ pub use crate::platform::{safe_id, test_kind_slug};
 /// tcp-ping which has no log).
 pub async fn read_test_log(platform: &dyn Platform, profile_id: &str, kind: TestKind) -> String {
     platform.read_test_log(profile_id, kind).await
+}
+
+/// The lock that owns one retained-log slot. A test drops the previous log when it
+/// starts and writes its own when it fails, so two overlapping attempts for the same
+/// row would otherwise erase each other's reason; whoever holds this owns the slot from
+/// the drop to the write. Entries are pruned once nobody holds or waits for them.
+fn attempt_lock(retained: &Path) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let mut locks = LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    locks.retain(|_, slot| Arc::strong_count(slot) > 1);
+    locks.entry(retained.to_path_buf()).or_default().clone()
 }
 
 /// Drop every retained test-core log for a profile — called when it's deleted so a
@@ -341,6 +355,12 @@ pub async fn run_real_ping(
     platform: &dyn Platform,
     profile_id: &str,
 ) -> Result<Option<i64>, String> {
+    let slot = attempt_lock(
+        &platform
+            .paths()
+            .retained_test_log(profile_id, TestKind::RealPing),
+    );
+    let _slot = slot.lock().await;
     // A log left by an earlier failure describes that run, not this one: drop it up front
     // so whichever branch below fails writes the truth for this attempt —
     // [`Platform::note_test_failure`] then only fills in when the attempt produced no
@@ -426,6 +446,12 @@ pub async fn run_speed_test(
     platform: &dyn Platform,
     profile_id: &str,
 ) -> Result<Option<i64>, String> {
+    let slot = attempt_lock(
+        &platform
+            .paths()
+            .retained_test_log(profile_id, TestKind::Speed),
+    );
+    let _slot = slot.lock().await;
     // See [`run_real_ping`]: a stale log from a previous failure must not outlive a
     // failure that raised before a core could write its own.
     platform.remove_test_log(profile_id, TestKind::Speed).await;
@@ -711,6 +737,23 @@ mod tests {
         let log = read_test_log(&p, &id, TestKind::RealPing).await;
         assert!(log.contains("test core binary missing"), "{log}");
         assert!(!log.contains("older failure"), "{log}");
+    }
+
+    /// One slot per row: overlapping attempts for the same profile and kind queue up
+    /// instead of dropping the log the other one is about to write.
+    #[tokio::test]
+    async fn attempts_sharing_a_row_take_turns_in_its_log_slot() {
+        let first = attempt_lock(Path::new("/data/test-last-realping-a.log"));
+        let same = attempt_lock(Path::new("/data/test-last-realping-a.log"));
+        let other = attempt_lock(Path::new("/data/test-last-speed-a.log"));
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &other));
+
+        let held = first.lock().await;
+        assert!(same.try_lock().is_err(), "the second attempt has to wait");
+        drop(held);
+        assert!(same.try_lock().is_ok());
+        assert!(other.try_lock().is_ok(), "another row is a different slot");
     }
 
     #[test]
