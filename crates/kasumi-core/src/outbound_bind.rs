@@ -18,6 +18,13 @@
 //!   - **Android**: a per-uid policy-routing model excludes root from marking, so the
 //!     core (run as root) escapes without an explicit bind. It doesn't call this
 //!     today, but the helper is shared so it can if a future need arises.
+//!
+//! One exception holds in every mode: an outbound that dials a *local relay* (a
+//! provider's companion app listening on loopback, e.g. a WireGuard profile whose
+//! peer is `127.0.0.1:9000`) must keep loopback reachability. A socket pinned to a
+//! physical device cannot send to `127.0.0.1` at all, so such an object is left
+//! unbound here and exempted from the core's own interface detection by
+//! [`preserve_loopback_singbox_egress`].
 
 use std::collections::BTreeMap;
 
@@ -219,12 +226,7 @@ fn bind_singbox_outbound(ob: &mut Map<String, Value>, iface: &str, source: &Upli
     {
         return;
     }
-    let servers = ob
-        .get("server")
-        .and_then(Value::as_str)
-        .into_iter()
-        .chain(peer_field(ob, "address"))
-        .collect::<Vec<_>>();
+    let servers = singbox_servers(ob);
     if dials_only_loopback(&servers) {
         return;
     }
@@ -235,6 +237,70 @@ fn bind_singbox_outbound(ob: &mut Map<String, Value>, iface: &str, source: &Upli
     if let Some(v6) = &source.v6 {
         ob.insert("inet6_bind_address".into(), v6.as_str().into());
     }
+}
+
+/// Keep a local-relay object reachable under `route.auto_detect_interface`.
+///
+/// In the self-managed tun mode sing-box binds every dial to the default uplink
+/// device, and a device-bound socket cannot reach `127.0.0.1`. A WireGuard profile
+/// whose peer is an on-device relay (a provider hands out `wireguard://…@127.0.0.1:9000`
+/// so its companion app carries the packets) therefore never completes a handshake,
+/// and everything routed to it times out while the rest of the config looks healthy.
+///
+/// A bind address on the object makes sing-box skip the auto-detected device bind for
+/// that object alone (its `disableDefaultBind`), so the object keeps loopback
+/// reachability while every other dial stays on the uplink. Only loopback-*only*
+/// objects are exempted: a peer list that also names a remote server still needs the
+/// uplink, and a chained object dials through another outbound's socket.
+pub fn preserve_loopback_singbox_egress(cfg: &mut Value) {
+    for key in ["outbounds", "endpoints"] {
+        let Some(arr) = cfg.get_mut(key).and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for ob in arr.iter_mut().filter_map(Value::as_object_mut) {
+            preserve_singbox_loopback(ob);
+        }
+    }
+}
+
+fn preserve_singbox_loopback(ob: &mut Map<String, Value>) {
+    let kind = ob.get("type").and_then(Value::as_str).unwrap_or("");
+    if kind.is_empty() || SINGBOX_LOCAL_TYPES.contains(&kind) {
+        return;
+    }
+    if ob
+        .get("detour")
+        .and_then(Value::as_str)
+        .is_some_and(|t| !t.is_empty())
+    {
+        return;
+    }
+    let servers = singbox_servers(ob);
+    if !dials_only_loopback(&servers) {
+        return;
+    }
+    let mut v4 = false;
+    let mut v6 = false;
+    for family in servers.iter().filter_map(|s| loopback_family(s)) {
+        v4 |= family != LoopbackFamily::V6;
+        v6 |= family != LoopbackFamily::V4;
+    }
+    if v4 {
+        ob.insert("inet4_bind_address".into(), "127.0.0.1".into());
+    }
+    if v6 {
+        ob.insert("inet6_bind_address".into(), "::1".into());
+    }
+}
+
+/// Server addresses a sing-box outbound or endpoint dials itself: `server`, and the
+/// wireguard peers' `address` (endpoints keep their peers under `peers`).
+fn singbox_servers(ob: &Map<String, Value>) -> Vec<&str> {
+    ob.get("server")
+        .and_then(Value::as_str)
+        .into_iter()
+        .chain(peer_field(ob, "address"))
+        .collect()
 }
 
 /// Server addresses an xray outbound dials: `vnext` / `servers` entries, the
@@ -267,17 +333,39 @@ fn dials_only_loopback(servers: &[&str]) -> bool {
 
 /// `host`, `host:port`, `[v6]:port` or a bare v6 literal on loopback.
 fn is_loopback_host(addr: &str) -> bool {
-    let host = if let Some(rest) = addr.strip_prefix('[') {
+    loopback_family(addr).is_some()
+}
+
+/// Which loopback family an address names, for choosing the bind addresses that keep
+/// an object off the uplink device. `localhost` may resolve either way.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LoopbackFamily {
+    V4,
+    V6,
+    Both,
+}
+
+fn loopback_family(addr: &str) -> Option<LoopbackFamily> {
+    let host = host_of(addr);
+    if host.eq_ignore_ascii_case("localhost") {
+        return Some(LoopbackFamily::Both);
+    }
+    match host.parse::<std::net::IpAddr>().ok()? {
+        std::net::IpAddr::V4(v4) if v4.is_loopback() => Some(LoopbackFamily::V4),
+        std::net::IpAddr::V6(v6) if v6.is_loopback() => Some(LoopbackFamily::V6),
+        _ => None,
+    }
+}
+
+/// The host part of `host`, `host:port`, `[v6]:port` or a bare v6 literal.
+fn host_of(addr: &str) -> &str {
+    if let Some(rest) = addr.strip_prefix('[') {
         rest.split(']').next().unwrap_or(rest)
     } else if addr.matches(':').count() == 1 {
         addr.split(':').next().unwrap_or(addr)
     } else {
         addr
-    };
-    host.eq_ignore_ascii_case("localhost")
-        || host
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|ip| ip.is_loopback())
+    }
 }
 
 /// Let xray reach its proxy servers without the system resolver, so DNS can be sent
@@ -934,5 +1022,102 @@ mod tests {
         bind_uplink_outbounds(CoreEngine::Xray, &mut v6_only, "eno1", &source);
         assert!(xray_bound(&v6_only, "proxy"));
         assert!(!v6_only.to_string().contains("sendThrough"));
+    }
+
+    #[test]
+    fn loopback_relay_objects_keep_their_reachability() {
+        let mut s = json!({
+            "outbounds": [
+                { "tag": "proxy", "type": "vless", "server": "p.example" },
+                { "tag": "direct", "type": "direct" },
+                { "tag": "block", "type": "block" },
+                { "tag": "pick", "type": "selector", "outbounds": ["proxy"] },
+                { "tag": "local", "type": "socks", "server": "127.0.0.1" },
+                { "tag": "local6", "type": "socks", "server": "[::1]" },
+                { "tag": "name", "type": "http", "server": "localhost" },
+                { "tag": "mixed", "type": "wireguard",
+                  "peers": [{ "address": "127.0.0.1" }, { "address": "w.example" }] },
+                { "tag": "hop", "type": "socks", "server": "127.0.0.1",
+                  "detour": "proxy" },
+            ],
+            "endpoints": [
+                { "tag": "relay", "type": "wireguard", "peers": [{ "address": "127.0.0.1" }] },
+                { "tag": "remote", "type": "wireguard", "peers": [{ "address": "w.example" }] },
+            ],
+        });
+        preserve_loopback_singbox_egress(&mut s);
+        // Loopback-only: exempted from the auto-detected device bind, per family.
+        assert_eq!(
+            by_tag(&s, "outbounds", "local")["inet4_bind_address"],
+            "127.0.0.1"
+        );
+        assert_eq!(
+            by_tag(&s, "outbounds", "local6")["inet6_bind_address"],
+            "::1"
+        );
+        for key in ["inet4_bind_address", "inet6_bind_address"] {
+            let expected = if key == "inet4_bind_address" {
+                "127.0.0.1"
+            } else {
+                "::1"
+            };
+            // `localhost` may resolve either way, so it gets both families.
+            assert_eq!(by_tag(&s, "outbounds", "name")[key], expected);
+        }
+        let relay = by_tag(&s, "endpoints", "relay");
+        assert_eq!(relay["inet4_bind_address"], "127.0.0.1");
+        assert!(relay.get("inet6_bind_address").is_none());
+        // Everything else is left for `auto_detect_interface` to bind.
+        for (key, tag) in [
+            ("outbounds", "proxy"),
+            ("outbounds", "direct"),
+            ("outbounds", "block"),
+            ("outbounds", "pick"),
+            ("outbounds", "mixed"),
+            ("outbounds", "hop"),
+            ("endpoints", "remote"),
+        ] {
+            let ob = by_tag(&s, key, tag);
+            assert!(ob.get("bind_interface").is_none(), "{tag} bound");
+            assert!(ob.get("inet4_bind_address").is_none(), "{tag} bound");
+            assert!(ob.get("inet6_bind_address").is_none(), "{tag} bound");
+        }
+
+        // Idempotent, and the uplink bind still skips the exempted objects.
+        let once = s.clone();
+        preserve_loopback_singbox_egress(&mut s);
+        assert_eq!(s, once);
+        bind_uplink_outbounds(CoreEngine::SingBox, &mut s, "eno1", &v4("192.168.1.2"));
+        assert!(singbox_bound(&s, "outbounds", "proxy"));
+        assert!(singbox_bound(&s, "endpoints", "remote"));
+        let relay = by_tag(&s, "endpoints", "relay");
+        assert!(relay.get("bind_interface").is_none());
+        assert_eq!(relay["inet4_bind_address"], "127.0.0.1");
+    }
+
+    #[test]
+    fn a_loopback_wireguard_profile_is_exempted_on_the_built_config() {
+        let mut p = profile(
+            "wireguard://cHJpdg==@127.0.0.1:9000?publickey=cHVi&address=10.13.13.2/32",
+            "relay",
+            None,
+        );
+        p.meta_mut().core_type = Some(CoreEngine::SingBox);
+        let cfg = crate::core_config::build_core_config(
+            &p,
+            &crate::state::AdvancedSettings::default(),
+            &[],
+            std::slice::from_ref(&p),
+            "",
+            crate::data_path_plan::TEST_HOST,
+        )
+        .unwrap();
+        assert_eq!(cfg.engine(), CoreEngine::SingBox);
+        // The end-to-end tun escape stays on for every other dial.
+        assert_eq!(cfg.config["route"]["auto_detect_interface"], true);
+        let relay = &cfg.config["endpoints"][0];
+        assert_eq!(relay["type"], "wireguard");
+        assert_eq!(relay["inet4_bind_address"], "127.0.0.1");
+        assert!(relay.get("bind_interface").is_none());
     }
 }
