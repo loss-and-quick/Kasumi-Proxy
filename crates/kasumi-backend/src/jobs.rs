@@ -18,7 +18,9 @@ use kasumi_core::core::resolve_core;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Profile;
 use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
-use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL};
+use kasumi_core::state::{
+    AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL, RoutingMode, RoutingRule,
+};
 use kasumi_core::xray_config::build_xray_config;
 
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
@@ -274,7 +276,18 @@ fn build_test_config(
     let mut settings = loaded.state.settings.clone();
     settings.local_socks_port = Some(port);
     settings.local_http_port = Some(port + 1);
-    let rules = &kasumi_core::route::resolve_route(&loaded.state, &loaded.profile);
+    // A probe answers "can this node carry traffic", not "what does my routing do
+    // with the test URL", so its core runs no routing of the user's: Global mode (with
+    // the empty rule list below) leaves both builders nothing but "everything from the
+    // local inbounds goes to `proxy`" — no rule blocks, no raw custom routing — while
+    // keeping their own LAN bypass and the scope rules that only narrow a probe nobody
+    // else matches. That also keeps the probe off the user's geo rule-sets: `rule_set`
+    // entries are only ever emitted for route rules, and the `.srs` files behind them
+    // exist only once a service start generated them, which is precisely what the device
+    // that never started has not done. Without this, every test before the first start
+    // dies on `parse rule-set[0]: open …/geosite-cn.srs: no such file or directory`.
+    settings.routing_mode = RoutingMode::Global;
+    let rules: &[RoutingRule] = &[];
     let mut value = match engine {
         CoreEngine::SingBox => build_singbox_config(
             &loaded.profile,
@@ -290,7 +303,18 @@ fn build_test_config(
         CoreEngine::Xray => build_xray_config(&loaded.profile, &settings, rules, &loaded.profiles)?,
     };
     platform.tune_config(engine, &mut value);
-    serde_json::to_string(&value).map_err(|e| e.to_string())
+    let text = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+    // A config that still names geo data — xray's fake-DNS server pins
+    // `geoip:!private`, a provider profile may carry rules of its own — would die the
+    // same silent way on a file that is not there. Say what is absent while we can.
+    let missing = crate::lifecycle::missing_geo_assets(platform, engine, &text);
+    if !missing.is_empty() {
+        return Err(format!(
+            "the test core needs geo data that is not downloaded: {} (add it in Resource files)",
+            missing.join(", ")
+        ));
+    }
+    Ok(text)
 }
 
 fn test_proxy(port: u16) -> ProxyStatus {
@@ -445,8 +469,9 @@ pub async fn run_speed_test(
 mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
-    use crate::testutil::{TestPlatform, vless_at};
-    use kasumi_core::state::default_app_state;
+    use crate::testutil::{TestPlatform, sample_vless, vless_at};
+    use kasumi_core::route::{RouteBlockRef, RuleBlock};
+    use kasumi_core::state::{RoutingMode, RoutingRule, default_app_state};
 
     #[tokio::test]
     async fn ping_none_when_profile_absent() {
@@ -520,6 +545,109 @@ mod tests {
         assert_eq!(p.tuned(), [CoreEngine::Xray, CoreEngine::Xray]);
         // Unknown profile is also an error.
         assert!(run_real_ping(&p, "nope").await.is_err());
+    }
+
+    /// A state whose routing rules reference geosite/geoip, the way a fresh user
+    /// sets it up in the rule editor before any service start.
+    fn state_with_geo_rules() -> AppState {
+        let mut state = default_app_state();
+        state.settings.routing_mode = RoutingMode::Rules;
+        state.rule_blocks = vec![RuleBlock {
+            id: "b1".into(),
+            name: "direct cn".into(),
+            rules: vec![RoutingRule {
+                id: "r1".into(),
+                remarks: "cn sites".into(),
+                enabled: true,
+                outbound_tag: "direct".into(),
+                domain: Some(vec!["geosite:cn".into()]),
+                ip: Some(vec!["geoip:cn".into()]),
+                port: None,
+                network: None,
+                protocol: None,
+                process: None,
+                package_name: None,
+                source_ip: None,
+            }],
+            source_sub_id: None,
+        }];
+        state.routes[0].blocks = vec![RouteBlockRef {
+            block_id: "b1".into(),
+            enabled: true,
+        }];
+        state
+    }
+
+    fn loaded_with(profile: &Profile, state: AppState) -> Loaded {
+        Loaded {
+            profile: profile.clone(),
+            state,
+            profiles: vec![profile.clone()],
+        }
+    }
+
+    /// A test core must never depend on the geo rule-sets only a service start
+    /// generates: with a geo-heavy route configured and no `.dat` on disk at all,
+    /// the probe config names no rule-set and still sends everything to the node.
+    #[tokio::test]
+    async fn test_config_ignores_route_rules_so_it_needs_no_rule_sets() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let loaded = loaded_with(&prof, state_with_geo_rules());
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::SingBox, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("a probe needs no geo data");
+
+        let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
+        assert!(value.pointer("/route/rule_set").is_none(), "{cfg}");
+        assert_eq!(value["route"]["final"], "proxy");
+        assert!(crate::lifecycle::referenced_srs(&cfg).is_empty(), "{cfg}");
+    }
+
+    /// Whatever a probe config still names (xray's fake-DNS server pins
+    /// `geoip:!private` regardless of rules) is reported up front instead of
+    /// surfacing later as a core that "did not start".
+    #[tokio::test]
+    async fn test_config_reports_geo_data_it_still_needs() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let mut state = default_app_state();
+        state.settings.fake_dns = true;
+        let loaded = loaded_with(&prof, state);
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let err =
+            build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir).unwrap_err();
+        assert!(err.contains("geoip.dat"), "{err}");
+
+        tokio::fs::write(p.paths().dat_dir.join("geoip.dat"), b"geo")
+            .await
+            .unwrap();
+        assert!(build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir).is_ok());
+    }
+
+    /// Custom mode's raw routing JSON is the user's own rules: a probe left them in and
+    /// a `direct` rule could make it measure the LAN instead of the node.
+    #[tokio::test]
+    async fn test_config_ignores_custom_routing_too() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let mut state = default_app_state();
+        state.settings.routing_mode = RoutingMode::Custom;
+        state.settings.custom_routing =
+            Some(r#"[{"type":"field","domain":["geosite:cn"],"outboundTag":"direct"}]"#.into());
+        let loaded = loaded_with(&prof, state);
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("custom routing needs no geo data in a probe");
+
+        assert!(!cfg.contains("geosite"), "{cfg}");
+        // Everything the probe dials still leaves for the node.
+        let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
+        let rules = value["routing"]["rules"].as_array().unwrap();
+        assert_eq!(rules.last().unwrap()["outboundTag"], "proxy");
     }
 
     #[test]
