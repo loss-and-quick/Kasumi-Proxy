@@ -207,7 +207,13 @@ where
         Err(e) => {
             ks_warn!(Area::Jobs, "test core spawn failed on port {port}: {e}");
             platform.cleanup_test_core(port).await;
-            return Err(format!("failed to start test core: {e}"));
+            let reason = format!("failed to start test core: {e}");
+            // Nothing ran, so there is no core log to keep — the reason itself is
+            // what the row's log sheet has to show.
+            if let Some((profile_id, kind)) = retained {
+                platform.note_test_failure(profile_id, kind, &reason).await;
+            }
+            return Err(reason);
         }
     };
 
@@ -335,6 +341,23 @@ pub async fn run_real_ping(
     platform: &dyn Platform,
     profile_id: &str,
 ) -> Result<Option<i64>, String> {
+    // A log left by an earlier failure describes that run, not this one: drop it up front
+    // so whichever branch below fails writes the truth for this attempt —
+    // [`Platform::note_test_failure`] then only fills in when the attempt produced no
+    // core log of its own.
+    platform
+        .remove_test_log(profile_id, TestKind::RealPing)
+        .await;
+    let result = real_ping(platform, profile_id).await;
+    if let Err(e) = &result {
+        platform
+            .note_test_failure(profile_id, TestKind::RealPing, e)
+            .await;
+    }
+    result
+}
+
+async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i64>, String> {
     let loaded = load_profile(platform, profile_id)
         .await
         .ok_or_else(|| "profile not found".to_string())?;
@@ -403,6 +426,19 @@ pub async fn run_speed_test(
     platform: &dyn Platform,
     profile_id: &str,
 ) -> Result<Option<i64>, String> {
+    // See [`run_real_ping`]: a stale log from a previous failure must not outlive a
+    // failure that raised before a core could write its own.
+    platform.remove_test_log(profile_id, TestKind::Speed).await;
+    let result = speed_test(platform, profile_id).await;
+    if let Err(e) = &result {
+        platform
+            .note_test_failure(profile_id, TestKind::Speed, e)
+            .await;
+    }
+    result
+}
+
+async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<i64>, String> {
     let loaded = load_profile(platform, profile_id)
         .await
         .ok_or_else(|| "profile not found".to_string())?;
@@ -648,6 +684,33 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
         let rules = value["routing"]["rules"].as_array().unwrap();
         assert_eq!(rules.last().unwrap()["outboundTag"], "proxy");
+    }
+
+    /// The row's `-1` opens the retained test log, so a failure raised before any
+    /// core ran has to leave its reason there instead of an empty sheet.
+    #[tokio::test]
+    async fn a_test_that_fails_before_its_core_starts_records_why() {
+        let (p, _d) = TestPlatform::new();
+        let prof = vless_at(443);
+        let id = prof.meta().id.clone();
+        write_json_atomic(&p.paths().app_state, &default_app_state())
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![prof])
+            .await
+            .unwrap();
+
+        assert!(run_real_ping(&p, &id).await.is_err());
+        let log = read_test_log(&p, &id, TestKind::RealPing).await;
+        assert!(log.contains("test core binary missing"), "{log}");
+
+        // A log from an earlier failure must not outlive this one's reason.
+        p.write_test_log(&id, TestKind::RealPing, "boom: an older failure\n")
+            .await;
+        assert!(run_real_ping(&p, &id).await.is_err());
+        let log = read_test_log(&p, &id, TestKind::RealPing).await;
+        assert!(log.contains("test core binary missing"), "{log}");
+        assert!(!log.contains("older failure"), "{log}");
     }
 
     #[test]
