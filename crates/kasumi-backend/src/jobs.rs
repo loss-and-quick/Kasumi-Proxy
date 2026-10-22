@@ -4,9 +4,9 @@
 //! probe through fetch means no `curl` and no Start/Status polling: one async call
 //! returns the result.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
-
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -18,7 +18,9 @@ use kasumi_core::core::resolve_core;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Profile;
 use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
-use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL};
+use kasumi_core::state::{
+    AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL, RoutingMode, RoutingRule,
+};
 use kasumi_core::xray_config::build_xray_config;
 
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
@@ -119,6 +121,20 @@ pub async fn read_test_log(platform: &dyn Platform, profile_id: &str, kind: Test
     platform.read_test_log(profile_id, kind).await
 }
 
+/// The lock that owns one retained-log slot. A test drops the previous log when it
+/// starts and writes its own when it fails, so two overlapping attempts for the same
+/// row would otherwise erase each other's reason; whoever holds this owns the slot from
+/// the drop to the write. Entries are pruned once nobody holds or waits for them.
+fn attempt_lock(retained: &Path) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<PathBuf, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
+    let mut locks = LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    locks.retain(|_, slot| Arc::strong_count(slot) > 1);
+    locks.entry(retained.to_path_buf()).or_default().clone()
+}
+
 /// Drop every retained test-core log for a profile — called when it's deleted so a
 /// reused id can't surface a stale predecessor's log. (tcp-ping never writes one,
 /// but sweep its slot too for completeness.)
@@ -205,7 +221,13 @@ where
         Err(e) => {
             ks_warn!(Area::Jobs, "test core spawn failed on port {port}: {e}");
             platform.cleanup_test_core(port).await;
-            return Err(format!("failed to start test core: {e}"));
+            let reason = format!("failed to start test core: {e}");
+            // Nothing ran, so there is no core log to keep — the reason itself is
+            // what the row's log sheet has to show.
+            if let Some((profile_id, kind)) = retained {
+                platform.note_test_failure(profile_id, kind, &reason).await;
+            }
+            return Err(reason);
         }
     };
 
@@ -274,7 +296,18 @@ fn build_test_config(
     let mut settings = loaded.state.settings.clone();
     settings.local_socks_port = Some(port);
     settings.local_http_port = Some(port + 1);
-    let rules = &kasumi_core::route::resolve_route(&loaded.state, &loaded.profile);
+    // A probe answers "can this node carry traffic", not "what does my routing do
+    // with the test URL", so its core runs no routing of the user's: Global mode (with
+    // the empty rule list below) leaves both builders nothing but "everything from the
+    // local inbounds goes to `proxy`" — no rule blocks, no raw custom routing — while
+    // keeping their own LAN bypass and the scope rules that only narrow a probe nobody
+    // else matches. That also keeps the probe off the user's geo rule-sets: `rule_set`
+    // entries are only ever emitted for route rules, and the `.srs` files behind them
+    // exist only once a service start generated them, which is precisely what the device
+    // that never started has not done. Without this, every test before the first start
+    // dies on `parse rule-set[0]: open …/geosite-cn.srs: no such file or directory`.
+    settings.routing_mode = RoutingMode::Global;
+    let rules: &[RoutingRule] = &[];
     let mut value = match engine {
         CoreEngine::SingBox => build_singbox_config(
             &loaded.profile,
@@ -290,7 +323,18 @@ fn build_test_config(
         CoreEngine::Xray => build_xray_config(&loaded.profile, &settings, rules, &loaded.profiles)?,
     };
     platform.tune_config(engine, &mut value);
-    serde_json::to_string(&value).map_err(|e| e.to_string())
+    let text = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+    // A config that still names geo data — xray's fake-DNS server pins
+    // `geoip:!private`, a provider profile may carry rules of its own — would die the
+    // same silent way on a file that is not there. Say what is absent while we can.
+    let missing = crate::lifecycle::missing_geo_assets(platform, engine, &text);
+    if !missing.is_empty() {
+        return Err(format!(
+            "the test core needs geo data that is not downloaded: {} (add it in Resource files)",
+            missing.join(", ")
+        ));
+    }
+    Ok(text)
 }
 
 fn test_proxy(port: u16) -> ProxyStatus {
@@ -311,6 +355,29 @@ pub async fn run_real_ping(
     platform: &dyn Platform,
     profile_id: &str,
 ) -> Result<Option<i64>, String> {
+    let slot = attempt_lock(
+        &platform
+            .paths()
+            .retained_test_log(profile_id, TestKind::RealPing),
+    );
+    let _slot = slot.lock().await;
+    // A log left by an earlier failure describes that run, not this one: drop it up front
+    // so whichever branch below fails writes the truth for this attempt —
+    // [`Platform::note_test_failure`] then only fills in when the attempt produced no
+    // core log of its own.
+    platform
+        .remove_test_log(profile_id, TestKind::RealPing)
+        .await;
+    let result = real_ping(platform, profile_id).await;
+    if let Err(e) = &result {
+        platform
+            .note_test_failure(profile_id, TestKind::RealPing, e)
+            .await;
+    }
+    result
+}
+
+async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i64>, String> {
     let loaded = load_profile(platform, profile_id)
         .await
         .ok_or_else(|| "profile not found".to_string())?;
@@ -379,6 +446,25 @@ pub async fn run_speed_test(
     platform: &dyn Platform,
     profile_id: &str,
 ) -> Result<Option<i64>, String> {
+    let slot = attempt_lock(
+        &platform
+            .paths()
+            .retained_test_log(profile_id, TestKind::Speed),
+    );
+    let _slot = slot.lock().await;
+    // See [`run_real_ping`]: a stale log from a previous failure must not outlive a
+    // failure that raised before a core could write its own.
+    platform.remove_test_log(profile_id, TestKind::Speed).await;
+    let result = speed_test(platform, profile_id).await;
+    if let Err(e) = &result {
+        platform
+            .note_test_failure(profile_id, TestKind::Speed, e)
+            .await;
+    }
+    result
+}
+
+async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<i64>, String> {
     let loaded = load_profile(platform, profile_id)
         .await
         .ok_or_else(|| "profile not found".to_string())?;
@@ -445,8 +531,9 @@ pub async fn run_speed_test(
 mod tests {
     use super::*;
     use crate::fsjson::write_json_atomic;
-    use crate::testutil::{TestPlatform, vless_at};
-    use kasumi_core::state::default_app_state;
+    use crate::testutil::{TestPlatform, sample_vless, vless_at};
+    use kasumi_core::route::{RouteBlockRef, RuleBlock};
+    use kasumi_core::state::{RoutingMode, RoutingRule, default_app_state};
 
     #[tokio::test]
     async fn ping_none_when_profile_absent() {
@@ -520,6 +607,153 @@ mod tests {
         assert_eq!(p.tuned(), [CoreEngine::Xray, CoreEngine::Xray]);
         // Unknown profile is also an error.
         assert!(run_real_ping(&p, "nope").await.is_err());
+    }
+
+    /// A state whose routing rules reference geosite/geoip, the way a fresh user
+    /// sets it up in the rule editor before any service start.
+    fn state_with_geo_rules() -> AppState {
+        let mut state = default_app_state();
+        state.settings.routing_mode = RoutingMode::Rules;
+        state.rule_blocks = vec![RuleBlock {
+            id: "b1".into(),
+            name: "direct cn".into(),
+            rules: vec![RoutingRule {
+                id: "r1".into(),
+                remarks: "cn sites".into(),
+                enabled: true,
+                outbound_tag: "direct".into(),
+                domain: Some(vec!["geosite:cn".into()]),
+                ip: Some(vec!["geoip:cn".into()]),
+                port: None,
+                network: None,
+                protocol: None,
+                process: None,
+                package_name: None,
+                source_ip: None,
+            }],
+            source_sub_id: None,
+        }];
+        state.routes[0].blocks = vec![RouteBlockRef {
+            block_id: "b1".into(),
+            enabled: true,
+        }];
+        state
+    }
+
+    fn loaded_with(profile: &Profile, state: AppState) -> Loaded {
+        Loaded {
+            profile: profile.clone(),
+            state,
+            profiles: vec![profile.clone()],
+        }
+    }
+
+    /// A test core must never depend on the geo rule-sets only a service start
+    /// generates: with a geo-heavy route configured and no `.dat` on disk at all,
+    /// the probe config names no rule-set and still sends everything to the node.
+    #[tokio::test]
+    async fn test_config_ignores_route_rules_so_it_needs_no_rule_sets() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let loaded = loaded_with(&prof, state_with_geo_rules());
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::SingBox, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("a probe needs no geo data");
+
+        let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
+        assert!(value.pointer("/route/rule_set").is_none(), "{cfg}");
+        assert_eq!(value["route"]["final"], "proxy");
+        assert!(crate::lifecycle::referenced_srs(&cfg).is_empty(), "{cfg}");
+    }
+
+    /// Whatever a probe config still names (xray's fake-DNS server pins
+    /// `geoip:!private` regardless of rules) is reported up front instead of
+    /// surfacing later as a core that "did not start".
+    #[tokio::test]
+    async fn test_config_reports_geo_data_it_still_needs() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let mut state = default_app_state();
+        state.settings.fake_dns = true;
+        let loaded = loaded_with(&prof, state);
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let err =
+            build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir).unwrap_err();
+        assert!(err.contains("geoip.dat"), "{err}");
+
+        tokio::fs::write(p.paths().dat_dir.join("geoip.dat"), b"geo")
+            .await
+            .unwrap();
+        assert!(build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir).is_ok());
+    }
+
+    /// Custom mode's raw routing JSON is the user's own rules: a probe left them in and
+    /// a `direct` rule could make it measure the LAN instead of the node.
+    #[tokio::test]
+    async fn test_config_ignores_custom_routing_too() {
+        let (p, _d) = TestPlatform::new();
+        let prof = sample_vless();
+        let mut state = default_app_state();
+        state.settings.routing_mode = RoutingMode::Custom;
+        state.settings.custom_routing =
+            Some(r#"[{"type":"field","domain":["geosite:cn"],"outboundTag":"direct"}]"#.into());
+        let loaded = loaded_with(&prof, state);
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("custom routing needs no geo data in a probe");
+
+        assert!(!cfg.contains("geosite"), "{cfg}");
+        // Everything the probe dials still leaves for the node.
+        let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
+        let rules = value["routing"]["rules"].as_array().unwrap();
+        assert_eq!(rules.last().unwrap()["outboundTag"], "proxy");
+    }
+
+    /// The row's `-1` opens the retained test log, so a failure raised before any
+    /// core ran has to leave its reason there instead of an empty sheet.
+    #[tokio::test]
+    async fn a_test_that_fails_before_its_core_starts_records_why() {
+        let (p, _d) = TestPlatform::new();
+        let prof = vless_at(443);
+        let id = prof.meta().id.clone();
+        write_json_atomic(&p.paths().app_state, &default_app_state())
+            .await
+            .unwrap();
+        write_json_atomic(&p.paths().profiles, &vec![prof])
+            .await
+            .unwrap();
+
+        assert!(run_real_ping(&p, &id).await.is_err());
+        let log = read_test_log(&p, &id, TestKind::RealPing).await;
+        assert!(log.contains("test core binary missing"), "{log}");
+
+        // A log from an earlier failure must not outlive this one's reason.
+        p.write_test_log(&id, TestKind::RealPing, "boom: an older failure\n")
+            .await;
+        assert!(run_real_ping(&p, &id).await.is_err());
+        let log = read_test_log(&p, &id, TestKind::RealPing).await;
+        assert!(log.contains("test core binary missing"), "{log}");
+        assert!(!log.contains("older failure"), "{log}");
+    }
+
+    /// One slot per row: overlapping attempts for the same profile and kind queue up
+    /// instead of dropping the log the other one is about to write.
+    #[tokio::test]
+    async fn attempts_sharing_a_row_take_turns_in_its_log_slot() {
+        let first = attempt_lock(Path::new("/data/test-last-realping-a.log"));
+        let same = attempt_lock(Path::new("/data/test-last-realping-a.log"));
+        let other = attempt_lock(Path::new("/data/test-last-speed-a.log"));
+        assert!(Arc::ptr_eq(&first, &same));
+        assert!(!Arc::ptr_eq(&first, &other));
+
+        let held = first.lock().await;
+        assert!(same.try_lock().is_err(), "the second attempt has to wait");
+        drop(held);
+        assert!(same.try_lock().is_ok());
+        assert!(other.try_lock().is_ok(), "another row is a different slot");
     }
 
     #[test]
