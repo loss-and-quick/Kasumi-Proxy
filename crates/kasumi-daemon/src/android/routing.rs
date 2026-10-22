@@ -1,7 +1,10 @@
 //! Packet routing for the xray data-path: iptables marking + ip rules/tables +
-//! fwmark. sing-box manages its own tun via auto_route, so these run for xray only.
+//! fwmark. sing-box manages its own tun via auto_route, so these run for xray only,
+//! except the listener-return rules ([`apply_listener_return`]), which every tun
+//! needs.
 
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 
 use kasumi_backend::lifecycle::orphaned_tun_rules;
 use kasumi_core::state::{AppCaptureMode, AppFilterMode, app_filter_uid};
@@ -23,6 +26,18 @@ const PRIO_TUN_FORCE: &str = "1011";
 // Priority of the `iif <uplink> lookup <uplink>` rule older versions installed
 // under sing-box strict_route. Only removed now (see `clear_legacy_strict_carveouts`).
 const STRICT_CARVEOUT_PREF: &str = "8500";
+
+/// Keeps the replies of a tun stack's own kernel listener in the tun. sing-box's
+/// "system" and "mixed" stacks hand each TCP flow to a listener on the tun address
+/// through a NAT inside the tun (`198.18.0.2 -> 198.18.0.1`). The listener answers
+/// as root, and nothing takes root into the tun: the external path marks app uids
+/// only, and a native tun's uid-0 exemption (9000) skips its own table. Without
+/// this rule the SYN-ACK leaves through the uplink and the flow never connects:
+/// every app's TCP on the external path, tethered clients' TCP on the native one
+/// (local apps there reach a loopback listener through `auto_redirect` instead).
+/// Only the phone's own packets from a tun address into that tun's subnet match,
+/// so the rule is harmless for gvisor and the userspace helpers.
+const PRIO_LISTENER: &str = "1017";
 
 /// The per-app capture configuration the routing rules are built from.
 pub struct AppFilter {
@@ -381,8 +396,84 @@ async fn clear_legacy_port_rules(filter: &AppFilter, socks_port: u16, http_port:
     }
 }
 
+/// `addr/prefix` as the network `net/prefix`, or `None` when it is not a CIDR.
+fn cidr_network(cidr: &str) -> Option<(IpAddr, String)> {
+    let (addr, prefix) = cidr.split_once('/')?;
+    let addr: IpAddr = addr.parse().ok()?;
+    let prefix: u32 = prefix.parse().ok()?;
+    let net = match addr {
+        IpAddr::V4(a) if prefix <= 32 => {
+            let mask = u32::MAX.checked_shl(32 - prefix).unwrap_or(0);
+            IpAddr::from(std::net::Ipv4Addr::from(u32::from(a) & mask))
+        }
+        IpAddr::V6(a) if prefix <= 128 => {
+            let mask = u128::MAX.checked_shl(128 - prefix).unwrap_or(0);
+            IpAddr::from(std::net::Ipv6Addr::from(u128::from(a) & mask))
+        }
+        _ => return None,
+    };
+    Some((addr, format!("{net}/{prefix}")))
+}
+
+/// The `ip rule add` argument lists, with whether each is IPv6, that send the
+/// phone's packets from each tun address in `cidrs` into its own subnet to
+/// `table` (see [`PRIO_LISTENER`]).
+fn listener_return_rules(table: &str, cidrs: &[&str]) -> Vec<(bool, Vec<String>)> {
+    cidrs
+        .iter()
+        .filter_map(|c| cidr_network(c))
+        .map(|(addr, net)| {
+            let rule = [
+                "rule",
+                "add",
+                "from",
+                &addr.to_string(),
+                "to",
+                &net,
+                "iif",
+                "lo",
+                "lookup",
+                table,
+                "pref",
+                PRIO_LISTENER,
+            ]
+            .map(String::from)
+            .to_vec();
+            (addr.is_ipv6(), rule)
+        })
+        .collect()
+}
+
+/// Install the listener-return rules for a tun with the addresses `cidrs` whose
+/// default route lives in `table`. Idempotent; [`clear_routing_rules`] removes them.
+pub(super) async fn apply_listener_return(table: &str, cidrs: &[&str]) {
+    for (v6, rule) in listener_return_rules(table, cidrs) {
+        let mut args: Vec<&str> = rule.iter().map(String::as_str).collect();
+        args[1] = "del";
+        for _ in 0..4 {
+            if ip_rule(v6, &args).await != 0 {
+                break;
+            }
+        }
+        args[1] = "add";
+        ip_rule(v6, &args).await;
+    }
+}
+
+/// Remove every listener-return rule, whichever tun it was for.
+async fn clear_listener_return() {
+    for v6 in [false, true] {
+        for _ in 0..8 {
+            if ip_rule(v6, &["rule", "del", "pref", PRIO_LISTENER]).await != 0 {
+                break;
+            }
+        }
+    }
+}
+
 /// Tear down every rule/table/device the xray data-path installed.
 pub async fn clear_routing_rules(st: &RoutingState) {
+    clear_listener_return().await;
     clear_legacy_mark_rule().await;
     clear_legacy_strict_carveouts().await;
     clear_guards().await;
@@ -621,6 +712,11 @@ pub async fn apply_external_tun_routing(st: &RoutingState) {
     ])
     .await;
 
+    apply_listener_return(TUN_TABLE, &[TUN_IPV4_CIDR, TUN_IPV6_CIDR]).await;
+    if tun2.is_some() {
+        apply_listener_return(TUN_TABLE_FORCE, &[TUN2_IPV4_CIDR, TUN2_IPV6_CIDR]).await;
+    }
+
     // IPv6 addresses/routes + marking chain
     silent(&[IP, "-6", "addr", "add", TUN_IPV6_CIDR, "dev", tun]).await;
     silent(&[IP, "-6", "link", "set", "dev", tun, "up"]).await;
@@ -783,5 +879,66 @@ mod tests {
         );
         // No tun (not up yet): nothing to guard there.
         assert!(guard_rules(&f, &[10808], &[]).is_empty());
+    }
+
+    fn joined_rules(rules: &[(bool, Vec<String>)]) -> Vec<(bool, String)> {
+        rules.iter().map(|(v6, r)| (*v6, r.join(" "))).collect()
+    }
+
+    #[test]
+    fn listener_replies_from_each_tun_address_go_back_into_its_table() {
+        let main = listener_return_rules(TUN_TABLE, &[TUN_IPV4_CIDR, TUN_IPV6_CIDR]);
+        assert_eq!(
+            joined_rules(&main),
+            [
+                (
+                    false,
+                    "rule add from 198.18.0.1 to 198.18.0.0/15 iif lo lookup 1100 pref 1017"
+                        .to_string()
+                ),
+                (
+                    true,
+                    "rule add from fdfe:dcba:9876::1 to fdfe:dcba:9876::/64 iif lo lookup 1100 \
+                     pref 1017"
+                        .to_string()
+                ),
+            ]
+        );
+        let force = listener_return_rules("2023", &[TUN2_IPV4_CIDR]);
+        assert_eq!(
+            joined_rules(&force),
+            [(
+                false,
+                "rule add from 198.19.0.1 to 198.19.0.0/16 iif lo lookup 2023 pref 1017"
+                    .to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn listener_rule_sits_ahead_of_the_native_root_exemption() {
+        // sing-box's `uidrange 0-0 goto` starts at its main rule index; the rule must
+        // come first or root's replies skip the tun table again.
+        let pref: u32 = PRIO_LISTENER.parse().unwrap();
+        assert!(pref < kasumi_core::singbox_config::SINGBOX_MAIN_RULE_PRIO);
+        assert!(pref < kasumi_core::singbox_config::SINGBOX_FORCE_RULE_PRIO);
+        // Its own pref: teardown deletes by pref, so it must not share one with the
+        // app-mark or tethering rules.
+        for other in [
+            LEGACY_MARK_RULE_PRIORITY,
+            PRIO_TUN,
+            PRIO_TUN_FORCE,
+            "1015",
+            "1016",
+        ] {
+            assert_ne!(PRIO_LISTENER, other);
+        }
+    }
+
+    #[test]
+    fn a_malformed_tun_address_yields_no_rule() {
+        assert!(
+            listener_return_rules(TUN_TABLE, &["198.18.0.1", "x/15", "10.0.0.1/40"]).is_empty()
+        );
     }
 }

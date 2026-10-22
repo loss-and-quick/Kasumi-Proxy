@@ -95,8 +95,8 @@ const REPLY_TABLE: &str = "1102";
 /// Above the app-mark rules (1000/1010) and below everything else, the OS's own
 /// rules and sing-box's `auto_route` rules (9000+, including its uid-0 exemption
 /// that forwarded packets would otherwise fall under) included.
-const PRIO_STEER: &str = "1015";
-const PRIO_REPLY: &str = "1016";
+pub(super) const PRIO_STEER: &str = "1015";
+pub(super) const PRIO_REPLY: &str = "1016";
 /// Where tethered clients' DNS is sent. They ask the phone's resolver on the
 /// gateway address, which is a local destination: it never reaches the tun, and the
 /// phone would answer from the carrier's DNS while the connections go through the
