@@ -2,6 +2,7 @@
 //! needs. This crate is platform-neutral; each shell (Android via the root module,
 //! desktop via the native network stack) provides a [`Platform`] implementation.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -9,7 +10,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use kasumi_core::contract::{LogTarget, ServiceState};
+use kasumi_core::contract::{LogTarget, ServiceState, TestKind};
 use kasumi_core::data_path_plan::{DataPathPlan, HostTraits};
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Protocol;
@@ -59,6 +60,29 @@ pub async fn spawn_local_test_core(
 ) -> anyhow::Result<Box<dyn TestCore>> {
     let child = spawn_core(bin, &cfg_path.to_string_lossy(), log_path, dat_dir, true).await?;
     Ok(Box::new(LocalTestCore { child }))
+}
+
+/// Sanitise a profile id for use as a filename component. Ids are normally UUIDs,
+/// but imported profiles can carry arbitrary strings, so keep only safe chars and
+/// fold the rest to `_`.
+pub fn safe_id(id: &str) -> String {
+    id.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+pub fn test_kind_slug(kind: TestKind) -> &'static str {
+    match kind {
+        TestKind::TcpPing => "tcpping",
+        TestKind::RealPing => "realping",
+        TestKind::Speed => "speed",
+    }
 }
 
 /// Absolute on-disk locations the backend reads and writes.
@@ -113,6 +137,17 @@ impl BackendPaths {
     /// The random seed of Incy's HWID when Incy's SSAID is unknown.
     pub fn incy_seed(&self) -> PathBuf {
         self.data_dir.join("incy-seed")
+    }
+
+    /// Stable path of the retained test-core log for one (profile, kind). Overwritten
+    /// on each test of that kind: kept when the test failed (so the UI can show why),
+    /// removed when it passed — always in sync with the `err` the row shows.
+    pub fn retained_test_log(&self, profile_id: &str, kind: TestKind) -> PathBuf {
+        self.data_dir.join(format!(
+            "test-last-{}-{}.log",
+            test_kind_slug(kind),
+            safe_id(profile_id)
+        ))
     }
 }
 
@@ -335,6 +370,62 @@ pub trait Platform: Send + Sync {
     async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
         crate::net::tcp_ping(host, port, timeout).await
     }
+
+    /// Read the retained test-core log for a profile's last failed real-ping/speed-test,
+    /// or empty if none (it passed, was never run, or has no log).
+    async fn read_test_log(&self, profile_id: &str, kind: TestKind) -> String {
+        let path = self.paths().retained_test_log(profile_id, kind);
+        crate::fs::read_text(&path).await.unwrap_or_default()
+    }
+
+    /// Write the retained test-core log for a profile's failed probe.
+    async fn write_test_log(&self, profile_id: &str, kind: TestKind, content: &str) {
+        let path = self.paths().retained_test_log(profile_id, kind);
+        let _ = crate::fsjson::write_text_atomic(&path, content).await;
+    }
+
+    /// Record why a test failed when it failed without a core log worth reading, so the
+    /// row's log sheet explains the failure instead of showing an empty file. A core log
+    /// with content is left alone.
+    async fn note_test_failure(&self, profile_id: &str, kind: TestKind, err: &str) {
+        let said = self.read_test_log(profile_id, kind).await;
+        if said.trim().is_empty() {
+            self.write_test_log(profile_id, kind, &format!("{err}\n"))
+                .await;
+        }
+    }
+
+    /// Drop the retained test-core log for one test kind of a profile.
+    async fn remove_test_log(&self, profile_id: &str, kind: TestKind) {
+        let path = self.paths().retained_test_log(profile_id, kind);
+        crate::fs::remove_file(&path).await;
+    }
+
+    /// Drop every retained test-core log for a profile across all test kinds.
+    async fn remove_test_logs(&self, profile_id: &str) {
+        for kind in [TestKind::TcpPing, TestKind::RealPing, TestKind::Speed] {
+            self.remove_test_log(profile_id, kind).await;
+        }
+    }
+
+    /// Delete every retained test log whose profile isn't in `live_ids`.
+    async fn sweep_orphan_test_logs(&self, live_ids: &HashSet<String>) {
+        let data_dir = &self.paths().data_dir;
+        for name in crate::fs::list_names(data_dir).await {
+            let Some(rest) = name
+                .strip_prefix("test-last-")
+                .and_then(|r| r.strip_suffix(".log"))
+            else {
+                continue;
+            };
+            let id = [TestKind::TcpPing, TestKind::RealPing, TestKind::Speed]
+                .iter()
+                .find_map(|k| rest.strip_prefix(test_kind_slug(*k))?.strip_prefix('-'));
+            if id.is_some_and(|id| !live_ids.contains(id)) {
+                crate::fs::remove_file(data_dir.join(&name)).await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -369,6 +460,19 @@ mod tests {
         assert_eq!(
             p.log(LogTarget::TunEngine),
             PathBuf::from("/data/tun-engine.log")
+        );
+    }
+
+    #[test]
+    fn retained_test_log_path() {
+        let p = paths();
+        assert_eq!(
+            p.retained_test_log("p1", TestKind::RealPing),
+            PathBuf::from("/data/test-last-realping-p1.log")
+        );
+        assert_eq!(
+            p.retained_test_log("p/1:x", TestKind::Speed),
+            PathBuf::from("/data/test-last-speed-p_1_x.log")
         );
     }
 
