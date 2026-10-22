@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 use std::future::Future;
-use std::path::Path;
+
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -21,8 +21,6 @@ use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL};
 use kasumi_core::xray_config::build_xray_config;
 
-use crate::fs::{exists, read_text, remove_file};
-use crate::fsjson::write_text_atomic;
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
 use kasumi_log::{Area, ks_debug, ks_info, ks_warn};
@@ -157,8 +155,8 @@ pub async fn sweep_orphan_test_logs(platform: &dyn Platform, state: &AppState) {
 
 /// Last `n` non-blank lines of a test core's log — the actual core error (bad
 /// config, bind failure, …) to surface when it won't start.
-async fn log_tail(path: &Path, n: usize) -> String {
-    let text = read_text(path).await.unwrap_or_default();
+async fn log_tail(platform: &dyn Platform, port: u16, n: usize) -> String {
+    let text = platform.read_temp_test_log(port).await.unwrap_or_default();
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     lines[lines.len().saturating_sub(n)..].join(" | ")
 }
@@ -183,15 +181,17 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Option<i64>>,
 {
-    let bin = platform.core_path(engine);
-    if !exists(&bin).await {
-        ks_warn!(Area::Jobs, "test core binary missing: {}", bin.display());
+    if !platform.core_exists(engine).await {
+        ks_warn!(
+            Area::Jobs,
+            "test core binary missing: {}",
+            platform.core_path(engine).display()
+        );
         return Err("test core binary missing".into());
     }
-    let data_dir = platform.paths().data_dir.clone();
-    let cfg_path = data_dir.join(format!("test-{port}.json"));
-    let log_path = data_dir.join(format!("test-{port}.log"));
-    if write_text_atomic(&cfg_path, cfg).await.is_err() {
+    let cfg_path = platform.paths().test_config(port);
+    let log_path = platform.paths().test_log(port);
+    if platform.write_test_config(port, cfg).await.is_err() {
         return Err("failed to write test config".into());
     }
 
@@ -204,8 +204,7 @@ where
         Ok(c) => c,
         Err(e) => {
             ks_warn!(Area::Jobs, "test core spawn failed on port {port}: {e}");
-            remove_file(&cfg_path).await;
-            remove_file(&log_path).await;
+            platform.cleanup_test_core(port).await;
             return Err(format!("failed to start test core: {e}"));
         }
     };
@@ -228,14 +227,14 @@ where
             ks_info!(
                 Area::Jobs,
                 "test core on port {port}: no probe result; core log: {}",
-                log_tail(&log_path, 6).await
+                log_tail(platform, port, 6).await
             );
         }
         Ok(measured)
     } else {
         // The core exited or never bound its SOCKS port — surface its own log so the
         // user sees the real reason (bad config, port in use, TLS error, …).
-        let tail = log_tail(&log_path, 5).await;
+        let tail = log_tail(platform, port, 5).await;
         ks_warn!(
             Area::Jobs,
             "test core on port {port} did not start; core log: {tail}"
@@ -253,14 +252,13 @@ where
     if let Some((profile_id, kind)) = retained {
         if matches!(result, Ok(Some(_))) {
             platform.remove_test_log(profile_id, kind).await;
-        } else if let Some(text) = read_text(&log_path).await {
+        } else if let Some(text) = platform.read_temp_test_log(port).await {
             platform.write_test_log(profile_id, kind, &text).await;
         }
     }
 
     core.kill().await;
-    remove_file(&cfg_path).await;
-    remove_file(&log_path).await;
+    platform.cleanup_test_core(port).await;
     result
 }
 

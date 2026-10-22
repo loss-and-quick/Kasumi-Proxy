@@ -139,6 +139,16 @@ impl BackendPaths {
         self.data_dir.join("incy-seed")
     }
 
+    /// Temporary SOCKS-only config file for an on-demand test core on `port`.
+    pub fn test_config(&self, port: u16) -> PathBuf {
+        self.data_dir.join(format!("test-{port}.json"))
+    }
+
+    /// Temporary log file written by an on-demand test core on `port`.
+    pub fn test_log(&self, port: u16) -> PathBuf {
+        self.data_dir.join(format!("test-{port}.log"))
+    }
+
     /// Stable path of the retained test-core log for one (profile, kind). Overwritten
     /// on each test of that kind: kept when the test failed (so the UI can show why),
     /// removed when it passed — always in sync with the `err` the row shows.
@@ -371,6 +381,29 @@ pub trait Platform: Send + Sync {
         crate::net::tcp_ping(host, port, timeout).await
     }
 
+    /// Whether the core binary for `engine` exists on the host.
+    async fn core_exists(&self, engine: Engine) -> bool {
+        crate::fs::exists(self.core_path(engine)).await
+    }
+
+    /// Write the temporary SOCKS-only config for a test core on `port`.
+    async fn write_test_config(&self, port: u16, cfg: &str) -> std::io::Result<()> {
+        let path = self.paths().test_config(port);
+        crate::fsjson::write_text_atomic(&path, cfg).await
+    }
+
+    /// Read the temporary log of a test core on `port`, if present.
+    async fn read_temp_test_log(&self, port: u16) -> Option<String> {
+        let path = self.paths().test_log(port);
+        crate::fs::read_text(&path).await
+    }
+
+    /// Clean up the temporary config and log files of a test core on `port`.
+    async fn cleanup_test_core(&self, port: u16) {
+        crate::fs::remove_file(self.paths().test_config(port)).await;
+        crate::fs::remove_file(self.paths().test_log(port)).await;
+    }
+
     /// Read the retained test-core log for a profile's last failed real-ping/speed-test,
     /// or empty if none (it passed, was never run, or has no log).
     async fn read_test_log(&self, profile_id: &str, kind: TestKind) -> String {
@@ -474,6 +507,8 @@ mod tests {
             p.retained_test_log("p/1:x", TestKind::Speed),
             PathBuf::from("/data/test-last-speed-p_1_x.log")
         );
+        assert_eq!(p.test_config(10808), PathBuf::from("/data/test-10808.json"));
+        assert_eq!(p.test_log(10808), PathBuf::from("/data/test-10808.log"));
     }
 
     /// A minimal implementor: proves the trait is object-safe and the defaulted
