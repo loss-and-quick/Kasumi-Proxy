@@ -10,6 +10,7 @@ use crate::config_shared::{parse_pem_chain, split_csv, split_list};
 use crate::core::rule_target_fallback;
 use crate::enums::{CoreEngine, Fingerprint, HeaderType, Security, SsMethod};
 use crate::mixins::Transport;
+use crate::outbound_bind::preserve_loopback_singbox_egress;
 use crate::profile::Profile;
 use crate::state::{
     AdvancedSettings, AppFilterMode, DEFAULT_LOCAL_HTTP_PORT, DEFAULT_LOCAL_SOCKS_PORT,
@@ -1423,6 +1424,9 @@ fn build_singbox_route(
     let mut route = json!({
         "rules": rules,
         "final": "proxy",
+        // Bind every dial to the default uplink device (L3 escape from our own tun,
+        // and the only escape on Windows). A loopback-dialing object is exempted per
+        // object afterwards by `preserve_loopback_singbox_egress`.
         "auto_detect_interface": true,
         "default_domain_resolver": { "server": "local" },
     });
@@ -1695,6 +1699,9 @@ pub fn build_singbox_config(
             .unwrap()
             .insert("endpoints".into(), Value::Array(endpoints));
     }
+    // `auto_detect_interface` (see `build_singbox_route`) binds every dial to the
+    // uplink device, which is unreachable for a profile whose peer is a local relay.
+    preserve_loopback_singbox_egress(&mut cfg);
     Ok(cfg)
 }
 
