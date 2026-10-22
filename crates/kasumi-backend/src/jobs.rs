@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 use std::future::Future;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -21,7 +21,7 @@ use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL};
 use kasumi_core::xray_config::build_xray_config;
 
-use crate::fs::{exists, list_names, read_text, remove_file};
+use crate::fs::{exists, read_text, remove_file};
 use crate::fsjson::write_text_atomic;
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
@@ -112,56 +112,20 @@ async fn wait_port_up(port: u16, timeout: Duration) -> bool {
     false
 }
 
-/// Sanitise a profile id for use as a filename component. Ids are normally UUIDs,
-/// but imported profiles can carry arbitrary strings, so keep only safe chars and
-/// fold the rest to `_`.
-fn safe_id(id: &str) -> String {
-    id.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
-}
-
-fn test_kind_slug(kind: TestKind) -> &'static str {
-    match kind {
-        TestKind::TcpPing => "tcpping",
-        TestKind::RealPing => "realping",
-        TestKind::Speed => "speed",
-    }
-}
-
-/// Stable path of the retained test-core log for one (profile, kind). Overwritten
-/// on each test of that kind: kept when the test failed (so the UI can show why),
-/// removed when it passed — always in sync with the `err` the row shows.
-fn retained_test_log_path(data_dir: &Path, profile_id: &str, kind: TestKind) -> PathBuf {
-    data_dir.join(format!(
-        "test-last-{}-{}.log",
-        test_kind_slug(kind),
-        safe_id(profile_id)
-    ))
-}
+pub use crate::platform::{safe_id, test_kind_slug};
 
 /// The retained test-core log for a profile's last failed real-ping/speed-test, or
 /// empty if none (it passed, was never run, or the `err` came from a coreless
 /// tcp-ping which has no log).
 pub async fn read_test_log(platform: &dyn Platform, profile_id: &str, kind: TestKind) -> String {
-    let path = retained_test_log_path(&platform.paths().data_dir, profile_id, kind);
-    read_text(&path).await.unwrap_or_default()
+    platform.read_test_log(profile_id, kind).await
 }
 
 /// Drop every retained test-core log for a profile — called when it's deleted so a
 /// reused id can't surface a stale predecessor's log. (tcp-ping never writes one,
 /// but sweep its slot too for completeness.)
 pub async fn remove_test_logs(platform: &dyn Platform, profile_id: &str) {
-    let data_dir = &platform.paths().data_dir;
-    for kind in [TestKind::TcpPing, TestKind::RealPing, TestKind::Speed] {
-        remove_file(retained_test_log_path(data_dir, profile_id, kind)).await;
-    }
+    platform.remove_test_logs(profile_id).await;
 }
 
 /// Drop the retained test logs of every profile present in `prev` but gone from
@@ -174,7 +138,7 @@ pub(crate) async fn remove_dropped_test_logs(
     let kept: HashSet<&str> = next.profiles.iter().map(|p| p.meta().id.as_str()).collect();
     for p in &prev.profiles {
         if !kept.contains(p.meta().id.as_str()) {
-            remove_test_logs(platform, &p.meta().id).await;
+            platform.remove_test_logs(&p.meta().id).await;
         }
     }
 }
@@ -183,31 +147,17 @@ pub(crate) async fn remove_dropped_test_logs(
 /// re-issue profile ids on each refresh, and logs written for ids dropped before
 /// the cleanup existed (or by an unclean exit mid-test) would otherwise pile up.
 pub async fn sweep_orphan_test_logs(platform: &dyn Platform, state: &AppState) {
-    let data_dir = &platform.paths().data_dir;
     let live: HashSet<String> = state
         .profiles
         .iter()
         .map(|p| safe_id(&p.meta().id))
         .collect();
-    for name in list_names(data_dir).await {
-        let Some(rest) = name
-            .strip_prefix("test-last-")
-            .and_then(|r| r.strip_suffix(".log"))
-        else {
-            continue;
-        };
-        let id = [TestKind::TcpPing, TestKind::RealPing, TestKind::Speed]
-            .iter()
-            .find_map(|k| rest.strip_prefix(test_kind_slug(*k))?.strip_prefix('-'));
-        if id.is_some_and(|id| !live.contains(id)) {
-            remove_file(data_dir.join(&name)).await;
-        }
-    }
+    platform.sweep_orphan_test_logs(&live).await;
 }
 
 /// Last `n` non-blank lines of a test core's log — the actual core error (bad
 /// config, bind failure, …) to surface when it won't start.
-async fn log_tail(path: &std::path::Path, n: usize) -> String {
+async fn log_tail(path: &Path, n: usize) -> String {
     let text = read_text(path).await.unwrap_or_default();
     let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     lines[lines.len().saturating_sub(n)..].join(" | ")
@@ -227,7 +177,7 @@ async fn with_test_core<F, Fut>(
     port: u16,
     measure: F,
     cap: Duration,
-    retained: Option<&Path>,
+    retained: Option<(&str, TestKind)>,
 ) -> Result<Option<i64>, String>
 where
     F: FnOnce() -> Fut,
@@ -300,11 +250,11 @@ where
     // Persist or clear the retained per-(profile,kind) log so the UI can open the
     // reason behind an `err`. Kept on failure, dropped on success — done before the
     // temp log is removed below.
-    if let Some(dst) = retained {
+    if let Some((profile_id, kind)) = retained {
         if matches!(result, Ok(Some(_))) {
-            remove_file(dst).await;
+            platform.remove_test_log(profile_id, kind).await;
         } else if let Some(text) = read_text(&log_path).await {
-            let _ = write_text_atomic(dst, &text).await;
+            platform.write_test_log(profile_id, kind, &text).await;
         }
     }
 
@@ -376,8 +326,6 @@ pub async fn run_real_ping(
     let lease = lease_ports(TEST_PORT_BASE, TEST_PORT_SPAN).await;
     let test_port = lease.base();
     let srs_dir = platform.paths().srs_dir.to_string_lossy().into_owned();
-    let retained =
-        retained_test_log_path(&platform.paths().data_dir, profile_id, TestKind::RealPing);
     let cfg = build_test_config(platform, engine, &loaded, test_port, &srs_dir)?;
     let url = loaded
         .state
@@ -413,7 +361,7 @@ pub async fn run_real_ping(
             }
         },
         Duration::from_secs(10),
-        Some(&retained),
+        Some((profile_id, TestKind::RealPing)),
     )
     .await
     .inspect(|r| {
@@ -445,7 +393,6 @@ pub async fn run_speed_test(
     let lease = lease_ports(TEST_PORT_BASE, TEST_PORT_SPAN).await;
     let test_port = lease.base();
     let srs_dir = platform.paths().srs_dir.to_string_lossy().into_owned();
-    let retained = retained_test_log_path(&platform.paths().data_dir, profile_id, TestKind::Speed);
     let cfg = build_test_config(platform, engine, &loaded, test_port, &srs_dir)?;
     let url = loaded
         .state
@@ -484,7 +431,7 @@ pub async fn run_speed_test(
             }
         },
         Duration::from_secs(18),
-        Some(&retained),
+        Some((profile_id, TestKind::Speed)),
     )
     .await
     .inspect(|r| {
@@ -615,15 +562,43 @@ mod tests {
         let (p, _d) = TestPlatform::new();
         // Absent → empty.
         assert_eq!(read_test_log(&p, "p1", TestKind::RealPing).await, "");
+        assert_eq!(p.read_test_log("p1", TestKind::RealPing).await, "");
         // A retained real-ping log reads back; the speed slot stays independent.
-        let path = retained_test_log_path(&p.paths().data_dir, "p1", TestKind::RealPing);
-        write_text_atomic(&path, "boom: bad config\n")
-            .await
-            .unwrap();
+        p.write_test_log("p1", TestKind::RealPing, "boom: bad config\n")
+            .await;
         assert_eq!(
             read_test_log(&p, "p1", TestKind::RealPing).await,
             "boom: bad config\n"
         );
+        assert_eq!(
+            p.read_test_log("p1", TestKind::RealPing).await,
+            "boom: bad config\n"
+        );
         assert_eq!(read_test_log(&p, "p1", TestKind::Speed).await, "");
+    }
+
+    #[tokio::test]
+    async fn note_test_failure_fills_empty_log_but_preserves_content() {
+        let (p, _d) = TestPlatform::new();
+        p.write_test_log("silent", TestKind::RealPing, "  \n").await;
+        p.note_test_failure("silent", TestKind::RealPing, "test core did not start")
+            .await;
+        assert_eq!(
+            p.read_test_log("silent", TestKind::RealPing).await,
+            "test core did not start\n"
+        );
+
+        p.write_test_log(
+            "fatal",
+            TestKind::RealPing,
+            "FATAL create service: no such file\n",
+        )
+        .await;
+        p.note_test_failure("fatal", TestKind::RealPing, "test core did not start")
+            .await;
+        assert_eq!(
+            p.read_test_log("fatal", TestKind::RealPing).await,
+            "FATAL create service: no such file\n"
+        );
     }
 }

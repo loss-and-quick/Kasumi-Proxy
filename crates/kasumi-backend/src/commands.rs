@@ -717,7 +717,7 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         }
 
         Command::TestLog { profile_id, kind } => Ok(Response::Text(
-            crate::jobs::read_test_log(platform, &profile_id, kind).await,
+            platform.read_test_log(&profile_id, kind).await,
         )),
 
         Command::ParseShareLinks { text, group_id } => {
@@ -952,7 +952,7 @@ pub(crate) async fn run_mutation(
         next.profiles.iter().map(|p| p.meta().id.as_str()).collect();
     for p in &prev.profiles {
         if !kept.contains(p.meta().id.as_str()) {
-            crate::jobs::remove_test_logs(platform, &p.meta().id).await;
+            platform.remove_test_logs(&p.meta().id).await;
         }
     }
     Ok(next)
