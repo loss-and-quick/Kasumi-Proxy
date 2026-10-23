@@ -23,6 +23,7 @@
 //! - [`sub_changes`] — provider changes that wait for the user's consent
 //! - [`request_identity`] — the identity a subscription fetch sends, built by happ-sub
 //! - [`custom_sanitize`] — provider Xray JSON reduced to an allowlist
+//! - [`custom_target`] — which outbound a provider config sends traffic to by default
 //! - [`singbox_import`] — provider sing-box JSON decomposed into typed profiles
 //! - [`import_input`] — pasted subscription URLs, `happ://` links and share links
 
@@ -34,6 +35,7 @@ pub mod contract;
 pub mod core;
 pub mod core_config;
 pub mod custom_sanitize;
+pub mod custom_target;
 pub mod data_path_plan;
 pub mod data_path_state;
 pub mod enums;
