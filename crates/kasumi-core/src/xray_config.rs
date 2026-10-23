@@ -778,8 +778,23 @@ fn build_routing(
     let dns_rule = json!({ "type": "field", "inboundTag": ["socks-in", "http-in"], "port": 53, "outboundTag": dns_outbound_tag });
     let final_rule = json!({ "type": "field", "inboundTag": ["socks-in", "http-in"], "network": "tcp,udp", "outboundTag": "proxy" });
 
+    // The proxy-select alias rule sends re-entering loopback traffic to its
+    // balancer. It must precede user rules: a user rule without inboundTag
+    // (the normal case) targeting `proxy` would otherwise match the
+    // re-entering connection and send it into an infinite loop.
+    let (proxy_select_rules, rest_provider_rules): (Vec<_>, Vec<_>) =
+        provider_rules.iter().cloned().partition(|r| {
+            r.get("inboundTag")
+                .and_then(Value::as_array)
+                .is_some_and(|tags| tags.iter().any(|t| t == PROXY_SELECT))
+        });
+
+    let mut prefix_rules = vec![force_rule];
+    prefix_rules.extend(proxy_select_rules);
+    prefix_rules.push(dns_rule);
+
     if s.routing_mode == crate::state::RoutingMode::Rules && !routing_rules.is_empty() {
-        let mut rules: Vec<Value> = vec![force_rule, dns_rule];
+        let mut rules: Vec<Value> = prefix_rules;
         // xray can't tell which Android package opened a connection. Dropping just
         // the package condition would widen the rule to every app, so a rule that
         // names packages is left out on xray entirely.
@@ -791,7 +806,7 @@ fn build_routing(
                 .filter_map(|r| build_rule_object(r, resolve))
                 .filter(|r| r.as_object().is_some_and(xray_rule_has_condition)),
         );
-        rules.extend_from_slice(provider_rules);
+        rules.extend(rest_provider_rules);
         rules.push(final_rule);
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
     }
@@ -800,22 +815,22 @@ fn build_routing(
         && let Some(cr) = s.custom_routing.as_deref().filter(|x| !x.trim().is_empty())
         && let Some(Value::Array(parsed)) = parse_json_safe(cr)
     {
-        let mut rules: Vec<Value> = vec![force_rule, dns_rule];
+        let mut rules: Vec<Value> = prefix_rules;
         rules.extend(
             parsed
                 .into_iter()
                 .filter(|r| r.as_object().is_none_or(xray_rule_has_condition)),
         );
-        rules.extend_from_slice(provider_rules);
+        rules.extend(rest_provider_rules);
         rules.push(final_rule);
         return json!({ "domainStrategy": domain_strategy, "rules": rules });
     }
 
-    let mut rules: Vec<Value> = vec![force_rule, dns_rule];
+    let mut rules: Vec<Value> = prefix_rules;
     if s.fake_dns {
         rules.push(json!({ "type": "field", "ip": [FAKEIP_INET4_RANGE], "outboundTag": "proxy" }));
     }
-    rules.extend_from_slice(provider_rules);
+    rules.extend(rest_provider_rules);
     rules.push(final_rule);
     json!({ "domainStrategy": domain_strategy, "rules": rules })
 }
@@ -1955,13 +1970,54 @@ mod tests {
             json!({ "type": "field", "inboundTag": ["proxy-select"],
                     "network": "tcp,udp", "balancerTag": "balancer-main" })
         );
-        // It is the first of the provider's rules, ahead of anything else that
-        // could capture the alias's second pass.
+        // It is ahead of the provider's own rules, and ahead of user rules.
         let geosite = rules
             .iter()
             .position(|r| r["domain"][0] == "geosite:ru")
             .unwrap();
         assert!(second_pass < geosite);
+    }
+
+    /// When a user has a routing rule targeting the active profile (or `proxy`),
+    /// the re-entering `proxy-select` loopback connection must not match that
+    /// user rule again, which would loop forever. The `proxy-select` rule must
+    /// precede user rules.
+    #[test]
+    fn proxy_select_precedes_user_routing_rules() {
+        let p = custom("provider", &balancer_raw());
+        let s = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let user_rule = RoutingRule {
+            domain: Some(vec!["example.com".into()]),
+            outbound_tag: "proxy".into(),
+            ..source_rule("proxy")
+        };
+        let cfg = build_xray_config(&p, &s, &[user_rule], &[]).unwrap();
+        let rules = cfg["routing"]["rules"].as_array().unwrap();
+
+        let proxy_select_pos = rules
+            .iter()
+            .position(|r| {
+                r.get("inboundTag")
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| a.iter().any(|t| t == "proxy-select"))
+            })
+            .expect("proxy-select rule present");
+        let user_rule_pos = rules
+            .iter()
+            .position(|r| {
+                r.get("domain")
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| a.iter().any(|t| t == "example.com"))
+            })
+            .expect("user rule present");
+
+        assert!(
+            proxy_select_pos < user_rule_pos,
+            "proxy-select ({proxy_select_pos}) must come before user rule ({user_rule_pos})"
+        );
     }
 
     #[test]
