@@ -43,7 +43,9 @@ use kasumi_core::state::{
     SingboxFragment, SingboxStack,
 };
 use kasumi_core::sub_ingest::{IngestInput, ingest};
-use kasumi_core::xray_config::{hijack_inbound_dns, xray_rule_has_condition};
+use kasumi_core::xray_config::{
+    build_xray_probe_config, hijack_inbound_dns, xray_rule_has_condition,
+};
 
 // ── valid credential / crypto material (cores validate these) ──
 const UUID: &str = "11111111-1111-1111-1111-111111111111";
@@ -1813,7 +1815,7 @@ fn provider_custom_cases() -> Vec<Case> {
         routing_mode: RoutingMode::Rules,
         ..AdvancedSettings::default()
     };
-    [
+    let mut cases: Vec<Case> = [
         ("global", AdvancedSettings::default(), vec![]),
         ("rules", rules_mode, plain_rules()),
     ]
@@ -1826,12 +1828,150 @@ fn provider_custom_cases() -> Vec<Case> {
         needs_geo: false,
         others: vec![],
     })
-    .collect()
+    .collect();
+    // A provider whose routing sends everything to a balancer while its first
+    // outbound is a decoy, and whose balancer keeps a `fallbackTag`: `proxy`
+    // becomes a loopback alias, so this is the shape that has to survive
+    // validating through the router twice.
+    for (label, settings) in [
+        ("balancer", AdvancedSettings::default()),
+        (
+            "balancer-rules",
+            AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                ..AdvancedSettings::default()
+            },
+        ),
+    ] {
+        cases.push(Case {
+            name: format!("provider-custom/{label}"),
+            profile: balancer_provider(),
+            settings,
+            rules: plain_rules(),
+            needs_geo: false,
+            others: vec![],
+        });
+    }
+    cases
+}
+
+/// A provider config that routes every connection through a balancer, keeping a
+/// decoy as its first outbound and a `fallbackTag` on the balancer.
+fn balancer_provider() -> Profile {
+    let server = |tag: &str, host: &str| {
+        json!({
+            "tag": tag, "protocol": "vless",
+            "settings": { "vnext": [{ "address": host, "port": 443,
+                "users": [{ "id": UUID, "encryption": "none" }] }] },
+            "streamSettings": {
+                "network": "tcp", "security": "reality",
+                "realitySettings": { "serverName": "s.example", "publicKey": REALITY_PBK,
+                    "shortId": "ab", "fingerprint": "chrome" },
+            },
+        })
+    };
+    let raw = json!({
+        "remarks": "Balancer",
+        "outbounds": [
+            server("decoy", "decoy.example"),
+            server("main", "main.example"),
+            server("main-2", "main2.example"),
+            { "tag": "direct", "protocol": "freedom" },
+        ],
+        "routing": {
+            "balancers": [{ "tag": "balancer-main", "selector": ["main"],
+                "strategy": { "type": "random" }, "fallbackTag": "decoy" }],
+            "rules": [
+                { "type": "field", "network": "tcp,udp", "balancerTag": "balancer-main" },
+            ],
+        },
+    });
+    serde_json::from_value(json!({
+        "protocol": "custom",
+        "meta": { "id": "balancer", "remarks": "balancer", "groupId": "g-main" },
+        "raw": raw.to_string(),
+        "origin": "provider",
+    }))
+    .unwrap()
 }
 
 #[test]
 fn provider_custom_validates_against_real_xray() {
     validate_all(provider_custom_cases());
+}
+
+/// The configs a probe's test core runs: a provider profile whose default path is
+/// a balancer, and a user's own config, which a probe runs through the sanitised
+/// view of it so its own listeners stay out and Kasumi's inbounds are there.
+fn probe_cases() -> Vec<(String, Profile)> {
+    let user_raw = json!({
+        "remarks": "Own",
+        "inbounds": [{ "tag": "socks", "protocol": "socks", "listen": "0.0.0.0", "port": 10808 }],
+        "outbounds": [
+            { "tag": "proxy", "protocol": "vless",
+              "settings": { "vnext": [{ "address": "srv.example", "port": 443,
+                  "users": [{ "id": UUID, "encryption": "none" }] }] },
+              "streamSettings": { "network": "ws", "security": "tls",
+                  "tlsSettings": { "serverName": "srv.example" },
+                  "wsSettings": { "path": "/ws" } } },
+            { "tag": "direct", "protocol": "freedom" },
+            { "tag": "block", "protocol": "blackhole" },
+        ],
+        "routing": { "rules": [
+            { "type": "field", "ip": ["geoip:private"], "outboundTag": "direct" },
+        ]},
+    });
+    let user: Profile = serde_json::from_value(json!({
+        "protocol": "custom",
+        "meta": { "id": "own", "remarks": "own", "groupId": "g-main" },
+        "raw": user_raw.to_string(),
+        "origin": "user",
+    }))
+    .unwrap();
+    vec![
+        ("probe/provider-balancer".to_string(), balancer_provider()),
+        ("probe/user".to_string(), user),
+    ]
+}
+
+#[test]
+fn probe_configs_validate_against_real_xray() {
+    let Some(xray) = find_core("KASUMI_XRAY_BIN", "xray") else {
+        eprintln!(
+            "no staged xray binary in {} (run scripts/fetch-binaries.sh desktop): \
+             probe configs not validated",
+            binaries_dir().display()
+        );
+        return;
+    };
+    let asset_dir = binaries_dir();
+    let mut failures = Vec::new();
+    let mut checked = 0;
+    for (name, profile) in probe_cases() {
+        let probe = build_xray_probe_config(
+            &profile,
+            &AdvancedSettings::default(),
+            std::slice::from_ref(&profile),
+        )
+        .unwrap_or_else(|e| panic!("[{name}] probe config did not build: {e}"));
+        let (_keep, cfg) = write_config(&probe.config);
+        let (ok, output) = validate(CoreEngine::Xray, &xray, &cfg, asset_dir.as_path());
+        checked += 1;
+        if !ok {
+            failures.push(format!(
+                "[{name}] xray ({}) rejected:\n{}",
+                probe.target.describe(),
+                output.trim()
+            ));
+        }
+    }
+    assert!(checked > 0, "no probe configs were validated");
+    assert!(
+        failures.is_empty(),
+        "{} probe configs rejected:\n\n{}",
+        failures.len(),
+        failures.join("\n---\n")
+    );
 }
 
 /// A JSON-array subscription body as Happ-style panels serve it, taken through
