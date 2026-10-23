@@ -274,8 +274,12 @@ where
         if matches!(result, Ok(Some(_))) {
             platform.remove_test_log(profile_id, kind).await;
         } else if let Some(text) = platform.read_temp_test_log(port).await {
+            let body = match &result {
+                Err(e) if text.trim().is_empty() => e.clone(),
+                _ => text,
+            };
             platform
-                .write_test_log(profile_id, kind, &format!("{}\n{text}", cfg.measured))
+                .write_test_log(profile_id, kind, &format!("{}\n{body}", cfg.measured))
                 .await;
         }
     }
