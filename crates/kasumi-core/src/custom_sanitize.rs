@@ -452,7 +452,7 @@ fn sanitize_routing(
     let mut balancer_tags = HashSet::new();
     let balancers: Vec<Value> = array_of(obj, "balancers")
         .enumerate()
-        .filter_map(|(i, b)| sanitize_balancer(b, i, &order, tags, &mut balancer_tags, dropped))
+        .filter_map(|(i, b)| sanitize_balancer(b, i, &order, &mut balancer_tags, dropped))
         .collect();
     let rules: Vec<Value> = array_of(obj, "rules")
         .enumerate()
@@ -478,7 +478,6 @@ fn sanitize_balancer(
     b: &Value,
     i: usize,
     order: &[&str],
-    tags: &HashSet<String>,
     balancer_tags: &mut HashSet<String>,
     dropped: &mut Vec<String>,
 ) -> Option<Value> {
@@ -518,13 +517,11 @@ fn sanitize_balancer(
             _ => dropped.push(format!("{path}.strategy")),
         }
     }
-    if let Some(fallback) = b.get("fallbackTag") {
-        match fallback.as_str().filter(|t| tags.contains(*t)) {
-            Some(t) => {
-                out.insert("fallbackTag".into(), t.into());
-            }
-            None => dropped.push(format!("{path}.fallbackTag")),
-        }
+    if b.get("fallbackTag").is_some() {
+        // Xray refuses to start a balancer that has a `fallbackTag` unless an
+        // observatory exists ("not all dependencies are resolved"), and the
+        // observatory goes with the rest of the provider's top-level config.
+        dropped.push(format!("{path}.fallbackTag"));
     }
     Some(Value::Object(out))
 }
@@ -804,6 +801,35 @@ mod tests {
                 out.dropped
             );
         }
+    }
+
+    #[test]
+    fn a_balancer_fallback_is_dropped() {
+        // Without an observatory xray refuses the whole config over a fallbackTag.
+        let out = sanitize(json!({
+            "outbounds": [vless("main"), vless("backup")],
+            "routing": {
+                "balancers": [
+                    { "tag": "lb", "selector": ["main"], "fallbackTag": "backup" },
+                    { "tag": "stray", "selector": ["backup"], "fallbackTag": "gone" },
+                ],
+            },
+        }));
+        assert_eq!(
+            out.routing.unwrap()["balancers"],
+            json!([
+                { "tag": "lb", "selector": ["main"] },
+                { "tag": "stray", "selector": ["backup"] },
+            ])
+        );
+        assert!(
+            out.dropped
+                .contains(&"routing.balancers[0].fallbackTag".to_string())
+        );
+        assert!(
+            out.dropped
+                .contains(&"routing.balancers[1].fallbackTag".to_string())
+        );
     }
 
     fn reality_config(sni: &str, sid: &str, public_key: &str) -> String {

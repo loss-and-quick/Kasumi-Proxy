@@ -18,10 +18,8 @@ use kasumi_core::core::resolve_core;
 use kasumi_core::enums::CoreEngine;
 use kasumi_core::profile::Profile;
 use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
-use kasumi_core::state::{
-    AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL, RoutingMode, RoutingRule,
-};
-use kasumi_core::xray_config::build_xray_config;
+use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL, RoutingMode};
+use kasumi_core::xray_config::build_xray_probe_config;
 
 use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
 use crate::platform::{Engine, Platform};
@@ -187,7 +185,7 @@ async fn log_tail(platform: &dyn Platform, port: u16, n: usize) -> String {
 async fn with_test_core<F, Fut>(
     platform: &dyn Platform,
     engine: Engine,
-    cfg: &str,
+    cfg: &TestConfig,
     port: u16,
     measure: F,
     cap: Duration,
@@ -207,7 +205,7 @@ where
     }
     let cfg_path = platform.paths().test_config(port);
     let log_path = platform.paths().test_log(port);
-    if platform.write_test_config(port, cfg).await.is_err() {
+    if platform.write_test_config(port, &cfg.text).await.is_err() {
         return Err("failed to write test config".into());
     }
 
@@ -223,8 +221,9 @@ where
             platform.cleanup_test_core(port).await;
             let reason = format!("failed to start test core: {e}");
             // Nothing ran, so there is no core log to keep — the reason itself is
-            // what the row's log sheet has to show.
+            // what the row's log sheet has to show, behind what was being measured.
             if let Some((profile_id, kind)) = retained {
+                let reason = format!("{}\n{reason}", cfg.measured);
                 platform.note_test_failure(profile_id, kind, &reason).await;
             }
             return Err(reason);
@@ -275,13 +274,28 @@ where
         if matches!(result, Ok(Some(_))) {
             platform.remove_test_log(profile_id, kind).await;
         } else if let Some(text) = platform.read_temp_test_log(port).await {
-            platform.write_test_log(profile_id, kind, &text).await;
+            let body = match &result {
+                Err(e) if text.trim().is_empty() => e.clone(),
+                _ => text,
+            };
+            platform
+                .write_test_log(profile_id, kind, &format!("{}\n{body}", cfg.measured))
+                .await;
         }
     }
 
     core.kill().await;
     platform.cleanup_test_core(port).await;
     result
+}
+
+/// The config a test core runs, and the line naming what it measures.
+#[derive(Debug)]
+struct TestConfig {
+    text: String,
+    /// `measured path: …` — what `proxy` in the config stands for, so a `None` or a
+    /// slow number on a provider row says which path it went through.
+    measured: String,
 }
 
 /// The SOCKS-only config a test core runs, tuned for this platform like the main
@@ -292,12 +306,13 @@ fn build_test_config(
     loaded: &Loaded,
     port: u16,
     srs_dir: &str,
-) -> Result<String, String> {
+) -> Result<TestConfig, String> {
     let mut settings = loaded.state.settings.clone();
     settings.local_socks_port = Some(port);
     settings.local_http_port = Some(port + 1);
-    // A probe answers "can this node carry traffic", not "what does my routing do
-    // with the test URL", so its core runs no routing of the user's: Global mode (with
+    // A probe answers "can this profile's default path carry traffic", where that
+    // path is chosen by the profile itself and never by the user's routing or a
+    // provider's conditional rules, so its core runs none of them: Global mode (with
     // the empty rule list below) leaves both builders nothing but "everything from the
     // local inbounds goes to `proxy`" — no rule blocks, no raw custom routing — while
     // keeping their own LAN bypass and the scope rules that only narrow a probe nobody
@@ -307,26 +322,32 @@ fn build_test_config(
     // that never started has not done. Without this, every test before the first start
     // dies on `parse rule-set[0]: open …/geosite-cn.srs: no such file or directory`.
     settings.routing_mode = RoutingMode::Global;
-    let rules: &[RoutingRule] = &[];
-    let mut value = match engine {
-        CoreEngine::SingBox => build_singbox_config(
-            &loaded.profile,
-            &settings,
-            rules,
-            &loaded.profiles,
-            SingboxBuildOpts {
-                no_tun: true,
-                force_tun: false,
-                srs_dir,
-            },
-        )?,
-        CoreEngine::Xray => build_xray_config(&loaded.profile, &settings, rules, &loaded.profiles)?,
+    let (mut value, measured) = match engine {
+        CoreEngine::SingBox => {
+            let value = build_singbox_config(
+                &loaded.profile,
+                &settings,
+                &[],
+                &loaded.profiles,
+                SingboxBuildOpts {
+                    no_tun: true,
+                    force_tun: false,
+                    srs_dir,
+                },
+            )?;
+            (value, "outbound proxy".to_string())
+        }
+        CoreEngine::Xray => {
+            let probe = build_xray_probe_config(&loaded.profile, &settings, &loaded.profiles)?;
+            let measured = probe.target.describe();
+            (probe.config, measured)
+        }
     };
     platform.tune_config(engine, &mut value);
     let text = serde_json::to_string(&value).map_err(|e| e.to_string())?;
     // A config that still names geo data — xray's fake-DNS server pins
-    // `geoip:!private`, a provider profile may carry rules of its own — would die the
-    // same silent way on a file that is not there. Say what is absent while we can.
+    // `geoip:!private` — would die the same silent way on a file that is not there.
+    // Say what is absent while we can.
     let missing = crate::lifecycle::missing_geo_assets(platform, engine, &text);
     if !missing.is_empty() {
         return Err(format!(
@@ -334,7 +355,10 @@ fn build_test_config(
             missing.join(", ")
         ));
     }
-    Ok(text)
+    Ok(TestConfig {
+        text,
+        measured: format!("measured path: {measured}"),
+    })
 }
 
 fn test_proxy(port: u16) -> ProxyStatus {
@@ -432,8 +456,9 @@ async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i
     .inspect(|r| {
         ks_info!(
             Area::Jobs,
-            "real-ping {} port {test_port}: {r:?}",
-            loaded.profile.meta().remarks
+            "real-ping {} port {test_port}: {r:?} ({})",
+            loaded.profile.meta().remarks,
+            cfg.measured
         )
     })
 }
@@ -521,8 +546,9 @@ async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<
     .inspect(|r| {
         ks_info!(
             Area::Jobs,
-            "speed-test {} port {test_port}: {r:?}",
-            loaded.profile.meta().remarks
+            "speed-test {} port {test_port}: {r:?} ({})",
+            loaded.profile.meta().remarks,
+            cfg.measured
         )
     })
 }
@@ -661,10 +687,14 @@ mod tests {
         let cfg = build_test_config(&p, CoreEngine::SingBox, &loaded, TEST_PORT_BASE, &srs_dir)
             .expect("a probe needs no geo data");
 
-        let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
-        assert!(value.pointer("/route/rule_set").is_none(), "{cfg}");
+        let value: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
+        assert!(value.pointer("/route/rule_set").is_none(), "{}", cfg.text);
         assert_eq!(value["route"]["final"], "proxy");
-        assert!(crate::lifecycle::referenced_srs(&cfg).is_empty(), "{cfg}");
+        assert!(
+            crate::lifecycle::referenced_srs(&cfg.text).is_empty(),
+            "{}",
+            cfg.text
+        );
     }
 
     /// Whatever a probe config still names (xray's fake-DNS server pins
@@ -705,11 +735,156 @@ mod tests {
         let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
             .expect("custom routing needs no geo data in a probe");
 
-        assert!(!cfg.contains("geosite"), "{cfg}");
+        assert!(!cfg.text.contains("geosite"), "{}", cfg.text);
         // Everything the probe dials still leaves for the node.
-        let value: serde_json::Value = serde_json::from_str(&cfg).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
         let rules = value["routing"]["rules"].as_array().unwrap();
         assert_eq!(rules.last().unwrap()["outboundTag"], "proxy");
+    }
+
+    fn custom_profile(origin: &str, raw: serde_json::Value) -> Profile {
+        serde_json::from_value(serde_json::json!({
+            "protocol": "custom",
+            "meta": { "id": "c", "remarks": "C", "groupId": "g-main" },
+            "raw": raw.to_string(),
+            "origin": origin,
+        }))
+        .unwrap()
+    }
+
+    fn provider_server(tag: &str, host: &str) -> serde_json::Value {
+        serde_json::json!({
+            "tag": tag, "protocol": "vless",
+            "settings": { "vnext": [{ "address": host, "port": 443,
+                "users": [{ "id": "11111111-1111-1111-1111-111111111111", "encryption": "none" }] }] },
+            "streamSettings": { "network": "tcp", "security": "tls" },
+        })
+    }
+
+    /// A provider config whose first outbound is a decoy nothing routes to: its
+    /// routing sends every connection to a balancer. The rules it keeps also name
+    /// geo data, which a probe must never need.
+    fn provider_balancer_raw() -> serde_json::Value {
+        serde_json::json!({
+            "outbounds": [
+                provider_server("proxy", "decoy.example"),
+                provider_server("main", "main.example"),
+                provider_server("main-2", "main2.example"),
+                { "tag": "direct", "protocol": "freedom" },
+            ],
+            "routing": {
+                "balancers": [{ "tag": "balancer-main", "selector": ["main"] }],
+                "rules": [
+                    { "type": "field", "domain": ["geosite:ru"], "outboundTag": "direct" },
+                    { "type": "field", "inboundTag": ["in"], "network": "tcp,udp", "balancerTag": "balancer-main" },
+                ],
+            },
+        })
+    }
+
+    /// A provider profile's rows measure the path its own routing takes, not its
+    /// first outbound: a decoy there would report `None` forever.
+    #[tokio::test]
+    async fn test_config_of_a_provider_measures_its_routed_balancer() {
+        let (p, _d) = TestPlatform::new();
+        let prof = custom_profile("provider", provider_balancer_raw());
+        let loaded = loaded_with(&prof, default_app_state());
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("a provider probe builds");
+        assert_eq!(
+            cfg.measured,
+            "measured path: balancer balancer-main (main, main-2)"
+        );
+        let value: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
+        // `proxy` is the alias into the balancer, and the decoy gave the tag up.
+        assert_eq!(
+            value["outbounds"][0],
+            serde_json::json!({
+                "tag": "proxy", "protocol": "loopback",
+                "settings": { "inboundTag": "proxy-select" },
+            })
+        );
+        assert!(cfg.text.contains("decoy.example"), "{}", cfg.text);
+        let rules = value["routing"]["rules"].as_array().unwrap();
+        assert_eq!(rules[0]["inboundTag"][0], "force-in");
+        assert_eq!(rules[0]["outboundTag"], "proxy");
+        assert!(
+            !value["routing"].to_string().contains("proxy-provider"),
+            "{}",
+            value["routing"]
+        );
+    }
+
+    /// A probe core must not need geo data a device has not downloaded, whatever
+    /// rules a provider config carries: they never run in a probe.
+    #[tokio::test]
+    async fn test_config_of_a_provider_needs_no_geo_data() {
+        let (p, _d) = TestPlatform::new();
+        let prof = custom_profile("provider", provider_balancer_raw());
+        let loaded = loaded_with(&prof, default_app_state());
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("a provider probe needs no geo data");
+        assert!(!cfg.text.contains("geosite"), "{}", cfg.text);
+    }
+
+    /// A user's own config has no Kasumi inbounds to probe through, so a probe
+    /// runs the sanitised view of it: its own listeners stay out, and the port it
+    /// answers on is Kasumi's leased one.
+    #[tokio::test]
+    async fn test_config_of_a_user_custom_binds_the_leased_port() {
+        let (p, _d) = TestPlatform::new();
+        let raw = serde_json::json!({
+            "inbounds": [{ "tag": "in", "protocol": "socks", "listen": "0.0.0.0", "port": 10808 }],
+            "outbounds": [
+                provider_server("proxy", "srv.example"),
+                { "tag": "direct", "protocol": "freedom" },
+            ],
+        });
+        let prof = custom_profile("user", raw);
+        let loaded = loaded_with(&prof, default_app_state());
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
+            .expect("a user config is probed through its sanitised view");
+        let value: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
+        let inbound = |tag: &str| {
+            value["inbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|i| i["tag"] == tag)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(inbound("socks-in")["port"], TEST_PORT_BASE);
+        assert_eq!(inbound("http-in")["port"], TEST_PORT_BASE + 1);
+        assert_eq!(
+            inbound("force-in")["port"],
+            kasumi_core::state::force_socks_port(TEST_PORT_BASE, TEST_PORT_BASE + 1)
+        );
+        assert!(!cfg.text.contains("10808"), "{}", cfg.text);
+        assert_eq!(cfg.measured, "measured path: outbound proxy");
+    }
+
+    /// A config the sanitiser refuses cannot be probed, and says so instead of
+    /// leaving the row on a silent `None`.
+    #[tokio::test]
+    async fn a_user_custom_that_cannot_be_sanitised_says_why() {
+        let (p, _d) = TestPlatform::new();
+        let prof = custom_profile(
+            "user",
+            serde_json::json!({ "outbounds": [{ "tag": "direct", "protocol": "freedom" }] }),
+        );
+        let loaded = loaded_with(&prof, default_app_state());
+        let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
+
+        let err =
+            build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir).unwrap_err();
+        assert_eq!(err, "cannot be tested: no proxy outbound");
     }
 
     /// The row's `-1` opens the retained test log, so a failure raised before any
