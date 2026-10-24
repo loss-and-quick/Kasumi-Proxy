@@ -271,7 +271,7 @@ fn best_route() -> Option<DefaultRoute> {
         let if_metric = if unsafe { GetIpInterfaceEntry(&mut if_row) } == 0 {
             if_row.Metric
         } else {
-            0
+            continue;
         };
         let effective_metric = row.Metric.saturating_add(if_metric);
 
@@ -520,10 +520,9 @@ pub async fn bind_uplink(
         IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, IPV6_UNICAST_IF, SOCKET, SOCKET_ERROR, setsockopt,
     };
 
-    let Some(alias) = uplink_device().await else {
-        return Ok(());
-    };
-    let Some(index) = adapter_ifindex(&alias).await else {
+    // Take the interface index straight from the best route rather than resolving
+    // the alias back through PowerShell.
+    let Some(index) = best_route().map(|r| r.ifindex) else {
         return Ok(());
     };
     // The IPv4 option takes the index in network byte order, the IPv6 one in host order.
