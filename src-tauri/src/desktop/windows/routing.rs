@@ -188,7 +188,8 @@ fn guard_dns(tun_ifindex: u32, core_bin: &str) {
 /// Start-menu name, an adapter alias — comes back as bytes no UTF-8 caller can
 /// decode. Doing it here keeps every script from having to remember it.
 pub(super) async fn powershell(script: &str) -> String {
-    let script = format!("[Console]::OutputEncoding = [Text.Encoding]::UTF8; {script}");
+    let script =
+        format!("[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); {script}");
     let (code, out) = run_out(&[
         "powershell",
         "-NoProfile",
@@ -200,7 +201,7 @@ pub(super) async fn powershell(script: &str) -> String {
     if code != 0 {
         return String::new();
     }
-    out.trim().to_string()
+    out.trim().trim_start_matches('\u{feff}').trim().to_string()
 }
 
 #[derive(Clone, Copy)]
@@ -212,6 +213,10 @@ struct DefaultRoute {
 /// The current default route's gateway + uplink interface index, or `None`.
 pub async fn read_default_route() -> Option<(String, u32)> {
     let route = best_route()?;
+    // A non-routable next hop ("on-link" default) has no gateway to bypass via.
+    if route.next_hop == 0 {
+        return None;
+    }
     Some((ipv4_string(route.next_hop), route.ifindex))
 }
 
@@ -257,8 +262,7 @@ fn best_route() -> Option<DefaultRoute> {
             continue;
         }
         let next_hop = unsafe { row.NextHop.Ipv4.sin_addr.S_un.S_addr };
-        // An on-link default has no gateway (0.0.0.0).
-        if next_hop == 0 || row.InterfaceIndex == 0 {
+        if row.InterfaceIndex == 0 {
             continue;
         }
 
