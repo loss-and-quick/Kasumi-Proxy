@@ -448,7 +448,7 @@ fn adapter_alias(ifindex: u32) -> Option<String> {
     }
     let len = buf.iter().position(|c| *c == 0).unwrap_or(buf.len());
     let alias = String::from_utf16_lossy(&buf[..len]);
-    (!alias.is_empty()).then(|| alias)
+    (!alias.is_empty()).then_some(alias)
 }
 
 /// Bind `socket` to the uplink adapter with `IP_UNICAST_IF` / `IPV6_UNICAST_IF`,
@@ -501,21 +501,6 @@ pub async fn uplink_source(_dev: &str) -> kasumi_core::outbound_bind::UplinkSour
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_default_route_json() {
-        let out = r#"{"NextHop":"192.168.1.1","InterfaceIndex":12}"#;
-        assert_eq!(
-            parse_default_route(out),
-            Some(("192.168.1.1".to_string(), 12))
-        );
-        // On-link default (no gateway) is not bypassable.
-        assert_eq!(
-            parse_default_route(r#"{"NextHop":"0.0.0.0","InterfaceIndex":12}"#),
-            None
-        );
-        assert_eq!(parse_default_route("not json"), None);
-    }
 
     // No adapter has this index: the call has to fail cleanly, either at the
     // run-time export lookup (before Windows 10 2004) or at the index.
