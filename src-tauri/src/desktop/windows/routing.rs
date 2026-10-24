@@ -401,15 +401,46 @@ pub async fn apply_escape_rules() {}
 /// The physical uplink adapter name of the current default route — what a
 /// helper-spawned test core binds its outbound to (`bind_interface` /
 /// `sockopt.interface`) so it escapes an active tun. `None` when offline.
+///
+/// Read straight from the routing table (`GetBestRoute`) rather than through
+/// PowerShell: the alias comes back as UTF-16 from `iphlpapi`, no console
+/// codepage to mangle it. A `Get-NetRoute | Select InterfaceAlias` one-liner
+/// encoded the alias through the OEM codepage (CP936 on a Chinese system), so
+/// a non-ASCII adapter name (以太网) arrived as mojibake and the core's
+/// `bind_interface` lookup failed. `GetBestRoute` is IPv4-only, so an
+/// IPv6-only default route reads as offline (no bind) — the pre-fix behaviour.
 pub async fn uplink_device() -> Option<String> {
-    let alias = powershell(
-        "Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue \
-         | Sort-Object RouteMetric \
-         | Select-Object -First 1 -ExpandProperty InterfaceAlias",
-    )
-    .await;
-    let alias = alias.trim();
-    (!alias.is_empty()).then(|| alias.to_string())
+    use windows_sys::Win32::NetworkManagement::IpHelper::{GetBestRoute, MIB_IPFORWARDROW};
+
+    // SAFETY: `row` outlives the call; the API writes it on success.
+    let mut row: MIB_IPFORWARDROW = unsafe { std::mem::zeroed() };
+    // SAFETY: `row` is a valid out param; NULL dest/source mean the default route.
+    if unsafe { GetBestRoute(0, 0, &mut row) } != 0 {
+        return None;
+    }
+    adapter_alias(row.dwForwardIfIndex)
+}
+
+/// The adapter alias of interface `ifindex`, or `None` if it is gone.
+fn adapter_alias(ifindex: u32) -> Option<String> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        ConvertInterfaceIndexToLuid, ConvertInterfaceLuidToAlias,
+    };
+
+    let mut luid: windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH =
+        unsafe { std::mem::zeroed() };
+    // SAFETY: `luid` outlives the call.
+    if unsafe { ConvertInterfaceIndexToLuid(ifindex, &mut luid) } != 0 {
+        return None;
+    }
+    let mut buf = [0u16; 256];
+    // The call writes a NUL-terminated alias and reports an error code, not a length.
+    if unsafe { ConvertInterfaceLuidToAlias(&luid, buf.as_mut_ptr(), buf.len()) } != 0 {
+        return None;
+    }
+    let len = buf.iter().position(|c| *c == 0).unwrap_or(buf.len());
+    let alias = String::from_utf16_lossy(&buf[..len]);
+    (!alias.is_empty()).then(|| alias)
 }
 
 /// Bind `socket` to the uplink adapter with `IP_UNICAST_IF` / `IPV6_UNICAST_IF`,
@@ -520,5 +551,19 @@ mod tests {
     fn splits_cidr_family() {
         assert_eq!(split_cidr("1.2.3.4/32"), ("1.2.3.4", true));
         assert_eq!(split_cidr("2001:db8::1/128"), ("2001:db8::1", false));
+    }
+
+    // The Win32 default-route lookup and the PowerShell one must name the same
+    // adapter: a divergence would mean the uplink bind targets a different
+    // interface than the bypass routes. Offline has nothing to compare.
+    #[tokio::test]
+    async fn uplink_device_matches_default_route() {
+        let Some((_, ifindex)) = read_default_route().await else {
+            return;
+        };
+        let Some(alias) = uplink_device().await else {
+            return;
+        };
+        assert_eq!(Some(alias), adapter_alias(ifindex));
     }
 }
