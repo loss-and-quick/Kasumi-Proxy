@@ -17,7 +17,6 @@
 use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
@@ -182,43 +181,121 @@ fn guard_dns(tun_ifindex: u32, core_bin: &str) {
 }
 
 /// Run a PowerShell one-liner, returning trimmed stdout (empty on failure).
+///
+/// The script runs with the console output encoding forced to UTF-8. PowerShell
+/// encodes a redirected command's stdout through the console's OEM codepage
+/// otherwise (CP936 on a Chinese Windows), so any non-ASCII text it prints — a
+/// Start-menu name, an adapter alias — comes back as bytes no UTF-8 caller can
+/// decode. Doing it here keeps every script from having to remember it.
 pub(super) async fn powershell(script: &str) -> String {
+    let script =
+        format!("[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); {script}");
     let (code, out) = run_out(&[
         "powershell",
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        script,
+        &script,
     ])
     .await;
     if code != 0 {
         return String::new();
     }
-    out.trim().to_string()
+    out.trim().trim_start_matches('\u{feff}').trim().to_string()
+}
+
+#[derive(Clone, Copy)]
+struct DefaultRoute {
+    ifindex: u32,
+    next_hop: u32,
 }
 
 /// The current default route's gateway + uplink interface index, or `None`.
 pub async fn read_default_route() -> Option<(String, u32)> {
-    let out = powershell(
-        "Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue \
-         | Sort-Object RouteMetric \
-         | Select-Object -First 1 -Property NextHop,InterfaceIndex \
-         | ConvertTo-Json -Compress",
-    )
-    .await;
-    parse_default_route(&out)
-}
-
-/// Pull `(gateway, ifindex)` from the `ConvertTo-Json` object of a default route.
-fn parse_default_route(out: &str) -> Option<(String, u32)> {
-    let v: Value = serde_json::from_str(out.trim()).ok()?;
-    let gw = v.get("NextHop")?.as_str()?.to_string();
-    let idx = v.get("InterfaceIndex")?.as_u64()? as u32;
+    let route = best_route()?;
     // A non-routable next hop ("on-link" default) has no gateway to bypass via.
-    if gw.is_empty() || gw == "0.0.0.0" {
+    if route.next_hop == 0 {
         return None;
     }
-    Some((gw, idx))
+    Some((ipv4_string(route.next_hop), route.ifindex))
+}
+
+/// The default route (`0.0.0.0/0`) with the lowest effective metric (route metric
+/// plus interface metric), or `None` when offline.
+///
+/// Enumerates routes via `GetIpForwardTable2` and matches on prefix length 0
+/// specifically: a destination-based lookup like `GetBestRoute(0.0.0.0)` matches
+/// the `0.0.0.0/1` split-default route once the tun is up (longest prefix match),
+/// which would return the tun instead of the physical uplink.
+fn best_route() -> Option<DefaultRoute> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        FreeMibTable, GetIpForwardTable2, GetIpInterfaceEntry, InitializeIpInterfaceEntry,
+        MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW,
+    };
+    use windows_sys::Win32::Networking::WinSock::AF_INET;
+
+    let mut table: *mut MIB_IPFORWARD_TABLE2 = std::ptr::null_mut();
+    // SAFETY: table is a valid out-pointer; non-zero is an error.
+    if unsafe { GetIpForwardTable2(AF_INET, &mut table) } != 0 || table.is_null() {
+        return None;
+    }
+    struct TableGuard(*mut MIB_IPFORWARD_TABLE2);
+    impl Drop for TableGuard {
+        fn drop(&mut self) {
+            unsafe { FreeMibTable(self.0.cast()) };
+        }
+    }
+    let _guard = TableGuard(table);
+
+    let num = unsafe { (*table).NumEntries as usize };
+    let first = unsafe { std::ptr::addr_of!((*table).Table).cast::<MIB_IPFORWARD_ROW2>() };
+    let rows = unsafe { std::slice::from_raw_parts(first, num) };
+
+    let mut best: Option<(DefaultRoute, u32)> = None;
+    for row in rows {
+        // DestinationPrefix must be 0.0.0.0/0 specifically (excludes /1 split-default).
+        if row.DestinationPrefix.PrefixLength != 0 {
+            continue;
+        }
+        let family = unsafe { row.DestinationPrefix.Prefix.si_family };
+        if family != AF_INET {
+            continue;
+        }
+        let next_hop = unsafe { row.NextHop.Ipv4.sin_addr.S_un.S_addr };
+        if row.InterfaceIndex == 0 {
+            continue;
+        }
+
+        // Effective metric is route metric + interface metric.
+        let mut if_row: MIB_IPINTERFACE_ROW = unsafe { std::mem::zeroed() };
+        unsafe { InitializeIpInterfaceEntry(&mut if_row) };
+        if_row.Family = AF_INET;
+        if_row.InterfaceLuid = row.InterfaceLuid;
+        if_row.InterfaceIndex = row.InterfaceIndex;
+        let if_metric = if unsafe { GetIpInterfaceEntry(&mut if_row) } == 0 {
+            if_row.Metric
+        } else {
+            continue;
+        };
+        let effective_metric = row.Metric.saturating_add(if_metric);
+
+        if best.is_none_or(|(_, m)| effective_metric < m) {
+            best = Some((
+                DefaultRoute {
+                    ifindex: row.InterfaceIndex,
+                    next_hop,
+                },
+                effective_metric,
+            ));
+        }
+    }
+
+    best.map(|(r, _)| r)
+}
+
+/// `10.0.0.1` from a routing-table address (network byte order in a `u32`).
+fn ipv4_string(addr: u32) -> String {
+    std::net::Ipv4Addr::from(addr.to_ne_bytes()).to_string()
 }
 
 /// The interface index of the named adapter (the wintun device tun2socks created),
@@ -401,15 +478,38 @@ pub async fn apply_escape_rules() {}
 /// The physical uplink adapter name of the current default route — what a
 /// helper-spawned test core binds its outbound to (`bind_interface` /
 /// `sockopt.interface`) so it escapes an active tun. `None` when offline.
+///
+/// Read straight from the routing table (`GetBestRoute`) rather than through
+/// PowerShell: the alias comes back as UTF-16 from `iphlpapi`, no console
+/// codepage to mangle it. A `Get-NetRoute | Select InterfaceAlias` one-liner
+/// encoded the alias through the OEM codepage (CP936 on a Chinese system), so
+/// a non-ASCII adapter name (以太网) arrived as mojibake and the core's
+/// `bind_interface` lookup failed. `GetBestRoute` is IPv4-only, so an
+/// IPv6-only default route reads as offline (no bind) — the pre-fix behaviour.
 pub async fn uplink_device() -> Option<String> {
-    let alias = powershell(
-        "Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue \
-         | Sort-Object RouteMetric \
-         | Select-Object -First 1 -ExpandProperty InterfaceAlias",
-    )
-    .await;
-    let alias = alias.trim();
-    (!alias.is_empty()).then(|| alias.to_string())
+    adapter_alias(best_route()?.ifindex)
+}
+
+/// The adapter alias of interface `ifindex`, or `None` if it is gone.
+fn adapter_alias(ifindex: u32) -> Option<String> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        ConvertInterfaceIndexToLuid, ConvertInterfaceLuidToAlias,
+    };
+
+    let mut luid: windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH =
+        unsafe { std::mem::zeroed() };
+    // SAFETY: `luid` outlives the call.
+    if unsafe { ConvertInterfaceIndexToLuid(ifindex, &mut luid) } != 0 {
+        return None;
+    }
+    let mut buf = [0u16; 256];
+    // The call writes a NUL-terminated alias and reports an error code, not a length.
+    if unsafe { ConvertInterfaceLuidToAlias(&luid, buf.as_mut_ptr(), buf.len()) } != 0 {
+        return None;
+    }
+    let len = buf.iter().position(|c| *c == 0).unwrap_or(buf.len());
+    let alias = String::from_utf16_lossy(&buf[..len]);
+    (!alias.is_empty()).then_some(alias)
 }
 
 /// Bind `socket` to the uplink adapter with `IP_UNICAST_IF` / `IPV6_UNICAST_IF`,
@@ -424,10 +524,9 @@ pub async fn bind_uplink(
         IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, IPV6_UNICAST_IF, SOCKET, SOCKET_ERROR, setsockopt,
     };
 
-    let Some(alias) = uplink_device().await else {
-        return Ok(());
-    };
-    let Some(index) = adapter_ifindex(&alias).await else {
+    // Take the interface index straight from the best route rather than resolving
+    // the alias back through PowerShell.
+    let Some(index) = best_route().map(|r| r.ifindex) else {
         return Ok(());
     };
     // The IPv4 option takes the index in network byte order, the IPv6 one in host order.
@@ -462,21 +561,6 @@ pub async fn uplink_source(_dev: &str) -> kasumi_core::outbound_bind::UplinkSour
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_default_route_json() {
-        let out = r#"{"NextHop":"192.168.1.1","InterfaceIndex":12}"#;
-        assert_eq!(
-            parse_default_route(out),
-            Some(("192.168.1.1".to_string(), 12))
-        );
-        // On-link default (no gateway) is not bypassable.
-        assert_eq!(
-            parse_default_route(r#"{"NextHop":"0.0.0.0","InterfaceIndex":12}"#),
-            None
-        );
-        assert_eq!(parse_default_route("not json"), None);
-    }
 
     // No adapter has this index: the call has to fail cleanly, either at the
     // run-time export lookup (before Windows 10 2004) or at the index.
@@ -520,5 +604,21 @@ mod tests {
     fn splits_cidr_family() {
         assert_eq!(split_cidr("1.2.3.4/32"), ("1.2.3.4", true));
         assert_eq!(split_cidr("2001:db8::1/128"), ("2001:db8::1", false));
+    }
+
+    // The alias and the bypass routes must name the same adapter: both come from
+    // the routing table's best route, so a host with two defaults on different
+    // metrics cannot bind the core to one uplink and route its bypass to another.
+    // Offline has nothing to compare.
+    #[tokio::test]
+    async fn uplink_and_default_route_agree() {
+        let Some((gw, ifindex)) = read_default_route().await else {
+            return;
+        };
+        assert!(gw.parse::<std::net::Ipv4Addr>().is_ok(), "gateway {gw}");
+        let alias = uplink_device()
+            .await
+            .expect("a default route names a adapter");
+        assert_eq!(adapter_ifindex(&alias).await, Some(ifindex));
     }
 }
