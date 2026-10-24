@@ -182,13 +182,20 @@ fn guard_dns(tun_ifindex: u32, core_bin: &str) {
 }
 
 /// Run a PowerShell one-liner, returning trimmed stdout (empty on failure).
+///
+/// The script runs with the console output encoding forced to UTF-8. PowerShell
+/// encodes a redirected command's stdout through the console's OEM codepage
+/// otherwise (CP936 on a Chinese Windows), so any non-ASCII text it prints — a
+/// Start-menu name, an adapter alias — comes back as bytes no UTF-8 caller can
+/// decode. Doing it here keeps every script from having to remember it.
 pub(super) async fn powershell(script: &str) -> String {
+    let script = format!("[Console]::OutputEncoding = [Text.Encoding]::UTF8; {script}");
     let (code, out) = run_out(&[
         "powershell",
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        script,
+        &script,
     ])
     .await;
     if code != 0 {

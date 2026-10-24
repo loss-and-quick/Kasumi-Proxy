@@ -8,10 +8,9 @@ use kasumi_backend::platform::AppInfo;
 use serde::Deserialize;
 
 /// Lists the shortcuts as JSON `[{name, exe, icon}]`, with the target's own icon
-/// as base64 PNG. UTF-8 output so non-ASCII names survive the console codepage;
-/// uninstaller shortcuts are left out.
+/// as base64 PNG. Uninstaller shortcuts are left out. (`powershell` runs it with
+/// a UTF-8 console encoding, so non-ASCII names survive the codepage.)
 const SCRIPT: &str = r#"
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Drawing
 $sh = New-Object -ComObject WScript.Shell
 $dirs = @("$env:ProgramData\Microsoft\Windows\Start Menu\Programs", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs")
