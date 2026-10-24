@@ -17,7 +17,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use windows_sys::Win32::NetworkManagement::IpHelper::MIB_IPFORWARDROW;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
@@ -206,26 +206,35 @@ pub(super) async fn powershell(script: &str) -> String {
 
 /// The current default route's gateway + uplink interface index, or `None`.
 pub async fn read_default_route() -> Option<(String, u32)> {
-    let out = powershell(
-        "Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue \
-         | Sort-Object RouteMetric \
-         | Select-Object -First 1 -Property NextHop,InterfaceIndex \
-         | ConvertTo-Json -Compress",
-    )
-    .await;
-    parse_default_route(&out)
-}
-
-/// Pull `(gateway, ifindex)` from the `ConvertTo-Json` object of a default route.
-fn parse_default_route(out: &str) -> Option<(String, u32)> {
-    let v: Value = serde_json::from_str(out.trim()).ok()?;
-    let gw = v.get("NextHop")?.as_str()?.to_string();
-    let idx = v.get("InterfaceIndex")?.as_u64()? as u32;
+    let row = best_route()?;
+    let gw = ipv4_string(row.dwForwardNextHop);
     // A non-routable next hop ("on-link" default) has no gateway to bypass via.
-    if gw.is_empty() || gw == "0.0.0.0" {
+    if gw == "0.0.0.0" {
         return None;
     }
-    Some((gw, idx))
+    Some((gw, row.dwForwardIfIndex))
+}
+
+/// The best route to 0.0.0.0 — the default route, as the OS resolves it — or
+/// `None` when offline.
+///
+/// The routing table, not `Get-NetRoute`: the API weighs a route's own metric
+/// together with its adapter's, which a `Sort-Object RouteMetric` does not, and
+/// every uplink lookup here must answer with the same adapter the OS would send
+/// by. One source for the alias and for the bypass routes also means they cannot
+/// disagree.
+fn best_route() -> Option<MIB_IPFORWARDROW> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::GetBestRoute;
+
+    // SAFETY: `row` outlives the call; the API writes it on success.
+    let mut row: MIB_IPFORWARDROW = unsafe { std::mem::zeroed() };
+    // SAFETY: `row` is a valid out param; NULL dest/source mean the default route.
+    (unsafe { GetBestRoute(0, 0, &mut row) } == 0).then_some(row)
+}
+
+/// `10.0.0.1` from a routing-table address (network byte order in a `u32`).
+fn ipv4_string(addr: u32) -> String {
+    std::net::Ipv4Addr::from(addr.to_ne_bytes()).to_string()
 }
 
 /// The interface index of the named adapter (the wintun device tun2socks created),
@@ -417,15 +426,7 @@ pub async fn apply_escape_rules() {}
 /// `bind_interface` lookup failed. `GetBestRoute` is IPv4-only, so an
 /// IPv6-only default route reads as offline (no bind) — the pre-fix behaviour.
 pub async fn uplink_device() -> Option<String> {
-    use windows_sys::Win32::NetworkManagement::IpHelper::{GetBestRoute, MIB_IPFORWARDROW};
-
-    // SAFETY: `row` outlives the call; the API writes it on success.
-    let mut row: MIB_IPFORWARDROW = unsafe { std::mem::zeroed() };
-    // SAFETY: `row` is a valid out param; NULL dest/source mean the default route.
-    if unsafe { GetBestRoute(0, 0, &mut row) } != 0 {
-        return None;
-    }
-    adapter_alias(row.dwForwardIfIndex)
+    adapter_alias(best_route()?.dwForwardIfIndex)
 }
 
 /// The adapter alias of interface `ifindex`, or `None` if it is gone.
@@ -560,17 +561,19 @@ mod tests {
         assert_eq!(split_cidr("2001:db8::1/128"), ("2001:db8::1", false));
     }
 
-    // The Win32 default-route lookup and the PowerShell one must name the same
-    // adapter: a divergence would mean the uplink bind targets a different
-    // interface than the bypass routes. Offline has nothing to compare.
+    // The alias and the bypass routes must name the same adapter: both come from
+    // the routing table's best route, so a host with two defaults on different
+    // metrics cannot bind the core to one uplink and route its bypass to another.
+    // Offline has nothing to compare.
     #[tokio::test]
-    async fn uplink_device_matches_default_route() {
-        let Some((_, ifindex)) = read_default_route().await else {
+    async fn uplink_and_default_route_agree() {
+        let Some((gw, ifindex)) = read_default_route().await else {
             return;
         };
-        let Some(alias) = uplink_device().await else {
-            return;
-        };
-        assert_eq!(Some(alias), adapter_alias(ifindex));
+        assert!(gw.parse::<std::net::Ipv4Addr>().is_ok(), "gateway {gw}");
+        let alias = uplink_device()
+            .await
+            .expect("a default route names a adapter");
+        assert_eq!(adapter_ifindex(&alias).await, Some(ifindex));
     }
 }
