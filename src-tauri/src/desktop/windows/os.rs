@@ -18,7 +18,7 @@ use windows_sys::Win32::System::Registry::{
 use crate::desktop::paths::DesktopPaths;
 use crate::desktop::platform::DesktopOs;
 
-use super::routing::adapter_ifindex;
+use super::routing::{adapter_ifindex, iface_counters};
 
 pub(crate) struct WindowsOs;
 
@@ -41,7 +41,7 @@ impl DesktopOs for WindowsOs {
         // tun2socks creates the wintun adapter asynchronously; it must appear before
         // we address/route it, else routing would target a non-existent interface.
         for _ in 0..40 {
-            if adapter_ifindex(name).await.is_some() {
+            if adapter_ifindex(name).is_some() {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
@@ -49,11 +49,13 @@ impl DesktopOs for WindowsOs {
         anyhow::bail!("tun adapter never came up — see tun2socks log")
     }
 
-    async fn iface_traffic(&self, _iface: Option<&str>) -> (u64, u64) {
-        // Per-interface byte counters aren't wired on Windows yet (no /proc/net/dev;
-        // reading them needs iphlpapi) — report 0/0 rather than spawn PowerShell at
-        // the 1 Hz status cadence.
-        (0, 0)
+    async fn iface_traffic(&self, iface: Option<&str>) -> (u64, u64) {
+        // The tun's own counters, straight from iphlpapi — no /proc/net/dev here.
+        // An unnamed or absent device has nothing to report.
+        let Some(index) = iface.and_then(adapter_ifindex) else {
+            return (0, 0);
+        };
+        iface_counters(index).unwrap_or((0, 0))
     }
 
     async fn tun_capable(&self) -> bool {
