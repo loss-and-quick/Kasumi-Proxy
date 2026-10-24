@@ -17,7 +17,6 @@
 use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
-use windows_sys::Win32::NetworkManagement::IpHelper::MIB_IPFORWARDROW;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
@@ -204,32 +203,90 @@ pub(super) async fn powershell(script: &str) -> String {
     out.trim().to_string()
 }
 
-/// The current default route's gateway + uplink interface index, or `None`.
-pub async fn read_default_route() -> Option<(String, u32)> {
-    let row = best_route()?;
-    let gw = ipv4_string(row.dwForwardNextHop);
-    // A non-routable next hop ("on-link" default) has no gateway to bypass via.
-    if gw == "0.0.0.0" {
-        return None;
-    }
-    Some((gw, row.dwForwardIfIndex))
+#[derive(Clone, Copy)]
+struct DefaultRoute {
+    ifindex: u32,
+    next_hop: u32,
 }
 
-/// The best route to 0.0.0.0 — the default route, as the OS resolves it — or
-/// `None` when offline.
-///
-/// The routing table, not `Get-NetRoute`: the API weighs a route's own metric
-/// together with its adapter's, which a `Sort-Object RouteMetric` does not, and
-/// every uplink lookup here must answer with the same adapter the OS would send
-/// by. One source for the alias and for the bypass routes also means they cannot
-/// disagree.
-fn best_route() -> Option<MIB_IPFORWARDROW> {
-    use windows_sys::Win32::NetworkManagement::IpHelper::GetBestRoute;
+/// The current default route's gateway + uplink interface index, or `None`.
+pub async fn read_default_route() -> Option<(String, u32)> {
+    let route = best_route()?;
+    Some((ipv4_string(route.next_hop), route.ifindex))
+}
 
-    // SAFETY: `row` outlives the call; the API writes it on success.
-    let mut row: MIB_IPFORWARDROW = unsafe { std::mem::zeroed() };
-    // SAFETY: `row` is a valid out param; NULL dest/source mean the default route.
-    (unsafe { GetBestRoute(0, 0, &mut row) } == 0).then_some(row)
+/// The default route (`0.0.0.0/0`) with the lowest effective metric (route metric
+/// plus interface metric), or `None` when offline.
+///
+/// Enumerates routes via `GetIpForwardTable2` and matches on prefix length 0
+/// specifically: a destination-based lookup like `GetBestRoute(0.0.0.0)` matches
+/// the `0.0.0.0/1` split-default route once the tun is up (longest prefix match),
+/// which would return the tun instead of the physical uplink.
+fn best_route() -> Option<DefaultRoute> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        FreeMibTable, GetIpForwardTable2, GetIpInterfaceEntry, InitializeIpInterfaceEntry,
+        MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW,
+    };
+    use windows_sys::Win32::Networking::WinSock::AF_INET;
+
+    let mut table: *mut MIB_IPFORWARD_TABLE2 = std::ptr::null_mut();
+    // SAFETY: table is a valid out-pointer; non-zero is an error.
+    if unsafe { GetIpForwardTable2(AF_INET, &mut table) } != 0 || table.is_null() {
+        return None;
+    }
+    struct TableGuard(*mut MIB_IPFORWARD_TABLE2);
+    impl Drop for TableGuard {
+        fn drop(&mut self) {
+            unsafe { FreeMibTable(self.0.cast()) };
+        }
+    }
+    let _guard = TableGuard(table);
+
+    let num = unsafe { (*table).NumEntries as usize };
+    let first = unsafe { std::ptr::addr_of!((*table).Table).cast::<MIB_IPFORWARD_ROW2>() };
+    let rows = unsafe { std::slice::from_raw_parts(first, num) };
+
+    let mut best: Option<(DefaultRoute, u32)> = None;
+    for row in rows {
+        // DestinationPrefix must be 0.0.0.0/0 specifically (excludes /1 split-default).
+        if row.DestinationPrefix.PrefixLength != 0 {
+            continue;
+        }
+        let family = unsafe { row.DestinationPrefix.Prefix.si_family };
+        if family != AF_INET {
+            continue;
+        }
+        let next_hop = unsafe { row.NextHop.Ipv4.sin_addr.S_un.S_addr };
+        // An on-link default has no gateway (0.0.0.0).
+        if next_hop == 0 || row.InterfaceIndex == 0 {
+            continue;
+        }
+
+        // Effective metric is route metric + interface metric.
+        let mut if_row: MIB_IPINTERFACE_ROW = unsafe { std::mem::zeroed() };
+        unsafe { InitializeIpInterfaceEntry(&mut if_row) };
+        if_row.Family = AF_INET;
+        if_row.InterfaceLuid = row.InterfaceLuid;
+        if_row.InterfaceIndex = row.InterfaceIndex;
+        let if_metric = if unsafe { GetIpInterfaceEntry(&mut if_row) } == 0 {
+            if_row.Metric
+        } else {
+            0
+        };
+        let effective_metric = row.Metric.saturating_add(if_metric);
+
+        if best.is_none_or(|(_, m)| effective_metric < m) {
+            best = Some((
+                DefaultRoute {
+                    ifindex: row.InterfaceIndex,
+                    next_hop,
+                },
+                effective_metric,
+            ));
+        }
+    }
+
+    best.map(|(r, _)| r)
 }
 
 /// `10.0.0.1` from a routing-table address (network byte order in a `u32`).
@@ -426,7 +483,7 @@ pub async fn apply_escape_rules() {}
 /// `bind_interface` lookup failed. `GetBestRoute` is IPv4-only, so an
 /// IPv6-only default route reads as offline (no bind) — the pre-fix behaviour.
 pub async fn uplink_device() -> Option<String> {
-    adapter_alias(best_route()?.dwForwardIfIndex)
+    adapter_alias(best_route()?.ifindex)
 }
 
 /// The adapter alias of interface `ifindex`, or `None` if it is gone.
