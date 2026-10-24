@@ -415,6 +415,17 @@ fn set_interface_metric(ifindex: u32, metric: u32) -> std::io::Result<()> {
     win32(unsafe { SetIpInterfaceEntry(&mut row) })
 }
 
+/// RX/TX bytes on interface `ifindex` since it came up, or `None` when it is gone.
+pub fn iface_counters(ifindex: u32) -> Option<(u64, u64)> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{GetIfEntry2, MIB_IF_ROW2};
+
+    let mut row: MIB_IF_ROW2 = unsafe { std::mem::zeroed() };
+    row.InterfaceLuid = luid_of(ifindex).ok()?;
+    row.InterfaceIndex = ifindex;
+    // SAFETY: `row` identifies the interface above.
+    (unsafe { GetIfEntry2(&mut row) } == 0).then_some((row.InOctets, row.OutOctets))
+}
+
 /// The address and prefix length of a CIDR; a bare address is a host route.
 fn parse_cidr(cidr: &str) -> std::io::Result<(std::net::IpAddr, u8)> {
     let (addr, len) = cidr.split_once('/').unwrap_or((cidr, ""));
