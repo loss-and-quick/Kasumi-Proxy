@@ -59,7 +59,11 @@ struct RouteState {
     tun: String,
     tun_ifindex: u32,
     /// Every route this process installed, so teardown deletes exactly those.
+    #[serde(default)]
     routes: Vec<RouteRow>,
+    /// Pre-refactor route state files held a list of bypass CIDR strings instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    bypass: Vec<String>,
 }
 
 /// One installed route, as `delete` has to identify it: a route is not addressable
@@ -678,18 +682,22 @@ pub async fn apply_external_tun_routing(
     // and record the row: teardown deletes exactly what was installed here.
     let mut routes = Vec::new();
     for c in bypass {
-        match host_route(c, gw, uplink) {
-            Ok(row) => {
-                if let Err(e) = add_route(&row) {
-                    ks_warn!(Area::Platform, "bypass route {c} not installed ({e})");
-                    continue;
-                }
-                routes.push(row);
-            }
+        let row = match host_route(c, gw, uplink) {
+            Ok(row) => row,
             Err(e) => {
-                ks_warn!(Area::Platform, "bypass route {c} unusable ({e})");
+                for r in routes.iter().rev() {
+                    let _ = delete_route(r);
+                }
+                anyhow::bail!("bypass route {c} unusable ({e})");
             }
+        };
+        if let Err(e) = add_route(&row) {
+            for r in routes.iter().rev() {
+                let _ = delete_route(r);
+            }
+            anyhow::bail!("bypass route {c} not installed ({e})");
         }
+        routes.push(row);
     }
 
     // Address the tun and pull the split-default into it (unspecified next hop
@@ -733,6 +741,7 @@ pub async fn apply_external_tun_routing(
         tun: tun.to_string(),
         tun_ifindex,
         routes,
+        bypass: Vec::new(),
     };
     write_text_atomic(route_state_file, &serde_json::to_string(&state)?).await?;
     if capture_dns {
@@ -760,9 +769,57 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
             ks_warn!(Area::Platform, "route {} still installed ({e})", row.dest);
         }
     }
+    // Delete legacy pre-refactor bypass entries if present (file left by an older version).
+    delete_legacy_routes(&state.bypass);
+
     // The tun's address and the tun itself go with the adapter the helper owns on
     // process exit; the routes above are the state that would otherwise outlive us.
     kasumi_backend::fs::remove_file(route_state_file).await;
+}
+
+/// Remove legacy bypass routes recorded in a pre-refactor `RouteState` file (which
+/// held only `bypass: Vec<String>` and no `RouteRow`s). Enumerates routes with
+/// `GetIpForwardTable2` and deletes entries matching each destination CIDR.
+fn delete_legacy_routes(bypass: &[String]) {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        DeleteIpForwardEntry2, FreeMibTable, GetIpForwardTable2, MIB_IPFORWARD_TABLE2,
+    };
+    use windows_sys::Win32::Networking::WinSock::AF_INET;
+
+    if bypass.is_empty() {
+        return;
+    }
+    let mut table: *mut MIB_IPFORWARD_TABLE2 = std::ptr::null_mut();
+    // SAFETY: table is a valid out-pointer; non-zero is an error.
+    if unsafe { GetIpForwardTable2(AF_INET, &mut table) } != 0 || table.is_null() {
+        return;
+    }
+    struct TableGuard(*mut MIB_IPFORWARD_TABLE2);
+    impl Drop for TableGuard {
+        fn drop(&mut self) {
+            unsafe { FreeMibTable(self.0.cast()) };
+        }
+    }
+    let _guard = TableGuard(table);
+
+    let num = unsafe { (*table).NumEntries as usize };
+    let first = unsafe { std::ptr::addr_of!((*table).Table).cast::<MIB_IPFORWARD_ROW2>() };
+    let rows = unsafe { std::slice::from_raw_parts(first, num) };
+
+    for cidr in bypass {
+        let Ok((addr, prefix_len)) = parse_cidr(cidr) else {
+            continue;
+        };
+        let target = sockaddr(addr);
+        for row in rows {
+            if row.DestinationPrefix.PrefixLength == prefix_len
+                && unsafe { row.DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr }
+                    == unsafe { target.Ipv4.sin_addr.S_un.S_addr }
+            {
+                let _ = unsafe { DeleteIpForwardEntry2(row) };
+            }
+        }
+    }
 }
 
 /// No-op on Windows: native sing-box rides its embedded wintun, whose driver
@@ -891,6 +948,7 @@ mod tests {
                 next_hop: "192.168.1.1".into(),
                 ifindex: 12,
             }],
+            bypass: Vec::new(),
         };
         let json = serde_json::to_value(&state).unwrap();
         let mut keys: Vec<&str> = json
@@ -901,6 +959,16 @@ mod tests {
             .collect();
         keys.sort_unstable();
         assert_eq!(keys, ["routes", "tun", "tun_ifindex"]);
+    }
+
+    #[test]
+    fn parses_legacy_route_state() {
+        let legacy = r#"{"tun":"kasumi0","tun_ifindex":42,"bypass":["1.2.3.4/32"]}"#;
+        let state: RouteState = serde_json::from_str(legacy).unwrap();
+        assert_eq!(state.tun, "kasumi0");
+        assert_eq!(state.tun_ifindex, 42);
+        assert!(state.routes.is_empty());
+        assert_eq!(state.bypass, vec!["1.2.3.4/32".to_string()]);
     }
 
     #[test]
