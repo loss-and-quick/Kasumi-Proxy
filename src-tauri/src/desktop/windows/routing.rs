@@ -6,8 +6,9 @@
 //!   - install a split-default (0.0.0.0/1 + 128.0.0.0/1) into the tun, which
 //!     overrides the existing `0.0.0.0/0` without deleting it (classic VPN trick).
 //!
-//! Everything is driven through `route` / `netsh` / `Get-Net*`, mirroring the Linux
-//! `ip` back-end. The exact set of installed routes is persisted so teardown is
+//! Everything is driven through `iphlpapi` (`GetBestRoute`, `CreateIpForwardEntry2`,
+//! …) rather than `route` / `netsh` / `Get-Net*`, mirroring the Linux `ip`
+//! back-end. The exact set of installed routes is persisted so teardown is
 //! idempotent.
 //!
 //! With an xray core the system's DNS is sent into the tun as well (see
@@ -17,7 +18,9 @@
 use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
+use windows_sys::Win32::NetworkManagement::IpHelper::MIB_IPFORWARD_ROW2;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
+use windows_sys::Win32::Networking::WinSock::SOCKADDR_INET;
 
 use kasumi_backend::fsjson::{read_json, write_text_atomic};
 
@@ -27,14 +30,24 @@ use kasumi_log::{Area, ks_info, ks_warn};
 
 use super::dns_guard;
 
-/// The userspace tun's address + mask; `/15` covers the 198.18/15 test net.
-/// Address single-sourced from core so it can't drift from hev's / the routing's.
+/// The userspace tun's address; `/15` ([`TUN_PREFIX_LEN`]) covers the 198.18/15
+/// test net. Address single-sourced from core so it can't drift from hev's / the
+/// routing's.
 const TUN_ADDR: &str = kasumi_core::tun::TUN_IPV4;
-const TUN_MASK: &str = "255.254.0.0";
 
-/// The two halves of a split-default route, as (dest, mask) pairs. Each overrides
-/// `0.0.0.0/0` for its half without touching the real default.
-const SPLIT_DEFAULT: [(&str, &str); 2] = [("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0")];
+/// The two halves of a split-default route: each overrides `0.0.0.0/0` for its
+/// half without touching the real default (classic VPN trick).
+const SPLIT_DEFAULT: [(&str, u8); 2] = [("0.0.0.0", 1), ("128.0.0.0", 1)];
+
+/// The tun's on-link prefix length (the `255.254.0.0` mask of [`TUN_ADDR`]).
+const TUN_PREFIX_LEN: u8 = 15;
+
+/// `route add`'s metric: as low as a route can be, so it wins over anything the
+/// system installed.
+const ROUTE_METRIC: u32 = 1;
+
+/// A route's lifetime in a `MIB_IPFORWARD_ROW2`: no expiry, like `route add`.
+const INFINITE_LIFETIME: u32 = u32::MAX;
 
 /// Resolver the tun advertises; see [`kasumi_core::tun::TUN_DNS_IPV4`].
 const TUN_DNS: &str = kasumi_core::tun::TUN_DNS_IPV4;
@@ -45,8 +58,19 @@ static DNS_GUARD: Mutex<Option<dns_guard::Guard>> = Mutex::new(None);
 struct RouteState {
     tun: String,
     tun_ifindex: u32,
-    /// Bypass host-routes we added (CIDR strings), to delete on teardown.
-    bypass: Vec<String>,
+    /// Every route this process installed, so teardown deletes exactly those.
+    routes: Vec<RouteRow>,
+}
+
+/// One installed route, as `delete` has to identify it: a route is not addressable
+/// by its destination alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct RouteRow {
+    /// Destination prefix as a CIDR string (`1.2.3.4/32`, `2001:db8::1/128`).
+    dest: String,
+    /// Next hop (`0.0.0.0` / `::` for an on-link prefix).
+    next_hop: String,
+    ifindex: u32,
 }
 
 /// `netsh` fallback for [`set_adapter_dns`] on Windows before 10 2004.
@@ -68,21 +92,10 @@ fn netsh_dns_argv(tun: &str) -> Vec<String> {
 }
 
 /// The lowest interface metric, which makes the tun the adapter Windows lists
-/// first and asks first.
+/// first and asks first. The Linux side reaches the same end by moving the tun's
+/// routes into their own table.
 /// <https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-interface-metric>
-fn netsh_metric_argv(tun_ifindex: u32) -> Vec<String> {
-    [
-        "netsh",
-        "interface",
-        "ipv4",
-        "set",
-        "interface",
-        &format!("interface={tun_ifindex}"),
-        "metric=1",
-    ]
-    .map(String::from)
-    .to_vec()
-}
+const TUN_METRIC: u32 = 1;
 
 async fn run_argv(argv: &[String]) -> i32 {
     let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
@@ -158,7 +171,9 @@ async fn point_dns_at_tun(tun: &str, tun_ifindex: u32) {
         );
         run_argv(&netsh_dns_argv(tun)).await;
     }
-    run_argv(&netsh_metric_argv(tun_ifindex)).await;
+    if let Err(e) = set_interface_metric(tun_ifindex, TUN_METRIC) {
+        ks_warn!(Area::Platform, "tun metric not set ({e})");
+    }
 }
 
 /// Close port 53 outside the tun until [`clear_external_tun_routing`] or the end of
@@ -298,34 +313,318 @@ fn ipv4_string(addr: u32) -> String {
     std::net::Ipv4Addr::from(addr.to_ne_bytes()).to_string()
 }
 
-/// The interface index of the named adapter (the wintun device tun2socks created),
-/// or `None` if it isn't up yet.
-pub async fn adapter_ifindex(name: &str) -> Option<u32> {
-    let out = powershell(&format!(
-        "(Get-NetAdapter -Name '{name}' -ErrorAction SilentlyContinue).InterfaceIndex"
-    ))
-    .await;
-    out.lines().next()?.trim().parse().ok()
+/// The host route that sends `dest` (a CIDR, or a bare address) out through `gw`
+/// on the uplink adapter `uplink`.
+fn host_route(dest: &str, gw: std::net::IpAddr, uplink: u32) -> std::io::Result<RouteRow> {
+    let (addr, prefix_len) = parse_cidr(dest)?;
+    Ok(RouteRow {
+        dest: format!("{addr}/{prefix_len}"),
+        next_hop: gw.to_string(),
+        ifindex: uplink,
+    })
 }
 
-/// The DNS server IPs of every active interface (so name resolution keeps working
-/// while the tun is up). The Linux side reads /etc/resolv.conf; here it's WMI.
+/// Add `row`'s route to the routing table. Idempotent only in the sense that a
+/// second call reports "already exists" rather than changing anything.
+fn add_route(row: &RouteRow) -> std::io::Result<()> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::CreateIpForwardEntry2;
+
+    let mut entry = forward_row(row)?;
+    entry.Metric = ROUTE_METRIC;
+    win32(unsafe { CreateIpForwardEntry2(&entry) })
+}
+
+/// Delete the route `add_route` installed. A route is identified by its
+/// destination *and* its next hop and interface, so nothing else is matched.
+fn delete_route(row: &RouteRow) -> std::io::Result<()> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::DeleteIpForwardEntry2;
+
+    win32(unsafe { DeleteIpForwardEntry2(&forward_row(row)?) })
+}
+
+/// The routing-table row for `row`.
+fn forward_row(row: &RouteRow) -> std::io::Result<MIB_IPFORWARD_ROW2> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        IP_ADDRESS_PREFIX, InitializeIpForwardEntry, MIB_IPFORWARD_ROW2,
+    };
+    use windows_sys::Win32::Networking::WinSock::MIB_IPPROTO_NETMGMT;
+
+    let (dest, prefix_len) = parse_cidr(&row.dest)?;
+    let next_hop = parse_addr(&row.next_hop)?;
+    let mut entry: MIB_IPFORWARD_ROW2 = unsafe { std::mem::zeroed() };
+    // SAFETY: `entry` is a valid out param; the API fills in its defaults.
+    unsafe { InitializeIpForwardEntry(&mut entry) };
+    entry.InterfaceIndex = row.ifindex;
+    entry.DestinationPrefix = IP_ADDRESS_PREFIX {
+        Prefix: sockaddr(dest),
+        PrefixLength: prefix_len,
+    };
+    entry.NextHop = sockaddr(next_hop);
+    entry.Protocol = MIB_IPPROTO_NETMGMT;
+    entry.ValidLifetime = INFINITE_LIFETIME;
+    entry.PreferredLifetime = INFINITE_LIFETIME;
+    Ok(entry)
+}
+
+/// Give adapter `ifindex` the address `addr` with `prefix_len` on-link.
+fn add_address(addr: std::net::IpAddr, prefix_len: u8, ifindex: u32) -> std::io::Result<()> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        CreateUnicastIpAddressEntry, InitializeUnicastIpAddressEntry, MIB_UNICASTIPADDRESS_ROW,
+    };
+    use windows_sys::Win32::Networking::WinSock::{
+        IpDadStatePreferred, IpPrefixOriginManual, IpSuffixOriginManual,
+    };
+
+    let mut entry: MIB_UNICASTIPADDRESS_ROW = unsafe { std::mem::zeroed() };
+    // SAFETY: `entry` is a valid out param; the API fills in its defaults.
+    unsafe { InitializeUnicastIpAddressEntry(&mut entry) };
+    entry.InterfaceIndex = ifindex;
+    entry.Address = sockaddr(addr);
+    entry.OnLinkPrefixLength = prefix_len;
+    entry.PrefixOrigin = IpPrefixOriginManual;
+    entry.SuffixOrigin = IpSuffixOriginManual;
+    // A configured address is usable at once; no duplicate-address detection for a
+    // point-to-point device only this process routes into.
+    entry.DadState = IpDadStatePreferred;
+    entry.ValidLifetime = INFINITE_LIFETIME;
+    entry.PreferredLifetime = INFINITE_LIFETIME;
+    win32(unsafe { CreateUnicastIpAddressEntry(&entry) })
+}
+
+/// Pin adapter `ifindex`'s metric to `metric` and stop it tracking the link speed:
+/// without a metric of its own, the tun can rank below another adapter and Windows
+/// asks that one first.
+fn set_interface_metric(ifindex: u32, metric: u32) -> std::io::Result<()> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GetIpInterfaceEntry, InitializeIpInterfaceEntry, MIB_IPINTERFACE_ROW, SetIpInterfaceEntry,
+    };
+    use windows_sys::Win32::Networking::WinSock::AF_INET;
+
+    let mut row: MIB_IPINTERFACE_ROW = unsafe { std::mem::zeroed() };
+    // SAFETY: `row` is a valid out param; the API fills in its defaults.
+    unsafe { InitializeIpInterfaceEntry(&mut row) };
+    row.Family = AF_INET;
+    row.InterfaceLuid = luid_of(ifindex)?;
+    row.InterfaceIndex = ifindex;
+    // SAFETY: `row` identifies the interface above.
+    win32(unsafe { GetIpInterfaceEntry(&mut row) })?;
+    row.UseAutomaticMetric = 0; // FALSE
+    row.Metric = metric;
+    // SetIpInterfaceEntry rejects an IPv4 row whose SitePrefixLength is non-zero.
+    row.SitePrefixLength = 0;
+    win32(unsafe { SetIpInterfaceEntry(&mut row) })
+}
+
+/// The address and prefix length of a CIDR; a bare address is a host route.
+fn parse_cidr(cidr: &str) -> std::io::Result<(std::net::IpAddr, u8)> {
+    let (addr, len) = cidr.split_once('/').unwrap_or((cidr, ""));
+    let addr = parse_addr(addr)?;
+    let host = if addr.is_ipv4() { 32 } else { 128 };
+    let len = match len {
+        "" => host,
+        _ => len
+            .parse()
+            .ok()
+            .filter(|l| *l <= host)
+            .ok_or_else(|| invalid(format!("{cidr}: no usable prefix length")))?,
+    };
+    Ok((addr, len))
+}
+
+/// An IP address, with the input quoted back on failure.
+fn parse_addr(addr: &str) -> std::io::Result<std::net::IpAddr> {
+    addr.parse()
+        .map_err(|_| invalid(format!("{addr}: not an address")))
+}
+
+/// `addr` in the socket-address form a routing-table row holds.
+fn sockaddr(addr: std::net::IpAddr) -> SOCKADDR_INET {
+    use windows_sys::Win32::Networking::WinSock::{
+        AF_INET, AF_INET6, IN_ADDR, IN6_ADDR, IN6_ADDR_0, SOCKADDR_IN, SOCKADDR_IN6, SOCKADDR_IN6_0,
+    };
+
+    match addr {
+        std::net::IpAddr::V4(v4) => {
+            let mut in_addr: IN_ADDR = unsafe { std::mem::zeroed() };
+            in_addr.S_un.S_addr = u32::from_ne_bytes(v4.octets());
+            SOCKADDR_INET {
+                Ipv4: SOCKADDR_IN {
+                    sin_family: AF_INET,
+                    sin_port: 0,
+                    sin_addr: in_addr,
+                    sin_zero: [0; 8],
+                },
+            }
+        }
+        std::net::IpAddr::V6(v6) => SOCKADDR_INET {
+            Ipv6: SOCKADDR_IN6 {
+                sin6_family: AF_INET6,
+                sin6_port: 0,
+                sin6_flowinfo: 0,
+                sin6_addr: IN6_ADDR {
+                    u: IN6_ADDR_0 { Byte: v6.octets() },
+                },
+                Anonymous: SOCKADDR_IN6_0 { sin6_scope_id: 0 },
+            },
+        },
+    }
+}
+
+/// A `WIN32_ERROR` return as a `Result` (zero is success, as with `errno`).
+fn win32(rc: u32) -> std::io::Result<()> {
+    match rc {
+        0 => Ok(()),
+        code => Err(std::io::Error::from_raw_os_error(code as i32)),
+    }
+}
+
+/// An `InvalidInput` carrying the offending value.
+fn invalid(msg: String) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, msg)
+}
+
+/// The interface index of the named adapter — the wintun device tun2socks
+/// created, or the physical uplink — or `None` when no such adapter is up.
+pub fn adapter_ifindex(name: &str) -> Option<u32> {
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        ConvertInterfaceAliasToLuid, ConvertInterfaceLuidToIndex,
+    };
+
+    let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut luid: NET_LUID_LH = unsafe { std::mem::zeroed() };
+    // SAFETY: `wide` is NUL-terminated and outlives the call.
+    if unsafe { ConvertInterfaceAliasToLuid(wide.as_ptr(), &mut luid) } != 0 {
+        return None;
+    }
+    let mut index = 0u32;
+    // SAFETY: `luid` and `index` outlive the call.
+    if unsafe { ConvertInterfaceLuidToIndex(&luid, &mut index) } != 0 {
+        return None;
+    }
+    (index != 0).then_some(index)
+}
+
+/// The DNS server IPs every adapter is configured with (so name resolution keeps
+/// working while the tun is up). The Linux side reads /etc/resolv.conf; here it's
+/// `GetAdaptersAddresses`, which hands back the same configured list
+/// `Get-DnsClientServerAddress` printed — as `SOCKADDR`s, not as text to decode.
 pub async fn read_resolvers() -> Vec<String> {
-    let out = powershell(
-        "Get-DnsClientServerAddress -AddressFamily IPv4 \
-         | Select-Object -ExpandProperty ServerAddresses \
-         | Sort-Object -Unique",
-    )
-    .await;
-    out.lines()
-        .map(|l| l.trim().to_string())
+    let mut resolvers: Vec<String> = adapter_resolvers()
+        .into_iter()
+        .map(|ip| ip.to_string())
         .filter(|ip| !is_loopback(ip))
-        .collect()
+        .collect();
+    resolvers.sort_unstable();
+    resolvers.dedup();
+    resolvers
+}
+
+/// Every IPv4 DNS server address across all adapters, down ones included (the
+/// same set `Get-DnsClientServerAddress` lists).
+fn adapter_resolvers() -> Vec<std::net::Ipv4Addr> {
+    use windows_sys::Win32::Networking::WinSock::{AF_INET, SOCKADDR_IN};
+
+    let list = adapters();
+    let mut resolvers = Vec::new();
+    for adapter in list.iter() {
+        let mut server = adapter.FirstDnsServerAddress;
+        while !server.is_null() {
+            // SAFETY: the API built this node list; the pointers stay valid until
+            // the buffer is dropped, and `list` outlives this walk.
+            let node = unsafe { &*server };
+            let addr = node.Address.lpSockaddr;
+            if !addr.is_null()
+                && node.Address.iSockaddrLength as usize >= std::mem::size_of::<SOCKADDR_IN>()
+            {
+                // SAFETY: a non-empty `SOCKET_ADDRESS` of at least `SOCKADDR_IN`
+                // length holds a `SOCKADDR` whose family decides the shape.
+                let sock = unsafe { &*addr };
+                if sock.sa_family == AF_INET {
+                    // SAFETY: the family above says this is a `SOCKADDR_IN`.
+                    let v4 = unsafe { &*addr.cast::<SOCKADDR_IN>() };
+                    // SAFETY: reading the plain-`u32` arm of the address union.
+                    let raw = unsafe { v4.sin_addr.S_un.S_addr };
+                    resolvers.push(std::net::Ipv4Addr::from(raw.to_ne_bytes()));
+                }
+            }
+            server = node.Next;
+        }
+    }
+    resolvers
+}
+
+/// Every adapter `GetAdaptersAddresses` reports, as the allocated node list it
+/// fills in. The returned list owns the buffer, so a walk over `Next` stays valid.
+fn adapters() -> AdapterList {
+    use windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW;
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GAA_FLAG_INCLUDE_ALL_INTERFACES, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_MULTICAST,
+        GAA_FLAG_SKIP_UNICAST, GetAdaptersAddresses, IP_ADAPTER_ADDRESSES_LH,
+    };
+    use windows_sys::Win32::Networking::WinSock::AF_UNSPEC;
+
+    const FLAGS: u32 = GAA_FLAG_SKIP_UNICAST
+        | GAA_FLAG_SKIP_ANYCAST
+        | GAA_FLAG_SKIP_MULTICAST
+        | GAA_FLAG_INCLUDE_ALL_INTERFACES;
+    // A caller-sized buffer: the first call reports the size it needs.
+    let mut size = 0u32;
+    // SAFETY: a NULL buffer with a size out-param is the documented sizing call.
+    let rc = unsafe {
+        GetAdaptersAddresses(
+            AF_UNSPEC.into(),
+            FLAGS,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            &mut size,
+        )
+    };
+    if rc != ERROR_BUFFER_OVERFLOW || size == 0 {
+        return AdapterList::default();
+    }
+    // `usize`-aligned storage: the node list is 8-byte aligned (it holds u64s and
+    // pointers) and a `Vec<u8>` is not required to be.
+    let words = (size as usize).div_ceil(std::mem::size_of::<usize>());
+    let mut buf = vec![0usize; words];
+    let head = buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+    // SAFETY: `head` points at `size` bytes of writable, aligned storage.
+    let rc =
+        unsafe { GetAdaptersAddresses(AF_UNSPEC.into(), FLAGS, std::ptr::null(), head, &mut size) };
+    if rc != 0 {
+        return AdapterList::default();
+    }
+    AdapterList { _buf: buf, head }
+}
+
+/// The buffer `GetAdaptersAddresses` filled, walked through [`AdapterList::iter`].
+#[derive(Default)]
+struct AdapterList {
+    /// Holds the allocation the node list points into; never read directly.
+    _buf: Vec<usize>,
+    head: *mut windows_sys::Win32::NetworkManagement::IpHelper::IP_ADAPTER_ADDRESSES_LH,
+}
+
+impl AdapterList {
+    /// The adapters in the list, in the API's order.
+    fn iter(
+        &self,
+    ) -> impl Iterator<Item = &windows_sys::Win32::NetworkManagement::IpHelper::IP_ADAPTER_ADDRESSES_LH>
+    {
+        let mut next = (!self.head.is_null()).then_some(self.head);
+        std::iter::from_fn(move || {
+            let node = next?;
+            // SAFETY: every non-NULL `Next` in the list points into the buffer,
+            // which `self` keeps alive for the iterator's lifetime.
+            let node = unsafe { &*node };
+            next = (!node.Next.is_null()).then_some(node.Next);
+            Some(node)
+        })
+    }
 }
 
 /// The tun bypass set for the resolved proxy servers and the user's TUN-exclude
 /// CIDRs (e.g. docker networks). `keep_resolvers` also routes the system's DNS
-/// servers (WMI) off the tun, for a core that resolves through them itself
+/// servers off the tun, for a core that resolves through them itself
 /// (a socks-only sing-box); an xray core reaches its servers through pinned
 /// `dns.hosts` instead, so its system DNS goes through the tun.
 pub async fn bypass_cidrs(
@@ -339,13 +638,6 @@ pub async fn bypass_cidrs(
         Vec::new()
     };
     crate::desktop::net::bypass_cidrs(servers, &resolvers, tun_exclude)
-}
-
-/// `1.2.3.4/32` → `("1.2.3.4", true)`; `2001:db8::1/128` → `("2001:db8::1", false)`.
-/// Returns the bare address and whether it's IPv4.
-fn split_cidr(cidr: &str) -> (&str, bool) {
-    let addr = cidr.split('/').next().unwrap_or(cidr);
-    (addr, !addr.contains(':'))
 }
 
 /// An external tun's core escapes by binding the uplink (`IP_UNICAST_IF`): Windows has
@@ -365,69 +657,71 @@ pub async fn apply_external_tun_routing(
     let Some((gw, uplink)) = read_default_route().await else {
         anyhow::bail!("no default route — cannot set up tun bypass");
     };
-    let Some(tun_ifindex) = adapter_ifindex(tun).await else {
+    let Some(tun_ifindex) = adapter_ifindex(tun) else {
         anyhow::bail!("tun adapter '{tun}' not found — tun2socks did not bring it up");
     };
-    let uplink = uplink.to_string();
-    let tun_idx = tun_ifindex.to_string();
+    let tun_addr = TUN_ADDR.parse().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let gw: std::net::IpAddr = gw.parse().map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    // Host-route each proxy server / DNS server out via the real uplink gateway.
+    // Host-route each proxy server / DNS server out via the real uplink gateway,
+    // and record the row: teardown deletes exactly what was installed here.
+    let mut routes = Vec::new();
     for c in bypass {
-        let (addr, v4) = split_cidr(c);
-        if v4 {
-            silent(&[
-                "route",
-                "add",
-                addr,
-                "mask",
-                "255.255.255.255",
-                &gw,
-                "metric",
-                "1",
-                "if",
-                &uplink,
-            ])
-            .await;
-        } else {
-            silent(&[
-                "netsh",
-                "interface",
-                "ipv6",
-                "add",
-                "route",
-                c,
-                &uplink,
-                &gw,
-            ])
-            .await;
+        match host_route(c, gw, uplink) {
+            Ok(row) => {
+                if let Err(e) = add_route(&row) {
+                    ks_warn!(Area::Platform, "bypass route {c} not installed ({e})");
+                    continue;
+                }
+                routes.push(row);
+            }
+            Err(e) => {
+                ks_warn!(Area::Platform, "bypass route {c} unusable ({e})");
+            }
         }
     }
 
-    // Address the tun and pull the split-default into it (gateway = the tun's own
-    // on-link address, scoped to the tun interface).
-    silent(&[
-        "netsh",
-        "interface",
-        "ip",
-        "set",
-        "address",
-        &format!("name={tun}"),
-        "static",
-        TUN_ADDR,
-        TUN_MASK,
-    ])
-    .await;
-    for (dest, mask) in SPLIT_DEFAULT {
-        silent(&[
-            "route", "add", dest, "mask", mask, TUN_ADDR, "metric", "1", "if", &tun_idx,
-        ])
-        .await;
+    // Address the tun and pull the split-default into it (unspecified next hop
+    // = on-link route, scoped to the tun interface).
+    match add_address(tun_addr, TUN_PREFIX_LEN, tun_ifindex) {
+        Ok(()) => {}
+        // ERROR_OBJECT_ALREADY_EXISTS: the tun already has the address.
+        Err(e) if e.raw_os_error() == Some(5010) => {}
+        Err(e) => {
+            for row in routes.iter().rev() {
+                let _ = delete_route(row);
+            }
+            anyhow::bail!("cannot address the tun ({e})");
+        }
+    }
+    let mut missing_split_default = Vec::new();
+    for (dest, prefix_len) in SPLIT_DEFAULT {
+        let row = RouteRow {
+            dest: format!("{dest}/{prefix_len}"),
+            next_hop: "0.0.0.0".to_string(),
+            ifindex: tun_ifindex,
+        };
+        match add_route(&row) {
+            Ok(()) => routes.push(row),
+            Err(e) => missing_split_default.push(format!("{dest}/{prefix_len} ({e})")),
+        }
+    }
+    if !missing_split_default.is_empty() {
+        // Without the split-default, traffic does not enter the tun. Remove the
+        // routes installed so far and fail before the state file is written.
+        for row in routes.iter().rev() {
+            let _ = delete_route(row);
+        }
+        anyhow::bail!(
+            "split-default not installed: {}",
+            missing_split_default.join(", ")
+        );
     }
 
     let state = RouteState {
         tun: tun.to_string(),
         tun_ifindex,
-        bypass: bypass.to_vec(),
+        routes,
     };
     write_text_atomic(route_state_file, &serde_json::to_string(&state)?).await?;
     if capture_dns {
@@ -448,18 +742,15 @@ pub async fn clear_external_tun_routing(route_state_file: &str) {
     let Some(state) = read_json::<RouteState>(route_state_file).await else {
         return;
     };
-    for (dest, mask) in SPLIT_DEFAULT {
-        silent(&["route", "delete", dest, "mask", mask]).await;
-    }
-    for c in &state.bypass {
-        let (addr, v4) = split_cidr(c);
-        if v4 {
-            silent(&["route", "delete", addr, "mask", "255.255.255.255"]).await;
-        } else {
-            let ifidx = state.tun_ifindex.to_string();
-            silent(&["netsh", "interface", "ipv6", "delete", "route", c, &ifidx]).await;
+    // The recorded rows, not a prefix-+mask match: deleting by destination alone
+    // can take a route this process never installed.
+    for row in state.routes.iter().rev() {
+        if let Err(e) = delete_route(row) {
+            ks_warn!(Area::Platform, "route {} still installed ({e})", row.dest);
         }
     }
+    // The tun's address and the tun itself go with the adapter the helper owns on
+    // process exit; the routes above are the state that would otherwise outlive us.
     kasumi_backend::fs::remove_file(route_state_file).await;
 }
 
@@ -575,9 +866,6 @@ mod tests {
         assert!(dns.contains(&"name=kasumi0".to_string()));
         assert!(dns.contains(&format!("address={TUN_DNS}")));
         assert!(dns.contains(&"validate=no".to_string()));
-        let metric = netsh_metric_argv(42);
-        assert!(metric.contains(&"interface=42".to_string()));
-        assert!(metric.contains(&"metric=1".to_string()));
     }
 
     // DNS capture leaves nothing for a later start to undo: its adapter settings go
@@ -587,7 +875,11 @@ mod tests {
         let state = RouteState {
             tun: "kasumi0".into(),
             tun_ifindex: 42,
-            bypass: vec!["1.2.3.4/32".into()],
+            routes: vec![RouteRow {
+                dest: "1.2.3.4/32".into(),
+                next_hop: "192.168.1.1".into(),
+                ifindex: 12,
+            }],
         };
         let json = serde_json::to_value(&state).unwrap();
         let mut keys: Vec<&str> = json
@@ -597,13 +889,29 @@ mod tests {
             .map(String::as_str)
             .collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["bypass", "tun", "tun_ifindex"]);
+        assert_eq!(keys, ["routes", "tun", "tun_ifindex"]);
     }
 
     #[test]
-    fn splits_cidr_family() {
-        assert_eq!(split_cidr("1.2.3.4/32"), ("1.2.3.4", true));
-        assert_eq!(split_cidr("2001:db8::1/128"), ("2001:db8::1", false));
+    fn parses_cidr_and_length() {
+        assert_eq!(
+            parse_cidr("1.2.3.4/32").unwrap(),
+            ("1.2.3.4".parse().unwrap(), 32)
+        );
+        assert_eq!(
+            parse_cidr("1.2.3.4").unwrap(),
+            ("1.2.3.4".parse().unwrap(), 32)
+        );
+        assert_eq!(
+            parse_cidr("2001:db8::1/128").unwrap(),
+            ("2001:db8::1".parse().unwrap(), 128)
+        );
+        assert_eq!(
+            parse_cidr("2001:db8::1").unwrap(),
+            ("2001:db8::1".parse().unwrap(), 128)
+        );
+        assert!(parse_cidr("1.2.3.4/33").is_err());
+        assert!(parse_cidr("not-an-ip").is_err());
     }
 
     // The alias and the bypass routes must name the same adapter: both come from
@@ -619,6 +927,6 @@ mod tests {
         let alias = uplink_device()
             .await
             .expect("a default route names a adapter");
-        assert_eq!(adapter_ifindex(&alias).await, Some(ifindex));
+        assert_eq!(adapter_ifindex(&alias), Some(ifindex));
     }
 }
