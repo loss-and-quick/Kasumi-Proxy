@@ -537,7 +537,9 @@ fn generate() -> Vec<(String, Profile)> {
                 k.uplink = 50;
                 k.downlink = 100;
                 k.cwnd_multiplier = 2;
-                k.max_sending_window = 128;
+                // Xray 26.10 rejects windows below the MTU; 2 MiB is the
+                // core default and exercises the emission branch.
+                k.max_sending_window = 2 * 1024 * 1024;
             }
             cases.push((name, Profile::Vless(v)));
         }
@@ -2277,13 +2279,19 @@ fn bridged_escape_mark_validates_against_real_cores() {
     });
 }
 
-/// Every Shadowsocks cipher on a plain TCP link, pinned to each core in turn:
-/// both must run them all, sing-box under its own names for Xray's aliases.
+/// Every Shadowsocks cipher on a plain TCP link, pinned to each core that can run
+/// it: Xray dropped the plaintext ciphers (`none` / `plain`), sing-box runs them
+/// all under its own names for Xray's aliases.
 #[test]
-fn every_shadowsocks_cipher_validates_on_both_cores() {
+fn every_shadowsocks_cipher_validates_on_a_core_that_runs_it() {
     let mut cases = Vec::new();
     for method in SsMethod::iter() {
-        for engine in [CoreEngine::Xray, CoreEngine::SingBox] {
+        let engines: &[CoreEngine] = if matches!(method, SsMethod::None | SsMethod::Plain) {
+            &[CoreEngine::SingBox]
+        } else {
+            &[CoreEngine::Xray, CoreEngine::SingBox]
+        };
+        for &engine in engines {
             let name = format!("ss-core/{}/{}", wire(&method), wire(&engine));
             let Some(Profile::Shadowsocks(mut s)) =
                 make(Protocol::Shadowsocks, None, Security::None, &name)
