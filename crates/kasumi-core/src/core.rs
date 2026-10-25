@@ -6,7 +6,9 @@ use std::collections::BTreeMap;
 use crate::chain::{chain_candidates, chain_hops};
 use crate::contract::{CoreConflict, HopConflict, TargetFallback, XrayOnlySetting};
 use crate::custom_sanitize::{has_unpinned_allow_insecure, sanitize_provider_xray};
-use crate::enums::{CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, TunEngine};
+use crate::enums::{
+    CoreEngine, Flow, HeaderType, Network, PacketEncoding, Security, SsMethod, TunEngine,
+};
 use crate::mixins::Transport;
 use crate::profile::{Custom, CustomOrigin, Profile, Protocol};
 use crate::state::AdvancedSettings;
@@ -94,7 +96,14 @@ pub(crate) fn xray_builds(p: &Profile) -> bool {
     !(is_singbox_only(p.protocol())
         || p.protocol() == Protocol::Custom
         || matches!(p.transport(), Some(Transport::Quic(_) | Transport::H2(_)))
+        || matches!(p, Profile::Shadowsocks(ss) if plaintext_ss(ss.method))
         || skips_cert_check_unpinned(p))
+}
+
+/// Xray dropped its plaintext Shadowsocks ciphers (`none` / `plain`) in 26.10;
+/// sing-box still implements both under `none`.
+fn plaintext_ss(method: SsMethod) -> bool {
+    matches!(method, SsMethod::None | SsMethod::Plain)
 }
 
 /// Why `core` can't build `target` as the outbound of another profile's routing
@@ -192,12 +201,15 @@ fn capability_pins(p: &Profile) -> Vec<Pin> {
         ),
         Profile::Shadowsocks(ss) => pin(
             // Xray dropped its QUIC transport, so v2ray-plugin's QUIC mode runs only
-            // on sing-box, whatever the cipher. Every cipher runs on both cores
-            // (sing-box under its own names for Xray's `plain` / `chacha20-poly1305` /
-            // `xchacha20-poly1305`), so only a v2ray-plugin or obfs-local transport,
-            // or the plugin's TLS, pins sing-box.
+            // on sing-box, whatever the cipher. Xray also dropped its plaintext
+            // ciphers (`none` / `plain`) in 26.10, so those pin sing-box too. The
+            // remaining ciphers run on both cores (sing-box under its own names for
+            // Xray's `chacha20-poly1305` / `xchacha20-poly1305`), so only a
+            // v2ray-plugin or obfs-local transport, or the plugin's TLS, pins
+            // sing-box.
             &mut pins,
-            matches!(ss.transport, Transport::Quic(_))
+            plaintext_ss(ss.method)
+                || matches!(ss.transport, Transport::Quic(_))
                 || ss.tls.security == Security::Tls
                 || ss.transport.network() != Network::Tcp
                 || ss.transport.header_type() == HeaderType::Http,
@@ -558,6 +570,11 @@ mod tests {
         );
         let only_singbox = BTreeMap::from([(Xray, TargetFallback::SingBoxOnly)]);
         assert_eq!(fallbacks("tuic://u:pw@t.ex:443?sni=t.ex"), only_singbox);
+        // Xray can't build the plaintext Shadowsocks cipher either.
+        assert_eq!(
+            fallbacks("ss://bm9uZTpwYXNzd29yZDEyMw==@ss.example:8388#none"),
+            only_singbox
+        );
         assert_eq!(
             fallbacks("vless://u@e.x:443?type=h2&security=tls"),
             only_singbox
@@ -623,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn every_shadowsocks_cipher_is_selectable_on_plain_tcp() {
+    fn every_shadowsocks_cipher_runs_on_a_core_that_supports_it() {
         use strum::IntoEnumIterator;
         for method in SsMethod::iter() {
             let with = |uri: &str| {
@@ -633,9 +650,15 @@ mod tests {
                 ss.method = method;
                 Profile::Shadowsocks(ss)
             };
+            // Xray dropped the plaintext ciphers; everything else runs on both.
+            let expected = if matches!(method, SsMethod::None | SsMethod::Plain) {
+                Some(CoreEngine::SingBox)
+            } else {
+                None
+            };
             assert_eq!(
                 forced_core(&with("ss://YWVzLTI1Ni1nY206cHc=@h.ex:8388#x")),
-                None,
+                expected,
                 "{method:?} on plain TCP"
             );
             for plugin in [
@@ -891,11 +914,15 @@ mod tests {
 
     #[test]
     fn xray_cipher_spellings_follow_the_core_choice() {
-        for m in ["plain", "chacha20-poly1305", "xchacha20-poly1305"] {
+        for (m, default) in [
+            ("plain", CoreEngine::SingBox),
+            ("chacha20-poly1305", CoreEngine::Xray),
+            ("xchacha20-poly1305", CoreEngine::Xray),
+        ] {
             let mut prof = p(&format!("ss://{m}:pw@h.ex:8388#x"));
             assert_eq!(
                 resolve_core(&prof, &AdvancedSettings::default(), &[]).unwrap(),
-                CoreEngine::Xray,
+                default,
                 "{m}"
             );
             let mut s = AdvancedSettings::default();
@@ -912,6 +939,15 @@ mod tests {
                 CoreEngine::SingBox,
                 "{m}"
             );
+            // A plaintext cipher can't be forced back onto Xray, which dropped it.
+            if default == CoreEngine::SingBox {
+                prof.meta_mut().core_type = Some(CoreEngine::Xray);
+                assert_eq!(
+                    resolve_core(&prof, &AdvancedSettings::default(), &[]).unwrap(),
+                    CoreEngine::SingBox,
+                    "{m}"
+                );
+            }
             // A v2ray-plugin transport pins sing-box, as for every cipher.
             assert_eq!(
                 forced_core(&p(&format!(

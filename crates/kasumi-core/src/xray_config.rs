@@ -168,10 +168,13 @@ fn build_hysteria2_outbound(p: &Profile) -> Map<String, Value> {
         finalmask["udp"] =
             json!([{ "type": "salamander", "settings": { "password": h.obfs_password } }]);
     }
+    // Xray 26.10 checks that the stream network is `hysteria`, not just that
+    // `hysteriaSettings` is present.
     json!({
         "tag": "proxy", "protocol": "hysteria",
         "settings": { "version": 2, "address": h.endpoint.address, "port": h.endpoint.port },
         "streamSettings": {
+            "network": "hysteria",
             "security": "tls",
             "sockopt": {},
             "tlsSettings": build_tls_security(p),
@@ -395,7 +398,10 @@ fn build_transport_setting(p: &Profile) -> Option<(&'static str, Value)> {
             if k.cwnd_multiplier != 0 {
                 v.insert("cwndMultiplier".into(), k.cwnd_multiplier.into());
             }
-            if k.max_sending_window != 0 {
+            // Xray 26.10 rejects a maxSendingWindow below the MTU (it divides
+            // down to a zero-packet window); leave those to the core default.
+            let mtu = if k.mtu > 0 { k.mtu } else { 1350 };
+            if k.max_sending_window >= mtu {
                 v.insert("maxSendingWindow".into(), k.max_sending_window.into());
             }
             Some(("kcpSettings", Value::Object(v)))
@@ -2420,5 +2426,59 @@ mod tests {
         assert_eq!(out["protocol"], "shadowsocks");
         assert_eq!(out["streamSettings"]["security"], "none", "{out}");
         assert!(out["streamSettings"].get("tlsSettings").is_none(), "{out}");
+    }
+
+    #[test]
+    fn hysteria2_outbound_names_the_hysteria_stream_network() {
+        let p = crate::share::parse_share_link("hysteria2://pw@h.x:443?sni=h.x", None).unwrap();
+        let out = build_outbound(&p, &AdvancedSettings::default()).unwrap();
+        assert_eq!(out["protocol"], "hysteria");
+        assert_eq!(out["streamSettings"]["network"], "hysteria", "{out}");
+        assert_eq!(
+            out["streamSettings"]["hysteriaSettings"]["version"], 2,
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn kcp_sending_window_below_the_mtu_is_left_to_the_core_default() {
+        let mut p = crate::share::parse_share_link(
+            "vless://11111111-1111-1111-1111-111111111111@v.example:4000?type=kcp&security=none",
+            None,
+        )
+        .unwrap();
+        {
+            let Profile::Vless(v) = &mut p else {
+                panic!("expected a VLESS profile");
+            };
+            let Transport::Kcp(k) = &mut v.transport else {
+                panic!("expected a KCP transport");
+            };
+            k.mtu = 1350;
+            k.max_sending_window = 128;
+        }
+        let out = build_outbound(&p, &AdvancedSettings::default()).unwrap();
+        assert!(
+            out["streamSettings"]["kcpSettings"]
+                .get("maxSendingWindow")
+                .is_none(),
+            "{out}"
+        );
+
+        {
+            let Profile::Vless(v) = &mut p else {
+                unreachable!();
+            };
+            let Transport::Kcp(k) = &mut v.transport else {
+                unreachable!();
+            };
+            k.max_sending_window = 2 * 1024 * 1024;
+        }
+        let out = build_outbound(&p, &AdvancedSettings::default()).unwrap();
+        assert_eq!(
+            out["streamSettings"]["kcpSettings"]["maxSendingWindow"],
+            2 * 1024 * 1024,
+            "{out}"
+        );
     }
 }
