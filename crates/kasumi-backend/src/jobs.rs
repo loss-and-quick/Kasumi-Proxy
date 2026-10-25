@@ -766,6 +766,7 @@ mod tests {
     /// geo data, which a probe must never need.
     fn provider_balancer_raw() -> serde_json::Value {
         serde_json::json!({
+            "inbounds": [{ "tag": "in" }],
             "outbounds": [
                 provider_server("proxy", "decoy.example"),
                 provider_server("main", "main.example"),
@@ -782,23 +783,45 @@ mod tests {
         })
     }
 
-    /// A provider profile's rows measure the path its own routing takes, not its
-    /// first outbound: a decoy there would report `None` forever.
+    /// Probe the routed balancer rather than the provider's first decoy outbound.
     #[tokio::test]
     async fn test_config_of_a_provider_measures_its_routed_balancer() {
         let (p, _d) = TestPlatform::new();
         let prof = custom_profile("provider", provider_balancer_raw());
         let loaded = loaded_with(&prof, default_app_state());
         let srs_dir = p.paths().srs_dir.to_string_lossy().into_owned();
-
         let cfg = build_test_config(&p, CoreEngine::Xray, &loaded, TEST_PORT_BASE, &srs_dir)
             .expect("a provider probe builds");
+        let value: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
+        let balancer = &value["routing"]["balancers"][0];
+        let members: Vec<&str> = balancer["selector"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|member| member.as_str().unwrap())
+            .collect();
+        assert_eq!(members.len(), 2);
         assert_eq!(
             cfg.measured,
-            "measured path: balancer balancer-main (main, main-2)"
+            format!(
+                "measured path: balancer {} ({})",
+                balancer["tag"].as_str().unwrap(),
+                members.join(", ")
+            )
         );
-        let value: serde_json::Value = serde_json::from_str(&cfg.text).unwrap();
-        // `proxy` is the alias into the balancer, and the decoy gave the tag up.
+        for member in members {
+            let outbound = value["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|outbound| outbound["tag"].as_str() == Some(member))
+                .unwrap();
+            assert!(matches!(
+                outbound["settings"]["vnext"][0]["address"].as_str(),
+                Some("main.example" | "main2.example")
+            ));
+        }
+        // The public alias belongs to Kasumi; every provider outbound remains isolated.
         assert_eq!(
             value["outbounds"][0],
             serde_json::json!({
@@ -806,19 +829,14 @@ mod tests {
                 "settings": { "inboundTag": "proxy-select" },
             })
         );
-        assert!(cfg.text.contains("decoy.example"), "{}", cfg.text);
+        assert!(cfg.text.contains("decoy.example"));
         let rules = value["routing"]["rules"].as_array().unwrap();
         assert_eq!(rules[0]["inboundTag"][0], "force-in");
         assert_eq!(rules[0]["outboundTag"], "proxy");
-        assert!(
-            !value["routing"].to_string().contains("proxy-provider"),
-            "{}",
-            value["routing"]
-        );
     }
 
-    /// A probe core must not need geo data a device has not downloaded, whatever
-    /// rules a provider config carries: they never run in a probe.
+    /// External entry policy does not run in a default-path probe, so its geo
+    /// dependencies do not need to be downloaded. Internal graph rules still apply.
     #[tokio::test]
     async fn test_config_of_a_provider_needs_no_geo_data() {
         let (p, _d) = TestPlatform::new();

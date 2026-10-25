@@ -297,6 +297,7 @@ export function WarningsSheet({
   onClose: () => void;
 }) {
   const t = useT();
+  const { formatList } = useFormatters();
   return (
     <Sheet open={!!warnings} title={t("subs.warnings.title")} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -321,6 +322,20 @@ export function WarningsSheet({
                   }}
                 >
                   {w.sample}
+                </div>
+              )}
+              {w.kind === "providerSettingsOmitted" && w.paths && w.paths.length > 0 && (
+                <div
+                  className="mono"
+                  dir="auto"
+                  style={{
+                    marginTop: 4,
+                    fontSize: 11.5,
+                    color: "var(--on-surface-variant)",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {formatList(w.paths)}
                 </div>
               )}
             </div>

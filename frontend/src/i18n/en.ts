@@ -799,6 +799,8 @@ const en = {
   "subs.error.noProfiles": "No supported servers in the response. Kept the previous servers.",
   "subs.error.limit": "The provider's response is too large.",
   "subs.error.invalid": "The provider's response is malformed.",
+  "subs.error.incompatibleConfig":
+    "The provider configuration uses unsupported features ({detail}). Update not applied.",
   "subs.openLinkFailed": "Couldn't open the link",
   "subs.identity.title": "Request identity",
   "subs.identity.hwid": "Device ID (HWID)",
@@ -862,6 +864,10 @@ const en = {
   "subs.warnings.skippedOutbounds": plural("count", {
     one: "# sing-box server uses a protocol or settings Kasumi can't import and was skipped",
     other: "# sing-box servers use protocols or settings Kasumi can't import and were skipped",
+  }),
+  "subs.warnings.providerSettingsOmitted": plural("count", {
+    one: "# client-owned setting from provider configs was omitted and not applied",
+    other: "# client-owned settings from provider configs were omitted and not applied",
   }),
   "subs.menu.more": "More",
   "subs.menu.history": "Provider changes",

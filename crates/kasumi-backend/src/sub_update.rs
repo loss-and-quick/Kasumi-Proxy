@@ -1892,4 +1892,114 @@ mod tests {
         assert!(fb_requests.lock().unwrap().is_empty());
         assert_eq!(s.last_error_kind, Some(SubErrorKind::Network));
     }
+
+    #[tokio::test]
+    async fn incompatible_provider_config_retains_previous_profiles_and_metadata_atomically() {
+        let (p, _d) = TestPlatform::new();
+        // A batch with one valid config and one requiring unsupported semantics (certificateFile).
+        let valid = serde_json::json!({
+            "remarks": "Valid Node",
+            "outbounds": [{ "tag": "proxy", "protocol": "trojan",
+                "settings": { "servers": [{ "address": "v.example", "port": 443, "password": "pw" }] } }],
+        });
+        let incompatible = serde_json::json!({
+            "remarks": "Bad Node",
+            "outbounds": [{
+                "tag": "proxy2", "protocol": "trojan",
+                "settings": { "servers": [{ "address": "b.example", "port": 443, "password": "pw" }] },
+                "streamSettings": { "security": "tls", "tlsSettings": { "certificateFile": "/etc/ssl/cert.pem" } }
+            }],
+        });
+        let body = serde_json::json!([valid, incompatible])
+            .to_string()
+            .into_bytes();
+
+        let (base, _) = serve(vec![http_response(200, &[], &body)]).await;
+        let url = format!("{base}/s");
+        with_old_profile(&p, &url).await;
+
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].allow_provider_configs = true;
+        write_app_state(&p, &state).await.unwrap();
+
+        let meta_entry = StoredSubMeta {
+            source_url: url.clone(),
+            encrypted: false,
+            meta: MetaMap::default(),
+            content_disposition: Some("prev.yaml".into()),
+        };
+        sub_meta::write_entry(&p, "s1", Some(meta_entry), &["s1"])
+            .await
+            .unwrap();
+
+        let after = update(&p).await;
+        let ids: Vec<&str> = after
+            .profiles
+            .iter()
+            .map(|x| x.meta().id.as_str())
+            .collect();
+        // Atomic retention: existing profile is kept, valid node from the bad batch is NOT applied
+        assert_eq!(ids, ["old"]);
+
+        let s = &after.subscriptions[0];
+        let err = s.last_error.as_deref().unwrap_or("");
+        assert!(err.contains("unsupported features"), "{err}");
+        assert!(
+            matches!(&s.last_error_kind, Some(SubErrorKind::IncompatibleProviderConfig { detail }) if detail.contains("certificateFile")),
+            "{:?}",
+            s.last_error_kind
+        );
+
+        // Previous metadata is retained
+        let stored_after = sub_meta::read_all(&p).await;
+        assert_eq!(
+            stored_after
+                .get("s1")
+                .and_then(|m| m.content_disposition.as_deref()),
+            Some("prev.yaml")
+        );
+    }
+
+    #[tokio::test]
+    async fn client_owned_omissions_record_bounded_warning_and_persist_validated_graph() {
+        let (p, _d) = TestPlatform::new();
+        let config = serde_json::json!({
+            "remarks": "Clean Node",
+            "log": { "loglevel": "debug", "access": "/data/adb/kasumi-proxy/test.log" },
+            "inbounds": [{ "tag": "entry", "protocol": "socks", "listen": "127.0.0.1", "port": 1080 }],
+            "outbounds": [{ "tag": "proxy", "protocol": "trojan",
+                "settings": { "servers": [{ "address": "c.example", "port": 443, "password": "pw" }] } }],
+        });
+        let body = serde_json::json!([config]).to_string().into_bytes();
+
+        let (base, _) = serve(vec![http_response(200, &[], &body)]).await;
+        let url = format!("{base}/s");
+        with_old_profile(&p, &url).await;
+
+        let mut state = read_app_state(&p).await.unwrap();
+        state.subscriptions[0].allow_provider_configs = true;
+        write_app_state(&p, &state).await.unwrap();
+
+        let after = update(&p).await;
+        let s = &after.subscriptions[0];
+        assert_eq!(s.last_error, None);
+        assert_eq!(after.profiles.len(), 1);
+        assert_eq!(after.profiles[0].meta().remarks, "Clean Node");
+
+        let Profile::Custom(c) = &after.profiles[0] else {
+            panic!("expected custom profile");
+        };
+        let raw: serde_json::Value = serde_json::from_str(&c.raw).unwrap();
+        assert_eq!(raw["inbounds"], serde_json::json!([{"tag": "entry"}]));
+        assert!(raw.get("log").is_none());
+        assert!(!c.raw.contains("/data/adb"));
+
+        assert_eq!(
+            s.warnings,
+            vec![SubWarning::ProviderSettingsOmitted {
+                count: 2,
+                paths: vec!["log".into(), "inbounds".into()],
+            }]
+        );
+    }
 }

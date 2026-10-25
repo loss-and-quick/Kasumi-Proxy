@@ -115,6 +115,7 @@ describe("errorKey", () => {
     { kind: "noProfiles" },
     { kind: "limit" },
     { kind: "invalid" },
+    { kind: "incompatibleProviderConfig", detail: "outbounds[0]: reason" },
   ];
 
   it("has a distinct translated message for every kind", () => {
@@ -129,6 +130,14 @@ describe("errorKey", () => {
     expect(errorVars({ kind: "decrypt", keyId: "key02" }, "")).toEqual({ key: " (key02)" });
     expect(errorVars({ kind: "network" }, "operation timed out")).toEqual({
       detail: "operation timed out",
+    });
+    expect(
+      errorVars(
+        { kind: "incompatibleProviderConfig", detail: "outbounds[0]: unsupported" },
+        "outbounds[0]: unsupported",
+      ),
+    ).toEqual({
+      detail: "outbounds[0]: unsupported",
     });
   });
 });
@@ -145,6 +154,7 @@ describe("warningKey", () => {
       { kind: "rejectedConfigs", count: 2 },
       { kind: "skippedOutbounds", count: 3 },
       { kind: "unavailableProtocols", count: 1 },
+      { kind: "providerSettingsOmitted", count: 2, paths: ["log"] },
     ];
     const keys = warnings.map(warningKey);
     expect(new Set(keys).size).toBe(keys.length);

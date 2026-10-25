@@ -10,9 +10,9 @@ use happ_sub::{
     BodyEncryption, Error as EnvelopeError, MergeMode, MetaMap, Payload, RoutingAction,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-use crate::custom_sanitize::sanitize_provider_xray;
+use crate::custom_sanitize::{SanitizeError, sanitize_provider_xray};
 use crate::profile::{Custom, CustomOrigin, Profile};
 use crate::share::{meta as share_meta, parse_share_link, parse_share_links};
 use crate::singbox_import::{SingboxImport, import_singbox};
@@ -81,6 +81,10 @@ pub enum IngestError {
     Limit(String),
     /// A malformed envelope: invalid JSON configuration, routing or deeplink.
     Invalid(String),
+    /// A provider configuration required semantics Kasumi does not support.
+    IncompatibleProviderConfig {
+        detail: String,
+    },
 }
 
 impl std::fmt::Display for IngestError {
@@ -109,6 +113,12 @@ impl std::fmt::Display for IngestError {
             IngestError::NoProfiles => write!(f, "no profiles in subscription body"),
             IngestError::Limit(m) => write!(f, "subscription too large: {m}"),
             IngestError::Invalid(m) => write!(f, "{m}"),
+            IngestError::IncompatibleProviderConfig { detail } => {
+                write!(
+                    f,
+                    "provider configuration uses unsupported features: {detail}"
+                )
+            }
         }
     }
 }
@@ -129,6 +139,11 @@ impl IngestError {
             IngestError::NoProfiles => SubErrorKind::NoProfiles,
             IngestError::Limit(_) => SubErrorKind::Limit,
             IngestError::Invalid(_) => SubErrorKind::Invalid,
+            IngestError::IncompatibleProviderConfig { detail } => {
+                SubErrorKind::IncompatibleProviderConfig {
+                    detail: detail.clone(),
+                }
+            }
         }
     }
 }
@@ -275,6 +290,25 @@ fn ingest_body(input: &IngestInput) -> Result<Ingested, IngestError> {
 /// Longest name a provider config gets from its `remarks`.
 const CONFIG_NAME_MAX: usize = 128;
 
+/// Maximum unique omitted paths recorded across an entire subscription.
+const MAX_OMITTED_PATHS: usize = 20;
+/// Maximum length of an omitted path string.
+const MAX_OMITTED_PATH_LEN: usize = 128;
+
+fn sanitize_omission_path(p: &str) -> String {
+    let base = p.split_once(':').map(|(path, _)| path).unwrap_or(p).trim();
+    let safe: String = base
+        .chars()
+        .take(MAX_OMITTED_PATH_LEN)
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '[' | ']' | '-'))
+        .collect();
+    if safe.is_empty() {
+        "unknown".to_string()
+    } else {
+        safe
+    }
+}
+
 /// Each full Xray config, reduced by the sanitiser, as a provider Custom profile.
 /// Configs the sanitiser refuses are counted, not imported.
 fn xray_configs(
@@ -293,12 +327,34 @@ fn xray_configs(
         .find(|t| !t.is_empty())
         .unwrap_or_else(|| host_of(input.url));
     let mut rejected = 0u32;
+    let mut omitted_count: u32 = 0;
+    let mut omitted_paths = Vec::new();
     let mut profiles = Vec::new();
+
     for (i, config) in configs.iter().enumerate() {
-        let Ok(s) = sanitize_provider_xray(config) else {
-            rejected += 1;
-            continue;
+        let s = match sanitize_provider_xray(config) {
+            Ok(s) => s,
+            Err(SanitizeError::Incompatible { path, reason }) => {
+                return Err(IngestError::IncompatibleProviderConfig {
+                    detail: format!("{path}: {reason}"),
+                });
+            }
+            Err(_) => {
+                rejected += 1;
+                continue;
+            }
         };
+
+        for path in &s.dropped {
+            omitted_count = omitted_count.saturating_add(1);
+            if omitted_paths.len() < MAX_OMITTED_PATHS {
+                let sanitized = sanitize_omission_path(path);
+                if !omitted_paths.contains(&sanitized) {
+                    omitted_paths.push(sanitized);
+                }
+            }
+        }
+
         let remarks = s
             .remarks
             .as_deref()
@@ -310,16 +366,20 @@ fn xray_configs(
             })
             .filter(|r| !r.is_empty())
             .unwrap_or_else(|| format!("{title} #{}", i + 1));
-        let mut raw = Map::new();
-        raw.insert("outbounds".into(), s.outbounds.into());
-        if let Some(routing) = s.routing {
-            raw.insert("routing".into(), routing);
-        }
+
+        let raw = s.into_provider_json();
         profiles.push(Profile::Custom(Custom {
             meta: share_meta(remarks, None),
-            raw: Value::Object(raw).to_string(),
+            raw: raw.to_string(),
             origin: CustomOrigin::Provider,
         }));
+    }
+
+    if omitted_count > 0 {
+        warnings.push(SubWarning::ProviderSettingsOmitted {
+            count: omitted_count,
+            paths: omitted_paths,
+        });
     }
     if rejected > 0 {
         warnings.push(SubWarning::RejectedConfigs { count: rejected });
@@ -791,7 +851,13 @@ pub(crate) mod tests {
         ])
         .to_string();
         let ing = ingest(&allowed(body.as_bytes())).unwrap();
-        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
+        assert_eq!(
+            ing.warnings,
+            [SubWarning::ProviderSettingsOmitted {
+                count: 4,
+                paths: vec!["log".into(), "inbounds".into()],
+            }]
+        );
         let names: Vec<&str> = ing
             .profiles
             .iter()
@@ -824,7 +890,17 @@ pub(crate) mod tests {
         ])
         .to_string();
         let ing = ingest(&allowed(body.as_bytes())).unwrap();
-        assert!(ing.warnings.is_empty(), "{:?}", ing.warnings);
+        assert_eq!(
+            ing.warnings,
+            [SubWarning::ProviderSettingsOmitted {
+                count: 5,
+                paths: vec![
+                    "log".into(),
+                    "inbounds".into(),
+                    "outbounds[0].streamSettings.tlsSettings.allowInsecure".into(),
+                ],
+            }]
+        );
         let [unpinned, pinned] = ing.profiles.as_slice() else {
             panic!("{:?}", ing.profiles)
         };
@@ -860,7 +936,16 @@ pub(crate) mod tests {
         let body = serde_json::json!([xray_config(None, "a.example"), only_direct]).to_string();
         let ing = ingest(&allowed(body.as_bytes())).unwrap();
         assert_eq!(ing.profiles.len(), 1);
-        assert_eq!(ing.warnings, [SubWarning::RejectedConfigs { count: 1 }]);
+        assert_eq!(
+            ing.warnings,
+            [
+                SubWarning::ProviderSettingsOmitted {
+                    count: 2,
+                    paths: vec!["log".into(), "inbounds".into()],
+                },
+                SubWarning::RejectedConfigs { count: 1 },
+            ]
+        );
 
         // Nothing usable: the previous profiles stay.
         let body = serde_json::json!([only_direct]).to_string();
@@ -909,5 +994,33 @@ pub(crate) mod tests {
             IngestError::Invalid("x".into()).kind(),
             SubErrorKind::Invalid
         );
+        assert_eq!(
+            IngestError::IncompatibleProviderConfig {
+                detail: "outbounds[0]: reason".into()
+            }
+            .kind(),
+            SubErrorKind::IncompatibleProviderConfig {
+                detail: "outbounds[0]: reason".into()
+            }
+        );
+    }
+
+    #[test]
+    fn incompatible_provider_config_aborts_entire_batch() {
+        let mut incompatible = xray_config(Some("Bad"), "b.example");
+        incompatible["outbounds"][0]["streamSettings"] = serde_json::json!({
+            "security": "tls",
+            "tlsSettings": { "certificateFile": "/etc/ssl/cert.pem" }
+        });
+        let body =
+            serde_json::json!([xray_config(Some("Good"), "a.example"), incompatible,]).to_string();
+
+        let err = ingest(&allowed(body.as_bytes())).unwrap_err();
+        match err {
+            IngestError::IncompatibleProviderConfig { detail } => {
+                assert!(detail.contains("certificateFile"), "{detail}");
+            }
+            other => panic!("expected IncompatibleProviderConfig, got {other:?}"),
+        }
     }
 }
