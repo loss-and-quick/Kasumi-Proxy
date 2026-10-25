@@ -6,6 +6,8 @@
 //! its first outbound: a provider may keep a decoy first and route everything
 //! through a balancer, or name its real exit only in a rule.
 
+use std::collections::HashSet;
+
 use serde_json::Value;
 
 use crate::custom_sanitize::{SanitizedXray, is_service_outbound};
@@ -29,11 +31,26 @@ impl Target {
     }
 }
 
+/// True if `rule` is scoped exclusively to virtual inbound tags (internal loopback transitions).
+pub fn is_virtual_rule(rule: &Value, virtual_tags: &HashSet<&str>) -> bool {
+    let Some(inbound) = rule.get("inboundTag") else {
+        return false;
+    };
+    let tags: Vec<&str> = match inbound {
+        Value::Array(arr) => arr.iter().filter_map(Value::as_str).collect(),
+        Value::String(s) => vec![s.as_str()],
+        _ => Vec::new(),
+    };
+    !tags.is_empty() && tags.iter().all(|t| virtual_tags.contains(t))
+}
+
 /// Pick the target of the traffic a provider config carries by default.
 ///
 /// Conditional rules are only ever consulted by Xray for the traffic they match,
 /// so following them would be following the provider's block and geo decisions;
 /// the default path is what an unconditional rule, or Xray's own fallback, says.
+/// Virtual-inbound rules (internal loopback fallback cascade) are excluded from the
+/// external entry default search so that internal cascades do not hijack the entry target.
 /// See Xray's `routing.Router.PickRoute` and `GetDefaultHandler`.
 pub fn default_target(s: &SanitizedXray) -> Target {
     let routing = s.routing.as_ref();
@@ -43,6 +60,23 @@ pub fn default_target(s: &SanitizedXray) -> Target {
     let balancers = routing
         .and_then(|r| r.get("balancers"))
         .and_then(Value::as_array);
+
+    let virtual_tags: HashSet<&str> = s
+        .virtual_inbound_tags
+        .iter()
+        .map(String::as_str)
+        .chain(
+            s.outbounds
+                .iter()
+                .filter(|o| o["protocol"] == "loopback")
+                .filter_map(|o| {
+                    o.get("settings")
+                        .and_then(|st| st.get("inboundTag"))
+                        .and_then(Value::as_str)
+                }),
+        )
+        .collect();
+
     let service = |tag: &str| {
         s.outbounds
             .iter()
@@ -51,28 +85,25 @@ pub fn default_target(s: &SanitizedXray) -> Target {
     };
     let target_for = |rule: &Value| target_of(rule, &service, balancers);
 
-    // The first rule that matches every TCP connection is the one that carries
-    // the profile; a later one never runs, so it is not consulted either.
+    // The first unconditional external entry rule that matches every TCP connection
+    // is the one that carries the profile; virtual loopback rules are skipped.
     if let Some(rule) = rules
         .into_iter()
         .flatten()
-        .find(|rule| is_unconditional(rule))
+        .find(|rule| is_unconditional_entry_rule(rule, &virtual_tags))
         && let Some(target) = target_for(rule)
     {
         return target;
     }
     // Xray's own fallback for traffic no rule matched: the first outbound.
+    // If the first outbound is a loopback or normal outbound, target that directly.
+    // The builder alias dispatches to it and Xray evaluates its internal ordered
+    // conditional rules and cascades automatically.
     if let Some(ob) = s.outbounds.first()
         && !is_service_outbound(ob)
         && let Some(tag) = ob["tag"].as_str()
     {
         return Target::Outbound(tag.to_string());
-    }
-    // Otherwise the first rule that names something able to carry traffic.
-    for rule in rules.into_iter().flatten() {
-        if let Some(target) = target_for(rule) {
-            return target;
-        }
     }
     // A config with no reachable target: the sanitiser refuses those, so this is
     // only a last resort that keeps the caller's `proxy` tag pointing at something.
@@ -113,62 +144,20 @@ fn target_of(
     })
 }
 
-/// Whether the rule matches every TCP connection: nothing but `network` or a
-/// full-range `port` narrows it.
-fn is_unconditional(rule: &Value) -> bool {
-    const CONDITIONAL: [&str; 4] = ["domain", "ip", "protocol", "sourcePort"];
+/// Whether the rule matches every TCP connection from external entry:
+/// excludes virtual-inbound scoped rules and uses the authoritative shared coverage helper.
+fn is_unconditional_entry_rule(rule: &Value, virtual_tags: &HashSet<&str>) -> bool {
     let Some(obj) = rule.as_object() else {
         return false;
     };
-    if obj.keys().any(|k| CONDITIONAL.contains(&k.as_str())) {
+    if is_virtual_rule(rule, virtual_tags) {
         return false;
     }
-    // A narrowed port narrows the rule whatever its network says.
-    if let Some(port) = obj.get("port")
-        && !covers_every_port(port)
-    {
-        return false;
-    }
-    match obj.get("network").and_then(Value::as_str) {
-        Some(network) => network.split(',').any(|n| n.trim() == "tcp"),
-        None => true,
-    }
+    crate::provider_graph::rule_covers_network(obj, "tcp")
 }
 
-/// Whether an Xray port list (`"53,1000-2000"`) covers 1–65535, in any order and
-/// split across entries.
-fn covers_every_port(port: &Value) -> bool {
-    let Value::String(list) = port else {
-        return false;
-    };
-    let mut ranges: Vec<(u32, u32)> = Vec::new();
-    for part in list.split(',') {
-        let part = part.trim();
-        let (lo, hi) = match part.split_once('-') {
-            Some((lo, hi)) => (lo.trim().parse(), hi.trim().parse()),
-            None => match part.parse() {
-                Ok(p) => (Ok(p), Ok(p)),
-                Err(_) => return false,
-            },
-        };
-        let (Ok(lo), Ok(hi)) = (lo, hi) else {
-            return false;
-        };
-        ranges.push((lo, hi));
-    }
-    if ranges.is_empty() {
-        return false;
-    }
-    ranges.sort_unstable();
-    let mut reach = 0;
-    for (lo, hi) in ranges {
-        if lo > reach + 1 {
-            return false;
-        }
-        reach = reach.max(hi);
-    }
-    reach >= 65535
-}
+#[allow(unused_imports)]
+pub(crate) use crate::provider_graph::ports_cover_all as covers_every_port;
 
 #[cfg(test)]
 mod tests {
@@ -195,6 +184,10 @@ mod tests {
             routing: (!routing.is_null()).then_some(routing),
             remarks: None,
             dropped: Vec::new(),
+            observatory: None,
+            burst_observatory: None,
+            ingress_tags: Vec::new(),
+            virtual_inbound_tags: Vec::new(),
         }
     }
 
@@ -348,5 +341,104 @@ mod tests {
             Value::Null,
         );
         assert_eq!(default_target(&s), Target::Outbound("main".into()));
+    }
+
+    #[test]
+    fn regression_virtual_inbound_cascade_does_not_hijack_entry_catchall() {
+        let loopback = |tag: &str, in_tag: &str| {
+            json!({
+                "tag": tag, "protocol": "loopback",
+                "settings": { "inboundTag": in_tag }
+            })
+        };
+        let mut s = built(
+            vec![
+                server("main-proxy"),
+                server("fallback-proxy"),
+                loopback("loopback-lte", "LTE-lte-lb-in"),
+                loopback("loopback-main", "LTE-main-lb-in"),
+                loopback("loopback-sticky", "LTE-sticky-lb-in"),
+                freedom("direct"),
+            ],
+            json!({
+                "balancers": [
+                    { "tag": "LTE-all-balancer", "selector": ["fallback-proxy"] },
+                    { "tag": "LTE-lte-balancer", "selector": ["fallback-proxy"], "fallbackTag": "loopback-lte" },
+                    { "tag": "LTE-balancer", "selector": ["main-proxy"], "fallbackTag": "loopback-main" },
+                    { "tag": "LTE-sticky-balancer", "selector": ["main-proxy"], "fallbackTag": "loopback-sticky" },
+                ],
+                "rules": [
+                    { "type": "field", "inboundTag": ["LTE-lte-lb-in"], "balancerTag": "LTE-all-balancer" },
+                    { "type": "field", "inboundTag": ["LTE-main-lb-in"], "balancerTag": "LTE-lte-balancer" },
+                    { "type": "field", "inboundTag": ["LTE-sticky-lb-in"], "balancerTag": "LTE-balancer" },
+                    { "type": "field", "domain": ["example.com"], "outboundTag": "direct" },
+                    { "type": "field", "network": "tcp,udp", "balancerTag": "LTE-sticky-balancer" },
+                ],
+            }),
+        );
+        s.virtual_inbound_tags = vec![
+            "LTE-lte-lb-in".into(),
+            "LTE-main-lb-in".into(),
+            "LTE-sticky-lb-in".into(),
+        ];
+        assert_eq!(
+            default_target(&s),
+            Target::Balancer {
+                tag: "LTE-sticky-balancer".into(),
+                members: vec!["main-proxy".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn domains_alias_is_treated_as_conditional() {
+        let s = built(
+            vec![server("decoy"), server("main"), server("conditional")],
+            json!({
+                "rules": [
+                    { "type": "field", "domains": ["only.example"], "outboundTag": "conditional" },
+                    { "type": "field", "network": "tcp,udp", "outboundTag": "main" },
+                ],
+            }),
+        );
+        assert_eq!(default_target(&s), Target::Outbound("main".into()));
+    }
+
+    #[test]
+    fn finding7_repro_first_outbound_loopback_terminating_productively() {
+        let loopback = json!({
+            "tag": "lb-out", "protocol": "loopback",
+            "settings": { "inboundTag": "v" }
+        });
+        let mut s = built(
+            vec![loopback, server("decoy"), server("actual")],
+            json!({
+                "rules": [
+                    { "type": "field", "inboundTag": ["v"], "outboundTag": "actual" },
+                ],
+            }),
+        );
+        s.virtual_inbound_tags = vec!["v".into()];
+        assert_eq!(default_target(&s), Target::Outbound("lb-out".into()));
+    }
+
+    #[test]
+    fn local_virtual_first_conditional_then_unconditional() {
+        let loopback = json!({
+            "tag": "lb-out", "protocol": "loopback",
+            "settings": { "inboundTag": "v" }
+        });
+        let mut s = built(
+            vec![loopback, server("conditional"), server("fallback")],
+            json!({
+                "rules": [
+                    { "type": "field", "inboundTag": ["v"], "domain": ["special.example"], "outboundTag": "conditional" },
+                    { "type": "field", "inboundTag": ["v"], "network": "tcp,udp", "outboundTag": "fallback" },
+                ],
+            }),
+        );
+        s.virtual_inbound_tags = vec!["v".into()];
+        // Target is the loopback entry, leaving internal conditional + fallback to Xray
+        assert_eq!(default_target(&s), Target::Outbound("lb-out".into()));
     }
 }

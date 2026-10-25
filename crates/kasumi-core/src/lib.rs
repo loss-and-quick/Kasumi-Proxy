@@ -47,6 +47,7 @@ pub mod mutate;
 pub mod normalize;
 pub mod outbound_bind;
 pub mod profile;
+pub mod provider_graph;
 pub mod request_identity;
 pub mod route;
 pub mod share;

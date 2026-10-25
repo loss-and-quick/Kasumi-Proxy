@@ -1800,8 +1800,7 @@ fn provider_custom_cases() -> Vec<Case> {
                 { "type": "field", "domain": ["domain:nl.example"], "outboundTag": "block" },
                 { "type": "field", "domain": ["domain:de.example"], "balancerTag": "de" },
                 { "type": "field", "ip": ["10.0.0.0/8"], "outboundTag": "fragment" },
-                // Tied only to the provider's own inbounds, which Kasumi drops.
-                { "type": "field", "inboundTag": ["lb-in"], "balancerTag": "de" },
+                { "type": "field", "inboundTag": ["socks"], "balancerTag": "de" },
                 { "type": "field", "user": ["u@example"], "outboundTag": "direct" },
             ],
         },
@@ -1887,6 +1886,10 @@ fn balancer_provider() -> Profile {
                 { "type": "field", "network": "tcp,udp", "balancerTag": "balancer-main" },
             ],
         },
+        "observatory": {
+            "probeUrl": "https://example.com/check",
+            "subjectSelector": ["main", "main-2"]
+        },
     });
     serde_json::from_value(json!({
         "protocol": "custom",
@@ -1900,6 +1903,166 @@ fn balancer_provider() -> Profile {
 #[test]
 fn provider_custom_validates_against_real_xray() {
     validate_all(provider_custom_cases());
+}
+
+fn synthetic_provider_graph_cases() -> Vec<Case> {
+    let server = |tag: &str, host: &str, proto: &str| match proto {
+        "vless" => json!({
+            "tag": tag, "protocol": "vless",
+            "settings": { "vnext": [{ "address": host, "port": 443,
+                "users": [{ "id": UUID, "encryption": "none" }] }] },
+            "streamSettings": {
+                "network": "tcp", "security": "reality",
+                "realitySettings": { "serverName": host, "publicKey": REALITY_PBK,
+                    "shortId": "ab", "fingerprint": "chrome" },
+            },
+        }),
+        "hysteria" => json!({
+            "tag": tag, "protocol": "hysteria",
+            "settings": { "version": 2, "address": host, "port": 443 },
+            "streamSettings": {
+                "network": "hysteria", "security": "tls",
+                "tlsSettings": { "serverName": host },
+                "hysteriaSettings": { "version": 2, "auth": PW },
+            },
+        }),
+        _ => panic!("unsupported proto"),
+    };
+    let loopback = |tag: &str, in_tag: &str| {
+        json!({
+            "tag": tag, "protocol": "loopback",
+            "settings": { "inboundTag": in_tag }
+        })
+    };
+
+    let raw = json!({
+        "remarks": "Synthetic-Graph-Fallback",
+        "inbounds": [
+            { "tag": "socks", "protocol": "socks", "listen": "127.0.0.1", "port": 10808 }
+        ],
+        "outbounds": [
+            server("node-1", "node1.example.org", "vless"),
+            server("node-2", "node2.example.org", "hysteria"),
+            server("node-3", "node3.example.org", "vless"),
+            loopback("lb-sticky-fb", "v-sticky-in"),
+            loopback("lb-main-fb", "v-main-in"),
+            loopback("lb-lte-fb", "v-lte-in"),
+            { "tag": "direct", "protocol": "freedom" },
+            { "tag": "block", "protocol": "blackhole" },
+        ],
+        "routing": {
+            "domainStrategy": "IPIfNonMatch",
+            "balancers": [
+                {
+                    "tag": "balancer-all",
+                    "selector": ["node-3"],
+                    "strategy": { "type": "leastLoad", "settings": { "expected": 1, "tolerance": 0.8 } }
+                },
+                {
+                    "tag": "balancer-lte",
+                    "selector": ["node-2"],
+                    "strategy": { "type": "leastLoad", "settings": { "expected": 1, "tolerance": 0.8 } },
+                    "fallbackTag": "lb-lte-fb"
+                },
+                {
+                    "tag": "balancer-main",
+                    "selector": ["node-1"],
+                    "strategy": { "type": "leastLoad", "settings": { "maxRTT": "2000ms", "expected": 1, "tolerance": 0.5 } },
+                    "fallbackTag": "lb-main-fb"
+                },
+                {
+                    "tag": "balancer-sticky",
+                    "selector": ["node-1"],
+                    "strategy": { "type": "leastLoad", "settings": { "maxRTT": "2000ms", "expected": 1, "tolerance": 0.5 } },
+                    "fallbackTag": "lb-sticky-fb"
+                }
+            ],
+            "rules": [
+                { "type": "field", "inboundTag": ["v-lte-in"], "balancerTag": "balancer-all" },
+                { "type": "field", "inboundTag": ["v-main-in"], "balancerTag": "balancer-lte" },
+                { "type": "field", "inboundTag": ["v-sticky-in"], "balancerTag": "balancer-main" },
+                { "type": "field", "domain": ["domain:blocked.example.org"], "outboundTag": "direct" },
+                { "type": "field", "network": "tcp,udp", "balancerTag": "balancer-sticky" }
+            ]
+        },
+        "burstObservatory": {
+            "pingConfig": {
+                "destination": "https://example.org/generate_204",
+                "interval": "3m",
+                "timeout": "3s",
+                "sampling": 5
+            },
+            "subjectSelector": ["node-1", "node-2", "node-3"]
+        }
+    });
+
+    let profile: Profile = serde_json::from_value(json!({
+        "protocol": "custom",
+        "meta": { "id": "synthetic-graph", "remarks": "synthetic-graph", "groupId": "g-main" },
+        "raw": raw.to_string(),
+        "origin": "provider",
+    }))
+    .unwrap();
+
+    vec![
+        Case {
+            name: "provider-synthetic-graph/global".into(),
+            profile: profile.clone(),
+            settings: AdvancedSettings::default(),
+            rules: vec![],
+            needs_geo: false,
+            others: vec![],
+        },
+        Case {
+            name: "provider-synthetic-graph/rules".into(),
+            profile,
+            settings: AdvancedSettings {
+                routing_mode: RoutingMode::Rules,
+                ..AdvancedSettings::default()
+            },
+            rules: plain_rules(),
+            needs_geo: false,
+            others: vec![],
+        },
+    ]
+}
+
+#[test]
+fn provider_synthetic_graph_validates_against_real_xray() {
+    validate_all(synthetic_provider_graph_cases());
+}
+
+#[test]
+fn provider_synthetic_graph_probe_config_preserves_internal_fallback_and_observatory() {
+    let p = &synthetic_provider_graph_cases()[0].profile;
+    let s = AdvancedSettings::default();
+    let probe = kasumi_core::xray_config::build_xray_probe_config(p, &s, &[]).unwrap();
+
+    match &probe.target {
+        kasumi_core::custom_target::Target::Balancer { tag, members } => {
+            assert!(tag.starts_with("ks-provider:"));
+            assert_eq!(members.len(), 1);
+            assert!(members[0].starts_with("ks-provider:"));
+        }
+        other => panic!("expected Balancer target, got {other:?}"),
+    }
+    assert!(probe.config.get("burstObservatory").is_some());
+    let rules = probe.config["routing"]["rules"].as_array().unwrap();
+    // InboundTag fallback rules are retained in probe (all 3 virtual contexts)
+    let v_rules: Vec<&serde_json::Value> = rules
+        .iter()
+        .filter(|r| {
+            r.get("inboundTag")
+                .is_some_and(|t| t.to_string().contains(":v:"))
+        })
+        .collect();
+    assert_eq!(v_rules.len(), 3);
+    // External domain rule is excluded from probe
+    assert!(
+        !rules
+            .iter()
+            .any(|r| r.get("domain") == Some(&json!(["domain:blocked.example.org"])))
+    );
 }
 
 /// The configs a probe's test core runs: a provider profile whose default path is
@@ -1998,7 +2161,7 @@ fn xray_array_body_cases() -> Vec<Case> {
                 { "tag": "block", "protocol": "blackhole" },
             ],
             "routing": { "domainStrategy": "IPIfNonMatch", "rules": [
-                { "type": "field", "inboundTag": ["socks"], "port": "53", "outboundTag": "direct" },
+                { "type": "field", "port": "53", "outboundTag": "direct" },
                 { "type": "field", "ip": ["geoip:private"], "outboundTag": "direct" },
             ]},
         })

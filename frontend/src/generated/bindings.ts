@@ -1962,7 +1962,9 @@ export type SubErrorKind = { kind: "network" } | { kind: "http"; status: number 
 /**  The `happ://crypt` link no built-in key opens. */
 { kind: "urlDecrypt" } | { kind: "emptyBody" } | { kind: "unknownContent"; hint: ContentHint } | { kind: "unsupportedPayload"; payload: PayloadKind } | { kind: "noProfiles" } | { kind: "limit" } | 
 /**  A malformed envelope (server JSON, routing or deeplink). */
-{ kind: "invalid" };
+{ kind: "invalid" } | 
+/**  A provider configuration uses unsupported features. */
+{ kind: "incompatibleProviderConfig"; detail: string };
 
 /**
  *  One subscription's departures from [`RequestIdentityDefaults`]; its User-Agent is
@@ -2010,7 +2012,9 @@ export type SubWarning = { kind: "skippedLines"; count: number; sample: string }
  */
 { kind: "skippedOutbounds"; count: number } | 
 /**  Servers whose protocol this device's cores can't run (naive on Android). */
-{ kind: "unavailableProtocols"; count: number };
+{ kind: "unavailableProtocols"; count: number } | 
+/**  Client-owned settings omitted from provider Xray configs. */
+{ kind: "providerSettingsOmitted"; count: number; paths: string[] };
 
 /**  A subscription source (`SubscriptionSchema`). */
 export type Subscription = Subscription_Serialize | Subscription_Deserialize;

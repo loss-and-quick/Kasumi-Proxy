@@ -329,6 +329,10 @@ export const SubWarningSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("legacyParser"),
 }), z.object({
+	kind: z.literal("providerSettingsOmitted"),
+	count: z.number(),
+	paths: z.array(z.string()),
+}), z.object({
 	kind: z.literal("rejectedConfigs"),
 	count: z.number(),
 }), z.object({
@@ -379,6 +383,9 @@ export const SubErrorKindSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("http"),
 	status: z.number(),
+}), z.object({
+	kind: z.literal("incompatibleProviderConfig"),
+	detail: z.string(),
 }), z.object({
 	kind: z.literal("invalid"),
 }), z.object({
