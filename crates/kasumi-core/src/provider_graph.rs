@@ -31,8 +31,8 @@ pub const DEFAULT_BURST_SAMPLING: u64 = 10;
 pub const DEFAULT_BURST_INTERVAL: Duration = Duration::from_secs(60);
 pub const DEFAULT_BURST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Rule keys that carry no condition: the rule's dispatch target, its parser
-/// discriminator, and its observability label. Everything else a provider may
+/// Rule keys that carry no condition: the rule's dispatch target, the legacy
+/// `type` label Xray ignores, and its observability label. Everything else a provider may
 /// write on a rule is a condition from Xray's own list.
 const RULE_METADATA_KEYS: [&str; 4] = ["type", "ruleTag", "outboundTag", "balancerTag"];
 
@@ -1020,8 +1020,24 @@ impl ProviderFragment {
             });
         }
 
+        let mut dropped_warnings = Vec::new();
+
         // Validate balancer observatory coverage
-        for (i, b) in fragment_balancers.iter().enumerate() {
+        for (i, b) in fragment_balancers.iter_mut().enumerate() {
+            // A random or roundRobin balancer that names a fallback makes Xray
+            // require an observatory, and without one Xray refuses to start.
+            // Such a balancer never had health data to fall back on, so the
+            // fallback is dropped (keeping its plain member choice) rather than
+            // inventing probe traffic the provider did not configure.
+            if fragment_observatory.is_none()
+                && b.has_explicit_fallback
+                && !is_observation_strategy(b.strategy.as_ref())
+            {
+                b.fallback_tag = None;
+                b.has_explicit_fallback = false;
+                dropped_warnings.push(format!("routing.balancers[{i}].fallbackTag"));
+                continue;
+            }
             if is_observation_strategy(b.strategy.as_ref()) || b.has_explicit_fallback {
                 if fragment_observatory.is_none() {
                     return Err(SanitizeError::Incompatible {
@@ -1040,7 +1056,6 @@ impl ProviderFragment {
             }
         }
 
-        let mut dropped_warnings = Vec::new();
         let raw_rules = routing
             .and_then(|r| r.get("rules"))
             .and_then(Value::as_array);
@@ -1073,19 +1088,8 @@ impl ProviderFragment {
                         });
                     }
                 }
-                if let Some(rule_type) = r_obj.get("type").and_then(Value::as_str) {
-                    if rule_type != "field" {
-                        return Err(SanitizeError::Incompatible {
-                            path: format!("{path}.type"),
-                            reason: "unsupported rule type",
-                        });
-                    }
-                } else {
-                    return Err(SanitizeError::Incompatible {
-                        path: format!("{path}.type"),
-                        reason: "missing rule type",
-                    });
-                }
+                // Xray parses every routing rule as a field rule and never reads
+                // `type`, so providers commonly omit it; it is not checked here.
                 validate_network_field(r_obj, &path)?;
 
                 let ob_tag = r_obj.get("outboundTag").and_then(Value::as_str);
