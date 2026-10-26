@@ -185,13 +185,20 @@ pub fn sanitize_provider_xray(v: &Value) -> Result<SanitizedXray, SanitizeError>
         .and_then(Value::as_str)
         .map(str::to_string);
     let observatory = top.get("observatory");
-    let burst_observatory = top.get("burstObservatory");
+    let mut burst_observatory = top.get("burstObservatory").cloned();
+    if let Some(Value::Object(bo)) = &mut burst_observatory
+        && let Some(Value::Object(pc)) = bo.get_mut("pingConfig")
+        && pc.remove("connectivity").is_some()
+        && !dropped.contains(&"burstObservatory.pingConfig.connectivity".to_string())
+    {
+        dropped.push("burstObservatory.pingConfig.connectivity".to_string());
+    }
 
     let fragment = ProviderFragment::build(
         outbounds,
         routing,
         observatory,
-        burst_observatory,
+        burst_observatory.as_ref(),
         &ingress_tags,
     )?;
 
@@ -209,7 +216,7 @@ pub fn sanitize_provider_xray(v: &Value) -> Result<SanitizedXray, SanitizeError>
         routing: routing.cloned(),
         remarks,
         observatory: observatory.cloned(),
-        burst_observatory: burst_observatory.cloned(),
+        burst_observatory,
         ingress_tags,
         dropped,
         fragment,

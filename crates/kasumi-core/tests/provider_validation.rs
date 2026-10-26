@@ -3,7 +3,9 @@
 use kasumi_core::custom_sanitize::{SanitizeError, sanitize_provider_xray};
 use kasumi_core::custom_target::Target;
 use kasumi_core::profile::Profile;
-use kasumi_core::provider_graph::{MAX_GRAPH_DEPTH, MAX_GRAPH_NODES, compile_custom_profile};
+use kasumi_core::provider_graph::{
+    MAX_GRAPH_DEPTH, MAX_GRAPH_NODES, ProviderFragment, compile_custom_profile,
+};
 use kasumi_core::state::{AdvancedSettings, RoutingMode};
 use kasumi_core::xray_config::{BuildKind, build_xray_config};
 use serde_json::{Value, json};
@@ -898,5 +900,97 @@ fn an_observation_balancer_without_an_observatory_is_still_rejected() {
     assert!(
         matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "balancer members not covered by observatory"),
         "got: {err:?}"
+    );
+}
+
+#[test]
+fn burst_observatory_connectivity_is_stripped_with_warning_and_stable_across_reingest() {
+    let raw_burst_obs = json!({
+        "pingConfig": {
+            "destination": "https://example.org/generate_204",
+            "connectivity": "https://example.org/connectivity_check",
+            "interval": "10s",
+            "timeout": "2s",
+            "sampling": 1
+        },
+        "subjectSelector": ["node-"]
+    });
+    let cfg = json!({
+        "outbounds": [server("node-1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": { "type": "leastPing" }, "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "burstObservatory": raw_burst_obs
+    });
+
+    // 1. Sanitizer succeeds and records dropped warning for connectivity
+    let sanitized = sanitize_provider_xray(&cfg).expect("sanitization should succeed");
+    assert!(
+        sanitized
+            .dropped
+            .contains(&"burstObservatory.pingConfig.connectivity".to_string())
+    );
+
+    // 2. Fragment and sanitized struct have connectivity stripped while retaining destination
+    let bobs = sanitized.burst_observatory.as_ref().unwrap();
+    let ping_cfg = bobs.get("pingConfig").unwrap();
+    assert_eq!(
+        ping_cfg.get("destination").and_then(Value::as_str),
+        Some("https://example.org/generate_204")
+    );
+    assert!(ping_cfg.get("connectivity").is_none());
+
+    // 3. Persisted provider JSON omits connectivity
+    let persisted = sanitized.into_provider_json();
+    let persisted_ping_cfg = &persisted["burstObservatory"]["pingConfig"];
+    assert!(persisted_ping_cfg.get("connectivity").is_none());
+    assert_eq!(
+        persisted_ping_cfg
+            .get("destination")
+            .and_then(Value::as_str),
+        Some("https://example.org/generate_204")
+    );
+
+    // 4. Re-sanitizing persisted JSON is stable and idempotent
+    let resanitized = sanitize_provider_xray(&persisted).expect("resanitize should succeed");
+    assert!(
+        !resanitized
+            .dropped
+            .contains(&"burstObservatory.pingConfig.connectivity".to_string())
+    );
+    assert_eq!(resanitized.clone().into_provider_json(), persisted);
+
+    // 5. Rendered active outbounds retains burstObservatory and destination, omits connectivity
+    let raw_str = persisted.to_string();
+    let active = resanitized
+        .fragment
+        .render(&raw_str)
+        .expect("render should succeed");
+    let active_burst_obs = active.burst_observatory.unwrap();
+    assert_eq!(
+        active_burst_obs["pingConfig"]["destination"],
+        "https://example.org/generate_204"
+    );
+    assert!(active_burst_obs["pingConfig"].get("connectivity").is_none());
+
+    // 6. Direct ProviderFragment::build API still rejects unstripped connectivity
+    let direct_err = ProviderFragment::build(
+        vec![server("node-1")],
+        None,
+        None,
+        Some(&cfg["burstObservatory"]),
+        &[],
+    )
+    .unwrap_err();
+    assert_eq!(
+        direct_err,
+        SanitizeError::Incompatible {
+            path: "burstObservatory.pingConfig.connectivity".into(),
+            reason: "unsupported burst connectivity check",
+        }
     );
 }
