@@ -1351,35 +1351,17 @@ fn anonymous_outbound_compiler_identity_not_persisted_and_evaluates_empty_for_co
         }
     });
 
-    // 1. Direct helper test: anonymous outbound with original tag "" does not match "unnamed"
-    let mut budget = kasumi_core::costs::CostBudget::default();
-    let cost_rules = json!([
-        { "match": "unnamed", "value": 99 },
-        { "match": "\\d+", "regexp": true, "value": 50 }
-    ]);
-    let resolved = kasumi_core::costs::resolve_leastload_costs(
-        &cost_rules,
-        &[("kasumi-unnamed-0-0", "")],
-        "routing.balancers[0]",
-        &mut budget,
-    )
-    .expect("resolve costs");
-    assert_eq!(resolved[0].1, serde_json::Number::from(1)); // default weight 1, NOT 99!
-
-    // 2. Sanitizer strips compiler synthetic identity from emitted safe JSON
+    // Compiler identities must not become source tags when a profile is stored.
     let sanitized = kasumi_core::custom_sanitize::sanitize_provider_xray(&raw).expect("sanitize");
     assert!(sanitized.outbounds[0].get("tag").is_none());
 
-    // 3. Persisted provider JSON retains absence of tag on anonymous outbound
     let persisted = sanitized.into_provider_json();
     assert!(persisted["outbounds"][0].get("tag").is_none());
 
-    // 4. Re-sanitizing persisted JSON preserves untagged state (never reads kasumi-unnamed as orig_tag)
     let resanitized =
         kasumi_core::custom_sanitize::sanitize_provider_xray(&persisted).expect("resanitize");
     assert!(resanitized.outbounds[0].get("tag").is_none());
 
-    // 5. Full profile compilation succeeds with valid routing
     let profile = custom_profile_from_json(persisted);
     let settings = AdvancedSettings::default();
     let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");

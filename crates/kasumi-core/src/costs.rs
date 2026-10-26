@@ -1,4 +1,4 @@
-//! Xray leastLoad balancer strategy costs evaluation and rendering.
+//! Resolve Xray leastLoad weights before provider tags are linked into Kasumi.
 
 use crate::custom_sanitize::SanitizeError;
 use regex_syntax::ast::parse::ParserBuilder;
@@ -758,6 +758,23 @@ pub fn resolve_leastload_costs(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compiler_identities_do_not_contribute_to_anonymous_outbound_costs() {
+        let mut budget = CostBudget::default();
+        let rules = serde_json::json!([
+            { "match": "unnamed", "value": 99 },
+            { "match": "\\d+", "regexp": true, "value": 50 }
+        ]);
+        let resolved = resolve_leastload_costs(
+            &rules,
+            &[("kasumi-unnamed-0-0", "")],
+            "routing.balancers[0]",
+            &mut budget,
+        )
+        .unwrap();
+        assert_eq!(resolved[0].1, serde_json::Number::from(1));
+    }
 
     #[test]
     fn test_number_finder() {

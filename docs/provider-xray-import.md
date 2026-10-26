@@ -156,7 +156,7 @@ Notice:
 ### Code locations
 
 - `crates/kasumi-core/src/provider_graph.rs`: Defines `ProviderFragment`, `FragmentOutbound`, `FragmentBalancer`, `FragmentObservatory`, `FragmentContext`, and `TargetRef`. Implements fragment building, cycle and depth validation, explicit default assignment, target resolution, and prefix-free rendering (`render`, `compile_custom_profile`).
-- `crates/kasumi-core/src/costs.rs`: Implements Xray `leastLoad` cost rule evaluation, Go-compatible regex normalization, auto-extraction of numeric weights, single-precision fidelity validation, and exact opaque tag rendering.
+- `crates/kasumi-core/src/costs.rs`: Resolves Xray `leastLoad` weights with bounded Go-compatible matching, numeric extraction and single-precision checks. This helper stays private to the core; the fragment renderer links its resolved weights to opaque outbound tags.
 - `crates/kasumi-core/src/custom_sanitize.rs`: Implements `sanitize_provider_xray` and `SanitizedXray`. Strips client-owned top-level keys, `masterKeyLog` from TLS settings (`strip_host_files`), and non-allowlisted sockopt fields. Rejects `certificateFile`, `keyFile`, unpinned `allowInsecure`, and non-canonical field-name casing (`validate_stream_security`, inline proxySettings check).
 - `crates/kasumi-core/src/custom_target.rs`: Defines `Target` and `describe()` for probe diagnostics and UI representations.
 - `crates/kasumi-core/src/xray_config.rs`: Merges rendered `ActiveOutbounds` from the fragment compiler into Kasumi's top-level Xray configuration.

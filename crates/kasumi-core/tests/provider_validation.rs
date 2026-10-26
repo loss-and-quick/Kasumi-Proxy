@@ -1611,27 +1611,34 @@ fn mixed_loopback_service_candidate_in_balancer_rejected() {
 
 #[test]
 fn profile_costs_matching_text_budget_exceeded_rejected() {
-    // 1 balancer with 33 rules, member tag of length 2 MiB: 33 * 2 MiB = 66 MiB > 64 MiB
-    let large_tag = "a".repeat(2 * 1024 * 1024);
-    let rules: Vec<Value> = (0..33)
+    // Reusing the same tag in different balancers still consumes the shared
+    // matching budget, even though each individual candidate set is small.
+    let large_tag = format!("node-{}", "a".repeat(70 * 1024));
+    let rules: Vec<Value> = (0..64)
         .map(|i| json!({ "match": format!("rule-{i}"), "value": 1 }))
         .collect();
-
-    let mut budget = kasumi_core::costs::CostBudget::default();
-    let member_tags = [("ob-1", large_tag.as_str())];
-    let err = kasumi_core::costs::resolve_leastload_costs(
-        &Value::Array(rules),
-        &member_tags,
-        "routing.balancers[0]",
-        &mut budget,
-    )
-    .unwrap_err();
-
-    assert_eq!(
-        err,
-        SanitizeError::Incompatible {
-            path: "routing.balancers[0].strategy.settings.costs".into(),
-            reason: "profile costs exceeds matching text budget",
+    let balancers: Vec<Value> = (0..16)
+        .map(|i| {
+            json!({
+                "tag": format!("lb-{i}"), "selector": ["node-"],
+                "strategy": { "type": "leastLoad", "settings": { "costs": rules } }
+            })
+        })
+        .collect();
+    let cfg = json!({
+        "outbounds": [server(&large_tag)],
+        "routing": {
+            "balancers": balancers,
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb-0" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204", "probeInterval": "10s"
         }
+    });
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert!(
+        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "profile costs exceeds matching text budget"),
+        "expected the profile-wide matching budget to reject repeated scanning: {err:?}"
     );
 }
