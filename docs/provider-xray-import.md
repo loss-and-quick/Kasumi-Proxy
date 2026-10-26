@@ -22,6 +22,7 @@ The compilation pipeline converts untrusted provider JSON into a validated, link
 3. **Make Xray implicit behavior explicit**:
    - The provider config's first outbound (`outbounds[0]`) is designated as the explicit `default_handler`.
    - An observation-driven balancer (`leastPing`, `leastLoad`) without a `fallbackTag` receives an explicit fallback pointing to `default_handler`. Those strategies return an empty pick when no member is qualified, and Xray then dispatches to its first outbound; in the linked config that would be `proxy` again, an endless loop. `random` and `roundRobin` never return an empty pick on their own, and naming a fallback for them would make Xray start filtering their members by health, so they are left as written.
+   - Routing rules are field rules whether or not they carry `"type": "field"`; Xray never reads that key, so it is not required.
    - A loopback entry is followed through its context before deciding whether the default route is a proxy.
    - Any context where no rule matches routes explicitly to `default_handler`.
 4. **Resolve entry and context targets using Xray semantics**:

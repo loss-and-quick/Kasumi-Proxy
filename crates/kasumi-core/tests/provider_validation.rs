@@ -802,3 +802,43 @@ fn proxy_settings_without_a_tag_is_rejected() {
         );
     }
 }
+
+#[test]
+fn rules_without_a_type_are_accepted_like_xray_does() {
+    // Xray parses every routing rule as a field rule, so providers often leave
+    // `type` out; both the entry rule and a context rule must still count.
+    let cfg = json!({
+        "outbounds": [
+            server("decoy"),
+            server("node-a"),
+            loopback(Some("fallback"), "inside"),
+        ],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-"],
+                "strategy": { "type": "leastLoad" },
+                "fallbackTag": "fallback"
+            }],
+            "rules": [
+                { "inboundTag": ["inside"], "network": "tcp,udp", "outboundTag": "decoy" },
+                { "network": "tcp,udp", "balancerTag": "lb" }
+            ]
+        },
+        "burstObservatory": {
+            "pingConfig": {
+                "destination": "https://example.org/generate_204",
+                "interval": "10s",
+                "timeout": "2s",
+                "sampling": 1
+            },
+            "subjectSelector": ["node-"]
+        }
+    });
+    let sanitized = sanitize_provider_xray(&cfg).expect("rules without type are valid Xray");
+    assert_eq!(
+        sanitized.fragment.entry,
+        kasumi_core::provider_graph::TargetRef::Balancer("lb".into())
+    );
+    assert_eq!(sanitized.fragment.contexts.len(), 1);
+}

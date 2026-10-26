@@ -31,8 +31,8 @@ pub const DEFAULT_BURST_SAMPLING: u64 = 10;
 pub const DEFAULT_BURST_INTERVAL: Duration = Duration::from_secs(60);
 pub const DEFAULT_BURST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Rule keys that carry no condition: the rule's dispatch target, its parser
-/// discriminator, and its observability label. Everything else a provider may
+/// Rule keys that carry no condition: the rule's dispatch target, the legacy
+/// `type` label Xray ignores, and its observability label. Everything else a provider may
 /// write on a rule is a condition from Xray's own list.
 const RULE_METADATA_KEYS: [&str; 4] = ["type", "ruleTag", "outboundTag", "balancerTag"];
 
@@ -1073,19 +1073,8 @@ impl ProviderFragment {
                         });
                     }
                 }
-                if let Some(rule_type) = r_obj.get("type").and_then(Value::as_str) {
-                    if rule_type != "field" {
-                        return Err(SanitizeError::Incompatible {
-                            path: format!("{path}.type"),
-                            reason: "unsupported rule type",
-                        });
-                    }
-                } else {
-                    return Err(SanitizeError::Incompatible {
-                        path: format!("{path}.type"),
-                        reason: "missing rule type",
-                    });
-                }
+                // Xray parses every routing rule as a field rule and never reads
+                // `type`, so providers commonly omit it; it is not checked here.
                 validate_network_field(r_obj, &path)?;
 
                 let ob_tag = r_obj.get("outboundTag").and_then(Value::as_str);
