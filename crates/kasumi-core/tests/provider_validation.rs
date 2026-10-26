@@ -327,6 +327,130 @@ fn context_with_conditional_scoped_rule_rejected() {
 }
 
 #[test]
+fn every_xray_condition_key_makes_an_unscoped_rule_a_dropped_warning() {
+    let conditions = [
+        ("domain", json!(["domain:example.com"])),
+        ("domains", json!(["domain:example.com"])),
+        ("ip", json!(["10.0.0.0/8"])),
+        ("port", json!("80,443")),
+        ("sourceIP", json!(["10.0.0.0/8"])),
+        ("source", json!(["10.0.0.0/8"])),
+        ("sourcePort", json!("443")),
+        ("user", json!(["user@example.com"])),
+        ("vlessRoute", json!("1000-2000")),
+        ("protocol", json!(["http"])),
+        ("attrs", json!({ "x": "y" })),
+        ("localIP", json!(["127.0.0.1"])),
+        ("localPort", json!("1080")),
+        ("process", json!(["curl"])),
+    ];
+    for (key, value) in conditions {
+        let mut conditional_rule = serde_json::Map::new();
+        conditional_rule.insert("type".into(), "field".into());
+        conditional_rule.insert("outboundTag".into(), "node-a".into());
+        conditional_rule.insert(key.into(), value.clone());
+        let unconditional_rule = json!({ "type": "field", "outboundTag": "node-a" });
+        let cfg = json!({
+            "outbounds": [server("node-a")],
+            "routing": { "rules": [unconditional_rule, Value::Object(conditional_rule)] }
+        });
+        let sanitized = sanitize_provider_xray(&cfg)
+            .unwrap_or_else(|e| panic!("{key} rule must classify, got: {e:?}"));
+        assert!(
+            sanitized.dropped.contains(&"routing.rules[1]".to_string()),
+            "unscoped {key} rule must be dropped with a warning"
+        );
+    }
+}
+
+#[test]
+fn unscoped_source_condition_rules_are_dropped_with_a_warning() {
+    let cfg = json!({
+        "outbounds": [server("node-a")],
+        "routing": {
+            "rules": [
+                { "type": "field", "sourcePort": "443", "outboundTag": "node-a" },
+                { "type": "field", "source": ["10.0.0.0/8"], "outboundTag": "node-a" },
+                { "type": "field", "process": ["curl"], "outboundTag": "node-a" }
+            ]
+        }
+    });
+    let sanitized = sanitize_provider_xray(&cfg).expect("sanitization succeeds");
+    assert!(sanitized.dropped.contains(&"routing.rules[0]".to_string()));
+    assert!(sanitized.dropped.contains(&"routing.rules[1]".to_string()));
+    assert!(sanitized.dropped.contains(&"routing.rules[2]".to_string()));
+    let rendered = sanitized
+        .fragment
+        .render(&cfg.to_string())
+        .expect("render succeeds");
+    let rule_text = serde_json::to_string(&rendered.rules).expect("serialize rendered rules");
+    assert!(!rule_text.contains("sourcePort"));
+    assert!(!rule_text.contains("process"));
+}
+
+#[test]
+fn context_scoped_source_condition_rules_are_rejected() {
+    for (key, value) in [
+        ("sourcePort", json!("443")),
+        ("source", json!(["10.0.0.0/8"])),
+        ("process", json!(["curl"])),
+        ("localPort", json!("1080")),
+    ] {
+        let mut rule = serde_json::Map::new();
+        rule.insert("type".into(), "field".into());
+        rule.insert("inboundTag".into(), json!(["v-context"]));
+        rule.insert("outboundTag".into(), "exit".into());
+        rule.insert(key.into(), value);
+        let cfg = json!({
+            "outbounds": [loopback(Some("lb-entry"), "v-context"), server("exit")],
+            "routing": { "rules": [Value::Object(rule)] }
+        });
+        let err = sanitize_provider_xray(&cfg)
+            .err()
+            .unwrap_or_else(|| panic!("expected rejection of context-scoped {key} rule"));
+        assert!(
+            matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "context-scoped conditional rules are not supported"),
+            "expected rejection of context-scoped {key} rule, got: {err:?}"
+        );
+    }
+}
+
+#[test]
+fn rule_tag_is_kept_as_rule_metadata() {
+    let cfg = json!({
+        "outbounds": [loopback(Some("lb-entry"), "v-context"), server("exit")],
+        "routing": {
+            "rules": [{
+                "type": "field",
+                "ruleTag": "ctx-route",
+                "inboundTag": ["v-context"],
+                "network": "tcp,udp",
+                "outboundTag": "exit"
+            }]
+        }
+    });
+    let sanitized = sanitize_provider_xray(&cfg).expect("ruleTag is metadata, not a condition");
+    assert!(sanitized.dropped.is_empty());
+}
+
+#[test]
+fn unknown_rule_condition_keys_are_still_rejected() {
+    let cfg = json!({
+        "outbounds": [server("node-a")],
+        "routing": {
+            "rules": [
+                { "type": "field", "sourceTag": ["x"], "outboundTag": "node-a" }
+            ]
+        }
+    });
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert!(
+        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "unsupported rule field"),
+        "expected rejection of unknown rule key, got: {err:?}"
+    );
+}
+
+#[test]
 fn plain_entry_gets_tag_proxy_without_loopback() {
     let cfg = json!({
         "outbounds": [server("single-node")]
@@ -374,6 +498,55 @@ fn chain_field_aliases_cannot_silently_remove_required_hops() {
             Err(SanitizeError::Incompatible { .. })
         ));
     }
+    for key in ["SockOpt", "SOCKOPT", "sockopt"] {
+        let mut outbound = server("exit");
+        outbound["streamSettings"][key]["dialerProxy"] = "entry".into();
+        if key == "sockopt" {
+            let sanitized = sanitize_provider_xray(&json!({
+                "outbounds": [outbound, server("entry")]
+            }))
+            .expect("canonical sockopt.dialerProxy dials through the graph");
+            assert!(
+                sanitized
+                    .fragment
+                    .outbounds
+                    .iter()
+                    .any(|o| o.tag == "exit" && o.dialer_proxy.as_deref() == Some("entry"))
+            );
+        } else {
+            assert!(matches!(
+                sanitize_provider_xray(&json!({ "outbounds": [outbound, server("entry")] })),
+                Err(SanitizeError::Incompatible { .. })
+            ));
+        }
+    }
+    for wrapper in ["ProxySettings", "PROXYSETTINGS"] {
+        let mut outbound = server("exit");
+        outbound[wrapper]["tag"] = "entry".into();
+        assert!(matches!(
+            sanitize_provider_xray(&json!({ "outbounds": [outbound, server("entry")] })),
+            Err(SanitizeError::Incompatible { .. })
+        ));
+    }
+    for key in ["Tag", "TAG"] {
+        let mut outbound = server("exit");
+        outbound["proxySettings"][key] = "entry".into();
+        assert!(matches!(
+            sanitize_provider_xray(&json!({ "outbounds": [outbound, server("entry")] })),
+            Err(SanitizeError::Incompatible { .. })
+        ));
+    }
+    let mut outbound = server("exit");
+    outbound["proxySettings"]["tag"] = "entry".into();
+    let sanitized = sanitize_provider_xray(&json!({ "outbounds": [outbound, server("entry")] }))
+        .expect("canonical proxySettings.tag dials through the graph");
+    assert!(
+        sanitized
+            .fragment
+            .outbounds
+            .iter()
+            .any(|o| o.tag == "exit" && o.dialer_proxy.as_deref() == Some("entry"))
+    );
 }
 
 #[test]

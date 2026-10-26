@@ -18,7 +18,7 @@ use url::Url;
 use crate::custom_sanitize::{SanitizeError, is_service_outbound, provider_outbounds_identity};
 use crate::custom_target::Target;
 use crate::profile::{Custom, CustomOrigin, Profile};
-use crate::xray_config::{BuildKind, parse_json_safe};
+use crate::xray_config::{BuildKind, XRAY_RULE_CONDITIONS, parse_json_safe};
 
 pub const BALANCER_STRATEGIES: [&str; 4] = ["random", "roundRobin", "leastPing", "leastLoad"];
 pub const MAX_SELECTOR_MEMBERS: usize = 64;
@@ -31,19 +31,14 @@ pub const DEFAULT_BURST_SAMPLING: u64 = 10;
 pub const DEFAULT_BURST_INTERVAL: Duration = Duration::from_secs(60);
 pub const DEFAULT_BURST_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub const ALLOWED_RULE_KEYS: [&str; 11] = [
-    "type",
-    "inboundTag",
-    "outboundTag",
-    "balancerTag",
-    "network",
-    "port",
-    "protocol",
-    "domain",
-    "ip",
-    "user",
-    "attrs",
-];
+/// Rule keys that carry no condition: the rule's dispatch target, its parser
+/// discriminator, and its observability label. Everything else a provider may
+/// write on a rule is a condition from Xray's own list.
+const RULE_METADATA_KEYS: [&str; 4] = ["type", "ruleTag", "outboundTag", "balancerTag"];
+
+/// These select a context or its TCP/UDP coverage, rather than external
+/// policy. `port` is classified by its coverage below.
+const RULE_SCOPE_KEYS: [&str; 3] = ["inboundTag", "network", "port"];
 
 pub const ALLOWED_OBSERVATORY_KEYS: [&str; 5] = [
     "subjectSelector",
@@ -237,7 +232,7 @@ pub fn validate_stream_security(v: &Value, base_path: &str) -> Result<(), Saniti
                 if k.eq_ignore_ascii_case("headers") {
                     continue;
                 }
-                for canonical in ["dialerProxy", "tlsSettings"] {
+                for canonical in ["dialerProxy", "sockopt", "tlsSettings"] {
                     if k.eq_ignore_ascii_case(canonical) && k != canonical {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{base_path}.{canonical}"),
@@ -397,7 +392,10 @@ pub(crate) fn validate_network_field(
 }
 
 pub(crate) fn is_rule_conditional(rule: &Map<String, Value>) -> bool {
-    for key in ["domain", "domains", "ip", "protocol", "user", "attrs"] {
+    for key in XRAY_RULE_CONDITIONS {
+        if RULE_SCOPE_KEYS.contains(&key) {
+            continue;
+        }
         if let Some(v) = rule.get(key) {
             match v {
                 Value::Null => {}
@@ -1045,7 +1043,9 @@ impl ProviderFragment {
                     });
                 };
                 for k in r_obj.keys() {
-                    if !ALLOWED_RULE_KEYS.contains(&k.as_str()) {
+                    let known = RULE_METADATA_KEYS.contains(&k.as_str())
+                        || XRAY_RULE_CONDITIONS.contains(&k.as_str());
+                    if !known {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.{k}"),
                             reason: "unsupported rule field",

@@ -530,9 +530,10 @@ const SPECIAL_OUTBOUND_TAGS: [&str; 3] = ["proxy", "direct", "block"];
 const DNS_OUT: &str = "dns-out";
 
 /// The field-rule keys Xray matches on (`RawFieldRule` in Xray's
-/// infra/conf/router.go). Xray refuses to start on a rule with none of them set:
-/// "this rule has no effective fields".
-const XRAY_RULE_CONDITIONS: [&str; 17] = [
+/// infra/conf/router.go; `domains` is a distinct key there that Xray folds
+/// into the same domain list, not an alias). Xray refuses to start on a rule
+/// with none of them set: "this rule has no effective fields".
+pub const XRAY_RULE_CONDITIONS: [&str; 17] = [
     "domain",
     "domains",
     "ip",

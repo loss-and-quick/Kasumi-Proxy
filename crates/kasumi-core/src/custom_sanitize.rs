@@ -305,6 +305,21 @@ fn sanitize_outbound(
         validate_stream_security(stream, &format!("{path}.streamSettings"))?;
     }
 
+    // Go's JSON decoder binds field names case-insensitively, so a `Tag` inside
+    // `proxySettings` dials like `tag` while staying invisible to graph
+    // extraction. Keep every alias out of the graph.
+    if let Some(keys) = obj.get("proxySettings").and_then(Value::as_object) {
+        for key in keys.keys() {
+            let known = ["tag", "transportLayer"];
+            if known.iter().any(|c| c.eq_ignore_ascii_case(key)) && !known.contains(&key.as_str()) {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("{path}.proxySettings.{key}"),
+                    reason: "non-canonical schema field alias",
+                });
+            }
+        }
+    }
+
     let mut out = Map::new();
     for (k, val) in obj {
         let canonical = OUTBOUND_KEYS.iter().find(|c| c.eq_ignore_ascii_case(k));
