@@ -904,6 +904,46 @@ fn an_observation_balancer_without_an_observatory_is_still_rejected() {
 }
 
 #[test]
+fn a_burst_ping_label_is_omitted_without_changing_probes() {
+    let cfg = json!({
+        "outbounds": [server("node-a")],
+        "burstObservatory": {
+            "subjectSelector": ["node-"],
+            "pingConfig": {
+                "tag": "diagnostic-label",
+                "destination": "https://example.org/generate_204",
+                "httpMethod": "HEAD", "interval": "10s", "timeout": "2s", "sampling": 1
+            }
+        }
+    });
+    let sanitized = sanitize_provider_xray(&cfg).expect("the ping label is not an Xray setting");
+    assert!(
+        sanitized
+            .dropped
+            .iter()
+            .any(|path| path == "burstObservatory.pingConfig.tag")
+    );
+    let rendered = sanitized.fragment.render(&cfg.to_string()).unwrap();
+    let ping = &rendered.burst_observatory.as_ref().unwrap()["pingConfig"];
+    assert!(ping.get("tag").is_none());
+    assert_eq!(ping["httpMethod"], "HEAD");
+    assert_eq!(ping["destination"], "https://example.org/generate_204");
+    let persisted = sanitized.into_provider_json();
+    assert!(
+        persisted["burstObservatory"]["pingConfig"]
+            .get("tag")
+            .is_none()
+    );
+    let again = sanitize_provider_xray(&persisted).unwrap();
+    assert!(
+        !again
+            .dropped
+            .iter()
+            .any(|path| path == "burstObservatory.pingConfig.tag")
+    );
+}
+
+#[test]
 fn burst_observatory_connectivity_is_stripped_with_warning_and_stable_across_reingest() {
     let raw_burst_obs = json!({
         "pingConfig": {

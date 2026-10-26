@@ -47,6 +47,8 @@ The compilation pipeline converts untrusted provider JSON into a validated, link
 
 ## 3. Preserved, warned, and rejected settings
 
+The optional provider label `burstObservatory.pingConfig.tag` is omitted with a warning: Xray's health-ping configuration has no such field. This does not change the probe destination, HTTP method, or routing.
+
 | Category | Settings | Rationale |
 | --- | --- | --- |
 | **Preserved** | Proxy outbounds, credentials, stream settings, `dialerProxy` chains, balancers, `leastLoad` `costs` (evaluated against original outbound tags at fragment build time and rendered as rewritten full opaque exact tags), single observation engine (`observatory` or `burstObservatory` with idempotent `httpMethod` `HEAD`/`GET`), virtual loopbacks (`settings.inboundTag`), context routing rules. | Necessary to reproduce the provider's intended connection topology and multi-node exit strategies. |

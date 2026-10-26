@@ -188,10 +188,15 @@ pub fn sanitize_provider_xray(v: &Value) -> Result<SanitizedXray, SanitizeError>
     let mut burst_observatory = top.get("burstObservatory").cloned();
     if let Some(Value::Object(bo)) = &mut burst_observatory
         && let Some(Value::Object(pc)) = bo.get_mut("pingConfig")
-        && pc.remove("connectivity").is_some()
-        && !dropped.contains(&"burstObservatory.pingConfig.connectivity".to_string())
     {
-        dropped.push("burstObservatory.pingConfig.connectivity".to_string());
+        // Direct reachability diagnostics belong to Kasumi. `tag` is an inert
+        // provider label: Xray's HealthPingConfig has no such field.
+        for field in ["connectivity", "tag"] {
+            let path = format!("burstObservatory.pingConfig.{field}");
+            if pc.remove(field).is_some() && !dropped.contains(&path) {
+                dropped.push(path);
+            }
+        }
     }
 
     let fragment = ProviderFragment::build(
