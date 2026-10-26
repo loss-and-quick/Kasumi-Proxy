@@ -1380,6 +1380,7 @@ fn validate_all_with(cases: Vec<Case>, adjust: impl Fn(CoreEngine, &mut Value)) 
     let mut built = 0;
     let mut checked = 0;
     let mut skipped_geo = 0;
+    let mut skipped_no_bin = 0;
     for Case {
         name,
         profile,
@@ -1418,15 +1419,18 @@ fn validate_all_with(cases: Vec<Case>, adjust: impl Fn(CoreEngine, &mut Value)) 
         if !cores_staged {
             continue;
         }
-        if needs_geo && !has_geo {
-            skipped_geo += 1;
-            continue;
-        }
         let bin = match engine {
             CoreEngine::Xray => xray.as_deref(),
             CoreEngine::SingBox => singbox.as_deref(),
         };
-        let Some(bin) = bin else { continue };
+        let Some(bin) = bin else {
+            skipped_no_bin += 1;
+            continue;
+        };
+        if needs_geo && !has_geo {
+            skipped_geo += 1;
+            continue;
+        }
         let (_keep, cfg) = write_config(&cfg_value);
         let (ok, output) = validate(engine, bin, &cfg, asset_dir.as_path());
         checked += 1;
@@ -1460,8 +1464,13 @@ fn validate_all_with(cases: Vec<Case>, adjust: impl Fn(CoreEngine, &mut Value)) 
         "no cases built — generator declined every combo?"
     );
     assert!(
-        !cores_staged || checked > 0,
-        "no cases validated — staged binaries unreadable?"
+        !cores_staged || skipped_no_bin == 0,
+        "{skipped_no_bin}/{built} cases target a core whose binary is not staged"
+    );
+    assert!(
+        !cores_staged || checked + skipped_geo == built,
+        "not every built case was validated: \
+         {checked} checked + {skipped_geo} geo-skipped \u{2260} {built} built"
     );
 }
 
