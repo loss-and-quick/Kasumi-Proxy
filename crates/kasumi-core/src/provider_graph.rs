@@ -11,6 +11,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr};
+use std::time::Duration;
 
 use serde_json::Value;
 use url::Url;
@@ -31,9 +32,11 @@ pub const MAX_GRAPH_DEPTH: usize = 256;
 
 /// Minimum probe interval for observatories (10 seconds).
 pub const MIN_PROBE_INTERVAL_SECONDS: u64 = 10;
+pub const MIN_PROBE_INTERVAL: Duration = Duration::from_secs(MIN_PROBE_INTERVAL_SECONDS);
 
 /// Maximum probe timeout for burst observatories (60 seconds).
 pub const MAX_BURST_TIMEOUT_SECONDS: u64 = 60;
+pub const MAX_BURST_TIMEOUT: Duration = Duration::from_secs(MAX_BURST_TIMEOUT_SECONDS);
 
 /// Maximum burst sampling count.
 pub const MAX_BURST_SAMPLING: u64 = 20;
@@ -43,9 +46,11 @@ pub const DEFAULT_BURST_SAMPLING: u64 = 10;
 
 /// Default burst interval when omitted in Xray (1 minute).
 pub const DEFAULT_BURST_INTERVAL_SECONDS: u64 = 60;
+pub const DEFAULT_BURST_INTERVAL: Duration = Duration::from_secs(DEFAULT_BURST_INTERVAL_SECONDS);
 
 /// Default burst timeout when omitted in Xray (5 seconds).
 pub const DEFAULT_BURST_TIMEOUT_SECONDS: u64 = 5;
+pub const DEFAULT_BURST_TIMEOUT: Duration = Duration::from_secs(DEFAULT_BURST_TIMEOUT_SECONDS);
 
 /// Keys permitted in routing rules.
 pub const ALLOWED_RULE_KEYS: [&str; 11] = [
@@ -201,25 +206,166 @@ pub fn validate_dialer_proxies(
     Ok(())
 }
 
-/// Parse duration string with explicit unit suffix (e.g. "10s", "1m", "300ms", "2h") into seconds.
-/// Bare numbers are rejected per Go duration string requirements.
-pub fn parse_duration_string(s: &str) -> Option<u64> {
-    let s = s.trim();
+fn parse_duration_unit(u: &str) -> Option<u64> {
+    match u {
+        "ns" => Some(1),
+        "us" | "µs" | "μs" => Some(1_000),
+        "ms" => Some(1_000_000),
+        "s" => Some(1_000_000_000),
+        "m" => Some(60_000_000_000),
+        "h" => Some(3_600_000_000_000),
+        _ => None,
+    }
+}
+
+fn duration_leading_int(s: &str) -> Option<(u64, &str)> {
+    let mut x: u64 = 0;
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if !c.is_ascii_digit() {
+            break;
+        }
+        let digit = (c - b'0') as u64;
+        if x > (1 << 63) / 10 {
+            return None;
+        }
+        x = x * 10 + digit;
+        if x > (1 << 63) {
+            return None;
+        }
+        i += 1;
+    }
+    Some((x, &s[i..]))
+}
+
+fn duration_leading_fraction(s: &str) -> (u64, f64, &str) {
+    let mut x: u64 = 0;
+    let mut scale: f64 = 1.0;
+    let mut overflow = false;
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if !c.is_ascii_digit() {
+            break;
+        }
+        if !overflow {
+            if x > ((1 << 63) - 1) / 10 {
+                overflow = true;
+            } else {
+                let y = x * 10 + (c - b'0') as u64;
+                if y > (1 << 63) {
+                    overflow = true;
+                } else {
+                    x = y;
+                    scale *= 10.0;
+                }
+            }
+        }
+        i += 1;
+    }
+    (x, scale, &s[i..])
+}
+
+/// Parse a non-negative Go duration string (e.g. "10s", "1m30s", "1.5s", "500ms", "100us", "100µs", "100μs", "100ns") into a [`Duration`].
+///
+/// Follows Go `time.ParseDuration` semantics:
+/// - Bare numbers (except "0", "+0", "-0") are rejected.
+/// - Negative nonzero durations (e.g. "-10s") are rejected per non-negative resource policy.
+/// - Supported units: "ns", "us", "µs" (U+00B5), "μs" (U+03BC), "ms", "s", "m", "h".
+/// - Maximum duration is bounded by Go's signed `time.Duration` (`i64::MAX` nanoseconds).
+pub fn parse_duration_string(mut s: &str) -> Option<Duration> {
     if s.is_empty() {
         return None;
     }
-    if let Some(rest) = s.strip_suffix("ms") {
-        let ms: u64 = rest.parse().ok()?;
-        Some(ms / 1000)
-    } else if let Some(rest) = s.strip_suffix('s') {
-        rest.parse().ok()
-    } else if let Some(rest) = s.strip_suffix('m') {
-        rest.parse::<u64>().ok()?.checked_mul(60)
-    } else if let Some(rest) = s.strip_suffix('h') {
-        rest.parse::<u64>().ok()?.checked_mul(3600)
-    } else {
-        None
+    let mut neg = false;
+    if let Some(&first) = s.as_bytes().first()
+        && (first == b'-' || first == b'+')
+    {
+        neg = first == b'-';
+        s = &s[1..];
     }
+    // Special case: if all that is left is "0", this is zero.
+    if s == "0" {
+        return Some(Duration::ZERO);
+    }
+    if s.is_empty() {
+        return None;
+    }
+    let mut d: u64 = 0;
+    while !s.is_empty() {
+        let first_byte = s.as_bytes()[0];
+        if first_byte != b'.' && !first_byte.is_ascii_digit() {
+            return None;
+        }
+        let pl = s.len();
+        let (mut v, rem) = duration_leading_int(s)?;
+        s = rem;
+        let pre = pl != s.len();
+
+        let mut post = false;
+        let mut f: u64 = 0;
+        let mut scale: f64 = 1.0;
+        if !s.is_empty() && s.as_bytes()[0] == b'.' {
+            s = &s[1..];
+            let pl_frac = s.len();
+            let (frac_x, frac_scale, rem_frac) = duration_leading_fraction(s);
+            f = frac_x;
+            scale = frac_scale;
+            s = rem_frac;
+            post = pl_frac != s.len();
+        }
+        if !pre && !post {
+            return None;
+        }
+
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let c = bytes[i];
+            if c == b'.' || c.is_ascii_digit() {
+                break;
+            }
+            i += 1;
+        }
+        if i == 0 {
+            return None;
+        }
+        let unit_str = &s[..i];
+        s = &s[i..];
+        let unit = parse_duration_unit(unit_str)?;
+
+        if v > (1 << 63) / unit {
+            return None;
+        }
+        v *= unit;
+        if f > 0 {
+            let frac_nanos = (f as f64 * (unit as f64 / scale)) as u64;
+            let next_v = v.checked_add(frac_nanos)?;
+            if next_v > (1 << 63) {
+                return None;
+            }
+            v = next_v;
+        }
+        let next_d = d.checked_add(v)?;
+        if next_d > (1 << 63) {
+            return None;
+        }
+        d = next_d;
+    }
+
+    if neg {
+        if d > 0 {
+            return None;
+        }
+        return Some(Duration::ZERO);
+    }
+    if d > (1 << 63) - 1 {
+        return None;
+    }
+    Some(Duration::from_nanos(d))
 }
 
 fn validate_ipv4_host(ip: Ipv4Addr) -> bool {
@@ -468,7 +614,7 @@ pub fn validate_observatory_config(
                     path: "observatory.probeInterval".into(),
                     reason: "invalid probe interval",
                 })?;
-            if interval < MIN_PROBE_INTERVAL_SECONDS {
+            if interval < MIN_PROBE_INTERVAL {
                 return Err(SanitizeError::Incompatible {
                     path: "observatory.probeInterval".into(),
                     reason: "probe interval below minimum",
@@ -528,20 +674,20 @@ pub fn validate_observatory_config(
                     path: "burstObservatory.pingConfig.interval".into(),
                     reason: "interval must be a string duration",
                 })?;
-            let int_sec =
+            let int_dur =
                 parse_duration_string(int_str).ok_or_else(|| SanitizeError::Incompatible {
                     path: "burstObservatory.pingConfig.interval".into(),
                     reason: "invalid probe interval",
                 })?;
-            if int_sec < MIN_PROBE_INTERVAL_SECONDS {
+            if int_dur < MIN_PROBE_INTERVAL {
                 return Err(SanitizeError::Incompatible {
                     path: "burstObservatory.pingConfig.interval".into(),
                     reason: "probe interval below minimum",
                 });
             }
-            int_sec
+            int_dur
         } else {
-            DEFAULT_BURST_INTERVAL_SECONDS
+            DEFAULT_BURST_INTERVAL
         };
 
         let _timeout = if let Some(to_val) = ping_cfg.get("timeout") {
@@ -549,20 +695,20 @@ pub fn validate_observatory_config(
                 path: "burstObservatory.pingConfig.timeout".into(),
                 reason: "timeout must be a string duration",
             })?;
-            let to_sec =
+            let to_dur =
                 parse_duration_string(to_str).ok_or_else(|| SanitizeError::Incompatible {
                     path: "burstObservatory.pingConfig.timeout".into(),
                     reason: "invalid burst timeout",
                 })?;
-            if to_sec == 0 || to_sec > MAX_BURST_TIMEOUT_SECONDS {
+            if to_dur.is_zero() || to_dur > MAX_BURST_TIMEOUT {
                 return Err(SanitizeError::Incompatible {
                     path: "burstObservatory.pingConfig.timeout".into(),
                     reason: "burst timeout exceeds maximum",
                 });
             }
-            to_sec
+            to_dur
         } else {
-            DEFAULT_BURST_TIMEOUT_SECONDS
+            DEFAULT_BURST_TIMEOUT
         };
 
         let sampling = if let Some(samp_val) = ping_cfg.get("sampling") {
@@ -589,12 +735,13 @@ pub fn validate_observatory_config(
             DEFAULT_BURST_SAMPLING
         };
 
-        let _ = interval
-            .checked_mul(sampling)
-            .ok_or_else(|| SanitizeError::Incompatible {
+        let total_ns = interval.as_nanos().checked_mul(sampling as u128);
+        if total_ns.is_none_or(|ns| ns > i64::MAX as u128) {
+            return Err(SanitizeError::Incompatible {
                 path: "burstObservatory.pingConfig".into(),
                 reason: "burst parameters overflow",
-            })?;
+            });
+        }
 
         if let Some(method_val) = ping_cfg.get("httpMethod") {
             let method_str = method_val
@@ -1045,16 +1192,296 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_duration_string() {
-        assert_eq!(parse_duration_string("10s"), Some(10));
-        assert_eq!(parse_duration_string("1m"), Some(60));
-        assert_eq!(parse_duration_string("2h"), Some(7200));
-        assert_eq!(parse_duration_string("500ms"), Some(0));
-        assert_eq!(parse_duration_string("1500ms"), Some(1));
-        // Bare numbers rejected
+    fn parse_duration_string_accepts_standard_units_and_compounds() {
+        assert_eq!(parse_duration_string("10s"), Some(Duration::from_secs(10)));
+        assert_eq!(parse_duration_string("1m"), Some(Duration::from_secs(60)));
+        assert_eq!(parse_duration_string("2h"), Some(Duration::from_secs(7200)));
+        assert_eq!(
+            parse_duration_string("1m30s"),
+            Some(Duration::from_secs(90))
+        );
+        assert_eq!(
+            parse_duration_string("2h45m"),
+            Some(Duration::from_secs(9900))
+        );
+        assert_eq!(
+            parse_duration_string("1h2m3s4ms5us6ns"),
+            Some(Duration::from_nanos(
+                3_600_000_000_000 + 120_000_000_000 + 3_000_000_000 + 4_000_000 + 5_000 + 6
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_duration_string_preserves_subsecond_precision() {
+        assert_eq!(
+            parse_duration_string("500ms"),
+            Some(Duration::from_millis(500))
+        );
+        assert_eq!(
+            parse_duration_string("1500ms"),
+            Some(Duration::from_millis(1500))
+        );
+        assert_eq!(
+            parse_duration_string("1.5s"),
+            Some(Duration::from_millis(1500))
+        );
+        assert_eq!(
+            parse_duration_string(".5s"),
+            Some(Duration::from_millis(500))
+        );
+        assert_eq!(parse_duration_string("1.s"), Some(Duration::from_secs(1)));
+        assert_eq!(
+            parse_duration_string("100us"),
+            Some(Duration::from_micros(100))
+        );
+        // UTF-8 micro symbol U+00B5
+        assert_eq!(
+            parse_duration_string("100µs"),
+            Some(Duration::from_micros(100))
+        );
+        // UTF-8 Greek letter mu U+03BC
+        assert_eq!(
+            parse_duration_string("100μs"),
+            Some(Duration::from_micros(100))
+        );
+        assert_eq!(
+            parse_duration_string("100ns"),
+            Some(Duration::from_nanos(100))
+        );
+        assert_eq!(
+            parse_duration_string("9.999999999s"),
+            Some(Duration::from_nanos(9_999_999_999))
+        );
+    }
+
+    #[test]
+    fn parse_duration_string_handles_signed_zero_and_rejects_negative() {
+        assert_eq!(parse_duration_string("+10s"), Some(Duration::from_secs(10)));
+        assert_eq!(parse_duration_string("+0"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("+0s"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("0"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("0s"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("-0"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("-0s"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("-0.0s"), Some(Duration::ZERO));
+
+        // Negative non-zero durations rejected per non-negative resource policy
+        assert_eq!(parse_duration_string("-10s"), None);
+        assert_eq!(parse_duration_string("-500ms"), None);
+        assert_eq!(parse_duration_string("-1ns"), None);
+        assert_eq!(parse_duration_string("-0.1s"), None);
+    }
+
+    #[test]
+    fn parse_duration_string_handles_subnano_and_overflow_boundaries() {
+        assert_eq!(
+            parse_duration_string("0.000000001s"),
+            Some(Duration::from_nanos(1))
+        );
+        assert_eq!(parse_duration_string("0.0000000001s"), Some(Duration::ZERO));
+        assert_eq!(parse_duration_string("0.5ns"), Some(Duration::ZERO));
+
+        // Go max positive duration: i64::MAX nanoseconds
+        assert_eq!(
+            parse_duration_string("9223372036854775807ns"),
+            Some(Duration::from_nanos(9223372036854775807))
+        );
+        assert_eq!(parse_duration_string("9223372036854775808ns"), None);
+
+        assert_eq!(
+            parse_duration_string("2562047h47m16.854775807s"),
+            Some(Duration::from_nanos(9223372036854775807))
+        );
+        assert_eq!(parse_duration_string("2562047h47m16.854775808s"), None);
+    }
+
+    #[test]
+    fn parse_duration_string_rejects_malformed_inputs() {
         assert_eq!(parse_duration_string("30"), None);
+        assert_eq!(parse_duration_string("00"), None);
+        assert_eq!(parse_duration_string("+00"), None);
+        assert_eq!(parse_duration_string("-00"), None);
         assert_eq!(parse_duration_string(""), None);
         assert_eq!(parse_duration_string("abc"), None);
+        assert_eq!(parse_duration_string(".s"), None);
+        assert_eq!(parse_duration_string("-.s"), None);
+        assert_eq!(parse_duration_string("+.s"), None);
+        assert_eq!(parse_duration_string("1..5s"), None);
+        assert_eq!(parse_duration_string("1s2"), None);
+        assert_eq!(parse_duration_string("++1s"), None);
+        assert_eq!(parse_duration_string("--1s"), None);
+        assert_eq!(parse_duration_string("1d"), None);
+        assert_eq!(parse_duration_string("1w"), None);
+        assert_eq!(parse_duration_string("10s "), None);
+        assert_eq!(parse_duration_string(" 10s"), None);
+    }
+
+    #[test]
+    fn validate_observatory_enforces_probe_interval_boundaries() {
+        let outbounds = vec![json!({ "tag": "proxy-1", "protocol": "vmess" })];
+        let tags: HashSet<String> = ["proxy-1".into()].into_iter().collect();
+
+        let valid_10s = json!({
+            "subjectSelector": ["proxy"],
+            "probeURL": "https://example.com/",
+            "probeInterval": "10s",
+        });
+        assert!(validate_observatory_config(&valid_10s, false, &outbounds, &tags).is_ok());
+
+        let valid_compound = json!({
+            "subjectSelector": ["proxy"],
+            "probeURL": "https://example.com/",
+            "probeInterval": "1m30s",
+        });
+        assert!(validate_observatory_config(&valid_compound, false, &outbounds, &tags).is_ok());
+
+        let below_min = json!({
+            "subjectSelector": ["proxy"],
+            "probeURL": "https://example.com/",
+            "probeInterval": "9.999999999s",
+        });
+        assert_eq!(
+            validate_observatory_config(&below_min, false, &outbounds, &tags).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "observatory.probeInterval".into(),
+                reason: "probe interval below minimum",
+            }
+        );
+
+        let subsecond = json!({
+            "subjectSelector": ["proxy"],
+            "probeURL": "https://example.com/",
+            "probeInterval": "500ms",
+        });
+        assert_eq!(
+            validate_observatory_config(&subsecond, false, &outbounds, &tags).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "observatory.probeInterval".into(),
+                reason: "probe interval below minimum",
+            }
+        );
+
+        let negative = json!({
+            "subjectSelector": ["proxy"],
+            "probeURL": "https://example.com/",
+            "probeInterval": "-10s",
+        });
+        assert_eq!(
+            validate_observatory_config(&negative, false, &outbounds, &tags).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "observatory.probeInterval".into(),
+                reason: "invalid probe interval",
+            }
+        );
+    }
+
+    #[test]
+    fn validate_burst_observatory_accepts_subsecond_timeout_and_validates_limits() {
+        let outbounds = vec![json!({ "tag": "node-1", "protocol": "vmess" })];
+        let tags: HashSet<String> = ["node-1".into()].into_iter().collect();
+
+        // 500ms timeout passes positive <= 60s
+        let cfg_500ms = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "10s",
+                "timeout": "500ms",
+            }
+        });
+        assert!(validate_observatory_config(&cfg_500ms, true, &outbounds, &tags).is_ok());
+
+        // 1.5s timeout passes
+        let cfg_1_5s = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "10s",
+                "timeout": "1.5s",
+            }
+        });
+        assert!(validate_observatory_config(&cfg_1_5s, true, &outbounds, &tags).is_ok());
+
+        // 60s timeout passes
+        let cfg_60s = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "10s",
+                "timeout": "60s",
+            }
+        });
+        assert!(validate_observatory_config(&cfg_60s, true, &outbounds, &tags).is_ok());
+
+        // 60.000000001s timeout rejected
+        let cfg_over_60s = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "10s",
+                "timeout": "60.000000001s",
+            }
+        });
+        assert_eq!(
+            validate_observatory_config(&cfg_over_60s, true, &outbounds, &tags).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "burstObservatory.pingConfig.timeout".into(),
+                reason: "burst timeout exceeds maximum",
+            }
+        );
+
+        // 0s timeout rejected under explicit current policy
+        let cfg_zero = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "10s",
+                "timeout": "0s",
+            }
+        });
+        assert_eq!(
+            validate_observatory_config(&cfg_zero, true, &outbounds, &tags).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "burstObservatory.pingConfig.timeout".into(),
+                reason: "burst timeout exceeds maximum",
+            }
+        );
+
+        // 9.999999999s interval rejected < 10s
+        let cfg_below_min_interval = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "9.999999999s",
+                "timeout": "5s",
+            }
+        });
+        assert_eq!(
+            validate_observatory_config(&cfg_below_min_interval, true, &outbounds, &tags)
+                .unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "burstObservatory.pingConfig.interval".into(),
+                reason: "probe interval below minimum",
+            }
+        );
+
+        // Burst interval * sampling must fit Go signed time.Duration (<= i64::MAX nanoseconds)
+        let cfg_overflow = json!({
+            "subjectSelector": ["node"],
+            "pingConfig": {
+                "destination": "https://example.com/",
+                "interval": "2000000h",
+                "sampling": 20,
+            }
+        });
+        assert_eq!(
+            validate_observatory_config(&cfg_overflow, true, &outbounds, &tags).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "burstObservatory.pingConfig".into(),
+                reason: "burst parameters overflow",
+            }
+        );
     }
 
     #[test]
