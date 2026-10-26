@@ -5,7 +5,7 @@
 //! control plane), `reverse` (tunnels in), TLS key-log and certificate paths, and
 //! socket marks or interface binds that escape Kasumi's fwmark/uid routing.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt;
 
 use serde_json::{Map, Value, json};
@@ -946,7 +946,7 @@ fn validate_ingress_references_across_rules(
     rules: &[&Value],
     ingress_tags: &[String],
 ) -> Result<(), SanitizeError> {
-    let mut referenced_ingress = HashSet::new();
+    let mut first_set: Option<BTreeSet<String>> = None;
     for r in rules {
         if let Some(obj) = r.as_object()
             && let Some(inb) = obj.get("inboundTag")
@@ -956,18 +956,25 @@ fn validate_ingress_references_across_rules(
                 Value::String(s) => vec![s.as_str()],
                 _ => Vec::new(),
             };
-            for t in tags {
-                if ingress_tags.iter().any(|it| it == t) {
-                    referenced_ingress.insert(t.to_string());
+            let set: BTreeSet<String> = tags
+                .into_iter()
+                .filter(|t| ingress_tags.iter().any(|it| it == *t))
+                .map(str::to_string)
+                .collect();
+            if set.is_empty() {
+                continue;
+            }
+            match &first_set {
+                None => first_set = Some(set),
+                Some(prev) if *prev != set => {
+                    return Err(SanitizeError::Incompatible {
+                        path: "routing.rules".into(),
+                        reason: "multiple ingress tags referenced with different routing",
+                    });
                 }
+                Some(_) => {}
             }
         }
-    }
-    if referenced_ingress.len() > 1 {
-        return Err(SanitizeError::Incompatible {
-            path: "routing.rules".into(),
-            reason: "multiple ingress tags referenced with different routing",
-        });
     }
     Ok(())
 }
@@ -1883,6 +1890,135 @@ mod tests {
         assert_eq!(out.ingress_tags, vec!["in-socks", "in-unused"]);
         let rules = out.routing.unwrap()["rules"].as_array().unwrap().clone();
         assert_eq!(rules[0]["inboundTag"], json!(["in-socks"]));
+    }
+
+    #[test]
+    fn accepts_single_rule_with_multiple_ingress_tags() {
+        let v = json!({
+            "inbounds": [
+                { "tag": "in-socks", "listen": "127.0.0.1", "port": 1080 },
+                { "tag": "in-http", "listen": "127.0.0.1", "port": 8080 },
+            ],
+            "outbounds": [vless("p1")],
+            "routing": {
+                "rules": [
+                    { "type": "field", "inboundTag": ["in-socks", "in-http"], "outboundTag": "p1" },
+                ],
+            },
+        });
+        let out = sanitize(v);
+        assert_eq!(out.ingress_tags, vec!["in-socks", "in-http"]);
+        let rules = out.routing.as_ref().unwrap()["rules"].as_array().unwrap();
+        assert_eq!(rules[0]["inboundTag"], json!(["in-socks", "in-http"]));
+
+        let roundtrip = sanitize_provider_xray(&out.into_provider_json()).unwrap();
+        assert_eq!(roundtrip.ingress_tags, vec!["in-socks", "in-http"]);
+        let rt_rules = roundtrip.routing.as_ref().unwrap()["rules"]
+            .as_array()
+            .unwrap();
+        assert_eq!(rt_rules[0]["inboundTag"], json!(["in-socks", "in-http"]));
+    }
+
+    #[test]
+    fn accepts_multiple_rules_with_same_ingress_tags_reversed_order() {
+        let v = json!({
+            "inbounds": [
+                { "tag": "in-socks", "listen": "127.0.0.1", "port": 1080 },
+                { "tag": "in-http", "listen": "127.0.0.1", "port": 8080 },
+            ],
+            "outbounds": [vless("p1"), vless("p2")],
+            "routing": {
+                "rules": [
+                    { "type": "field", "inboundTag": ["in-socks", "in-http"], "network": "tcp", "outboundTag": "p1" },
+                    { "type": "field", "inboundTag": ["in-http", "in-socks"], "network": "udp", "outboundTag": "p2" },
+                ],
+            },
+        });
+        let out = sanitize(v);
+        assert_eq!(out.ingress_tags, vec!["in-socks", "in-http"]);
+        let rules = out.routing.as_ref().unwrap()["rules"].as_array().unwrap();
+        assert_eq!(rules.len(), 2);
+
+        let roundtrip = sanitize_provider_xray(&out.into_provider_json()).unwrap();
+        assert_eq!(roundtrip.ingress_tags, vec!["in-socks", "in-http"]);
+        let rt_rules = roundtrip.routing.as_ref().unwrap()["rules"]
+            .as_array()
+            .unwrap();
+        assert_eq!(rt_rules.len(), 2);
+    }
+
+    #[test]
+    fn accepts_rules_mixing_virtual_tags_with_same_ingress_set() {
+        let v = json!({
+            "inbounds": [
+                { "tag": "in-socks", "listen": "127.0.0.1", "port": 1080 },
+                { "tag": "in-http", "listen": "127.0.0.1", "port": 8080 },
+            ],
+            "outbounds": [
+                vless("p1"),
+                loopback("loop", "v-in"),
+            ],
+            "routing": {
+                "rules": [
+                    { "type": "field", "inboundTag": ["v-in"], "outboundTag": "p1" },
+                    { "type": "field", "inboundTag": ["in-socks", "in-http"], "network": "tcp", "outboundTag": "loop" },
+                    { "type": "field", "inboundTag": ["in-http", "in-socks", "v-in"], "network": "udp", "outboundTag": "p1" },
+                ],
+            },
+        });
+        let out = sanitize(v);
+        assert_eq!(out.ingress_tags, vec!["in-socks", "in-http"]);
+        assert_eq!(out.virtual_inbound_tags, vec!["v-in"]);
+
+        let roundtrip = sanitize_provider_xray(&out.into_provider_json()).unwrap();
+        assert_eq!(roundtrip.ingress_tags, vec!["in-socks", "in-http"]);
+        assert_eq!(roundtrip.virtual_inbound_tags, vec!["v-in"]);
+        let rt_rules = roundtrip.routing.as_ref().unwrap()["rules"]
+            .as_array()
+            .unwrap();
+        assert_eq!(rt_rules.len(), 3);
+    }
+
+    #[test]
+    fn rejects_rules_referencing_differing_ingress_sets() {
+        let v = json!({
+            "inbounds": [
+                { "tag": "in-socks", "listen": "127.0.0.1", "port": 1080 },
+                { "tag": "in-http", "listen": "127.0.0.1", "port": 8080 },
+            ],
+            "outbounds": [vless("p1"), vless("p2")],
+            "routing": {
+                "rules": [
+                    { "type": "field", "inboundTag": ["in-socks", "in-http"], "outboundTag": "p1" },
+                    { "type": "field", "inboundTag": ["in-socks"], "outboundTag": "p2" },
+                ],
+            },
+        });
+        assert!(matches!(
+            sanitize_provider_xray(&v),
+            Err(SanitizeError::Incompatible { path, reason })
+            if path == "routing.rules" && reason == "multiple ingress tags referenced with different routing"
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_inbound_tag_in_rule_with_valid_ingress_tag() {
+        let v = json!({
+            "inbounds": [
+                { "tag": "in-socks", "listen": "127.0.0.1", "port": 1080 },
+            ],
+            "outbounds": [vless("proxy")],
+            "routing": {
+                "rules": [
+                    { "type": "field", "inboundTag": ["in-socks", "unknown-tag"], "outboundTag": "proxy" },
+                ],
+            },
+        });
+        assert!(matches!(
+            sanitize_provider_xray(&v),
+            Err(SanitizeError::Incompatible { path, reason })
+            if path == "routing.rules[0].inboundTag" && reason == "references unknown inbound tag"
+        ));
     }
 
     #[test]
