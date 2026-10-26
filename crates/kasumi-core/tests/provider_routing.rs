@@ -925,7 +925,8 @@ fn test_real_xray_traffic_unreachable_balancer_without_fallback_terminates_witho
     }))
     .unwrap();
 
-    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe config");
+    let mut probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe config");
+    probe.config["log"] = json!({ "loglevel": "info" });
 
     let temp_dir = tempfile::tempdir().expect("create tempdir");
     let cfg_path = temp_dir.path().join("xray_recursion_test.json");
@@ -986,11 +987,28 @@ fn test_real_xray_traffic_unreachable_balancer_without_fallback_terminates_witho
         );
     }
 
-    // Inspect the log to verify zero recursion
+    // At info level Xray records the force-in hand-off, the loopback context
+    // selection, and the balancer fallback. The old implicit default re-entered
+    // `proxy` indefinitely; an explicit fallback can select this context once.
     let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
-    let proxy_select_count = log_content.matches("proxy-select").count();
+    let force_to_proxy = log_content
+        .lines()
+        .filter(|line| line.contains("taking detour [proxy]"))
+        .count();
+    let proxy_select_routes = log_content
+        .lines()
+        .filter(|line| line.contains("[proxy-select ->"))
+        .count();
     assert!(
-        proxy_select_count <= 2,
-        "expected proxy-select to appear at most twice (entry route), but found {proxy_select_count} occurrences. Log:\n{log_content}"
+        force_to_proxy >= 1 && proxy_select_routes >= 1,
+        "expected info-level force-in and proxy-select routing records. Log:\n{log_content}"
+    );
+    assert!(
+        force_to_proxy <= 1 && proxy_select_routes <= 1,
+        "expected no proxy re-entry, but saw {force_to_proxy} proxy detours and {proxy_select_routes} proxy-select routes. Log:\n{log_content}"
+    );
+    assert!(
+        log_content.contains("app/router: fallback to ["),
+        "expected Xray to record the explicit balancer fallback. Log:\n{log_content}"
     );
 }
