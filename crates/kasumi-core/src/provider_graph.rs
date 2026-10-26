@@ -586,6 +586,16 @@ impl ProviderFragment {
                 .and_then(|ps| ps.get("tag"))
                 .and_then(Value::as_str)
                 .filter(|t| !t.is_empty());
+            // Unlike dialerProxy, a present proxySettings object is always built
+            // by Xray, which refuses one without a tag at load time.
+            if ob.get("proxySettings").is_some_and(|ps| !ps.is_null())
+                && proxy_settings_ref.is_none()
+            {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("outbounds[{i}].proxySettings.tag"),
+                    reason: "proxySettings requires a tag",
+                });
+            }
             if dialer_proxy_ref.is_some() && proxy_settings_ref.is_some() {
                 return Err(SanitizeError::Incompatible {
                     path: format!("outbounds[{i}].proxySettings.tag"),

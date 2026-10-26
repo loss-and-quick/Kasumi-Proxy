@@ -788,3 +788,17 @@ fn a_null_or_empty_dialer_proxy_does_not_conflict_with_proxy_settings() {
         );
     }
 }
+
+#[test]
+fn proxy_settings_without_a_tag_is_rejected() {
+    for missing in [json!({}), json!({ "tag": "" }), json!({ "tag": null })] {
+        let mut chained = server("node-a");
+        chained["proxySettings"] = missing.clone();
+        let cfg = json!({ "outbounds": [chained, server("hop-1")] });
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert!(
+            matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "proxySettings requires a tag"),
+            "expected rejection of proxySettings {missing}, got: {err:?}"
+        );
+    }
+}
