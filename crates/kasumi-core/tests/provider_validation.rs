@@ -3,7 +3,9 @@
 use kasumi_core::custom_sanitize::{SanitizeError, sanitize_provider_xray};
 use kasumi_core::custom_target::Target;
 use kasumi_core::profile::Profile;
-use kasumi_core::provider_graph::{MAX_GRAPH_DEPTH, MAX_GRAPH_NODES, compile_custom_profile};
+use kasumi_core::provider_graph::{
+    MAX_GRAPH_DEPTH, MAX_GRAPH_NODES, ProviderFragment, compile_custom_profile,
+};
 use kasumi_core::state::{AdvancedSettings, RoutingMode};
 use kasumi_core::xray_config::{BuildKind, build_xray_config};
 use serde_json::{Value, json};
@@ -898,5 +900,782 @@ fn an_observation_balancer_without_an_observatory_is_still_rejected() {
     assert!(
         matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "balancer members not covered by observatory"),
         "got: {err:?}"
+    );
+}
+
+#[test]
+fn observed_loopbacks_cannot_hide_service_only_probe_paths() {
+    for (kind, observation) in [
+        (
+            "observatory",
+            json!({
+                "subjectSelector": ["watched"],
+                "probeURL": "https://example.org/generate_204", "probeInterval": "10s"
+            }),
+        ),
+        (
+            "burstObservatory",
+            json!({
+                "subjectSelector": ["watched"],
+                "pingConfig": {
+                    "destination": "https://example.org/generate_204",
+                    "interval": "10s", "timeout": "2s", "sampling": 1
+                }
+            }),
+        ),
+    ] {
+        let mut cfg = json!({
+            "outbounds": [server("node-main"), loopback(Some("watched"), "inside"), freedom("direct")],
+            "routing": { "rules": [
+                { "inboundTag": ["inside"], "network": "tcp,udp", "outboundTag": "direct" },
+                { "network": "tcp,udp", "outboundTag": "node-main" }
+            ] }
+        });
+        cfg[kind] = observation;
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert!(
+            matches!(err, SanitizeError::Incompatible { ref path, reason } if path == &format!("{kind}.subjectSelector") && reason == "observatory selector matches service outbound"),
+            "{kind} must not probe through a service-only loopback: {err:?}"
+        );
+    }
+}
+
+#[test]
+fn a_burst_ping_label_is_omitted_without_changing_probes() {
+    let cfg = json!({
+        "outbounds": [server("node-a")],
+        "burstObservatory": {
+            "subjectSelector": ["node-"],
+            "pingConfig": {
+                "tag": "diagnostic-label",
+                "destination": "https://example.org/generate_204",
+                "httpMethod": "HEAD", "interval": "10s", "timeout": "2s", "sampling": 1
+            }
+        }
+    });
+    let sanitized = sanitize_provider_xray(&cfg).expect("the ping label is not an Xray setting");
+    assert!(
+        sanitized
+            .dropped
+            .iter()
+            .any(|path| path == "burstObservatory.pingConfig.tag")
+    );
+    let rendered = sanitized.fragment.render(&cfg.to_string()).unwrap();
+    let ping = &rendered.burst_observatory.as_ref().unwrap()["pingConfig"];
+    assert!(ping.get("tag").is_none());
+    assert_eq!(ping["httpMethod"], "HEAD");
+    assert_eq!(ping["destination"], "https://example.org/generate_204");
+    let persisted = sanitized.into_provider_json();
+    assert!(
+        persisted["burstObservatory"]["pingConfig"]
+            .get("tag")
+            .is_none()
+    );
+    let again = sanitize_provider_xray(&persisted).unwrap();
+    assert!(
+        !again
+            .dropped
+            .iter()
+            .any(|path| path == "burstObservatory.pingConfig.tag")
+    );
+}
+
+#[test]
+fn burst_observatory_connectivity_is_stripped_with_warning_and_stable_across_reingest() {
+    let raw_burst_obs = json!({
+        "pingConfig": {
+            "destination": "https://example.org/generate_204",
+            "connectivity": "https://example.org/connectivity_check",
+            "interval": "10s",
+            "timeout": "2s",
+            "sampling": 1
+        },
+        "subjectSelector": ["node-"]
+    });
+    let cfg = json!({
+        "outbounds": [server("node-1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": { "type": "leastPing" }, "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "burstObservatory": raw_burst_obs
+    });
+
+    // 1. Sanitizer succeeds and records dropped warning for connectivity
+    let sanitized = sanitize_provider_xray(&cfg).expect("sanitization should succeed");
+    assert!(
+        sanitized
+            .dropped
+            .contains(&"burstObservatory.pingConfig.connectivity".to_string())
+    );
+
+    // 2. Fragment and sanitized struct have connectivity stripped while retaining destination
+    let bobs = sanitized.burst_observatory.as_ref().unwrap();
+    let ping_cfg = bobs.get("pingConfig").unwrap();
+    assert_eq!(
+        ping_cfg.get("destination").and_then(Value::as_str),
+        Some("https://example.org/generate_204")
+    );
+    assert!(ping_cfg.get("connectivity").is_none());
+
+    // 3. Persisted provider JSON omits connectivity
+    let persisted = sanitized.into_provider_json();
+    let persisted_ping_cfg = &persisted["burstObservatory"]["pingConfig"];
+    assert!(persisted_ping_cfg.get("connectivity").is_none());
+    assert_eq!(
+        persisted_ping_cfg
+            .get("destination")
+            .and_then(Value::as_str),
+        Some("https://example.org/generate_204")
+    );
+
+    // 4. Re-sanitizing persisted JSON is stable and idempotent
+    let resanitized = sanitize_provider_xray(&persisted).expect("resanitize should succeed");
+    assert!(
+        !resanitized
+            .dropped
+            .contains(&"burstObservatory.pingConfig.connectivity".to_string())
+    );
+    assert_eq!(resanitized.clone().into_provider_json(), persisted);
+
+    // 5. Rendered active outbounds retains burstObservatory and destination, omits connectivity
+    let raw_str = persisted.to_string();
+    let active = resanitized
+        .fragment
+        .render(&raw_str)
+        .expect("render should succeed");
+    let active_burst_obs = active.burst_observatory.unwrap();
+    assert_eq!(
+        active_burst_obs["pingConfig"]["destination"],
+        "https://example.org/generate_204"
+    );
+    assert!(active_burst_obs["pingConfig"].get("connectivity").is_none());
+
+    // 6. Direct ProviderFragment::build API still rejects unstripped connectivity
+    let direct_err = ProviderFragment::build(
+        vec![server("node-1")],
+        None,
+        None,
+        Some(&cfg["burstObservatory"]),
+        &[],
+    )
+    .unwrap_err();
+    assert_eq!(
+        direct_err,
+        SanitizeError::Incompatible {
+            path: "burstObservatory.pingConfig.connectivity".into(),
+            reason: "unsupported burst connectivity check",
+        }
+    );
+}
+
+fn balancer_leastload_config(costs: Value) -> Value {
+    json!({
+        "outbounds": [server("node-1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": costs
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    })
+}
+
+#[test]
+fn costs_on_non_leastload_strategies_are_rejected() {
+    for strat in ["random", "roundRobin", "leastPing"] {
+        let cfg = json!({
+            "outbounds": [server("node-1"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb", "selector": ["node-"],
+                    "strategy": {
+                        "type": strat,
+                        "settings": {
+                            "costs": [{ "match": "node-1", "value": 2 }]
+                        }
+                    },
+                    "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "observatory": {
+                "subjectSelector": ["node-"],
+                "probeURL": "https://example.org/generate_204",
+                "probeInterval": "10s"
+            }
+        });
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs".into(),
+                reason: "leastLoad costs is not supported",
+            }
+        );
+    }
+}
+
+#[test]
+fn object_and_non_array_costs_are_rejected_while_null_and_empty_are_accepted() {
+    // Non-array types reject
+    for invalid in [json!({"match": "node"}), json!("string"), json!(42)] {
+        let cfg = balancer_leastload_config(invalid);
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs".into(),
+                reason: "balancer costs must be an array",
+            }
+        );
+    }
+
+    // null and empty array are accepted
+    for valid in [Value::Null, json!([])] {
+        let cfg = balancer_leastload_config(valid);
+        assert!(sanitize_provider_xray(&cfg).is_ok());
+    }
+}
+
+#[test]
+fn null_and_non_object_cost_entries_are_safely_rejected() {
+    let cfg_null = balancer_leastload_config(json!([null]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_null).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "cost entry cannot be null",
+        }
+    );
+
+    let cfg_number = balancer_leastload_config(json!([123]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_number).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "cost entry must be an object",
+        }
+    );
+}
+
+#[test]
+fn unknown_cost_fields_and_invalid_field_types_are_rejected() {
+    let cfg_unknown = balancer_leastload_config(json!([{"match": "a", "extra": true}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_unknown).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].extra".into(),
+            reason: "unknown cost rule field",
+        }
+    );
+
+    let cfg_bad_match = balancer_leastload_config(json!([{"match": 123}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_bad_match).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].match".into(),
+            reason: "cost match must be a string",
+        }
+    );
+
+    let cfg_bad_regexp = balancer_leastload_config(json!([{"regexp": "yes"}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_bad_regexp).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].regexp".into(),
+            reason: "cost regexp must be a boolean",
+        }
+    );
+
+    let cfg_bad_value = balancer_leastload_config(json!([{"value": "ten"}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_bad_value).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].value".into(),
+            reason: "cost value must be a number",
+        }
+    );
+}
+
+#[test]
+fn explicit_f32_overflow_is_rejected() {
+    let cfg = balancer_leastload_config(json!([{"match": "node", "value": 1e40}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].value".into(),
+            reason: "cost value exceeds float32 range",
+        }
+    );
+}
+
+#[test]
+fn auto_cost_zero_and_non_exact_f32_are_rejected() {
+    // Auto cost 0
+    let cfg_zero = json!({
+        "outbounds": [server("node-0"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node-0", "value": 0 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    assert_eq!(
+        sanitize_provider_xray(&cfg_zero).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "auto cost value cannot be zero",
+        }
+    );
+
+    // Auto cost 0.1 (not exact f32)
+    let cfg_inexact = json!({
+        "outbounds": [server("node-0.1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node-[0-9.]+", "regexp": true }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    assert_eq!(
+        sanitize_provider_xray(&cfg_inexact).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "auto cost value requires exact float32 representation",
+        }
+    );
+}
+
+#[test]
+fn unsupported_and_invalid_regex_syntax_are_rejected() {
+    let cases = [
+        ("node\\Qabc\\E", "unsupported regex syntax: literal quoting"),
+        ("(?x)node", "unsupported regex flag"),
+        ("(?u)node", "unsupported regex flag"),
+        ("(?R)node", "unsupported regex flag"),
+        ("[a-z&&[0-9]]", "unsupported regex character class operator"),
+        ("[a-z--[d]]", "unsupported regex character class operator"),
+        ("[a-z~~[d]]", "unsupported regex character class operator"),
+        ("[a[b]]", "unsupported regex nested character class"),
+        ("\\u0033", "unsupported regex escape sequence"),
+        ("\\U00000033", "unsupported regex escape sequence"),
+        ("\\<3", "unsupported regex escape sequence"),
+        ("\\1", "unsupported regex escape sequence"),
+        ("a**", "unsupported regex stacked quantifier"),
+        ("a++", "unsupported regex stacked quantifier"),
+        ("a{1001}", "regex repetition count exceeds limit"),
+        ("(a{100}){11}", "regex repetition count exceeds limit"),
+        ("a{01}", "unsupported regex quantifier spelling"),
+        ("a{ 2 }", "unsupported regex quantifier spelling"),
+        ("(?P<a.b>node)", "invalid regex capture group name"),
+        ("[--9]", "unsupported regex character class syntax"),
+        ("[---]", "unsupported regex character class syntax"),
+        ("[a-z", "invalid regex pattern"),
+    ];
+
+    for (pat, expected_reason) in cases {
+        let cfg = balancer_leastload_config(json!([{"match": pat, "regexp": true, "value": 2}]));
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs[0].match".into(),
+                reason: expected_reason,
+            },
+            "pattern {pat} should fail with {expected_reason}"
+        );
+    }
+}
+
+#[test]
+fn bounded_non_ascii_regex_rejected_but_unicode_literal_costs_accepted() {
+    // Non-ASCII regex pattern rejected
+    let cfg_non_ascii_pattern =
+        balancer_leastload_config(json!([{"match": "node-東京", "regexp": true, "value": 2}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_non_ascii_pattern).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].match".into(),
+            reason: "regexp costs require ASCII pattern",
+        }
+    );
+
+    // Non-ASCII candidate tag with regex rule rejected
+    let cfg_non_ascii_tag = json!({
+        "outbounds": [server("node-東京"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node", "regexp": true, "value": 2 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    assert_eq!(
+        sanitize_provider_xray(&cfg_non_ascii_tag).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs".into(),
+            reason: "regexp costs require ASCII tags",
+        }
+    );
+
+    // Non-ASCII candidate tag with substring literal rule IS ACCEPTED!
+    let cfg_unicode_literal = json!({
+        "outbounds": [server("node-東京"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "東京", "regexp": false, "value": 3.0 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    let sanitized =
+        sanitize_provider_xray(&cfg_unicode_literal).expect("unicode literal should be accepted");
+    let active = sanitized
+        .fragment
+        .render(&cfg_unicode_literal.to_string())
+        .expect("render succeeds");
+    let b = &active.balancers[0];
+    let rendered_costs = b["strategy"]["settings"]["costs"].as_array().unwrap();
+    assert_eq!(rendered_costs.len(), 1);
+    assert_eq!(rendered_costs[0]["value"], 3.0);
+}
+
+#[test]
+fn cost_rule_count_limits_are_enforced() {
+    let too_many_rules: Vec<Value> = (0..65)
+        .map(|i| json!({ "match": format!("node-{i}"), "value": 1 }))
+        .collect();
+    let cfg = balancer_leastload_config(Value::Array(too_many_rules));
+    assert_eq!(
+        sanitize_provider_xray(&cfg).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs".into(),
+            reason: "balancer costs exceeds maximum rule limit",
+        }
+    );
+}
+
+#[test]
+fn valid_parent_leastload_with_loopback_members_to_child_random_pools() {
+    let cfg = json!({
+        "outbounds": [
+            server("node-child-1"),
+            server("node-child-2"),
+            loopback(Some("loop-child"), "v-child"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "bal-child",
+                    "selector": ["node-child-"],
+                    "strategy": { "type": "random" }
+                },
+                {
+                    "tag": "bal-parent",
+                    "selector": ["loop-child"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-child"], "balancerTag": "bal-child" },
+                { "network": "tcp,udp", "balancerTag": "bal-parent" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["loop-child"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let sanitized =
+        sanitize_provider_xray(&cfg).expect("parent with loopback member should be accepted");
+    assert_eq!(sanitized.fragment.balancers.len(), 2);
+    let parent_b = sanitized
+        .fragment
+        .balancers
+        .iter()
+        .find(|b| b.tag == "bal-parent")
+        .unwrap();
+    assert_eq!(parent_b.members, vec!["loop-child"]);
+    assert_eq!(parent_b.fallback_tag.as_deref(), Some("direct"));
+}
+
+#[test]
+fn loopback_service_primary_candidate_rejected() {
+    let cfg = json!({
+        "outbounds": [
+            loopback(Some("loop-srv"), "v-srv"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "bal-all-service",
+                    "selector": ["loop-srv"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-srv"], "outboundTag": "direct" },
+                { "network": "tcp,udp", "balancerTag": "bal-all-service" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["loop-srv"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers".into(),
+            reason: "the profile's default route is not a proxy",
+        }
+    );
+}
+
+#[test]
+fn named_and_noncapturing_groups_accepted_without_flag_misclassification() {
+    let good_patterns = [
+        "(?P<proxy>node)",
+        "(?<proxy>node)",
+        "(?:node)",
+        "(?i)node",
+        "[a-z[:digit:]]",
+    ];
+
+    for pat in good_patterns {
+        let cfg = balancer_leastload_config(json!([{"match": pat, "regexp": true, "value": 2}]));
+        assert!(
+            sanitize_provider_xray(&cfg).is_ok(),
+            "pattern '{pat}' should be accepted"
+        );
+    }
+}
+
+#[test]
+fn burst_observatory_http_method_validation_and_preservation() {
+    fn burst_cfg(method: Value) -> Value {
+        json!({
+            "outbounds": [server("node-1"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb", "selector": ["node-"],
+                    "strategy": { "type": "leastPing" }, "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "burstObservatory": {
+                "pingConfig": {
+                    "destination": "https://example.org/generate_204",
+                    "interval": "10s",
+                    "timeout": "2s",
+                    "sampling": 1,
+                    "httpMethod": method
+                },
+                "subjectSelector": ["node-"]
+            }
+        })
+    }
+
+    // 1. Valid methods: GET, HEAD, whitespace, empty, null
+    for valid in [
+        json!("GET"),
+        json!("HEAD"),
+        json!("  GET  "),
+        json!(""),
+        json!("   "),
+        Value::Null,
+    ] {
+        let cfg = burst_cfg(valid.clone());
+        let sanitized = sanitize_provider_xray(&cfg).expect("valid httpMethod should be accepted");
+        let raw_str = sanitized.clone().into_provider_json().to_string();
+        let rendered = sanitized.fragment.render(&raw_str).expect("render");
+        let bobs = rendered.burst_observatory.unwrap();
+        if let Some(s) = valid.as_str() {
+            assert_eq!(bobs["pingConfig"]["httpMethod"], s);
+        }
+    }
+
+    // 2. Non-idempotent / unsupported methods rejected
+    for invalid_method in ["POST", "PUT", "DELETE", "PATCH", "CONNECT"] {
+        let cfg = burst_cfg(json!(invalid_method));
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "burstObservatory.pingConfig.httpMethod".into(),
+                reason: "unsupported probe HTTP method",
+            }
+        );
+    }
+
+    // 3. Non-string type rejected
+    let cfg_num = burst_cfg(json!(123));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_num).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "burstObservatory.pingConfig.httpMethod".into(),
+            reason: "httpMethod must be a string",
+        }
+    );
+}
+
+#[test]
+fn canonical_hyphen_character_classes_are_accepted() {
+    let valid_hyphens = ["[-a]", "[^-a]", "[a-]", "[a\\-b]", "[\\--9]", "[0-9]"];
+
+    for pat in valid_hyphens {
+        let cfg = balancer_leastload_config(json!([{"match": pat, "regexp": true, "value": 2}]));
+        assert!(
+            sanitize_provider_xray(&cfg).is_ok(),
+            "pattern '{pat}' should be accepted"
+        );
+    }
+}
+
+#[test]
+fn mixed_loopback_service_candidate_in_balancer_rejected() {
+    let cfg = json!({
+        "outbounds": [
+            server("node-proxy"),
+            loopback(Some("loop-srv"), "v-srv"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "lb-mixed",
+                    "selector": ["node-proxy", "loop-srv"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-srv"], "outboundTag": "direct" },
+                { "network": "tcp,udp", "balancerTag": "lb-mixed" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["node-proxy", "loop-srv"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].selector".into(),
+            reason: "balancer selector matches service outbound",
+        }
+    );
+}
+
+#[test]
+fn profile_costs_matching_text_budget_exceeded_rejected() {
+    // Reusing the same tag in different balancers still consumes the shared
+    // matching budget, even though each individual candidate set is small.
+    let large_tag = format!("node-{}", "a".repeat(70 * 1024));
+    let rules: Vec<Value> = (0..64)
+        .map(|i| json!({ "match": format!("rule-{i}"), "value": 1 }))
+        .collect();
+    let balancers: Vec<Value> = (0..16)
+        .map(|i| {
+            json!({
+                "tag": format!("lb-{i}"), "selector": ["node-"],
+                "strategy": { "type": "leastLoad", "settings": { "costs": rules } }
+            })
+        })
+        .collect();
+    let cfg = json!({
+        "outbounds": [server(&large_tag)],
+        "routing": {
+            "balancers": balancers,
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb-0" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204", "probeInterval": "10s"
+        }
+    });
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert!(
+        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "profile costs exceeds matching text budget"),
+        "expected the profile-wide matching budget to reject repeated scanning: {err:?}"
     );
 }

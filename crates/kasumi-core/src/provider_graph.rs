@@ -50,12 +50,13 @@ pub const ALLOWED_OBSERVATORY_KEYS: [&str; 5] = [
 
 pub const ALLOWED_BURST_OBSERVATORY_KEYS: [&str; 2] = ["subjectSelector", "pingConfig"];
 
-pub const ALLOWED_PING_CONFIG_KEYS: [&str; 5] = [
+pub const ALLOWED_PING_CONFIG_KEYS: [&str; 6] = [
     "destination",
     "interval",
     "connectivity",
     "timeout",
     "sampling",
+    "httpMethod",
 ];
 
 fn parse_duration_unit(u: &str) -> Option<u64> {
@@ -423,6 +424,7 @@ pub enum TargetRef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FragmentOutbound {
     pub tag: String,
+    pub orig_tag: String,
     pub raw: Value,
     pub is_service: bool,
     pub is_loopback: bool,
@@ -440,6 +442,7 @@ pub struct FragmentBalancer {
     /// strategies that can pick nothing; random and roundRobin never do.
     pub fallback_tag: Option<String>,
     pub has_explicit_fallback: bool,
+    pub resolved_costs: Option<Vec<(String, serde_json::Number)>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -497,13 +500,34 @@ impl ProviderFragment {
 
         let orig_outbound_tags: Vec<String> = raw_outbounds
             .iter()
-            .filter_map(|o| o.get("tag").and_then(Value::as_str).map(str::to_string))
+            .filter_map(|o| {
+                let t = o.get("tag").and_then(Value::as_str)?;
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            })
             .collect();
         let mut occupied: HashSet<String> = orig_outbound_tags.iter().cloned().collect();
 
+        let original_tags: Vec<String> = raw_outbounds
+            .iter()
+            .map(|o| {
+                o.get("tag")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect();
+
         // Assign synthetic tags to unnamed outbounds
         for (i, ob) in raw_outbounds.iter_mut().enumerate() {
-            if ob.get("tag").and_then(Value::as_str).is_some() {
+            if ob
+                .get("tag")
+                .and_then(Value::as_str)
+                .is_some_and(|t| !t.is_empty())
+            {
                 continue;
             }
             let mut suffix = 0usize;
@@ -620,6 +644,7 @@ impl ProviderFragment {
 
             fragment_outbounds.push(FragmentOutbound {
                 tag,
+                orig_tag: original_tags[i].clone(),
                 raw: ob,
                 is_service,
                 is_loopback,
@@ -630,6 +655,7 @@ impl ProviderFragment {
 
         let mut fragment_balancers = Vec::new();
         let mut balancer_tags = HashSet::new();
+        let mut cost_budget = crate::costs::CostBudget::default();
         let raw_balancers = routing
             .and_then(|r| r.get("balancers"))
             .and_then(Value::as_array);
@@ -667,24 +693,13 @@ impl ProviderFragment {
                 let strat_val = b_obj.get("strategy");
                 // Xray reads the strategy as an object with a `type`; a bare string
                 // does not parse there, so it is not passed on either.
-                let strat_type = match strat_val {
+                let (strat_type, raw_costs) = match strat_val {
                     Some(Value::Object(o)) => {
-                        if let Some(costs) = o.get("settings").and_then(|s| s.get("costs")) {
-                            let non_empty = match costs {
-                                Value::Array(a) => !a.is_empty(),
-                                Value::Object(m) => !m.is_empty(),
-                                _ => true,
-                            };
-                            if non_empty {
-                                return Err(SanitizeError::Incompatible {
-                                    path: format!("{path}.strategy.settings.costs"),
-                                    reason: "leastLoad costs is not supported",
-                                });
-                            }
-                        }
-                        o.get("type").and_then(Value::as_str)
+                        let st = o.get("type").and_then(Value::as_str);
+                        let costs = o.get("settings").and_then(|s| s.get("costs"));
+                        (st, costs)
                     }
-                    None => None,
+                    None => (None, None),
                     _ => {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.strategy"),
@@ -699,6 +714,24 @@ impl ProviderFragment {
                         path: format!("{path}.strategy"),
                         reason: "unknown balancer strategy",
                     });
+                }
+                if let Some(costs) = raw_costs
+                    && !costs.is_null()
+                {
+                    if !costs.is_array() {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs"),
+                            reason: "balancer costs must be an array",
+                        });
+                    }
+                    if strat_type != Some("leastLoad")
+                        && costs.as_array().is_some_and(|a| !a.is_empty())
+                    {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs"),
+                            reason: "leastLoad costs is not supported",
+                        });
+                    }
                 }
 
                 let sel_arr = b_obj
@@ -724,10 +757,10 @@ impl ProviderFragment {
                         && !members.contains(orig)
                     {
                         let ob = fragment_outbounds.iter().find(|o| o.tag == *orig).unwrap();
-                        if ob.is_service || ob.is_loopback {
+                        if ob.is_service {
                             return Err(SanitizeError::Incompatible {
                                 path: format!("{path}.selector"),
-                                reason: "balancer selector matches service or loopback outbound",
+                                reason: "balancer selector matches service outbound",
                             });
                         }
                         members.push(orig.clone());
@@ -763,12 +796,35 @@ impl ProviderFragment {
                         ),
                     };
 
+                let resolved_costs = if strat_type == Some("leastLoad")
+                    && let Some(costs) = raw_costs
+                    && !costs.is_null()
+                    && costs.as_array().is_some_and(|a| !a.is_empty())
+                {
+                    let member_orig_tags: Vec<(&str, &str)> = members
+                        .iter()
+                        .map(|m| {
+                            let ob = fragment_outbounds.iter().find(|o| o.tag == *m).unwrap();
+                            (ob.tag.as_str(), ob.orig_tag.as_str())
+                        })
+                        .collect();
+                    Some(crate::costs::resolve_leastload_costs(
+                        costs,
+                        &member_orig_tags,
+                        &path,
+                        &mut cost_budget,
+                    )?)
+                } else {
+                    None
+                };
+
                 fragment_balancers.push(FragmentBalancer {
                     tag,
                     strategy: strat_val.cloned(),
                     members,
                     fallback_tag,
                     has_explicit_fallback,
+                    resolved_costs,
                 });
             }
         }
@@ -789,7 +845,6 @@ impl ProviderFragment {
         }
 
         let mut fragment_observatory = None;
-        let mut obs_subjects: HashSet<String> = HashSet::new();
 
         if let Some(obs) = observatory {
             let path = "observatory";
@@ -856,10 +911,10 @@ impl ProviderFragment {
                     && !subjects.contains(orig)
                 {
                     let ob = fragment_outbounds.iter().find(|o| o.tag == *orig).unwrap();
-                    if ob.is_service || ob.is_loopback {
+                    if ob.is_service {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.subjectSelector"),
-                            reason: "observatory selector matches service or loopback outbound",
+                            reason: "observatory selector matches service outbound",
                         });
                     }
                     subjects.push(orig.clone());
@@ -877,7 +932,6 @@ impl ProviderFragment {
                     reason: "observatory selector exceeds maximum members",
                 });
             }
-            obs_subjects = subjects.iter().cloned().collect();
             fragment_observatory = Some(FragmentObservatory {
                 is_burst: false,
                 subjects,
@@ -919,6 +973,26 @@ impl ProviderFragment {
                     path: format!("{path}.pingConfig.connectivity"),
                     reason: "unsupported burst connectivity check",
                 });
+            }
+            if let Some(m_val) = ping_cfg.get("httpMethod") {
+                match m_val {
+                    Value::String(s) => {
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() && trimmed != "HEAD" && trimmed != "GET" {
+                            return Err(SanitizeError::Incompatible {
+                                path: format!("{path}.pingConfig.httpMethod"),
+                                reason: "unsupported probe HTTP method",
+                            });
+                        }
+                    }
+                    Value::Null => {}
+                    _ => {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.pingConfig.httpMethod"),
+                            reason: "httpMethod must be a string",
+                        });
+                    }
+                }
             }
             let dest = ping_cfg
                 .get("destination")
@@ -991,10 +1065,10 @@ impl ProviderFragment {
                     && !subjects.contains(orig)
                 {
                     let ob = fragment_outbounds.iter().find(|o| o.tag == *orig).unwrap();
-                    if ob.is_service || ob.is_loopback {
+                    if ob.is_service {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.subjectSelector"),
-                            reason: "observatory selector matches service or loopback outbound",
+                            reason: "observatory selector matches service outbound",
                         });
                     }
                     subjects.push(orig.clone());
@@ -1012,7 +1086,6 @@ impl ProviderFragment {
                     reason: "observatory selector exceeds maximum members",
                 });
             }
-            obs_subjects = subjects.iter().cloned().collect();
             fragment_observatory = Some(FragmentObservatory {
                 is_burst: true,
                 subjects,
@@ -1038,21 +1111,13 @@ impl ProviderFragment {
                 dropped_warnings.push(format!("routing.balancers[{i}].fallbackTag"));
                 continue;
             }
-            if is_observation_strategy(b.strategy.as_ref()) || b.has_explicit_fallback {
-                if fragment_observatory.is_none() {
-                    return Err(SanitizeError::Incompatible {
-                        path: format!("routing.balancers[{i}].strategy"),
-                        reason: "balancer members not covered by observatory",
-                    });
-                }
-                for m in &b.members {
-                    if !obs_subjects.contains(m) {
-                        return Err(SanitizeError::Incompatible {
-                            path: format!("routing.balancers[{i}].strategy"),
-                            reason: "balancer members not covered by observatory",
-                        });
-                    }
-                }
+            if (is_observation_strategy(b.strategy.as_ref()) || b.has_explicit_fallback)
+                && fragment_observatory.is_none()
+            {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("routing.balancers[{i}].strategy"),
+                    reason: "balancer members not covered by observatory",
+                });
             }
         }
 
@@ -1297,50 +1362,6 @@ impl ProviderFragment {
         // actually reaches is its context's target. Follow those hops (a cycle
         // among them is rejected by the graph check below) before deciding
         // whether the default route is a proxy.
-        let mut effective_entry = entry.clone();
-        for _ in 0..=fragment_contexts.len() {
-            let TargetRef::Outbound(t) = &effective_entry else {
-                break;
-            };
-            let Some(next) = fragment_outbounds
-                .iter()
-                .find(|o| o.tag == *t)
-                .and_then(|o| o.loopback_inbound.as_deref())
-                .and_then(|v| fragment_contexts.iter().find(|c| c.virtual_tag == v))
-                .map(|c| c.target.clone())
-            else {
-                break;
-            };
-            effective_entry = next;
-        }
-        match &effective_entry {
-            TargetRef::Outbound(t) => {
-                let ob = fragment_outbounds.iter().find(|o| o.tag == *t).unwrap();
-                if ob.is_service {
-                    return Err(SanitizeError::Incompatible {
-                        path: "routing".into(),
-                        reason: "the profile's default route is not a proxy",
-                    });
-                }
-            }
-            TargetRef::Balancer(bt) => {
-                let b = fragment_balancers.iter().find(|b| b.tag == *bt).unwrap();
-                let all_service = b.members.iter().all(|m| {
-                    fragment_outbounds
-                        .iter()
-                        .find(|o| o.tag == *m)
-                        .map(|o| o.is_service)
-                        .unwrap_or(false)
-                });
-                if all_service {
-                    return Err(SanitizeError::Incompatible {
-                        path: "routing.balancers".into(),
-                        reason: "the profile's default route is not a proxy",
-                    });
-                }
-            }
-        }
-
         // Cycle detection
         let n_ob = fragment_outbounds.len();
         let n_bal = fragment_balancers.len();
@@ -1440,6 +1461,152 @@ impl ProviderFragment {
         for u in 0..total_nodes {
             if state[u] == 0 {
                 dfs(u, &adj, &mut state, &mut depths)?;
+            }
+        }
+
+        let mut proxy_memo = vec![None; total_nodes];
+        fn node_has_proxy(
+            u: usize,
+            n_ob: usize,
+            n_bal: usize,
+            fragment_outbounds: &[FragmentOutbound],
+            fragment_balancers: &[FragmentBalancer],
+            fragment_contexts: &[FragmentContext],
+            memo: &mut [Option<bool>],
+        ) -> bool {
+            if let Some(ans) = memo[u] {
+                return ans;
+            }
+            let ans = if u < n_ob {
+                let ob = &fragment_outbounds[u];
+                if !ob.is_service && !ob.is_loopback {
+                    true
+                } else if ob.is_loopback {
+                    if let Some(ref vtag) = ob.loopback_inbound
+                        && let Some(c_idx) = fragment_contexts
+                            .iter()
+                            .position(|c| c.virtual_tag == *vtag)
+                    {
+                        node_has_proxy(
+                            n_ob + n_bal + c_idx,
+                            n_ob,
+                            n_bal,
+                            fragment_outbounds,
+                            fragment_balancers,
+                            fragment_contexts,
+                            memo,
+                        )
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else if u < n_ob + n_bal {
+                let b = &fragment_balancers[u - n_ob];
+                b.members.iter().any(|m| {
+                    let m_idx = fragment_outbounds.iter().position(|o| o.tag == *m).unwrap();
+                    node_has_proxy(
+                        m_idx,
+                        n_ob,
+                        n_bal,
+                        fragment_outbounds,
+                        fragment_balancers,
+                        fragment_contexts,
+                        memo,
+                    )
+                })
+            } else {
+                let c = &fragment_contexts[u - n_ob - n_bal];
+                let target_u = match &c.target {
+                    TargetRef::Outbound(t) => {
+                        fragment_outbounds.iter().position(|o| o.tag == *t).unwrap()
+                    }
+                    TargetRef::Balancer(t) => {
+                        n_ob + fragment_balancers.iter().position(|b| b.tag == *t).unwrap()
+                    }
+                };
+                node_has_proxy(
+                    target_u,
+                    n_ob,
+                    n_bal,
+                    fragment_outbounds,
+                    fragment_balancers,
+                    fragment_contexts,
+                    memo,
+                )
+            };
+            memo[u] = Some(ans);
+            ans
+        }
+
+        let entry_u = target_idx(&entry);
+        if !node_has_proxy(
+            entry_u,
+            n_ob,
+            n_bal,
+            &fragment_outbounds,
+            &fragment_balancers,
+            &fragment_contexts,
+            &mut proxy_memo,
+        ) {
+            return Err(SanitizeError::Incompatible {
+                path: match &entry {
+                    TargetRef::Outbound(_) => "routing".into(),
+                    TargetRef::Balancer(_) => "routing.balancers".into(),
+                },
+                reason: "the profile's default route is not a proxy",
+            });
+        }
+
+        // Validate that no balancer contains primary candidates that only reach service outbounds
+        for (b_idx, b) in fragment_balancers.iter().enumerate() {
+            for m in &b.members {
+                let m_idx = fragment_outbounds.iter().position(|o| o.tag == *m).unwrap();
+                if !node_has_proxy(
+                    m_idx,
+                    n_ob,
+                    n_bal,
+                    &fragment_outbounds,
+                    &fragment_balancers,
+                    &fragment_contexts,
+                    &mut proxy_memo,
+                ) {
+                    return Err(SanitizeError::Incompatible {
+                        path: format!("routing.balancers[{b_idx}].selector"),
+                        reason: "balancer selector matches service outbound",
+                    });
+                }
+            }
+        }
+
+        // Observation subjects have the same proxy requirement as pool members:
+        // a loopback must not hide a direct-only probe behind a virtual inbound.
+        if let Some(observation) = &fragment_observatory {
+            for subject in &observation.subjects {
+                let subject_idx = fragment_outbounds
+                    .iter()
+                    .position(|o| o.tag == *subject)
+                    .unwrap();
+                if !node_has_proxy(
+                    subject_idx,
+                    n_ob,
+                    n_bal,
+                    &fragment_outbounds,
+                    &fragment_balancers,
+                    &fragment_contexts,
+                    &mut proxy_memo,
+                ) {
+                    let kind = if observation.is_burst {
+                        "burstObservatory"
+                    } else {
+                        "observatory"
+                    };
+                    return Err(SanitizeError::Incompatible {
+                        path: format!("{kind}.subjectSelector"),
+                        reason: "observatory selector matches service outbound",
+                    });
+                }
             }
         }
 
@@ -1572,7 +1739,26 @@ impl ProviderFragment {
             if let Some(fallback) = new_fallback {
                 b_val["fallbackTag"] = Value::String(fallback.clone());
             }
-            if let Some(st) = &b.strategy {
+            if let Some(costs) = &b.resolved_costs {
+                let mut strat = b
+                    .strategy
+                    .clone()
+                    .unwrap_or_else(|| json!({"type": "leastLoad"}));
+                let mut settings = strat.get("settings").cloned().unwrap_or_else(|| json!({}));
+                let rendered_costs: Vec<Value> = costs
+                    .iter()
+                    .map(|(member_id, val)| {
+                        json!({
+                            "match": names_outbounds.get(member_id).unwrap(),
+                            "regexp": false,
+                            "value": val,
+                        })
+                    })
+                    .collect();
+                settings["costs"] = Value::Array(rendered_costs);
+                strat["settings"] = settings;
+                b_val["strategy"] = strat;
+            } else if let Some(st) = &b.strategy {
                 b_val["strategy"] = st.clone();
             }
             balancers.push(b_val);

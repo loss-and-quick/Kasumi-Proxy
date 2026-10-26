@@ -2490,6 +2490,7 @@ dependencies = [
  "happ-sub",
  "percent-encoding",
  "regex",
+ "regex-syntax",
  "serde",
  "serde_json",
  "sha2",

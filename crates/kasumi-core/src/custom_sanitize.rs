@@ -185,13 +185,25 @@ pub fn sanitize_provider_xray(v: &Value) -> Result<SanitizedXray, SanitizeError>
         .and_then(Value::as_str)
         .map(str::to_string);
     let observatory = top.get("observatory");
-    let burst_observatory = top.get("burstObservatory");
+    let mut burst_observatory = top.get("burstObservatory").cloned();
+    if let Some(Value::Object(bo)) = &mut burst_observatory
+        && let Some(Value::Object(pc)) = bo.get_mut("pingConfig")
+    {
+        // Direct reachability diagnostics belong to Kasumi. `tag` is an inert
+        // provider label: Xray's HealthPingConfig has no such field.
+        for field in ["connectivity", "tag"] {
+            let path = format!("burstObservatory.pingConfig.{field}");
+            if pc.remove(field).is_some() && !dropped.contains(&path) {
+                dropped.push(path);
+            }
+        }
+    }
 
     let fragment = ProviderFragment::build(
         outbounds,
         routing,
         observatory,
-        burst_observatory,
+        burst_observatory.as_ref(),
         &ingress_tags,
     )?;
 
@@ -201,15 +213,26 @@ pub fn sanitize_provider_xray(v: &Value) -> Result<SanitizedXray, SanitizeError>
         }
     }
 
-    let sanitized_outbounds: Vec<Value> =
-        fragment.outbounds.iter().map(|o| o.raw.clone()).collect();
+    let sanitized_outbounds: Vec<Value> = fragment
+        .outbounds
+        .iter()
+        .map(|o| {
+            let mut raw = o.raw.clone();
+            if o.orig_tag.is_empty()
+                && let Value::Object(m) = &mut raw
+            {
+                m.remove("tag");
+            }
+            raw
+        })
+        .collect();
 
     Ok(SanitizedXray {
         outbounds: sanitized_outbounds,
         routing: routing.cloned(),
         remarks,
         observatory: observatory.cloned(),
-        burst_observatory: burst_observatory.cloned(),
+        burst_observatory,
         ingress_tags,
         dropped,
         fragment,
