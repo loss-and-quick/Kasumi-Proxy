@@ -37,6 +37,9 @@ A selector must not accidentally include another profile or a client-owned outbo
 
 The profile's initial route is determined from its applicable routing rules, not from an
 assumption that its first outbound or an outbound called `proxy` is its intended exit.
+If the first outbound is only a client service such as direct access, forced-proxy
+traffic uses the first usable external ruled target rather than an unrelated server's
+declaration order. Virtual-inbound rules never participate in that external selection.
 Anonymous outbounds receive compiler-local identities only after validation; they do not
 become new selector matches and are not written back into the source configuration.
 Runtime traffic and connection tests use the same default-path selection. Tests skip

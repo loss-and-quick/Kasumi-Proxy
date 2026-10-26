@@ -49,6 +49,8 @@ pub fn is_virtual_rule(rule: &Value, virtual_tags: &HashSet<&str>) -> bool {
 /// Conditional rules are only ever consulted by Xray for the traffic they match,
 /// so following them would be following the provider's block and geo decisions;
 /// the default path is what an unconditional rule, or Xray's own fallback, says.
+/// If that fallback is a service rather than a proxy exit, the first usable
+/// externally ruled target supplies the forced-proxy path instead.
 /// Virtual-inbound rules (internal loopback fallback cascade) are excluded from the
 /// external entry default search so that internal cascades do not hijack the entry target.
 /// See Xray's `routing.Router.PickRoute` and `GetDefaultHandler`.
@@ -105,8 +107,17 @@ pub fn default_target(s: &SanitizedXray) -> Target {
     {
         return Target::Outbound(tag.to_string());
     }
-    // A config with no reachable target: the sanitiser refuses those, so this is
-    // only a last resort that keeps the caller's `proxy` tag pointing at something.
+    // A service-first config has no proxied fallback. Its first usable external
+    // rule identifies the exit, not the unrelated order of server declarations.
+    if let Some(target) = rules
+        .into_iter()
+        .flatten()
+        .filter(|rule| !is_virtual_rule(rule, &virtual_tags))
+        .find_map(target_for)
+    {
+        return target;
+    }
+    // With no usable ruled target either, the first declared proxy is the last resort.
     s.outbounds
         .iter()
         .find(|o| !is_service_outbound(o) && o["tag"].is_string())
@@ -115,8 +126,8 @@ pub fn default_target(s: &SanitizedXray) -> Target {
         .unwrap_or(Target::Outbound("proxy".into()))
 }
 
-/// A rule's named target, when it can carry traffic: a service outbound only
-/// drops or answers it, and a balancer made of nothing but those carries nothing.
+/// A rule's named proxy target. Direct, DNS and block services do not identify a
+/// proxy exit, and a balancer made entirely of those cannot supply one either.
 fn target_of(
     rule: &Value,
     service: &dyn Fn(&str) -> bool,
@@ -305,11 +316,61 @@ mod tests {
         // Everything the provider does not classify goes direct, and only a
         // conditional rule names a server: that server is the profile's exit.
         let s = built(
-            vec![freedom("direct"), server("main")],
+            vec![freedom("direct"), server("decoy"), server("main")],
             json!({ "rules": [
                 { "type": "field", "network": "tcp,udp", "outboundTag": "direct" },
                 { "type": "field", "domain": ["a.example"], "outboundTag": "main" },
             ]}),
+        );
+        assert_eq!(default_target(&s), Target::Outbound("main".into()));
+    }
+
+    #[test]
+    fn service_first_uses_rule_order_instead_of_server_order() {
+        let s = built(
+            vec![freedom("direct"), server("decoy"), server("main")],
+            json!({ "rules": [
+                { "type": "field", "domain": ["main.example"], "outboundTag": "main" },
+                { "type": "field", "domain": ["decoy.example"], "outboundTag": "decoy" }
+            ] }),
+        );
+        assert_eq!(default_target(&s), Target::Outbound("main".into()));
+    }
+
+    #[test]
+    fn service_first_rule_fallback_can_select_a_balancer() {
+        let s = built(
+            vec![freedom("direct"), server("decoy"), server("main")],
+            json!({
+                "balancers": [{ "tag": "selected", "selector": ["main"] }],
+                "rules": [
+                    { "type": "field", "domain": ["main.example"], "balancerTag": "selected" },
+                    { "type": "field", "domain": ["decoy.example"], "outboundTag": "decoy" }
+                ]
+            }),
+        );
+        assert_eq!(
+            default_target(&s),
+            Target::Balancer {
+                tag: "selected".into(),
+                members: vec!["main".into()]
+            }
+        );
+    }
+
+    #[test]
+    fn service_first_rule_fallback_excludes_virtual_only_rules() {
+        let s = built(
+            vec![
+                freedom("direct"),
+                server("decoy"),
+                server("main"),
+                json!({ "tag": "reenter", "protocol": "loopback", "settings": { "inboundTag": "inside" } }),
+            ],
+            json!({ "rules": [
+                { "type": "field", "inboundTag": ["inside"], "outboundTag": "decoy" },
+                { "type": "field", "domain": ["main.example"], "outboundTag": "main" }
+            ] }),
         );
         assert_eq!(default_target(&s), Target::Outbound("main".into()));
     }

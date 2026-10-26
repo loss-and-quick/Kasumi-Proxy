@@ -2168,15 +2168,16 @@ mod tests {
         // First prefix rule is force-in -> proxy
         assert_eq!(rules[0]["inboundTag"][0], "force-in");
         assert_eq!(rules[0]["outboundTag"], "proxy");
-        // Second rule is proxy-select alias rule dispatching to the default target (main)
-        let main_tag = obs
+        // With a service first, the first usable ruled target is backup, not
+        // main merely because its server declaration appears earlier.
+        let backup_tag = obs
             .iter()
-            .find(|o| o["settings"]["vnext"][0]["address"] == "main.example")
+            .find(|o| o["settings"]["vnext"][0]["address"] == "backup.example")
             .unwrap()["tag"]
             .as_str()
             .unwrap();
         assert_eq!(rules[1]["inboundTag"][0], "proxy-select");
-        assert_eq!(rules[1]["outboundTag"], main_tag);
+        assert_eq!(rules[1]["outboundTag"], backup_tag);
         // Catch-all to proxy is last
         assert_eq!(rules.last().unwrap()["outboundTag"], "proxy");
     }
