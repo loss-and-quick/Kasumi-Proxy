@@ -1020,8 +1020,24 @@ impl ProviderFragment {
             });
         }
 
+        let mut dropped_warnings = Vec::new();
+
         // Validate balancer observatory coverage
-        for (i, b) in fragment_balancers.iter().enumerate() {
+        for (i, b) in fragment_balancers.iter_mut().enumerate() {
+            // A random or roundRobin balancer that names a fallback makes Xray
+            // require an observatory, and without one Xray refuses to start.
+            // Such a balancer never had health data to fall back on, so the
+            // fallback is dropped (keeping its plain member choice) rather than
+            // inventing probe traffic the provider did not configure.
+            if fragment_observatory.is_none()
+                && b.has_explicit_fallback
+                && !is_observation_strategy(b.strategy.as_ref())
+            {
+                b.fallback_tag = None;
+                b.has_explicit_fallback = false;
+                dropped_warnings.push(format!("routing.balancers[{i}].fallbackTag"));
+                continue;
+            }
             if is_observation_strategy(b.strategy.as_ref()) || b.has_explicit_fallback {
                 if fragment_observatory.is_none() {
                     return Err(SanitizeError::Incompatible {
@@ -1040,7 +1056,6 @@ impl ProviderFragment {
             }
         }
 
-        let mut dropped_warnings = Vec::new();
         let raw_rules = routing
             .and_then(|r| r.get("rules"))
             .and_then(Value::as_array);

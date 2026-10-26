@@ -842,3 +842,61 @@ fn rules_without_a_type_are_accepted_like_xray_does() {
     );
     assert_eq!(sanitized.fragment.contexts.len(), 1);
 }
+
+#[test]
+fn a_stateless_balancer_fallback_without_an_observatory_is_dropped_with_a_warning() {
+    // Xray refuses to start a random/roundRobin balancer that names a fallback
+    // when nothing observes its members; the members themselves still route.
+    for strategy in [
+        Value::Null,
+        json!({ "type": "random" }),
+        json!({ "type": "roundRobin" }),
+    ] {
+        let mut balancer = json!({ "tag": "lb", "selector": ["node-"], "fallbackTag": "direct" });
+        if !strategy.is_null() {
+            balancer["strategy"] = strategy.clone();
+        }
+        let cfg = json!({
+            "outbounds": [server("node-a"), server("node-b"), freedom("direct")],
+            "routing": {
+                "balancers": [balancer],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            }
+        });
+        let sanitized =
+            sanitize_provider_xray(&cfg).unwrap_or_else(|e| panic!("strategy {strategy}: {e:?}"));
+        assert!(
+            sanitized
+                .dropped
+                .iter()
+                .any(|d| d == "routing.balancers[0].fallbackTag"),
+            "strategy {strategy}: {:?}",
+            sanitized.dropped
+        );
+        let rendered = sanitized.fragment.render(&cfg.to_string()).unwrap();
+        assert!(rendered.balancers[0].get("fallbackTag").is_none());
+        assert_eq!(
+            rendered.balancers[0]["selector"].as_array().unwrap().len(),
+            2
+        );
+    }
+}
+
+#[test]
+fn an_observation_balancer_without_an_observatory_is_still_rejected() {
+    let cfg = json!({
+        "outbounds": [server("node-a"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": { "type": "leastPing" }, "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        }
+    });
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert!(
+        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "balancer members not covered by observatory"),
+        "got: {err:?}"
+    );
+}
