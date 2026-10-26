@@ -194,6 +194,15 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
 
+      - name: Stage geoip/geosite data
+        if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
+        run: |
+          mkdir -p src-tauri/binaries
+          curl -fsSL https://github.com/v2fly/geoip/releases/latest/download/geoip.dat \
+            -o src-tauri/binaries/geoip.dat
+          curl -fsSL https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat \
+            -o src-tauri/binaries/geosite.dat
+
       - name: Verify the new cores accept our generated configs
         if: steps.changes.outputs.skip != 'true' && steps.changes.outputs.bins_changed == 'true'
         run: scripts/check-binary-compat.sh
