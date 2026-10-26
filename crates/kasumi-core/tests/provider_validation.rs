@@ -1221,6 +1221,18 @@ fn unsupported_and_invalid_regex_syntax_are_rejected() {
         ("[a-z&&[0-9]]", "unsupported regex character class operator"),
         ("[a-z--[d]]", "unsupported regex character class operator"),
         ("[a-z~~[d]]", "unsupported regex character class operator"),
+        ("[a[b]]", "unsupported regex nested character class"),
+        ("\\u0033", "unsupported regex escape sequence"),
+        ("\\U00000033", "unsupported regex escape sequence"),
+        ("\\<3", "unsupported regex escape sequence"),
+        ("\\1", "unsupported regex escape sequence"),
+        ("a**", "unsupported regex stacked quantifier"),
+        ("a++", "unsupported regex stacked quantifier"),
+        ("a{1001}", "regex repetition count exceeds limit"),
+        ("(a{100}){11}", "regex repetition count exceeds limit"),
+        ("a{01}", "unsupported regex quantifier spelling"),
+        ("a{ 2 }", "unsupported regex quantifier spelling"),
+        ("(?P<a.b>node)", "invalid regex capture group name"),
         ("[a-z", "invalid regex pattern"),
     ];
 
@@ -1328,4 +1340,109 @@ fn cost_rule_count_limits_are_enforced() {
             reason: "balancer costs exceeds maximum rule limit",
         }
     );
+}
+
+#[test]
+fn valid_parent_leastload_with_loopback_members_to_child_random_pools() {
+    let cfg = json!({
+        "outbounds": [
+            server("node-child-1"),
+            server("node-child-2"),
+            loopback(Some("loop-child"), "v-child"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "bal-child",
+                    "selector": ["node-child-"],
+                    "strategy": { "type": "random" }
+                },
+                {
+                    "tag": "bal-parent",
+                    "selector": ["loop-child"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-child"], "balancerTag": "bal-child" },
+                { "network": "tcp,udp", "balancerTag": "bal-parent" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["loop-child"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let sanitized =
+        sanitize_provider_xray(&cfg).expect("parent with loopback member should be accepted");
+    assert_eq!(sanitized.fragment.balancers.len(), 2);
+    let parent_b = sanitized
+        .fragment
+        .balancers
+        .iter()
+        .find(|b| b.tag == "bal-parent")
+        .unwrap();
+    assert_eq!(parent_b.members, vec!["loop-child"]);
+    assert_eq!(parent_b.fallback_tag.as_deref(), Some("direct"));
+}
+
+#[test]
+fn loopback_service_primary_candidate_rejected() {
+    let cfg = json!({
+        "outbounds": [
+            loopback(Some("loop-srv"), "v-srv"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "bal-all-service",
+                    "selector": ["loop-srv"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-srv"], "outboundTag": "direct" },
+                { "network": "tcp,udp", "balancerTag": "bal-all-service" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["loop-srv"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers".into(),
+            reason: "the profile's default route is not a proxy",
+        }
+    );
+}
+
+#[test]
+fn named_and_noncapturing_groups_accepted_without_flag_misclassification() {
+    let good_patterns = [
+        "(?P<proxy>node)",
+        "(?<proxy>node)",
+        "(?:node)",
+        "(?i)node",
+        "[a-z[:digit:]]",
+    ];
+
+    for pat in good_patterns {
+        let cfg = balancer_leastload_config(json!([{"match": pat, "regexp": true, "value": 2}]));
+        assert!(
+            sanitize_provider_xray(&cfg).is_ok(),
+            "pattern '{pat}' should be accepted"
+        );
+    }
 }

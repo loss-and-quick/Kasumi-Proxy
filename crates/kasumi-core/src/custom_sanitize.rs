@@ -208,8 +208,19 @@ pub fn sanitize_provider_xray(v: &Value) -> Result<SanitizedXray, SanitizeError>
         }
     }
 
-    let sanitized_outbounds: Vec<Value> =
-        fragment.outbounds.iter().map(|o| o.raw.clone()).collect();
+    let sanitized_outbounds: Vec<Value> = fragment
+        .outbounds
+        .iter()
+        .map(|o| {
+            let mut raw = o.raw.clone();
+            if o.orig_tag.is_empty()
+                && let Value::Object(m) = &mut raw
+            {
+                m.remove("tag");
+            }
+            raw
+        })
+        .collect();
 
     Ok(SanitizedXray {
         outbounds: sanitized_outbounds,

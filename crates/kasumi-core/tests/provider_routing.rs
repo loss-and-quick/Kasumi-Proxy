@@ -1321,48 +1321,73 @@ fn leastload_costs_original_tags_with_prefix_collisions_rendered_prefix_free() {
 }
 
 #[test]
-fn anonymous_outbound_uses_empty_tag_not_synthetic_tag_for_cost_matching() {
+fn anonymous_outbound_compiler_identity_not_persisted_and_evaluates_empty_for_costs() {
     let mut ob_anon = server("node-will-be-stripped");
     ob_anon.as_object_mut().unwrap().remove("tag");
 
     let raw = json!({
-        "outbounds": [ob_anon, server("node-2")],
+        "outbounds": [ob_anon, server("node-named")],
         "routing": {
             "balancers": [{
                 "tag": "lb",
-                "selector": [""],
+                "selector": ["node-named"],
                 "strategy": {
                     "type": "leastLoad",
                     "settings": {
                         "costs": [
                             { "match": "unnamed", "value": 99 },
-                            { "match": "\\d+", "regexp": true, "value": 50 }
+                            { "match": "node-named", "value": 42 }
                         ]
                     }
                 },
-                "fallbackTag": "node-2"
+                "fallbackTag": "node-named"
             }],
             "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
         },
         "observatory": {
-            "subjectSelector": [""],
+            "subjectSelector": ["node-named"],
             "probeURL": "https://example.org/generate_204",
             "probeInterval": "10s"
         }
     });
 
-    let profile = custom_profile_from_json(raw);
+    // 1. Direct helper test: anonymous outbound with original tag "" does not match "unnamed"
+    let mut total_rules = 0;
+    let cost_rules = json!([
+        { "match": "unnamed", "value": 99 },
+        { "match": "\\d+", "regexp": true, "value": 50 }
+    ]);
+    let resolved = kasumi_core::costs::resolve_leastload_costs(
+        &cost_rules,
+        &[("kasumi-unnamed-0-0", "")],
+        "routing.balancers[0]",
+        &mut total_rules,
+    )
+    .expect("resolve costs");
+    assert_eq!(resolved[0].1, serde_json::Number::from(1)); // default weight 1, NOT 99!
+
+    // 2. Sanitizer strips compiler synthetic identity from emitted safe JSON
+    let sanitized = kasumi_core::custom_sanitize::sanitize_provider_xray(&raw).expect("sanitize");
+    assert!(sanitized.outbounds[0].get("tag").is_none());
+
+    // 3. Persisted provider JSON retains absence of tag on anonymous outbound
+    let persisted = sanitized.into_provider_json();
+    assert!(persisted["outbounds"][0].get("tag").is_none());
+
+    // 4. Re-sanitizing persisted JSON preserves untagged state (never reads kasumi-unnamed as orig_tag)
+    let resanitized =
+        kasumi_core::custom_sanitize::sanitize_provider_xray(&persisted).expect("resanitize");
+    assert!(resanitized.outbounds[0].get("tag").is_none());
+
+    // 5. Full profile compilation succeeds with valid routing
+    let profile = custom_profile_from_json(persisted);
     let settings = AdvancedSettings::default();
     let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
     let costs = probe.config["routing"]["balancers"][0]["strategy"]["settings"]["costs"]
         .as_array()
         .unwrap();
-    assert_eq!(costs.len(), 2);
-    // Anonymous tag is "" during cost lookup:
-    // Neither "unnamed" nor "\d+" matches "" -> default weight 1!
-    assert_eq!(costs[0]["value"], 1);
-    // node-2 matches "\d+" regex (2 is a digit) -> weight 50!
-    assert_eq!(costs[1]["value"], 50);
+    assert_eq!(costs.len(), 1);
+    assert_eq!(costs[0]["value"], 42);
 }
 
 #[test]

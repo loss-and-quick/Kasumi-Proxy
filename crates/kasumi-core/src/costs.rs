@@ -1,12 +1,19 @@
 //! Xray leastLoad balancer strategy costs evaluation and rendering.
 
 use crate::custom_sanitize::SanitizeError;
+use regex_syntax::ast::parse::ParserBuilder;
+use regex_syntax::ast::{
+    AssertionKind, Ast, ClassAsciiKind, ClassSet, ClassSetItem, Flag, FlagsItemKind, GroupKind,
+    RepetitionRange,
+};
 use serde_json::Value;
 
 pub const ALLOWED_COST_KEYS: [&str; 3] = ["match", "regexp", "value"];
 pub const MAX_COST_RULES_PER_BALANCER: usize = 64;
 pub const MAX_PROFILE_COST_RULES: usize = 1024;
 const REGEX_SIZE_LIMIT: usize = 64 * 1024; // 64 KiB
+const MAX_REGEX_AST_DEPTH: usize = 64;
+const MAX_REPEAT_PRODUCT: u32 = 1000;
 
 #[derive(Debug, Clone)]
 pub struct ParsedCostRule {
@@ -20,14 +27,336 @@ enum CompiledMatcher {
     Regex(regex::bytes::Regex),
 }
 
+fn validate_escape(text: &str, cost_path: &str) -> Result<(), SanitizeError> {
+    let bytes = text.as_bytes();
+    if bytes.len() < 2 || bytes[0] != b'\\' {
+        return Ok(());
+    }
+    let next = bytes[1];
+
+    if next == b's' || next == b'S' {
+        return Ok(());
+    }
+
+    if next == b'<' || next == b'>' {
+        return Err(SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "unsupported regex escape sequence",
+        });
+    }
+
+    if next == b'Q' || next == b'E' {
+        return Err(SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "unsupported regex syntax: literal quoting",
+        });
+    }
+
+    if next.is_ascii_digit() {
+        if next == b'0' {
+            if bytes.len() == 4
+                && (b'0'..=b'7').contains(&bytes[2])
+                && (b'0'..=b'7').contains(&bytes[3])
+            {
+                return Ok(());
+            }
+            if bytes.len() == 2 {
+                return Ok(());
+            }
+            return Err(SanitizeError::Incompatible {
+                path: format!("{cost_path}.match"),
+                reason: "unsupported regex escape sequence",
+            });
+        } else if (b'1'..=b'3').contains(&next)
+            && bytes.len() == 4
+            && (b'0'..=b'7').contains(&bytes[2])
+            && (b'0'..=b'7').contains(&bytes[3])
+        {
+            return Ok(());
+        } else {
+            return Err(SanitizeError::Incompatible {
+                path: format!("{cost_path}.match"),
+                reason: "unsupported regex escape sequence",
+            });
+        }
+    }
+
+    if next.is_ascii_alphabetic() {
+        match next {
+            b'a' | b'f' | b't' | b'n' | b'r' | b'v' | b'A' | b'z' | b'b' | b'B' | b'd' | b'D'
+            | b'w' | b'W' => Ok(()),
+            b'x' => {
+                if bytes.len() >= 4 && bytes[2] == b'{' && bytes.ends_with(b"}") {
+                    let hex = &bytes[3..bytes.len() - 1];
+                    if !hex.is_empty() && hex.iter().all(u8::is_ascii_hexdigit) {
+                        return Ok(());
+                    }
+                } else if bytes.len() == 4
+                    && bytes[2].is_ascii_hexdigit()
+                    && bytes[3].is_ascii_hexdigit()
+                {
+                    return Ok(());
+                }
+                Err(SanitizeError::Incompatible {
+                    path: format!("{cost_path}.match"),
+                    reason: "invalid regex hex escape",
+                })
+            }
+            _ => Err(SanitizeError::Incompatible {
+                path: format!("{cost_path}.match"),
+                reason: "unsupported regex escape sequence",
+            }),
+        }
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_class_set(
+    cs: &ClassSet,
+    pattern: &str,
+    cost_path: &str,
+    depth: usize,
+) -> Result<(), SanitizeError> {
+    if depth > MAX_REGEX_AST_DEPTH {
+        return Err(SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "regex exceeds maximum nesting depth",
+        });
+    }
+    match cs {
+        ClassSet::Item(item) => match item {
+            ClassSetItem::Literal(lit) => {
+                let text = &pattern[lit.span.start.offset..lit.span.end.offset];
+                validate_escape(text, cost_path)
+            }
+            ClassSetItem::Range(range) => {
+                let start_text =
+                    &pattern[range.start.span.start.offset..range.start.span.end.offset];
+                validate_escape(start_text, cost_path)?;
+                let end_text = &pattern[range.end.span.start.offset..range.end.span.end.offset];
+                validate_escape(end_text, cost_path)
+            }
+            ClassSetItem::Ascii(ascii) => match ascii.kind {
+                ClassAsciiKind::Alnum
+                | ClassAsciiKind::Alpha
+                | ClassAsciiKind::Ascii
+                | ClassAsciiKind::Blank
+                | ClassAsciiKind::Cntrl
+                | ClassAsciiKind::Digit
+                | ClassAsciiKind::Graph
+                | ClassAsciiKind::Lower
+                | ClassAsciiKind::Print
+                | ClassAsciiKind::Punct
+                | ClassAsciiKind::Space
+                | ClassAsciiKind::Upper
+                | ClassAsciiKind::Word
+                | ClassAsciiKind::Xdigit => Ok(()),
+            },
+            ClassSetItem::Perl(_) | ClassSetItem::Empty(_) => Ok(()),
+            ClassSetItem::Bracketed(_) => Err(SanitizeError::Incompatible {
+                path: format!("{cost_path}.match"),
+                reason: "unsupported regex nested character class",
+            }),
+            ClassSetItem::Union(union) => {
+                for sub in &union.items {
+                    validate_class_set(
+                        &ClassSet::Item(sub.clone()),
+                        pattern,
+                        cost_path,
+                        depth + 1,
+                    )?;
+                }
+                Ok(())
+            }
+            ClassSetItem::Unicode(_) => Err(SanitizeError::Incompatible {
+                path: format!("{cost_path}.match"),
+                reason: "unsupported regex syntax: unicode classes",
+            }),
+        },
+        ClassSet::BinaryOp(_) => Err(SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "unsupported regex character class operator",
+        }),
+    }
+}
+
+fn validate_ast(
+    ast: &Ast,
+    pattern: &str,
+    cost_path: &str,
+    depth: usize,
+    repeat_product: u32,
+) -> Result<(), SanitizeError> {
+    if depth > MAX_REGEX_AST_DEPTH {
+        return Err(SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "regex exceeds maximum nesting depth",
+        });
+    }
+
+    match ast {
+        Ast::Empty(_) | Ast::Dot(_) => Ok(()),
+        Ast::Literal(lit) => {
+            let text = &pattern[lit.span.start.offset..lit.span.end.offset];
+            validate_escape(text, cost_path)
+        }
+        Ast::Concat(concat) => {
+            for child in &concat.asts {
+                validate_ast(child, pattern, cost_path, depth + 1, repeat_product)?;
+            }
+            Ok(())
+        }
+        Ast::Alternation(alt) => {
+            for child in &alt.asts {
+                validate_ast(child, pattern, cost_path, depth + 1, repeat_product)?;
+            }
+            Ok(())
+        }
+        Ast::Assertion(ass) => match ass.kind {
+            AssertionKind::StartLine
+            | AssertionKind::EndLine
+            | AssertionKind::StartText
+            | AssertionKind::EndText
+            | AssertionKind::WordBoundary
+            | AssertionKind::NotWordBoundary => Ok(()),
+            _ => Err(SanitizeError::Incompatible {
+                path: format!("{cost_path}.match"),
+                reason: "unsupported regex escape sequence",
+            }),
+        },
+        Ast::ClassPerl(_) => Ok(()),
+        Ast::ClassUnicode(_) => Err(SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "unsupported regex syntax: unicode classes",
+        }),
+        Ast::ClassBracketed(cb) => validate_class_set(&cb.kind, pattern, cost_path, depth + 1),
+        Ast::Group(group) => {
+            match &group.kind {
+                GroupKind::CaptureIndex(_) => {}
+                GroupKind::CaptureName { name, .. } => {
+                    if name.name.is_empty()
+                        || !name
+                            .name
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{cost_path}.match"),
+                            reason: "invalid regex capture group name",
+                        });
+                    }
+                }
+                GroupKind::NonCapturing(flags) => {
+                    for item in &flags.items {
+                        if let FlagsItemKind::Flag(ref f) = item.kind {
+                            match f {
+                                Flag::CaseInsensitive
+                                | Flag::MultiLine
+                                | Flag::DotMatchesNewLine
+                                | Flag::SwapGreed => {}
+                                _ => {
+                                    return Err(SanitizeError::Incompatible {
+                                        path: format!("{cost_path}.match"),
+                                        reason: "unsupported regex flag",
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            validate_ast(&group.ast, pattern, cost_path, depth + 1, repeat_product)
+        }
+        Ast::Flags(flags) => {
+            for item in &flags.flags.items {
+                if let FlagsItemKind::Flag(ref f) = item.kind {
+                    match f {
+                        Flag::CaseInsensitive
+                        | Flag::MultiLine
+                        | Flag::DotMatchesNewLine
+                        | Flag::SwapGreed => {}
+                        _ => {
+                            return Err(SanitizeError::Incompatible {
+                                path: format!("{cost_path}.match"),
+                                reason: "unsupported regex flag",
+                            });
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        Ast::Repetition(rep) => {
+            if matches!(&*rep.ast, Ast::Repetition(_)) {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("{cost_path}.match"),
+                    reason: "unsupported regex stacked quantifier",
+                });
+            }
+
+            let op_span = rep.op.span;
+            let op_text = &pattern[op_span.start.offset..op_span.end.offset];
+            let trimmed = op_text.strip_suffix('?').unwrap_or(op_text);
+
+            if trimmed.starts_with('{') && trimmed.ends_with('}') {
+                let inner = &trimmed[1..trimmed.len() - 1];
+                let parts: Vec<&str> = inner.split(',').collect();
+                if parts.is_empty() || parts.len() > 2 {
+                    return Err(SanitizeError::Incompatible {
+                        path: format!("{cost_path}.match"),
+                        reason: "unsupported regex quantifier spelling",
+                    });
+                }
+                for (p_idx, part) in parts.iter().enumerate() {
+                    if p_idx == 1 && part.is_empty() {
+                        continue;
+                    }
+                    if part.is_empty()
+                        || !part.chars().all(|c| c.is_ascii_digit())
+                        || (part.len() > 1 && part.starts_with('0'))
+                    {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{cost_path}.match"),
+                            reason: "unsupported regex quantifier spelling",
+                        });
+                    }
+                }
+            }
+
+            let max_count: u32 = match &rep.op.kind {
+                regex_syntax::ast::RepetitionKind::ZeroOrOne => 1,
+                regex_syntax::ast::RepetitionKind::ZeroOrMore => 1,
+                regex_syntax::ast::RepetitionKind::OneOrMore => 1,
+                regex_syntax::ast::RepetitionKind::Range(range) => match range {
+                    RepetitionRange::Exactly(n) => *n,
+                    RepetitionRange::AtLeast(n) => *n,
+                    RepetitionRange::Bounded(_, max) => *max,
+                },
+            };
+
+            if max_count > MAX_REPEAT_PRODUCT {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("{cost_path}.match"),
+                    reason: "regex repetition count exceeds limit",
+                });
+            }
+
+            let new_product =
+                repeat_product.saturating_mul(if max_count > 1 { max_count } else { 1 });
+            if new_product > MAX_REPEAT_PRODUCT {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("{cost_path}.match"),
+                    reason: "regex repetition count exceeds limit",
+                });
+            }
+
+            validate_ast(&rep.ast, pattern, cost_path, depth + 1, new_product)
+        }
+    }
+}
+
 /// Normalizes Go-compatible ASCII regex pattern into Rust non-unicode regex.
-///
-/// Specifically:
-/// - Rejects non-ASCII pattern bytes.
-/// - Rejects unsupported Go/RE2 features like `\Q..\E`.
-/// - Rejects Rust-only flags (x, u, R).
-/// - Rejects Rust-only character class set operators (`&&`, `--`, `~~`).
-/// - Normalizes `\s` to `[\t\n\f\r ]` and `\S` to `[^\t\n\f\r ]` (Go excludes vertical tab `\v` 0x0B).
 pub fn validate_and_normalize_regex(
     pattern: &str,
     cost_path: &str,
@@ -46,6 +375,17 @@ pub fn validate_and_normalize_regex(
         });
     }
 
+    let ast = ParserBuilder::new()
+        .octal(true)
+        .build()
+        .parse(pattern)
+        .map_err(|_| SanitizeError::Incompatible {
+            path: format!("{cost_path}.match"),
+            reason: "invalid regex pattern",
+        })?;
+
+    validate_ast(&ast, pattern, cost_path, 0, 1)?;
+
     let bytes = pattern.as_bytes();
     let len = bytes.len();
     let mut i = 0;
@@ -55,29 +395,30 @@ pub fn validate_and_normalize_regex(
     while i < len {
         let b = bytes[i];
         if b == b'\\' {
-            if i + 1 >= len {
-                normalized.push('\\');
-                break;
-            }
-            let next = bytes[i + 1];
-            if next == b's' {
-                if in_class {
-                    normalized.push_str("\t\n\x0c\r ");
-                } else {
-                    normalized.push_str("[\t\n\x0c\r ]");
+            if i + 1 < len {
+                let next = bytes[i + 1];
+                if next == b's' {
+                    if in_class {
+                        normalized.push_str("\t\n\x0c\r ");
+                    } else {
+                        normalized.push_str("[\t\n\x0c\r ]");
+                    }
+                    i += 2;
+                    continue;
+                } else if next == b'S' {
+                    normalized.push_str("[^\t\n\x0c\r ]");
+                    i += 2;
+                    continue;
                 }
-                i += 2;
-                continue;
-            } else if next == b'S' {
-                normalized.push_str("[^\t\n\x0c\r ]");
-                i += 2;
-                continue;
-            } else {
-                normalized.push('\\');
-                normalized.push(next as char);
-                i += 2;
-                continue;
             }
+            normalized.push('\\');
+            if i + 1 < len {
+                normalized.push(bytes[i + 1] as char);
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
         }
 
         if !in_class {
@@ -85,7 +426,6 @@ pub fn validate_and_normalize_regex(
                 in_class = true;
                 normalized.push('[');
                 i += 1;
-                // If first char in class is ']' or '^]', it is treated as a literal ']'
                 if i < len && bytes[i] == b'^' {
                     normalized.push('^');
                     i += 1;
@@ -95,38 +435,12 @@ pub fn validate_and_normalize_regex(
                     i += 1;
                 }
                 continue;
-            } else if b == b'(' && i + 1 < len && bytes[i + 1] == b'?' {
-                let mut j = i + 2;
-                while j < len && bytes[j] != b')' && bytes[j] != b':' {
-                    let c = bytes[j];
-                    if c == b'x' || c == b'u' || c == b'R' {
-                        return Err(SanitizeError::Incompatible {
-                            path: format!("{cost_path}.match"),
-                            reason: "unsupported regex flag",
-                        });
-                    }
-                    j += 1;
-                }
-                normalized.push('(');
-                i += 1;
-                continue;
             }
-        } else {
-            if b == b']' {
-                in_class = false;
-                normalized.push(']');
-                i += 1;
-                continue;
-            }
-            if (b == b'&' && i + 1 < len && bytes[i + 1] == b'&')
-                || (b == b'-' && i + 1 < len && bytes[i + 1] == b'-')
-                || (b == b'~' && i + 1 < len && bytes[i + 1] == b'~')
-            {
-                return Err(SanitizeError::Incompatible {
-                    path: format!("{cost_path}.match"),
-                    reason: "unsupported regex character class operator",
-                });
-            }
+        } else if b == b']' {
+            in_class = false;
+            normalized.push(']');
+            i += 1;
+            continue;
         }
 
         normalized.push(b as char);
@@ -137,8 +451,6 @@ pub fn validate_and_normalize_regex(
 }
 
 /// Extracts the first ASCII `\d+(\.\d+)?` from `s` and parses it as `f64`.
-///
-/// Missing number returns None. Parse errors / overflow return `Some(1.0)` matching Go's default.
 pub fn first_ascii_number(s: &str) -> Option<f64> {
     let bytes = s.as_bytes();
     let len = bytes.len();
@@ -168,19 +480,15 @@ pub fn first_ascii_number(s: &str) -> Option<f64> {
     None
 }
 
-/// Checks whether an f64 value is exactly representable as finite IEEE 754 single-precision (f32).
 #[inline]
 pub fn is_exact_f32(val: f64) -> bool {
     let as_f32 = val as f32;
     as_f32.is_finite() && (as_f32 as f64) == val
 }
 
-/// Resolves effective per-member weights for a leastLoad balancer.
-///
-/// Returns a list of `(member_id, resolved_weight_number)` preserving member order.
 pub fn resolve_leastload_costs(
     costs_val: &Value,
-    member_orig_tags: &[(&str, &str)], // (member_unique_tag, member_original_tag)
+    member_orig_tags: &[(&str, &str)],
     path: &str,
     total_cost_rules: &mut usize,
 ) -> Result<Vec<(String, serde_json::Number)>, SanitizeError> {
@@ -349,34 +657,32 @@ pub fn resolve_leastload_costs(
                 let rule = &parsed_rules[r_idx];
                 if let Some(explicit) = &rule.explicit_value {
                     weight = explicit.clone();
-                } else {
-                    if let Some(val) = first_ascii_number(matched) {
-                        if val <= 0.0 {
-                            return Err(SanitizeError::Incompatible {
-                                path: format!("{path}.strategy.settings.costs[{r_idx}]"),
-                                reason: "auto cost value cannot be zero",
-                            });
-                        }
-                        if !val.is_finite() || val > (f32::MAX as f64) {
-                            return Err(SanitizeError::Incompatible {
-                                path: format!("{path}.strategy.settings.costs[{r_idx}]"),
-                                reason: "auto cost value exceeds float32 range",
-                            });
-                        }
-                        if !is_exact_f32(val) {
-                            return Err(SanitizeError::Incompatible {
-                                path: format!("{path}.strategy.settings.costs[{r_idx}]"),
-                                reason: "auto cost value requires exact float32 representation",
-                            });
-                        }
-                        weight = if val.fract() == 0.0 && val <= (u64::MAX as f64) {
-                            serde_json::Number::from(val as u64)
-                        } else {
-                            serde_json::Number::from_f64(val).unwrap()
-                        };
-                    } else {
-                        weight = serde_json::Number::from(1);
+                } else if let Some(val) = first_ascii_number(matched) {
+                    if val <= 0.0 {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs[{r_idx}]"),
+                            reason: "auto cost value cannot be zero",
+                        });
                     }
+                    if !val.is_finite() || val > (f32::MAX as f64) {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs[{r_idx}]"),
+                            reason: "auto cost value exceeds float32 range",
+                        });
+                    }
+                    if !is_exact_f32(val) {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs[{r_idx}]"),
+                            reason: "auto cost value requires exact float32 representation",
+                        });
+                    }
+                    weight = if val.fract() == 0.0 && val <= (u64::MAX as f64) {
+                        serde_json::Number::from(val as u64)
+                    } else {
+                        serde_json::Number::from_f64(val).unwrap()
+                    };
+                } else {
+                    weight = serde_json::Number::from(1);
                 }
                 break;
             }
@@ -427,8 +733,65 @@ mod tests {
             .unicode(false)
             .build()
             .unwrap();
-        assert!(!re.is_match(b"node\x0b7")); // VT is NOT matched
-        assert!(re.is_match(b"node\t7")); // Tab matched
-        assert!(re.is_match(b"node 7")); // Space matched
+        assert!(!re.is_match(b"node\x0b7"));
+        assert!(re.is_match(b"node\t7"));
+        assert!(re.is_match(b"node 7"));
+    }
+
+    #[test]
+    fn test_ast_grammar_rejections() {
+        let bad_patterns = [
+            (r"\u0033", "unsupported regex escape sequence"),
+            (r"\U00000033", "unsupported regex escape sequence"),
+            (r"\<3", "unsupported regex escape sequence"),
+            (r"\1", "unsupported regex escape sequence"),
+            (r"a**", "unsupported regex stacked quantifier"),
+            (r"a++", "unsupported regex stacked quantifier"),
+            (r"a{1001}", "regex repetition count exceeds limit"),
+            (r"(a{100}){11}", "regex repetition count exceeds limit"),
+            (r"a{01}", "unsupported regex quantifier spelling"),
+            (r"a{ 2 }", "unsupported regex quantifier spelling"),
+            (r"(?P<a.b>node)", "invalid regex capture group name"),
+            (r"[a[b]]", "unsupported regex nested character class"),
+            (
+                r"[a-z&&[0-9]]",
+                "unsupported regex character class operator",
+            ),
+            (r"(?x)node", "unsupported regex flag"),
+            (r"(?u)node", "unsupported regex flag"),
+            (r"(?R)node", "unsupported regex flag"),
+        ];
+
+        for (pat, expected_reason) in bad_patterns {
+            let err = validate_and_normalize_regex(pat, "test").unwrap_err();
+            assert_eq!(
+                err,
+                SanitizeError::Incompatible {
+                    path: "test.match".into(),
+                    reason: expected_reason,
+                },
+                "pattern '{pat}' expected error reason '{expected_reason}'"
+            );
+        }
+
+        let good_patterns = [
+            r"(?P<proxy>node)",
+            r"(?<proxy>node)",
+            r"(?:node)",
+            r"(?i)node",
+            r"[a-z[:digit:]]",
+            r"\0",
+            r"\001",
+            r"\x7f",
+            r"\x{7f}",
+            r"node\s[0-9]",
+        ];
+
+        for pat in good_patterns {
+            assert!(
+                validate_and_normalize_regex(pat, "test").is_ok(),
+                "pattern '{pat}' should be accepted"
+            );
+        }
     }
 }
