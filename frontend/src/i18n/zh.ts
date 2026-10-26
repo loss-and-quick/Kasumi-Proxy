@@ -757,6 +757,7 @@ const zh = {
   "subs.error.noProfiles": "响应中没有受支持的服务器，已保留之前的服务器。",
   "subs.error.limit": "服务商的响应过大。",
   "subs.error.invalid": "服务商的响应格式错误。",
+  "subs.error.incompatibleConfig": "服务商配置使用了不受支持的功能（{detail}）。未应用更新。",
   "subs.openLinkFailed": "无法打开链接",
   "subs.identity.title": "请求身份",
   "subs.identity.hwid": "设备 ID（HWID）",
@@ -819,6 +820,10 @@ const zh = {
   "subs.warnings.skippedOutbounds": plural("count", {
     one: "# 个 sing-box 服务器使用了 Kasumi 无法导入的协议或设置，已跳过",
     other: "# 个 sing-box 服务器使用了 Kasumi 无法导入的协议或设置，已跳过",
+  }),
+  "subs.warnings.providerSettingsOmitted": plural("count", {
+    one: "提供商配置中的 # 项客户端设置已被忽略且未应用",
+    other: "提供商配置中的 # 项客户端设置已被忽略且未应用",
   }),
   "subs.menu.more": "更多",
   "subs.menu.history": "服务商的更改",

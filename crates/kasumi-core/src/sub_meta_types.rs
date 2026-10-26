@@ -92,6 +92,11 @@ pub enum SubWarning {
     UnavailableProtocols {
         count: u32,
     },
+    /// Client-owned settings omitted from provider Xray configs.
+    ProviderSettingsOmitted {
+        count: u32,
+        paths: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -135,6 +140,10 @@ pub enum SubErrorKind {
     Limit,
     /// A malformed envelope (server JSON, routing or deeplink).
     Invalid,
+    /// A provider configuration uses unsupported features.
+    IncompatibleProviderConfig {
+        detail: String,
+    },
 }
 
 /// The risk tier of a provider key, as happ-sub classifies it.
