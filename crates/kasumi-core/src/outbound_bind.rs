@@ -746,17 +746,31 @@ mod tests {
         let mut x = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
         bind_uplink_outbounds(CoreEngine::Xray, &mut x, "eno1", &UplinkSource::default());
 
-        // `de-1` became `proxy`; the balancer still picks among all three.
-        assert_eq!(
-            x["routing"]["balancers"][0]["selector"],
-            json!(["proxy", "de-2", "de-3"])
-        );
-        for tag in ["proxy", "de-2", "de-3", "relay", "fragment", "direct"] {
+        let selector: Vec<String> = x["routing"]["balancers"][0]["selector"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|member| member.as_str().unwrap().to_string())
+            .collect();
+        // The balancer picks among all three namespaced members.
+        assert!(selector.iter().all(|tag| tag.starts_with("ks-provider:")));
+        assert_eq!(selector.len(), 3);
+        let namespace = selector
+            .first()
+            .and_then(|tag| tag.rsplit_once(":o:").map(|(prefix, _)| prefix.to_string()))
+            .unwrap_or_default();
+        let bound_extra = [
+            format!("{namespace}:o:00000003:"),
+            format!("{namespace}:o:00000006:"),
+            "direct".to_string(),
+        ];
+        for tag in selector.iter().chain(&bound_extra) {
             assert!(xray_bound(&x, tag), "{tag} unbound");
         }
-        for tag in ["exit-a", "exit-b"] {
+        for ordinal in ["00000004", "00000005"] {
+            let tag = format!("{namespace}:o:{ordinal}:");
             assert!(
-                by_tag(&x, "outbounds", tag)["streamSettings"]["sockopt"]
+                by_tag(&x, "outbounds", &tag)["streamSettings"]["sockopt"]
                     .get("interface")
                     .is_none(),
                 "{tag} bound"
