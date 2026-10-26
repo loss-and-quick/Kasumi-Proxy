@@ -783,6 +783,8 @@ const vi = {
   "subs.error.noProfiles": "Phản hồi không có máy chủ được hỗ trợ. Đã giữ các máy chủ trước đó.",
   "subs.error.limit": "Phản hồi của nhà cung cấp quá lớn.",
   "subs.error.invalid": "Phản hồi của nhà cung cấp bị lỗi định dạng.",
+  "subs.error.incompatibleConfig":
+    "Cấu hình của nhà cung cấp sử dụng các tính năng không được hỗ trợ ({detail}). Bản cập nhật chưa được áp dụng.",
   "subs.openLinkFailed": "Không mở được liên kết",
   "subs.identity.title": "Danh tính yêu cầu",
   "subs.identity.hwid": "ID thiết bị (HWID)",
@@ -847,6 +849,11 @@ const vi = {
     one: "# máy chủ sing-box dùng giao thức hoặc cài đặt mà Kasumi không thể nhập và đã bị bỏ qua",
     other:
       "# máy chủ sing-box dùng giao thức hoặc cài đặt mà Kasumi không thể nhập và đã bị bỏ qua",
+  }),
+  "subs.warnings.providerSettingsOmitted": plural("count", {
+    one: "# cài đặt thuộc về ứng dụng trong cấu hình của nhà cung cấp đã bị bỏ qua và không áp dụng",
+    other:
+      "# cài đặt thuộc về ứng dụng trong cấu hình của nhà cung cấp đã bị bỏ qua và không áp dụng",
   }),
   "subs.menu.more": "Thêm",
   "subs.menu.history": "Thay đổi từ nhà cung cấp",

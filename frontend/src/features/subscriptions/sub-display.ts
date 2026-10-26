@@ -69,6 +69,8 @@ export function errorKey(kind: SubErrorKind): DictKey {
       return "subs.error.limit";
     case "invalid":
       return "subs.error.invalid";
+    case "incompatibleProviderConfig":
+      return "subs.error.incompatibleConfig";
   }
 }
 
@@ -81,6 +83,8 @@ export function errorVars(kind: SubErrorKind, detail: string): Record<string, st
       return { key: kind.keyId ? ` (${kind.keyId})` : "" };
     case "network":
       return { detail };
+    case "incompatibleProviderConfig":
+      return { detail: kind.detail };
     default:
       return {};
   }
@@ -106,5 +110,7 @@ export function warningKey(w: SubWarning): DictKey {
       return "subs.warnings.skippedOutbounds";
     case "unavailableProtocols":
       return "subs.warnings.unavailableProtocols";
+    case "providerSettingsOmitted":
+      return "subs.warnings.providerSettingsOmitted";
   }
 }

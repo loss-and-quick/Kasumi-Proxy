@@ -804,6 +804,8 @@ const es = {
     "La respuesta no contiene servidores compatibles. Se conservaron los servidores anteriores.",
   "subs.error.limit": "La respuesta del proveedor es demasiado grande.",
   "subs.error.invalid": "La respuesta del proveedor está mal formada.",
+  "subs.error.incompatibleConfig":
+    "La configuración del proveedor usa funciones no compatibles ({detail}). Actualización no aplicada.",
   "subs.openLinkFailed": "No se pudo abrir el enlace",
   "subs.identity.title": "Identidad de las solicitudes",
   "subs.identity.hwid": "ID del dispositivo (HWID)",
@@ -871,6 +873,11 @@ const es = {
     one: "# servidor de sing-box usa un protocolo o ajustes que Kasumi no puede importar y se omitió",
     other:
       "# servidores de sing-box usan protocolos o ajustes que Kasumi no puede importar y se omitieron",
+  }),
+  "subs.warnings.providerSettingsOmitted": plural("count", {
+    one: "# ajuste propio del cliente en las configuraciones del proveedor fue omitido y no se aplicó",
+    other:
+      "# ajustes propios del cliente en las configuraciones del proveedor fueron omitidos y no se aplicaron",
   }),
   "subs.menu.more": "Más",
   "subs.menu.history": "Cambios del proveedor",
