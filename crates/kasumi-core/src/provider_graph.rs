@@ -1580,6 +1580,36 @@ impl ProviderFragment {
             }
         }
 
+        // Observation subjects have the same proxy requirement as pool members:
+        // a loopback must not hide a direct-only probe behind a virtual inbound.
+        if let Some(observation) = &fragment_observatory {
+            for subject in &observation.subjects {
+                let subject_idx = fragment_outbounds
+                    .iter()
+                    .position(|o| o.tag == *subject)
+                    .unwrap();
+                if !node_has_proxy(
+                    subject_idx,
+                    n_ob,
+                    n_bal,
+                    &fragment_outbounds,
+                    &fragment_balancers,
+                    &fragment_contexts,
+                    &mut proxy_memo,
+                ) {
+                    let kind = if observation.is_burst {
+                        "burstObservatory"
+                    } else {
+                        "observatory"
+                    };
+                    return Err(SanitizeError::Incompatible {
+                        path: format!("{kind}.subjectSelector"),
+                        reason: "observatory selector matches service outbound",
+                    });
+                }
+            }
+        }
+
         let plain_entry = match &entry {
             TargetRef::Outbound(t) => {
                 let ob = fragment_outbounds.iter().find(|o| o.tag == *t).unwrap();

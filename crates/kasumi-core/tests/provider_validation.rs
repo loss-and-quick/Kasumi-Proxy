@@ -904,6 +904,43 @@ fn an_observation_balancer_without_an_observatory_is_still_rejected() {
 }
 
 #[test]
+fn observed_loopbacks_cannot_hide_service_only_probe_paths() {
+    for (kind, observation) in [
+        (
+            "observatory",
+            json!({
+                "subjectSelector": ["watched"],
+                "probeURL": "https://example.org/generate_204", "probeInterval": "10s"
+            }),
+        ),
+        (
+            "burstObservatory",
+            json!({
+                "subjectSelector": ["watched"],
+                "pingConfig": {
+                    "destination": "https://example.org/generate_204",
+                    "interval": "10s", "timeout": "2s", "sampling": 1
+                }
+            }),
+        ),
+    ] {
+        let mut cfg = json!({
+            "outbounds": [server("node-main"), loopback(Some("watched"), "inside"), freedom("direct")],
+            "routing": { "rules": [
+                { "inboundTag": ["inside"], "network": "tcp,udp", "outboundTag": "direct" },
+                { "network": "tcp,udp", "outboundTag": "node-main" }
+            ] }
+        });
+        cfg[kind] = observation;
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert!(
+            matches!(err, SanitizeError::Incompatible { ref path, reason } if path == &format!("{kind}.subjectSelector") && reason == "observatory selector matches service outbound"),
+            "{kind} must not probe through a service-only loopback: {err:?}"
+        );
+    }
+}
+
+#[test]
 fn a_burst_ping_label_is_omitted_without_changing_probes() {
     let cfg = json!({
         "outbounds": [server("node-a")],
