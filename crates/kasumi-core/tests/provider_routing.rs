@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use kasumi_core::custom_target::Target;
-use kasumi_core::profile::Profile;
+use kasumi_core::profile::{CustomOrigin, Profile};
 use kasumi_core::state::{AdvancedSettings, RoutingMode, RoutingRule, force_socks_port};
 use kasumi_core::xray_config::{build_xray_config, build_xray_probe_config};
 
@@ -453,10 +453,11 @@ fn send_socks5_http_request(
 /// - Virtual loopback fallback rule: `inboundTag = ["virtual-fallback-in"]` -> `node-fallback`
 /// - Default routing rule targeting `balancer-primary`
 /// - `burstObservatory` targeting `node-primary` and `node-fallback` with probe URL `http://probe.example/health`
-fn build_synthetic_provider_profile(
+fn build_synthetic_custom_profile(
     decoy_port: u16,
     primary_port: u16,
     fallback_port: u16,
+    origin: CustomOrigin,
 ) -> Profile {
     let raw = json!({
         "outbounds": [
@@ -532,9 +533,22 @@ fn build_synthetic_provider_profile(
             "groupId": "g-test"
         },
         "raw": raw.to_string(),
-        "origin": "provider",
+        "origin": origin,
     }))
     .expect("deserialize synthetic custom profile")
+}
+
+fn build_synthetic_provider_profile(
+    decoy_port: u16,
+    primary_port: u16,
+    fallback_port: u16,
+) -> Profile {
+    build_synthetic_custom_profile(
+        decoy_port,
+        primary_port,
+        fallback_port,
+        CustomOrigin::Provider,
+    )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -727,82 +741,88 @@ fn test_real_xray_traffic_healthy_default_selected_over_decoy() {
         return;
     };
 
-    // 1. Start mock relays on localhost
-    let primary_relay = MockRelay::start("primary", true);
-    let fallback_relay = MockRelay::start("fallback", true);
-    let decoy_port = 1; // unreachable port for decoy outbound
+    for origin in [CustomOrigin::Provider, CustomOrigin::User] {
+        // 1. Start mock relays on localhost
+        let primary_relay = MockRelay::start("primary", true);
+        let fallback_relay = MockRelay::start("fallback", true);
+        let decoy_port = 1; // unreachable port for decoy outbound
 
-    // 2. Allocate free ports for Kasumi inbounds
-    let (socks_port, http_port, force_port) = allocate_kasumi_inbound_ports();
-    let settings = AdvancedSettings {
-        local_socks_port: Some(socks_port),
-        local_http_port: Some(http_port),
-        ..AdvancedSettings::default()
-    };
+        // 2. Allocate free ports for Kasumi inbounds
+        let (socks_port, http_port, force_port) = allocate_kasumi_inbound_ports();
+        let settings = AdvancedSettings {
+            local_socks_port: Some(socks_port),
+            local_http_port: Some(http_port),
+            ..AdvancedSettings::default()
+        };
 
-    let profile =
-        build_synthetic_provider_profile(decoy_port, primary_relay.port, fallback_relay.port);
-    let probe = build_xray_probe_config(&profile, &settings, &[])
-        .expect("build probe config for real traffic test");
+        let profile = build_synthetic_custom_profile(
+            decoy_port,
+            primary_relay.port,
+            fallback_relay.port,
+            origin,
+        );
+        let probe = build_xray_probe_config(&profile, &settings, &[])
+            .unwrap_or_else(|e| panic!("build probe config for {origin:?} failed: {e}"));
 
-    // 3. Write temp config and spawn Xray core with stderr captured to a log file
-    let temp_dir = tempfile::tempdir().expect("create tempdir");
-    let cfg_path = temp_dir.path().join("xray_test.json");
-    std::fs::write(&cfg_path, serde_json::to_vec_pretty(&probe.config).unwrap())
-        .expect("write test config");
+        // 3. Write temp config and spawn Xray core with stderr captured to a log file
+        let temp_dir = tempfile::tempdir().expect("create tempdir");
+        let cfg_path = temp_dir.path().join("xray_test.json");
+        std::fs::write(&cfg_path, serde_json::to_vec_pretty(&probe.config).unwrap())
+            .expect("write test config");
 
-    let log_path = temp_dir.path().join("xray_test.log");
-    let log_file = std::fs::File::create(&log_path).expect("create test log file");
-    let log_file_err = log_file.try_clone().expect("clone log file");
+        let log_path = temp_dir.path().join("xray_test.log");
+        let log_file = std::fs::File::create(&log_path).expect("create test log file");
+        let log_file_err = log_file.try_clone().expect("clone log file");
 
-    let child = Command::new(&xray_bin)
-        .arg("run")
-        .arg("-config")
-        .arg(&cfg_path)
-        .env("XRAY_LOCATION_ASSET", binaries_dir())
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(log_file_err))
-        .spawn()
-        .expect("spawn xray child process");
+        let child = Command::new(&xray_bin)
+            .arg("run")
+            .arg("-config")
+            .arg(&cfg_path)
+            .env("XRAY_LOCATION_ASSET", binaries_dir())
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(log_file_err))
+            .spawn()
+            .expect("spawn xray child process");
 
-    let mut guard = ChildGuard(Some(child));
+        let mut guard = ChildGuard(Some(child));
 
-    // 4. Wait for Xray force-in port to be listening (bounded timeout <= 3s)
-    let start = Instant::now();
-    let mut ready = false;
-    while start.elapsed() < Duration::from_secs(3) {
-        if TcpStream::connect(format!("127.0.0.1:{force_port}")).is_ok() {
-            ready = true;
-            break;
+        // 4. Wait for Xray force-in port to be listening (bounded timeout <= 3s)
+        let start = Instant::now();
+        let mut ready = false;
+        while start.elapsed() < Duration::from_secs(3) {
+            if TcpStream::connect(format!("127.0.0.1:{force_port}")).is_ok() {
+                ready = true;
+                break;
+            }
+            if let Ok(Some(status)) = guard.0.as_mut().unwrap().try_wait() {
+                let tail = read_log_tail(&log_path, 40);
+                panic!("xray exited prematurely with {status}:\n{tail}");
+            }
+            thread::sleep(Duration::from_millis(50));
         }
-        if let Ok(Some(status)) = guard.0.as_mut().unwrap().try_wait() {
-            let tail = read_log_tail(&log_path, 40);
-            panic!("xray exited prematurely with {status}:\n{tail}");
-        }
-        thread::sleep(Duration::from_millis(50));
+        assert!(
+            ready,
+            "xray did not become ready on force-in port {force_port} within 3s for {origin:?}.\nLog tail:\n{}",
+            read_log_tail(&log_path, 40)
+        );
+
+        // 5. Send application request through Kasumi's generated force-in port until expected marker
+        let resp = wait_for_traffic_marker(
+            &mut guard,
+            force_port,
+            "OK node=primary",
+            &log_path,
+            Duration::from_secs(15),
+        );
+        assert!(
+            resp.contains("OK node=primary"),
+            "expected traffic routed to healthy primary node for {origin:?}, got response:\n{resp}"
+        );
+        assert!(
+            primary_relay.requests_served.load(Ordering::SeqCst) > 0,
+            "primary relay must have served requests for {origin:?}"
+        );
     }
-    assert!(
-        ready,
-        "xray did not become ready on force-in port {force_port} within 3s.\nLog tail:\n{}",
-        read_log_tail(&log_path, 40)
-    );
-
-    // 5. Send application request through Kasumi's generated force-in port until expected marker
-    let resp = wait_for_traffic_marker(
-        &mut guard,
-        force_port,
-        "OK node=primary",
-        &log_path,
-        Duration::from_secs(15),
-    );
-    assert!(
-        resp.contains("OK node=primary"),
-        "expected traffic routed to healthy primary node, got response:\n{resp}"
-    );
-    assert!(
-        primary_relay.requests_served.load(Ordering::SeqCst) > 0,
-        "primary relay must have served requests"
-    );
 }
 
 #[test]
@@ -815,77 +835,83 @@ fn test_real_xray_traffic_fallback_transition_when_primary_fails() {
         return;
     };
 
-    // 1. Primary starts unhealthy (fails health probe and connection), fallback starts healthy
-    let primary_relay = MockRelay::start("primary", false);
-    let fallback_relay = MockRelay::start("fallback", true);
-    let decoy_port = 1;
+    for origin in [CustomOrigin::Provider, CustomOrigin::User] {
+        // 1. Primary starts unhealthy (fails health probe and connection), fallback starts healthy
+        let primary_relay = MockRelay::start("primary", false);
+        let fallback_relay = MockRelay::start("fallback", true);
+        let decoy_port = 1;
 
-    let (socks_port, http_port, force_port) = allocate_kasumi_inbound_ports();
-    let settings = AdvancedSettings {
-        local_socks_port: Some(socks_port),
-        local_http_port: Some(http_port),
-        ..AdvancedSettings::default()
-    };
+        let (socks_port, http_port, force_port) = allocate_kasumi_inbound_ports();
+        let settings = AdvancedSettings {
+            local_socks_port: Some(socks_port),
+            local_http_port: Some(http_port),
+            ..AdvancedSettings::default()
+        };
 
-    let profile =
-        build_synthetic_provider_profile(decoy_port, primary_relay.port, fallback_relay.port);
-    let probe = build_xray_probe_config(&profile, &settings, &[])
-        .expect("build probe config for fallback test");
+        let profile = build_synthetic_custom_profile(
+            decoy_port,
+            primary_relay.port,
+            fallback_relay.port,
+            origin,
+        );
+        let probe = build_xray_probe_config(&profile, &settings, &[])
+            .unwrap_or_else(|e| panic!("build probe config for {origin:?} failed: {e}"));
 
-    let temp_dir = tempfile::tempdir().expect("create tempdir");
-    let cfg_path = temp_dir.path().join("xray_fallback_test.json");
-    std::fs::write(&cfg_path, serde_json::to_vec_pretty(&probe.config).unwrap())
-        .expect("write test config");
+        let temp_dir = tempfile::tempdir().expect("create tempdir");
+        let cfg_path = temp_dir.path().join("xray_fallback_test.json");
+        std::fs::write(&cfg_path, serde_json::to_vec_pretty(&probe.config).unwrap())
+            .expect("write test config");
 
-    let log_path = temp_dir.path().join("xray_fallback_test.log");
-    let log_file = std::fs::File::create(&log_path).expect("create fallback test log file");
-    let log_file_err = log_file.try_clone().expect("clone log file");
+        let log_path = temp_dir.path().join("xray_fallback_test.log");
+        let log_file = std::fs::File::create(&log_path).expect("create fallback test log file");
+        let log_file_err = log_file.try_clone().expect("clone log file");
 
-    let child = Command::new(&xray_bin)
-        .arg("run")
-        .arg("-config")
-        .arg(&cfg_path)
-        .env("XRAY_LOCATION_ASSET", binaries_dir())
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(log_file_err))
-        .spawn()
-        .expect("spawn xray child process");
+        let child = Command::new(&xray_bin)
+            .arg("run")
+            .arg("-config")
+            .arg(&cfg_path)
+            .env("XRAY_LOCATION_ASSET", binaries_dir())
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(log_file_err))
+            .spawn()
+            .expect("spawn xray child process");
 
-    let mut guard = ChildGuard(Some(child));
+        let mut guard = ChildGuard(Some(child));
 
-    let start = Instant::now();
-    let mut ready = false;
-    while start.elapsed() < Duration::from_secs(3) {
-        if TcpStream::connect(format!("127.0.0.1:{force_port}")).is_ok() {
-            ready = true;
-            break;
+        let start = Instant::now();
+        let mut ready = false;
+        while start.elapsed() < Duration::from_secs(3) {
+            if TcpStream::connect(format!("127.0.0.1:{force_port}")).is_ok() {
+                ready = true;
+                break;
+            }
+            if let Ok(Some(status)) = guard.0.as_mut().unwrap().try_wait() {
+                let tail = read_log_tail(&log_path, 40);
+                panic!("xray exited prematurely with {status}:\n{tail}");
+            }
+            thread::sleep(Duration::from_millis(50));
         }
-        if let Ok(Some(status)) = guard.0.as_mut().unwrap().try_wait() {
-            let tail = read_log_tail(&log_path, 40);
-            panic!("xray exited prematurely with {status}:\n{tail}");
-        }
-        thread::sleep(Duration::from_millis(50));
+        assert!(
+            ready,
+            "xray did not become ready on force-in port {force_port} within 3s for {origin:?}.\nLog tail:\n{}",
+            read_log_tail(&log_path, 40)
+        );
+
+        // Send request through force-in port until expected marker is observed
+        let resp = wait_for_traffic_marker(
+            &mut guard,
+            force_port,
+            "OK node=fallback",
+            &log_path,
+            Duration::from_secs(15),
+        );
+        assert!(
+            resp.contains("OK node=fallback"),
+            "expected traffic routed to fallback node via virtual loopback transition for {origin:?}, got response:\n{resp}"
+        );
+        assert!(
+            fallback_relay.requests_served.load(Ordering::SeqCst) > 0,
+            "fallback relay must have served requests for {origin:?}"
+        );
     }
-    assert!(
-        ready,
-        "xray did not become ready on force-in port {force_port} within 3s.\nLog tail:\n{}",
-        read_log_tail(&log_path, 40)
-    );
-
-    // Send request through force-in port until expected marker is observed
-    let resp = wait_for_traffic_marker(
-        &mut guard,
-        force_port,
-        "OK node=fallback",
-        &log_path,
-        Duration::from_secs(15),
-    );
-    assert!(
-        resp.contains("OK node=fallback"),
-        "expected traffic routed to fallback node via virtual loopback transition, got response:\n{resp}"
-    );
-    assert!(
-        fallback_relay.requests_served.load(Ordering::SeqCst) > 0,
-        "fallback relay must have served requests"
-    );
 }

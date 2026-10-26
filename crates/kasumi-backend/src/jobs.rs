@@ -885,7 +885,27 @@ mod tests {
             kasumi_core::state::force_socks_port(TEST_PORT_BASE, TEST_PORT_BASE + 1)
         );
         assert!(!cfg.text.contains("10808"), "{}", cfg.text);
-        assert_eq!(cfg.measured, "measured path: outbound proxy");
+        let target = cfg
+            .measured
+            .strip_prefix("measured path: outbound ")
+            .unwrap();
+        let measured = value["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|outbound| outbound["tag"].as_str() == Some(target))
+            .unwrap();
+        assert_eq!(measured["settings"]["vnext"][0]["address"], "srv.example");
+        assert!(
+            value["routing"]["rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|rule| {
+                    rule["inboundTag"] == serde_json::json!(["proxy-select"])
+                        && rule["outboundTag"].as_str() == Some(target)
+                })
+        );
     }
 
     /// A config the sanitiser refuses cannot be probed, and says so instead of

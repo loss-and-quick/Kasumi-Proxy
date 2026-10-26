@@ -37,6 +37,8 @@ A selector must not accidentally include another profile or a client-owned outbo
 
 The profile's initial route is determined from its applicable routing rules, not from an
 assumption that its first outbound or an outbound called `proxy` is its intended exit.
+Anonymous outbounds receive compiler-local identities only after validation; they do not
+become new selector matches and are not written back into the source configuration.
 Runtime traffic and connection tests use the same default-path selection. Tests skip
 external conditional entry policy, but retain reachable internal routing and observation
 dependencies. A required internal geodata dependency is an error when unavailable, not
@@ -45,6 +47,12 @@ an excuse to remove a routing condition.
 Original listener tags may be retained as tag-only ingress metadata. Their original
 addresses, ports, authentication and listener configuration are never executed. Multiple
 original entry points that imply different routing behavior cannot be collapsed silently.
+
+User-owned raw configurations still run as written. Their isolated connection checks
+reuse this graph compiler so the path reported by a check is the path it actually routes.
+A probe does not attach external `.via` metadata that the raw runtime does not execute.
+If the isolated representation is unsupported, the check reports that it cannot test the
+configuration rather than silently dropping required transitions.
 
 ## Observation traffic
 

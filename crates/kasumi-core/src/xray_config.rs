@@ -898,37 +898,9 @@ fn build_config(
                 _ => Err("custom profile contains invalid JSON".to_string()),
             };
         }
-        (Profile::Custom(c), BuildKind::Probe) if c.origin == CustomOrigin::User => {
-            let raw = parse_json_safe(&c.raw)
-                .ok_or_else(|| "custom profile contains invalid JSON".to_string())?;
-            let sanitized =
-                sanitize_provider_xray(&raw).map_err(|e| format!("cannot be tested: {e}"))?;
-            let target = default_target(&sanitized);
-            let mut outbounds = sanitized.outbounds;
-            outbounds.retain(|ob| {
-                let tag = ob.get("tag").and_then(Value::as_str).unwrap_or_default();
-                let is_direct = tag == "direct" && ob["protocol"] == "freedom";
-                let is_block = tag == "block" && ob["protocol"] == "blackhole";
-                !is_direct && !is_block
-            });
-            ActiveOutbounds {
-                outbounds,
-                rules: Vec::new(),
-                internal_rules: Vec::new(),
-                balancers: sanitized
-                    .routing
-                    .as_ref()
-                    .and_then(|r| r.get("balancers"))
-                    .and_then(Value::as_array)
-                    .cloned()
-                    .unwrap_or_default(),
-                target,
-                observatory: sanitized.observatory,
-                burst_observatory: sanitized.burst_observatory,
-            }
-        }
-        // Sanitised on every build, not only at import: stored state can be edited.
-        (Profile::Custom(c), _) => provider_outbounds(c, profiles, kind)?,
+        // A custom probe owns its listeners but preserves the same internal path
+        // compiler as provider runtime: the reported target must carry its traffic.
+        (Profile::Custom(c), _) => compile_custom_graph(c, kind)?,
         _ => ActiveOutbounds {
             outbounds: vec![build_outbound(p, s).ok_or_else(|| match core_conflict(p) {
                 Some(c) => c.to_string(),
@@ -1018,17 +990,18 @@ fn build_config(
         burst_observatory,
     } = provider;
 
-    if p.meta().via.is_some() && has_expanded_fallback(&head, &balancers) {
-        return Err("provider config rejected: chaining (.via) on expanded loopback/fallback graphs is not supported".into());
-    }
     let mut targets = po.outbounds.clone();
     let mut hops: Vec<Value> = Vec::new();
     let mut emitted: HashSet<String> = targets
         .iter()
         .filter_map(|o| o["tag"].as_str().map(str::to_string))
         .collect();
-    for entry in chain_entries(&head, &target)? {
-        attach_chain(p, &mut head[entry], s, profiles, &mut hops, &mut emitted)?;
+    // User raw runtime ignores external chain metadata; its isolated probe must
+    // not invent a chain that the config it measures never uses.
+    if !matches!(p, Profile::Custom(c) if c.origin == CustomOrigin::User) {
+        for entry in chain_entries(&head, &target)? {
+            attach_chain(p, &mut head[entry], s, profiles, &mut hops, &mut emitted)?;
+        }
     }
     for target in &mut targets {
         let id = target["tag"].as_str().unwrap_or_default().to_string();
@@ -1068,12 +1041,6 @@ fn build_config(
         config_map["burstObservatory"] = bobs;
     }
     Ok((config_map, target))
-}
-
-fn has_expanded_fallback(head: &[Value], balancers: &[Value]) -> bool {
-    head.iter()
-        .any(|o| o["protocol"] == "loopback" && o["tag"] != "proxy")
-        || balancers.iter().any(|b| b.get("fallbackTag").is_some())
 }
 
 /// The active profile's outbounds, `proxy` first, and for a provider config the
@@ -1121,10 +1088,6 @@ fn build_provider_names(
                 .outbounds
                 .insert(orig_tag.to_string(), gen_tag.clone());
         }
-        if i == 0 {
-            // Untagged or first outbound fallback identifier "proxy"
-            names.outbounds.insert("proxy".to_string(), gen_tag);
-        }
     }
 
     for (i, b) in balancers.iter().enumerate() {
@@ -1151,11 +1114,7 @@ fn build_provider_names(
 /// provider graph without recursion or capture. Provider outbounds, balancers, and
 /// virtual inbounds receive prefix-free namespaced tags, preserving prefix-free observer
 /// matching and tag independence.
-fn provider_outbounds(
-    c: &Custom,
-    _profiles: &[Profile],
-    kind: BuildKind,
-) -> Result<ActiveOutbounds, String> {
+fn compile_custom_graph(c: &Custom, kind: BuildKind) -> Result<ActiveOutbounds, String> {
     let reject = |reason: &str| match kind {
         BuildKind::Runtime => format!("provider config rejected: {reason}"),
         BuildKind::Probe => format!("cannot be tested: {reason}"),
@@ -1163,6 +1122,28 @@ fn provider_outbounds(
     let raw =
         parse_json_safe(&c.raw).ok_or_else(|| reject("custom profile contains invalid JSON"))?;
     let mut sanitized = sanitize_provider_xray(&raw).map_err(|e| reject(&e.to_string()))?;
+    // Source selectors cannot name anonymous outbounds. Snapshot their matching
+    // universe before assigning compiler-local identities to otherwise valid nodes.
+    let orig_outbound_tags: Vec<String> = sanitized
+        .outbounds
+        .iter()
+        .filter_map(|outbound| outbound["tag"].as_str().map(str::to_owned))
+        .collect();
+    let mut occupied: HashSet<String> = orig_outbound_tags.iter().cloned().collect();
+    for (index, outbound) in sanitized.outbounds.iter_mut().enumerate() {
+        if outbound["tag"].as_str().is_some() {
+            continue;
+        }
+        let mut suffix = 0usize;
+        let tag = loop {
+            let candidate = format!("kasumi-unnamed-{index}-{suffix}");
+            if occupied.insert(candidate.clone()) {
+                break candidate;
+            }
+            suffix += 1;
+        };
+        outbound["tag"] = tag.into();
+    }
 
     // Simultaneous standard and burst observatory is unsupported.
     if sanitized.observatory.is_some() && sanitized.burst_observatory.is_some() {
@@ -1177,7 +1158,7 @@ fn provider_outbounds(
         .first()
         .and_then(|o| o["tag"].as_str())
         .map(str::to_string)
-        .unwrap_or_else(|| "proxy".to_string());
+        .ok_or_else(|| reject("no default outbound"))?;
 
     let mut target = default_target(&sanitized);
 
@@ -1192,7 +1173,7 @@ fn provider_outbounds(
         .iter()
         .any(|o| o["protocol"] == "loopback")
         || raw_balancers.iter().any(|b| b.get("fallbackTag").is_some());
-    if c.meta.via.is_some() && is_expanded_fallback {
+    if c.origin == CustomOrigin::Provider && c.meta.via.is_some() && is_expanded_fallback {
         return Err("provider config rejected: chaining (.via) on expanded loopback/fallback graphs is not supported".into());
     }
 
@@ -1217,12 +1198,6 @@ fn provider_outbounds(
         &raw_balancers,
         &orig_virtual_tags,
     )?;
-
-    let orig_outbound_tags: Vec<String> = sanitized
-        .outbounds
-        .iter()
-        .filter_map(|o| o["tag"].as_str().map(str::to_string))
-        .collect();
 
     // Expand balancer prefix selectors against original outbound tags, then rewrite using names.outbounds
     for b in &mut raw_balancers {
@@ -2480,7 +2455,7 @@ mod tests {
     fn probe_config_of_a_user_custom_owns_the_inbounds() {
         let raw = json!({
             "inbounds": [{ "tag": "mine", "protocol": "socks", "listen": "0.0.0.0", "port": 10808 }],
-            "outbounds": [provider_vless("proxy", "srv.example")],
+            "outbounds": [provider_vless("user-exit", "srv.example")],
         });
         let p = custom("user", &raw);
         let s = AdvancedSettings {
@@ -2490,7 +2465,10 @@ mod tests {
         };
         let cfg = build_xray_probe_config(&p, &s, &[]).unwrap();
 
-        assert_eq!(cfg.target.describe(), "outbound proxy");
+        let Target::Outbound(target) = &cfg.target else {
+            panic!("the user's single-server probe must report an outbound");
+        };
+        assert!(target.starts_with("ks-provider:"));
         let text = cfg.config.to_string();
         assert!(
             !text.contains("10808") && !text.contains("\"mine\""),
@@ -2499,13 +2477,158 @@ mod tests {
         assert_eq!(cfg.config["inbounds"][0]["tag"], "socks-in");
         assert_eq!(cfg.config["inbounds"][0]["port"], 19080);
         assert_eq!(cfg.config["inbounds"][1]["port"], 19081);
-        assert_eq!(
-            cfg.config["outbounds"][0]["settings"]["vnext"][0]["address"],
-            "srv.example"
+        let measured = cfg.config["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|outbound| outbound["tag"].as_str() == Some(target.as_str()))
+            .unwrap();
+        assert_eq!(measured["settings"]["vnext"][0]["address"], "srv.example");
+        assert_eq!(cfg.config["outbounds"][0]["protocol"], "loopback");
+        assert!(
+            cfg.config["routing"]["rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|rule| {
+                    rule["inboundTag"] == json!(["proxy-select"])
+                        && rule["outboundTag"] == target.as_str()
+                })
         );
         // The runtime config still runs it exactly as written.
         assert_eq!(
             build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap(),
+            raw
+        );
+    }
+
+    #[test]
+    fn unnamed_default_is_not_replaced_by_a_later_outbound_named_proxy() {
+        let mut first = provider_vless("temporary", "first.example");
+        first.as_object_mut().unwrap().remove("tag");
+        let raw = json!({ "outbounds": [first, provider_vless("proxy", "later.example")] });
+        for origin in ["provider", "user"] {
+            let profile = custom(origin, &raw);
+            let probe =
+                build_xray_probe_config(&profile, &AdvancedSettings::default(), &[]).unwrap();
+            let Target::Outbound(tag) = &probe.target else {
+                panic!("an unnamed default must still select its original outbound");
+            };
+            assert_eq!(
+                by_tag(&probe.config, tag)["settings"]["vnext"][0]["address"],
+                "first.example"
+            );
+        }
+    }
+
+    #[test]
+    fn temporary_outbound_names_do_not_expand_source_selectors() {
+        let mut first = provider_vless("temporary", "unnamed.example");
+        first.as_object_mut().unwrap().remove("tag");
+        let raw = json!({
+            "outbounds": [first,
+                provider_vless("kasumi-unnamed-0-0", "named1.example"),
+                provider_vless("kasumi-unnamed-0", "named2.example")],
+            "routing": {
+                "balancers": [{ "tag": "selected", "selector": ["kasumi-unnamed-0"], "strategy": { "type": "random" } }],
+                "rules": [{ "type": "field", "network": "tcp,udp", "balancerTag": "selected" }]
+            }
+        });
+        for origin in ["provider", "user"] {
+            let probe =
+                build_xray_probe_config(&custom(origin, &raw), &AdvancedSettings::default(), &[])
+                    .unwrap();
+            let members = probe.config["routing"]["balancers"][0]["selector"]
+                .as_array()
+                .unwrap();
+            assert_eq!(members.len(), 2);
+            for member in members {
+                let outbound = by_tag(&probe.config, member.as_str().unwrap());
+                assert!(matches!(
+                    outbound["settings"]["vnext"][0]["address"].as_str(),
+                    Some("named1.example" | "named2.example")
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn unnamed_loopback_default_keeps_its_virtual_dispatch() {
+        let raw = json!({
+            "outbounds": [
+                { "protocol": "loopback", "settings": { "inboundTag": "inside" } },
+                provider_vless("proxy", "exit.example")
+            ],
+            "routing": { "rules": [
+                { "type": "field", "inboundTag": ["inside"], "outboundTag": "proxy" }
+            ] }
+        });
+        let probe =
+            build_xray_probe_config(&custom("user", &raw), &AdvancedSettings::default(), &[])
+                .unwrap();
+        let Target::Outbound(tag) = &probe.target else {
+            panic!("expected the loopback entry")
+        };
+        let entry = by_tag(&probe.config, tag);
+        assert_eq!(entry["protocol"], "loopback");
+        let context = &entry["settings"]["inboundTag"];
+        assert!(
+            probe.config["routing"]["rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|rule| rule["inboundTag"]
+                    .as_array()
+                    .is_some_and(|tags| tags.contains(context)))
+        );
+    }
+
+    #[test]
+    fn user_custom_probe_routes_to_its_reported_balancer_and_keeps_fallback() {
+        let mut raw = balancer_raw();
+        raw["outbounds"].as_array_mut().unwrap().push(json!({
+            "tag": "reenter", "protocol": "loopback",
+            "settings": { "inboundTag": "fallback-in" }
+        }));
+        raw["routing"]["balancers"][0]["fallbackTag"] = "reenter".into();
+        raw["routing"]["rules"].as_array_mut().unwrap().insert(
+            0,
+            json!({
+                "type": "field", "inboundTag": ["fallback-in"], "outboundTag": "main-2"
+            }),
+        );
+        raw["observatory"] = json!({
+            "subjectSelector": ["main"], "probeURL": "https://probe.example/health",
+            "probeInterval": "10s"
+        });
+        let mut profile = custom("user", &raw);
+        // Runtime executes the raw config, not a chain described outside it.
+        profile.meta_mut().via = Some("not-part-of-the-raw-config".into());
+        let probe = build_xray_probe_config(&profile, &AdvancedSettings::default(), &[]).unwrap();
+        let Target::Balancer { tag, .. } = &probe.target else {
+            panic!("a user balancer probe must report its selected balancer");
+        };
+        let rules = probe.config["routing"]["rules"].as_array().unwrap();
+        assert!(
+            rules
+                .iter()
+                .any(|rule| rule["inboundTag"] == json!(["proxy-select"])
+                    && rule["balancerTag"] == tag.as_str())
+        );
+        let fallback = probe.config["routing"]["balancers"][0]["fallbackTag"]
+            .as_str()
+            .unwrap();
+        let fallback_outbound = by_tag(&probe.config, fallback);
+        assert_eq!(fallback_outbound["protocol"], "loopback");
+        let context = &fallback_outbound["settings"]["inboundTag"];
+        assert!(rules.iter().any(|rule| {
+            rule["inboundTag"]
+                .as_array()
+                .is_some_and(|tags| tags.contains(context))
+        }));
+        assert!(probe.config.get("observatory").is_some());
+        assert_eq!(
+            build_xray_config(&profile, &AdvancedSettings::default(), &[], &[]).unwrap(),
             raw
         );
     }
