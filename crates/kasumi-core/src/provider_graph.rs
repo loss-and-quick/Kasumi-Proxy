@@ -423,6 +423,7 @@ pub enum TargetRef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FragmentOutbound {
     pub tag: String,
+    pub orig_tag: String,
     pub raw: Value,
     pub is_service: bool,
     pub is_loopback: bool,
@@ -440,6 +441,7 @@ pub struct FragmentBalancer {
     /// strategies that can pick nothing; random and roundRobin never do.
     pub fallback_tag: Option<String>,
     pub has_explicit_fallback: bool,
+    pub resolved_costs: Option<Vec<(String, serde_json::Number)>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -500,6 +502,16 @@ impl ProviderFragment {
             .filter_map(|o| o.get("tag").and_then(Value::as_str).map(str::to_string))
             .collect();
         let mut occupied: HashSet<String> = orig_outbound_tags.iter().cloned().collect();
+
+        let original_tags: Vec<String> = raw_outbounds
+            .iter()
+            .map(|o| {
+                o.get("tag")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string()
+            })
+            .collect();
 
         // Assign synthetic tags to unnamed outbounds
         for (i, ob) in raw_outbounds.iter_mut().enumerate() {
@@ -620,6 +632,7 @@ impl ProviderFragment {
 
             fragment_outbounds.push(FragmentOutbound {
                 tag,
+                orig_tag: original_tags[i].clone(),
                 raw: ob,
                 is_service,
                 is_loopback,
@@ -630,6 +643,7 @@ impl ProviderFragment {
 
         let mut fragment_balancers = Vec::new();
         let mut balancer_tags = HashSet::new();
+        let mut total_cost_rules = 0usize;
         let raw_balancers = routing
             .and_then(|r| r.get("balancers"))
             .and_then(Value::as_array);
@@ -667,24 +681,13 @@ impl ProviderFragment {
                 let strat_val = b_obj.get("strategy");
                 // Xray reads the strategy as an object with a `type`; a bare string
                 // does not parse there, so it is not passed on either.
-                let strat_type = match strat_val {
+                let (strat_type, raw_costs) = match strat_val {
                     Some(Value::Object(o)) => {
-                        if let Some(costs) = o.get("settings").and_then(|s| s.get("costs")) {
-                            let non_empty = match costs {
-                                Value::Array(a) => !a.is_empty(),
-                                Value::Object(m) => !m.is_empty(),
-                                _ => true,
-                            };
-                            if non_empty {
-                                return Err(SanitizeError::Incompatible {
-                                    path: format!("{path}.strategy.settings.costs"),
-                                    reason: "leastLoad costs is not supported",
-                                });
-                            }
-                        }
-                        o.get("type").and_then(Value::as_str)
+                        let st = o.get("type").and_then(Value::as_str);
+                        let costs = o.get("settings").and_then(|s| s.get("costs"));
+                        (st, costs)
                     }
-                    None => None,
+                    None => (None, None),
                     _ => {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.strategy"),
@@ -699,6 +702,24 @@ impl ProviderFragment {
                         path: format!("{path}.strategy"),
                         reason: "unknown balancer strategy",
                     });
+                }
+                if let Some(costs) = raw_costs
+                    && !costs.is_null()
+                {
+                    if !costs.is_array() {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs"),
+                            reason: "balancer costs must be an array",
+                        });
+                    }
+                    if strat_type != Some("leastLoad")
+                        && costs.as_array().is_some_and(|a| !a.is_empty())
+                    {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.strategy.settings.costs"),
+                            reason: "leastLoad costs is not supported",
+                        });
+                    }
                 }
 
                 let sel_arr = b_obj
@@ -717,20 +738,25 @@ impl ProviderFragment {
                 }
 
                 let mut members = Vec::new();
-                for orig in &orig_outbound_tags {
-                    if prefixes
-                        .iter()
-                        .any(|p| *p == orig.as_str() || orig.starts_with(p))
-                        && !members.contains(orig)
-                    {
-                        let ob = fragment_outbounds.iter().find(|o| o.tag == *orig).unwrap();
+                for ob in &fragment_outbounds {
+                    let orig = &ob.orig_tag;
+                    let matches_selector = prefixes.iter().any(|p| {
+                        if p.is_empty() {
+                            true
+                        } else if orig.is_empty() {
+                            false
+                        } else {
+                            *p == orig.as_str() || orig.starts_with(p)
+                        }
+                    });
+                    if matches_selector && !members.contains(&ob.tag) {
                         if ob.is_service || ob.is_loopback {
                             return Err(SanitizeError::Incompatible {
                                 path: format!("{path}.selector"),
                                 reason: "balancer selector matches service or loopback outbound",
                             });
                         }
-                        members.push(orig.clone());
+                        members.push(ob.tag.clone());
                     }
                 }
                 if members.is_empty() {
@@ -763,12 +789,35 @@ impl ProviderFragment {
                         ),
                     };
 
+                let resolved_costs = if strat_type == Some("leastLoad")
+                    && let Some(costs) = raw_costs
+                    && !costs.is_null()
+                    && costs.as_array().is_some_and(|a| !a.is_empty())
+                {
+                    let member_orig_tags: Vec<(&str, &str)> = members
+                        .iter()
+                        .map(|m| {
+                            let ob = fragment_outbounds.iter().find(|o| o.tag == *m).unwrap();
+                            (ob.tag.as_str(), ob.orig_tag.as_str())
+                        })
+                        .collect();
+                    Some(crate::costs::resolve_leastload_costs(
+                        costs,
+                        &member_orig_tags,
+                        &path,
+                        &mut total_cost_rules,
+                    )?)
+                } else {
+                    None
+                };
+
                 fragment_balancers.push(FragmentBalancer {
                     tag,
                     strategy: strat_val.cloned(),
                     members,
                     fallback_tag,
                     has_explicit_fallback,
+                    resolved_costs,
                 });
             }
         }
@@ -849,20 +898,25 @@ impl ProviderFragment {
                 });
             }
             let mut subjects = Vec::new();
-            for orig in &orig_outbound_tags {
-                if prefixes
-                    .iter()
-                    .any(|p| *p == orig.as_str() || orig.starts_with(p))
-                    && !subjects.contains(orig)
-                {
-                    let ob = fragment_outbounds.iter().find(|o| o.tag == *orig).unwrap();
+            for ob in &fragment_outbounds {
+                let orig = &ob.orig_tag;
+                let matches_selector = prefixes.iter().any(|p| {
+                    if p.is_empty() {
+                        true
+                    } else if orig.is_empty() {
+                        false
+                    } else {
+                        *p == orig.as_str() || orig.starts_with(p)
+                    }
+                });
+                if matches_selector && !subjects.contains(&ob.tag) {
                     if ob.is_service || ob.is_loopback {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.subjectSelector"),
                             reason: "observatory selector matches service or loopback outbound",
                         });
                     }
-                    subjects.push(orig.clone());
+                    subjects.push(ob.tag.clone());
                 }
             }
             if subjects.is_empty() {
@@ -984,20 +1038,25 @@ impl ProviderFragment {
                 });
             }
             let mut subjects = Vec::new();
-            for orig in &orig_outbound_tags {
-                if prefixes
-                    .iter()
-                    .any(|p| *p == orig.as_str() || orig.starts_with(p))
-                    && !subjects.contains(orig)
-                {
-                    let ob = fragment_outbounds.iter().find(|o| o.tag == *orig).unwrap();
+            for ob in &fragment_outbounds {
+                let orig = &ob.orig_tag;
+                let matches_selector = prefixes.iter().any(|p| {
+                    if p.is_empty() {
+                        true
+                    } else if orig.is_empty() {
+                        false
+                    } else {
+                        *p == orig.as_str() || orig.starts_with(p)
+                    }
+                });
+                if matches_selector && !subjects.contains(&ob.tag) {
                     if ob.is_service || ob.is_loopback {
                         return Err(SanitizeError::Incompatible {
                             path: format!("{path}.subjectSelector"),
                             reason: "observatory selector matches service or loopback outbound",
                         });
                     }
-                    subjects.push(orig.clone());
+                    subjects.push(ob.tag.clone());
                 }
             }
             if subjects.is_empty() {
@@ -1572,7 +1631,26 @@ impl ProviderFragment {
             if let Some(fallback) = new_fallback {
                 b_val["fallbackTag"] = Value::String(fallback.clone());
             }
-            if let Some(st) = &b.strategy {
+            if let Some(costs) = &b.resolved_costs {
+                let mut strat = b
+                    .strategy
+                    .clone()
+                    .unwrap_or_else(|| json!({"type": "leastLoad"}));
+                let mut settings = strat.get("settings").cloned().unwrap_or_else(|| json!({}));
+                let rendered_costs: Vec<Value> = costs
+                    .iter()
+                    .map(|(member_id, val)| {
+                        json!({
+                            "match": names_outbounds.get(member_id).unwrap(),
+                            "regexp": false,
+                            "value": val,
+                        })
+                    })
+                    .collect();
+                settings["costs"] = Value::Array(rendered_costs);
+                strat["settings"] = settings;
+                b_val["strategy"] = strat;
+            } else if let Some(st) = &b.strategy {
                 b_val["strategy"] = st.clone();
             }
             balancers.push(b_val);

@@ -994,3 +994,338 @@ fn burst_observatory_connectivity_is_stripped_with_warning_and_stable_across_rei
         }
     );
 }
+
+fn balancer_leastload_config(costs: Value) -> Value {
+    json!({
+        "outbounds": [server("node-1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": costs
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    })
+}
+
+#[test]
+fn costs_on_non_leastload_strategies_are_rejected() {
+    for strat in ["random", "roundRobin", "leastPing"] {
+        let cfg = json!({
+            "outbounds": [server("node-1"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb", "selector": ["node-"],
+                    "strategy": {
+                        "type": strat,
+                        "settings": {
+                            "costs": [{ "match": "node-1", "value": 2 }]
+                        }
+                    },
+                    "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "observatory": {
+                "subjectSelector": ["node-"],
+                "probeURL": "https://example.org/generate_204",
+                "probeInterval": "10s"
+            }
+        });
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs".into(),
+                reason: "leastLoad costs is not supported",
+            }
+        );
+    }
+}
+
+#[test]
+fn object_and_non_array_costs_are_rejected_while_null_and_empty_are_accepted() {
+    // Non-array types reject
+    for invalid in [json!({"match": "node"}), json!("string"), json!(42)] {
+        let cfg = balancer_leastload_config(invalid);
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs".into(),
+                reason: "balancer costs must be an array",
+            }
+        );
+    }
+
+    // null and empty array are accepted
+    for valid in [Value::Null, json!([])] {
+        let cfg = balancer_leastload_config(valid);
+        assert!(sanitize_provider_xray(&cfg).is_ok());
+    }
+}
+
+#[test]
+fn null_and_non_object_cost_entries_are_safely_rejected() {
+    let cfg_null = balancer_leastload_config(json!([null]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_null).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "cost entry cannot be null",
+        }
+    );
+
+    let cfg_number = balancer_leastload_config(json!([123]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_number).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "cost entry must be an object",
+        }
+    );
+}
+
+#[test]
+fn unknown_cost_fields_and_invalid_field_types_are_rejected() {
+    let cfg_unknown = balancer_leastload_config(json!([{"match": "a", "extra": true}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_unknown).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].extra".into(),
+            reason: "unknown cost rule field",
+        }
+    );
+
+    let cfg_bad_match = balancer_leastload_config(json!([{"match": 123}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_bad_match).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].match".into(),
+            reason: "cost match must be a string",
+        }
+    );
+
+    let cfg_bad_regexp = balancer_leastload_config(json!([{"regexp": "yes"}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_bad_regexp).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].regexp".into(),
+            reason: "cost regexp must be a boolean",
+        }
+    );
+
+    let cfg_bad_value = balancer_leastload_config(json!([{"value": "ten"}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_bad_value).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].value".into(),
+            reason: "cost value must be a number",
+        }
+    );
+}
+
+#[test]
+fn explicit_f32_overflow_is_rejected() {
+    let cfg = balancer_leastload_config(json!([{"match": "node", "value": 1e40}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].value".into(),
+            reason: "cost value exceeds float32 range",
+        }
+    );
+}
+
+#[test]
+fn auto_cost_zero_and_non_exact_f32_are_rejected() {
+    // Auto cost 0
+    let cfg_zero = json!({
+        "outbounds": [server("node-0"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node-0", "value": 0 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    assert_eq!(
+        sanitize_provider_xray(&cfg_zero).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "auto cost value cannot be zero",
+        }
+    );
+
+    // Auto cost 0.1 (not exact f32)
+    let cfg_inexact = json!({
+        "outbounds": [server("node-0.1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node-[0-9.]+", "regexp": true }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    assert_eq!(
+        sanitize_provider_xray(&cfg_inexact).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0]".into(),
+            reason: "auto cost value requires exact float32 representation",
+        }
+    );
+}
+
+#[test]
+fn unsupported_and_invalid_regex_syntax_are_rejected() {
+    let cases = [
+        ("node\\Qabc\\E", "unsupported regex syntax: literal quoting"),
+        ("(?x)node", "unsupported regex flag"),
+        ("(?u)node", "unsupported regex flag"),
+        ("(?R)node", "unsupported regex flag"),
+        ("[a-z&&[0-9]]", "unsupported regex character class operator"),
+        ("[a-z--[d]]", "unsupported regex character class operator"),
+        ("[a-z~~[d]]", "unsupported regex character class operator"),
+        ("[a-z", "invalid regex pattern"),
+    ];
+
+    for (pat, expected_reason) in cases {
+        let cfg = balancer_leastload_config(json!([{"match": pat, "regexp": true, "value": 2}]));
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs[0].match".into(),
+                reason: expected_reason,
+            },
+            "pattern {pat} should fail with {expected_reason}"
+        );
+    }
+}
+
+#[test]
+fn bounded_non_ascii_regex_rejected_but_unicode_literal_costs_accepted() {
+    // Non-ASCII regex pattern rejected
+    let cfg_non_ascii_pattern =
+        balancer_leastload_config(json!([{"match": "node-東京", "regexp": true, "value": 2}]));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_non_ascii_pattern).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs[0].match".into(),
+            reason: "regexp costs require ASCII pattern",
+        }
+    );
+
+    // Non-ASCII candidate tag with regex rule rejected
+    let cfg_non_ascii_tag = json!({
+        "outbounds": [server("node-東京"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node", "regexp": true, "value": 2 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    assert_eq!(
+        sanitize_provider_xray(&cfg_non_ascii_tag).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs".into(),
+            reason: "regexp costs require ASCII tags",
+        }
+    );
+
+    // Non-ASCII candidate tag with substring literal rule IS ACCEPTED!
+    let cfg_unicode_literal = json!({
+        "outbounds": [server("node-東京"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb", "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "東京", "regexp": false, "value": 3.0 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+    let sanitized =
+        sanitize_provider_xray(&cfg_unicode_literal).expect("unicode literal should be accepted");
+    let active = sanitized
+        .fragment
+        .render(&cfg_unicode_literal.to_string())
+        .expect("render succeeds");
+    let b = &active.balancers[0];
+    let rendered_costs = b["strategy"]["settings"]["costs"].as_array().unwrap();
+    assert_eq!(rendered_costs.len(), 1);
+    assert_eq!(rendered_costs[0]["value"], 3.0);
+}
+
+#[test]
+fn cost_rule_count_limits_are_enforced() {
+    let too_many_rules: Vec<Value> = (0..65)
+        .map(|i| json!({ "match": format!("node-{i}"), "value": 1 }))
+        .collect();
+    let cfg = balancer_leastload_config(Value::Array(too_many_rules));
+    assert_eq!(
+        sanitize_provider_xray(&cfg).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs".into(),
+            reason: "balancer costs exceeds maximum rule limit",
+        }
+    );
+}

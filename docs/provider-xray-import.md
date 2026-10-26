@@ -33,6 +33,12 @@ The compilation pipeline converts untrusted provider JSON into a validated, link
    - If the entry resolves to a service outbound or an all-service balancer, the configuration is rejected because a profile's default route must be a proxy.
 5. **Namespace tags with prefix-free identities**:
    A deterministic seed is derived via `provider_outbounds_identity` (SHA-256 of outbounds with tags and REALITY picks removed). Outbounds, balancers, and virtual inbounds receive fixed-length, colon-terminated tags (`ks-provider:{seed}:{o|b|v}:{index:08x}:`). This ensures prefix-free selector matching and prevents core restarts when subscription updates only refresh server picks.
+   - `leastLoad.strategy.settings.costs` resolution:
+     Because provider configurations may rely on pattern or substring matching over original human tags (such as `node-cost-3.5`), translating cost rules across hashed namespaces would corrupt numeric auto-weight extraction. Kasumi evaluates cost rules against each member's original outbound tag (untagged outbounds evaluate as `""`), resolves effective per-member numeric weights at validation time, and renders exact rewritten opaque tag matches (`regexp: false`) with explicit positive values in the linked configuration.
+     - First non-empty match wins in declaration order. Unmatched members receive default weight 1.
+     - Explicit positive numbers are checked for finite single-precision range (`f32`) and reused.
+     - Numbers <= 0 or omitted trigger auto-weight extraction of `\d+(\.\d+)?` from the matched text (falling back to 1 if no digits exist or on overflow). Auto-extracted values of zero (unrepresentable under Xray's `value > 0` explicit path) or values not exactly representable as `f32` are rejected fail-closed to prevent silent priority inversion.
+     - Regexp cost rules require an ASCII pattern and ASCII candidate tags, normalized to Go RE2 whitespace semantics (where `\s` excludes vertical tab `\v`), while literal substring costs support arbitrary Unicode via exact substring search. Unsupported syntax (e.g. `\Q..\E`, unsupported flags or class operators) is rejected fail-closed.
 6. **Link at `proxy`**:
    - If the entry target is a plain outbound not referenced by any balancer, observer, fallback, dialer, or context, it takes the tag `proxy` directly with no loopback hop.
    - Otherwise, `proxy` is created as a loopback outbound targeting `proxy-select`, paired with an internal rule `proxy-select -> entry_target`. Context rules and the `proxy-select` rule are placed ahead of user rules in routing.
@@ -43,9 +49,9 @@ The compilation pipeline converts untrusted provider JSON into a validated, link
 
 | Category | Settings | Rationale |
 | --- | --- | --- |
-| **Preserved** | Proxy outbounds, credentials, stream settings, `dialerProxy` chains, balancers, single observation engine (`observatory` or `burstObservatory`), virtual loopbacks (`settings.inboundTag`), context routing rules. | Necessary to reproduce the provider's intended connection topology and multi-node exit strategies. |
+| **Preserved** | Proxy outbounds, credentials, stream settings, `dialerProxy` chains, balancers, `leastLoad` `costs` (evaluated against original outbound tags at fragment build time and rendered as rewritten full opaque exact tags), single observation engine (`observatory` or `burstObservatory`), virtual loopbacks (`settings.inboundTag`), context routing rules. | Necessary to reproduce the provider's intended connection topology and multi-node exit strategies. |
 | **Ignored (Warning)** | Listener settings (`inbounds`), log file paths (`log`), management services (`api`, `stats`, `policy`), external conditional routing rules (any Xray match key: `domain`, `ip`, `port`, `sourcePort`, `process`, `user`, `attrs` and the rest), UDP service policies differing from TCP proxy targets, a `random`/`roundRobin` `fallbackTag` in a profile without an observatory (Xray would refuse to start), and `burstObservatory.pingConfig.connectivity` (direct HTTP diagnostic check belongs to Kasumi; when the host network is down, failed node probes are recorded rather than preserving stale RTT baselines). | Kasumi's platform routing and DNS policy are authoritative. Provider configurations cannot override system egress or intercept client-owned traffic. |
-| **Rejected (Incompatible)** | Local certificate or key files (`certificateFile`, `keyFile`), non-canonical field aliases (including `sockopt` and `proxySettings.tag` casing, since Xray binds JSON keys case-insensitively and an alias would hide a graph edge), unknown rule keys, unpinned `allowInsecure`, unknown protocols, cyclic dependencies, graph depth or node limit violations, ambiguous entry targets, simultaneous standard and burst observatories, leastLoad `costs`, and profiles whose default route is not a proxy. | Violates fail-closed security guarantees, introduces infinite loops, or relies on features unsupported by Kasumi's core architecture. |
+| **Rejected (Incompatible)** | Local certificate or key files (`certificateFile`, `keyFile`), non-canonical field aliases (including `sockopt` and `proxySettings.tag` casing, since Xray binds JSON keys case-insensitively and an alias would hide a graph edge), unknown rule keys, unpinned `allowInsecure`, unknown protocols, cyclic dependencies, graph depth or node limit violations, ambiguous entry targets, simultaneous standard and burst observatories, and profiles whose default route is not a proxy. | Violates fail-closed security guarantees, introduces infinite loops, or relies on features unsupported by Kasumi's core architecture. |
 
 ## 4. Worked example: balancer cascade
 
@@ -132,6 +138,9 @@ Notice:
 | Max graph nodes | 1024 | Prevents resource exhaustion from oversized declarations. |
 | Max graph depth | 256 | Binds DAG traversal and dialer chain recursion. |
 | Max selector members | 64 | Binds candidate sets for balancers and observatories. |
+| Max cost rules per balancer | 64 | Binds cost rule evaluation per balancer. |
+| Max profile cost rules | 1024 | Binds total cost rules across all balancers in a profile. |
+| Max compiled regex size | 64 KiB | Binds regex compilation and DFA state graph size. |
 | Min probe interval | 10 s | Prevents abusive health check frequencies. |
 | Max burst timeout | 60 s | Binds background observation probe duration. |
 | Max burst sampling | 20 | Binds packet bursts per observation check. |
@@ -142,6 +151,7 @@ Notice:
 ### Code locations
 
 - `crates/kasumi-core/src/provider_graph.rs`: Defines `ProviderFragment`, `FragmentOutbound`, `FragmentBalancer`, `FragmentObservatory`, `FragmentContext`, and `TargetRef`. Implements fragment building, cycle and depth validation, explicit default assignment, target resolution, and prefix-free rendering (`render`, `compile_custom_profile`).
+- `crates/kasumi-core/src/costs.rs`: Implements Xray `leastLoad` cost rule evaluation, Go-compatible regex normalization, auto-extraction of numeric weights, single-precision fidelity validation, and exact opaque tag rendering.
 - `crates/kasumi-core/src/custom_sanitize.rs`: Implements `sanitize_provider_xray` and `SanitizedXray`. Strips client-owned top-level keys, `masterKeyLog` from TLS settings (`strip_host_files`), and non-allowlisted sockopt fields. Rejects `certificateFile`, `keyFile`, unpinned `allowInsecure`, and non-canonical field-name casing (`validate_stream_security`, inline proxySettings check).
 - `crates/kasumi-core/src/custom_target.rs`: Defines `Target` and `describe()` for probe diagnostics and UI representations.
 - `crates/kasumi-core/src/xray_config.rs`: Merges rendered `ActiveOutbounds` from the fragment compiler into Kasumi's top-level Xray configuration.

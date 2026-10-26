@@ -1012,3 +1012,556 @@ fn test_real_xray_traffic_unreachable_balancer_without_fallback_terminates_witho
         "expected Xray to record the explicit balancer fallback. Log:\n{log_content}"
     );
 }
+
+fn server(tag: &str) -> Value {
+    json!({
+        "tag": tag, "protocol": "vless",
+        "settings": { "vnext": [{ "address": "127.0.0.1", "port": 443,
+            "users": [{ "id": "11111111-1111-1111-1111-111111111111", "encryption": "none" }] }] },
+        "streamSettings": { "network": "tcp", "security": "tls" }
+    })
+}
+
+fn freedom(tag: &str) -> Value {
+    json!({ "tag": tag, "protocol": "freedom" })
+}
+
+fn custom_profile_from_json(raw: Value) -> Profile {
+    serde_json::from_value(json!({
+        "protocol": "custom",
+        "meta": { "id": "test-costs", "remarks": "Test Costs", "groupId": "g-test" },
+        "raw": raw.to_string(),
+        "origin": CustomOrigin::Provider,
+    }))
+    .unwrap()
+}
+
+#[test]
+fn leastload_costs_ordered_overlapping_substring_matches_rendered_as_opaque_tags() {
+    let raw = json!({
+        "outbounds": [
+            server("prefix-node-a"),
+            server("node-b"),
+            server("node-ab"),
+            server("unmatched"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["prefix-node-a", "node-b", "node-ab", "unmatched"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "node-a", "value": 2 },
+                            { "match": "node", "value": 4 }
+                        ]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["prefix-node-a", "node-b", "node-ab", "unmatched"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let balancers = probe.config["routing"]["balancers"]
+        .as_array()
+        .expect("balancers");
+    let lb = &balancers[0];
+    let costs = lb["strategy"]["settings"]["costs"]
+        .as_array()
+        .expect("costs");
+    assert_eq!(costs.len(), 4);
+
+    for entry in costs {
+        assert_eq!(entry["regexp"], false);
+        let m = entry["match"].as_str().unwrap();
+        assert!(m.starts_with("ks-provider:"));
+        assert!(m.ends_with(':'));
+    }
+
+    let values: Vec<f64> = costs.iter().map(|c| c["value"].as_f64().unwrap()).collect();
+    assert_eq!(values, vec![2.0, 4.0, 2.0, 1.0]);
+}
+
+#[test]
+fn leastload_costs_empty_match_and_no_match_default_to_weight_one() {
+    let raw = json!({
+        "outbounds": [server("node-a"), server("other"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-a", "other"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "", "value": 9 },
+                            { "match": "node", "value": 3 }
+                        ]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-a", "other"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let lb = &probe.config["routing"]["balancers"][0];
+    let costs = lb["strategy"]["settings"]["costs"]
+        .as_array()
+        .expect("costs");
+    assert_eq!(costs.len(), 2);
+    let values: Vec<f64> = costs.iter().map(|c| c["value"].as_f64().unwrap()).collect();
+    assert_eq!(values, vec![3.0, 1.0]);
+}
+
+#[test]
+fn leastload_costs_regex_explicit_and_numeric_auto_extraction_from_matched_portion() {
+    let raw = json!({
+        "outbounds": [
+            server("node-99-cost-3.5"),
+            server("node-a"),
+            server("node-plain"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "cost-[0-9.]+", "regexp": true, "value": -1 },
+                            { "match": "node-a", "value": 0.1 },
+                            { "match": "node-plain", "value": 0 }
+                        ]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let lb = &probe.config["routing"]["balancers"][0];
+    let costs = lb["strategy"]["settings"]["costs"]
+        .as_array()
+        .expect("costs");
+    assert_eq!(costs.len(), 3);
+    assert_eq!(costs[0]["value"], 3.5);
+    assert_eq!(costs[1]["value"], 0.1);
+    assert_eq!(costs[2]["value"], 1);
+}
+
+#[test]
+fn leastload_costs_ascii_regex_d_and_s_semantics_with_vertical_tab() {
+    let raw = json!({
+        "outbounds": [
+            server("node\t7"),
+            server("node\u{000b}7"),
+            server("node 7"),
+            server("node_7"),
+            server("node-7"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "node\\s[0-9]", "regexp": true, "value": 2 },
+                            { "match": "^\\w+$", "regexp": true, "value": 4 }
+                        ]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let lb = &probe.config["routing"]["balancers"][0];
+    let costs = lb["strategy"]["settings"]["costs"]
+        .as_array()
+        .expect("costs");
+    assert_eq!(costs.len(), 5);
+    assert_eq!(costs[0]["value"], 2);
+    assert_eq!(costs[1]["value"], 1);
+    assert_eq!(costs[2]["value"], 2);
+    assert_eq!(costs[3]["value"], 4);
+    assert_eq!(costs[4]["value"], 1);
+}
+
+#[test]
+fn two_balancers_can_assign_different_costs_to_the_same_member() {
+    let raw = json!({
+        "outbounds": [server("node-shared"), freedom("direct")],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "lb-fast",
+                    "selector": ["node-shared"],
+                    "strategy": {
+                        "type": "leastLoad",
+                        "settings": { "costs": [{ "match": "node", "value": 5 }] }
+                    },
+                    "fallbackTag": "direct"
+                },
+                {
+                    "tag": "lb-slow",
+                    "selector": ["node-shared"],
+                    "strategy": {
+                        "type": "leastLoad",
+                        "settings": { "costs": [{ "match": "node", "value": 10 }] }
+                    },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["socks-in"], "balancerTag": "lb-fast" },
+                { "network": "tcp,udp", "balancerTag": "lb-slow" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["node-shared"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let balancers = probe.config["routing"]["balancers"]
+        .as_array()
+        .expect("balancers");
+    assert_eq!(balancers.len(), 2);
+    assert_eq!(balancers[0]["strategy"]["settings"]["costs"][0]["value"], 5);
+    assert_eq!(
+        balancers[1]["strategy"]["settings"]["costs"][0]["value"],
+        10
+    );
+}
+
+#[test]
+fn leastload_costs_original_tags_with_prefix_collisions_rendered_prefix_free() {
+    let raw = json!({
+        "outbounds": [server("node-1"), server("node-10"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "node-10", "value": 50 },
+                            { "match": "node-1", "value": 20 }
+                        ]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let costs = probe.config["routing"]["balancers"][0]["strategy"]["settings"]["costs"]
+        .as_array()
+        .unwrap();
+    assert_eq!(costs.len(), 2);
+    assert_eq!(costs[0]["value"], 20);
+    assert_eq!(costs[1]["value"], 50);
+}
+
+#[test]
+fn anonymous_outbound_uses_empty_tag_not_synthetic_tag_for_cost_matching() {
+    let mut ob_anon = server("node-will-be-stripped");
+    ob_anon.as_object_mut().unwrap().remove("tag");
+
+    let raw = json!({
+        "outbounds": [ob_anon, server("node-2")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": [""],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "unnamed", "value": 99 },
+                            { "match": "\\d+", "regexp": true, "value": 50 }
+                        ]
+                    }
+                },
+                "fallbackTag": "node-2"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": [""],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe");
+    let costs = probe.config["routing"]["balancers"][0]["strategy"]["settings"]["costs"]
+        .as_array()
+        .unwrap();
+    assert_eq!(costs.len(), 2);
+    // Anonymous tag is "" during cost lookup:
+    // Neither "unnamed" nor "\d+" matches "" -> default weight 1!
+    assert_eq!(costs[0]["value"], 1);
+    // node-2 matches "\d+" regex (2 is a digit) -> weight 50!
+    assert_eq!(costs[1]["value"], 50);
+}
+
+#[test]
+fn leastload_costs_render_and_reingest_are_stable_and_idempotent() {
+    let raw = json!({
+        "outbounds": [server("node-1"), server("node-2"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node-1", "value": 5 }]
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe1 = build_xray_probe_config(&profile, &settings, &[]).expect("probe 1");
+    let probe2 = build_xray_probe_config(&profile, &settings, &[]).expect("probe 2");
+    assert_eq!(probe1.config, probe2.config);
+}
+
+#[test]
+fn other_leastload_settings_are_retained_when_costs_are_rendered() {
+    let raw = json!({
+        "outbounds": [server("node-1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [{ "match": "node-1", "value": 2 }],
+                        "baselines": [100000000, 200000000],
+                        "expected": 2,
+                        "maxRTT": 500000000,
+                        "tolerance": 0.05
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("probe");
+    let strat_settings = &probe.config["routing"]["balancers"][0]["strategy"]["settings"];
+    assert_eq!(strat_settings["expected"], 2);
+    assert_eq!(strat_settings["maxRTT"], 500000000);
+    assert_eq!(strat_settings["tolerance"], 0.05);
+    assert_eq!(strat_settings["baselines"], json!([100000000, 200000000]));
+    assert!(strat_settings["costs"].as_array().is_some());
+}
+
+#[test]
+fn no_cost_leastload_balancer_is_unchanged() {
+    let raw = json!({
+        "outbounds": [server("node-1"), freedom("direct")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": ["node-"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "expected": 1
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let settings = AdvancedSettings::default();
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("probe");
+    let strat_settings = &probe.config["routing"]["balancers"][0]["strategy"]["settings"];
+    assert!(strat_settings.get("costs").is_none());
+}
+
+#[test]
+fn compiled_config_with_costs_accepted_by_pinned_xray() {
+    let Some(xray_bin) = find_xray_binary() else {
+        eprintln!(
+            "no staged xray binary found in KASUMI_XRAY_BIN or {}: skipping real-core test",
+            binaries_dir().display()
+        );
+        return;
+    };
+
+    let relay = MockRelay::start("costs-upstream", true);
+    let raw = json!({
+        "outbounds": [
+            {
+                "tag": "node-target",
+                "protocol": "socks",
+                "settings": {
+                    "servers": [{ "address": "127.0.0.1", "port": relay.port }]
+                }
+            },
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [{
+                "tag": "lb-costs",
+                "selector": ["node-target"],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "node-target", "value": 2.5 }
+                        ],
+                        "expected": 1
+                    }
+                },
+                "fallbackTag": "direct"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb-costs" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-target"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let profile = custom_profile_from_json(raw);
+    let (socks_port, http_port, force_port) = allocate_kasumi_inbound_ports();
+    let settings = AdvancedSettings {
+        local_socks_port: Some(socks_port),
+        local_http_port: Some(http_port),
+        ..AdvancedSettings::default()
+    };
+
+    let probe = build_xray_probe_config(&profile, &settings, &[]).expect("build probe config");
+
+    let temp_dir = tempfile::tempdir().expect("create tempdir");
+    let cfg_path = temp_dir.path().join("xray_costs_test.json");
+    std::fs::write(&cfg_path, serde_json::to_vec_pretty(&probe.config).unwrap())
+        .expect("write test config");
+
+    let log_path = temp_dir.path().join("xray_costs_test.log");
+    let log_file = std::fs::File::create(&log_path).expect("create test log file");
+    let log_file_err = log_file.try_clone().expect("clone log file");
+
+    let child = Command::new(&xray_bin)
+        .arg("run")
+        .arg("-config")
+        .arg(&cfg_path)
+        .env("XRAY_LOCATION_ASSET", find_asset_dir())
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(log_file_err))
+        .spawn()
+        .expect("spawn xray child process");
+
+    let mut guard = ChildGuard(Some(child));
+
+    let start = Instant::now();
+    let mut ready = false;
+    while start.elapsed() < Duration::from_secs(3) {
+        if TcpStream::connect(format!("127.0.0.1:{force_port}")).is_ok() {
+            ready = true;
+            break;
+        }
+        if let Ok(Some(status)) = guard.0.as_mut().unwrap().try_wait() {
+            let tail = read_log_tail(&log_path, 40);
+            panic!("xray exited prematurely with {status}:\n{tail}");
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        ready,
+        "xray with leastLoad costs did not become ready within 3s. Log:\n{}",
+        read_log_tail(&log_path, 40)
+    );
+}

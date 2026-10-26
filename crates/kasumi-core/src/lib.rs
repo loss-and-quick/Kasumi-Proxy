@@ -34,6 +34,7 @@ pub mod config_shared;
 pub mod contract;
 pub mod core;
 pub mod core_config;
+pub mod costs;
 pub mod custom_sanitize;
 pub mod custom_target;
 pub mod data_path_plan;
