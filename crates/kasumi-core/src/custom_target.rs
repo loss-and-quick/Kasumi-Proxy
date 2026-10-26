@@ -156,9 +156,6 @@ fn is_unconditional_entry_rule(rule: &Value, virtual_tags: &HashSet<&str>) -> bo
     crate::provider_graph::rule_covers_network(obj, "tcp")
 }
 
-#[allow(unused_imports)]
-pub(crate) use crate::provider_graph::ports_cover_all as covers_every_port;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn regression_virtual_inbound_cascade_does_not_hijack_entry_catchall() {
+    fn virtual_inbound_cascade_does_not_hijack_entry_catchall() {
         let loopback = |tag: &str, in_tag: &str| {
             json!({
                 "tag": tag, "protocol": "loopback",
@@ -405,7 +402,7 @@ mod tests {
     }
 
     #[test]
-    fn finding7_repro_first_outbound_loopback_terminating_productively() {
+    fn first_outbound_loopback_remains_the_default_target() {
         let loopback = json!({
             "tag": "lb-out", "protocol": "loopback",
             "settings": { "inboundTag": "v" }
