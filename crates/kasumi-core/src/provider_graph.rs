@@ -573,33 +573,26 @@ impl ProviderFragment {
 
             let mut dialer_proxy = None;
             // Xray dials through only one of these. With both set, the graph would
-            // record one hop while the core might take the other.
-            let has_dialer_proxy = ob
+            // record one hop while the core might take the other. A null or empty
+            // value names no hop, as in Xray.
+            let dialer_proxy_ref = ob
                 .get("streamSettings")
                 .and_then(|ss| ss.get("sockopt"))
                 .and_then(|so| so.get("dialerProxy"))
-                .is_some();
-            let has_proxy_settings_tag = ob
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty());
+            let proxy_settings_ref = ob
                 .get("proxySettings")
                 .and_then(|ps| ps.get("tag"))
-                .is_some();
-            if has_dialer_proxy && has_proxy_settings_tag {
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty());
+            if dialer_proxy_ref.is_some() && proxy_settings_ref.is_some() {
                 return Err(SanitizeError::Incompatible {
                     path: format!("outbounds[{i}].proxySettings.tag"),
                     reason: "both dialerProxy and proxySettings.tag are set",
                 });
             }
-            let dp_opt = ob
-                .get("streamSettings")
-                .and_then(|ss| ss.get("sockopt"))
-                .and_then(|so| so.get("dialerProxy"))
-                .and_then(Value::as_str)
-                .or_else(|| {
-                    ob.get("proxySettings")
-                        .and_then(|ps| ps.get("tag"))
-                        .and_then(Value::as_str)
-                });
-            if let Some(dp) = dp_opt {
+            if let Some(dp) = dialer_proxy_ref.or(proxy_settings_ref) {
                 if dp == tag {
                     return Err(SanitizeError::Incompatible {
                         path: format!("outbounds[{i}].streamSettings.sockopt.dialerProxy"),

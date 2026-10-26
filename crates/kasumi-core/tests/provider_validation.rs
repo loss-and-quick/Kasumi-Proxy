@@ -772,3 +772,19 @@ fn an_outbound_naming_two_dialer_hops_is_rejected() {
         "expected rejection of two dialer hops, got: {err:?}"
     );
 }
+
+#[test]
+fn a_null_or_empty_dialer_proxy_does_not_conflict_with_proxy_settings() {
+    for unset in [Value::Null, json!("")] {
+        let mut chained = server("node-a");
+        chained["streamSettings"]["sockopt"] = json!({ "dialerProxy": unset });
+        chained["proxySettings"] = json!({ "tag": "hop-1" });
+        let cfg = json!({ "outbounds": [chained, server("hop-1")] });
+        let sanitized = sanitize_provider_xray(&cfg)
+            .unwrap_or_else(|e| panic!("dialerProxy {unset} should name no hop: {e:?}"));
+        assert_eq!(
+            sanitized.fragment.outbounds[0].dialer_proxy.as_deref(),
+            Some("hop-1")
+        );
+    }
+}
