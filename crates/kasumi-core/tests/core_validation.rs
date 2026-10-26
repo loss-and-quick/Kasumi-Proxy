@@ -1203,6 +1203,16 @@ fn find_core(env_var: &str, prefix: &str) -> Option<PathBuf> {
     None
 }
 
+fn find_asset_dir() -> PathBuf {
+    if let Ok(p) = std::env::var("KASUMI_XRAY_ASSET_DIR") {
+        let path = PathBuf::from(p);
+        if path.is_dir() {
+            return path;
+        }
+    }
+    binaries_dir()
+}
+
 /// The configs are validated as a desktop builds them: every proxy mode honoured.
 const HOST: HostTraits = HostTraits {
     proxy_modes: true,
@@ -1367,7 +1377,7 @@ fn validate_all_with(cases: Vec<Case>, adjust: impl Fn(CoreEngine, &mut Value)) 
         );
     }
 
-    let asset_dir = binaries_dir();
+    let asset_dir = find_asset_dir();
     let srs_dir = tempfile::tempdir().unwrap();
     // geoip.dat isn't staged by fetch-binaries.sh (the app downloads it to its
     // datadir at runtime), so a config that references geoip/geosite data can't be
@@ -1801,7 +1811,6 @@ fn provider_custom_cases() -> Vec<Case> {
                 { "type": "field", "domain": ["domain:de.example"], "balancerTag": "de" },
                 { "type": "field", "ip": ["10.0.0.0/8"], "outboundTag": "fragment" },
                 { "type": "field", "inboundTag": ["socks"], "balancerTag": "de" },
-                { "type": "field", "user": ["u@example"], "outboundTag": "direct" },
             ],
         },
     });
@@ -1903,6 +1912,143 @@ fn balancer_provider() -> Profile {
 #[test]
 fn provider_custom_validates_against_real_xray() {
     validate_all(provider_custom_cases());
+}
+
+#[test]
+fn provider_custom_fixtures_and_modes_all_build_and_preserve_controls() {
+    let srs_dir = tempfile::tempdir().unwrap();
+    let cases = provider_custom_cases();
+    assert_eq!(
+        cases.len(),
+        4,
+        "expected all 4 provider custom cases (global, rules, balancer, balancer-rules)"
+    );
+
+    // Each supported provider fixture and routing mode must build successfully,
+    // ensuring no case is silently skipped by builder rejection.
+    let mut built_configs = Vec::new();
+    for case in &cases {
+        let (cfg, engine) = build_config(
+            &case.profile,
+            &case.others,
+            &case.settings,
+            &case.rules,
+            srs_dir.path(),
+        )
+        .unwrap_or_else(|| {
+            panic!(
+                "supported provider fixture/mode [{}] failed to build",
+                case.name
+            )
+        });
+        assert_eq!(
+            engine,
+            CoreEngine::Xray,
+            "case [{}] should target Xray engine",
+            case.name
+        );
+        built_configs.push((case.name.clone(), cfg));
+    }
+
+    // Verify flagship provider fixture retains ingress metadata and supported controls.
+    let (flagship_name, flagship_cfg) = &built_configs[0];
+    assert_eq!(flagship_name, "provider-custom/global");
+
+    // 1. Ingress metadata: verify the original fixture declared an inbound tag
+    // and that the built routing rules mapped that ingress to Kasumi's entry tags.
+    let rules = flagship_cfg["routing"]["rules"]
+        .as_array()
+        .expect("routing.rules array");
+    let ingress_mapped_rules: Vec<&Value> = rules
+        .iter()
+        .filter(|r| {
+            r.get("inboundTag")
+                .and_then(Value::as_array)
+                .is_some_and(|tags| tags.iter().any(|t| t == "socks-in" || t == "http-in"))
+        })
+        .collect();
+    assert!(
+        ingress_mapped_rules.len() >= 2,
+        "expected at least 2 ingress-mapped rules in {flagship_name}, got {}",
+        ingress_mapped_rules.len()
+    );
+
+    // 2. Supported controls: balancers preserved with roundRobin strategy
+    let balancers = flagship_cfg["routing"]["balancers"]
+        .as_array()
+        .expect("routing.balancers array");
+    assert!(
+        balancers.iter().any(|b| {
+            b.get("strategy")
+                .and_then(|s| s.get("type"))
+                .and_then(Value::as_str)
+                == Some("roundRobin")
+        }),
+        "roundRobin balancer must be preserved in {flagship_name}"
+    );
+
+    // 3. Supported controls: freedom outbounds with domainStrategy and fragment
+    let outbounds = flagship_cfg["outbounds"]
+        .as_array()
+        .expect("outbounds array");
+    assert!(
+        outbounds.iter().any(|o| {
+            o.get("protocol").and_then(Value::as_str) == Some("freedom")
+                && o.get("settings")
+                    .and_then(|s| s.get("domainStrategy"))
+                    .and_then(Value::as_str)
+                    == Some("UseIPv4")
+        }),
+        "freedom outbound with domainStrategy=UseIPv4 must be preserved"
+    );
+    assert!(
+        outbounds.iter().any(|o| {
+            o.get("protocol").and_then(Value::as_str) == Some("freedom")
+                && o.get("settings")
+                    .and_then(|s| s.get("fragment"))
+                    .and_then(|f| f.get("packets"))
+                    .and_then(Value::as_str)
+                    == Some("tlshello")
+        }),
+        "freedom outbound with fragment settings must be preserved"
+    );
+
+    // 4. Supported controls: dialerProxy preserved on relayed outbound
+    assert!(
+        outbounds.iter().any(|o| {
+            o.get("streamSettings")
+                .and_then(|ss| ss.get("sockopt"))
+                .and_then(|so| so.get("dialerProxy"))
+                .is_some()
+        }),
+        "dialerProxy setting must be preserved on relayed outbound"
+    );
+}
+
+#[test]
+fn provider_custom_with_unsupported_user_rule_condition_is_rejected() {
+    let mut custom = provider_custom_cases().remove(0);
+    if let Profile::Custom(c) = &mut custom.profile {
+        let mut raw: Value = serde_json::from_str(&c.raw).unwrap();
+        raw["routing"]["rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "type": "field", "user": ["u@example"], "outboundTag": "direct" }));
+        c.raw = raw.to_string();
+    }
+    let err = build_core_config(
+        &custom.profile,
+        &custom.settings,
+        &custom.rules,
+        std::slice::from_ref(&custom.profile),
+        "",
+        HOST,
+    )
+    .unwrap_err();
+    assert!(
+        err.contains("unsupported rule condition"),
+        "expected error about unsupported rule condition, got: {err}"
+    );
 }
 
 fn synthetic_provider_graph_cases() -> Vec<Case> {
@@ -2109,7 +2255,7 @@ fn probe_configs_validate_against_real_xray() {
         );
         return;
     };
-    let asset_dir = binaries_dir();
+    let asset_dir = find_asset_dir();
     let mut failures = Vec::new();
     let mut checked = 0;
     for (name, profile) in probe_cases() {
