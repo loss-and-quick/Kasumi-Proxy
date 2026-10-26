@@ -1233,6 +1233,8 @@ fn unsupported_and_invalid_regex_syntax_are_rejected() {
         ("a{01}", "unsupported regex quantifier spelling"),
         ("a{ 2 }", "unsupported regex quantifier spelling"),
         ("(?P<a.b>node)", "invalid regex capture group name"),
+        ("[--9]", "unsupported regex character class syntax"),
+        ("[---]", "unsupported regex character class syntax"),
         ("[a-z", "invalid regex pattern"),
     ];
 
@@ -1445,4 +1447,151 @@ fn named_and_noncapturing_groups_accepted_without_flag_misclassification() {
             "pattern '{pat}' should be accepted"
         );
     }
+}
+
+#[test]
+fn burst_observatory_http_method_validation_and_preservation() {
+    fn burst_cfg(method: Value) -> Value {
+        json!({
+            "outbounds": [server("node-1"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb", "selector": ["node-"],
+                    "strategy": { "type": "leastPing" }, "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "burstObservatory": {
+                "pingConfig": {
+                    "destination": "https://example.org/generate_204",
+                    "interval": "10s",
+                    "timeout": "2s",
+                    "sampling": 1,
+                    "httpMethod": method
+                },
+                "subjectSelector": ["node-"]
+            }
+        })
+    }
+
+    // 1. Valid methods: GET, HEAD, whitespace, empty, null
+    for valid in [
+        json!("GET"),
+        json!("HEAD"),
+        json!("  GET  "),
+        json!(""),
+        json!("   "),
+        Value::Null,
+    ] {
+        let cfg = burst_cfg(valid.clone());
+        let sanitized = sanitize_provider_xray(&cfg).expect("valid httpMethod should be accepted");
+        let raw_str = sanitized.clone().into_provider_json().to_string();
+        let rendered = sanitized.fragment.render(&raw_str).expect("render");
+        let bobs = rendered.burst_observatory.unwrap();
+        if let Some(s) = valid.as_str() {
+            assert_eq!(bobs["pingConfig"]["httpMethod"], s);
+        }
+    }
+
+    // 2. Non-idempotent / unsupported methods rejected
+    for invalid_method in ["POST", "PUT", "DELETE", "PATCH", "CONNECT"] {
+        let cfg = burst_cfg(json!(invalid_method));
+        let err = sanitize_provider_xray(&cfg).unwrap_err();
+        assert_eq!(
+            err,
+            SanitizeError::Incompatible {
+                path: "burstObservatory.pingConfig.httpMethod".into(),
+                reason: "unsupported probe HTTP method",
+            }
+        );
+    }
+
+    // 3. Non-string type rejected
+    let cfg_num = burst_cfg(json!(123));
+    assert_eq!(
+        sanitize_provider_xray(&cfg_num).unwrap_err(),
+        SanitizeError::Incompatible {
+            path: "burstObservatory.pingConfig.httpMethod".into(),
+            reason: "httpMethod must be a string",
+        }
+    );
+}
+
+#[test]
+fn canonical_hyphen_character_classes_are_accepted() {
+    let valid_hyphens = ["[-a]", "[^-a]", "[a-]", "[a\\-b]", "[\\--9]", "[0-9]"];
+
+    for pat in valid_hyphens {
+        let cfg = balancer_leastload_config(json!([{"match": pat, "regexp": true, "value": 2}]));
+        assert!(
+            sanitize_provider_xray(&cfg).is_ok(),
+            "pattern '{pat}' should be accepted"
+        );
+    }
+}
+
+#[test]
+fn mixed_loopback_service_candidate_in_balancer_rejected() {
+    let cfg = json!({
+        "outbounds": [
+            server("node-proxy"),
+            loopback(Some("loop-srv"), "v-srv"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "lb-mixed",
+                    "selector": ["node-proxy", "loop-srv"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-srv"], "outboundTag": "direct" },
+                { "network": "tcp,udp", "balancerTag": "lb-mixed" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["node-proxy", "loop-srv"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].selector".into(),
+            reason: "balancer selector matches service outbound",
+        }
+    );
+}
+
+#[test]
+fn profile_costs_matching_text_budget_exceeded_rejected() {
+    // 1 balancer with 33 rules, member tag of length 2 MiB: 33 * 2 MiB = 66 MiB > 64 MiB
+    let large_tag = "a".repeat(2 * 1024 * 1024);
+    let rules: Vec<Value> = (0..33)
+        .map(|i| json!({ "match": format!("rule-{i}"), "value": 1 }))
+        .collect();
+
+    let mut budget = kasumi_core::costs::CostBudget::default();
+    let member_tags = [("ob-1", large_tag.as_str())];
+    let err = kasumi_core::costs::resolve_leastload_costs(
+        &Value::Array(rules),
+        &member_tags,
+        "routing.balancers[0]",
+        &mut budget,
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].strategy.settings.costs".into(),
+            reason: "profile costs exceeds matching text budget",
+        }
+    );
 }

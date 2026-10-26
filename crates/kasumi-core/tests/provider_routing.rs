@@ -1352,7 +1352,7 @@ fn anonymous_outbound_compiler_identity_not_persisted_and_evaluates_empty_for_co
     });
 
     // 1. Direct helper test: anonymous outbound with original tag "" does not match "unnamed"
-    let mut total_rules = 0;
+    let mut budget = kasumi_core::costs::CostBudget::default();
     let cost_rules = json!([
         { "match": "unnamed", "value": 99 },
         { "match": "\\d+", "regexp": true, "value": 50 }
@@ -1361,7 +1361,7 @@ fn anonymous_outbound_compiler_identity_not_persisted_and_evaluates_empty_for_co
         &cost_rules,
         &[("kasumi-unnamed-0-0", "")],
         "routing.balancers[0]",
-        &mut total_rules,
+        &mut budget,
     )
     .expect("resolve costs");
     assert_eq!(resolved[0].1, serde_json::Number::from(1)); // default weight 1, NOT 99!
@@ -1388,6 +1388,64 @@ fn anonymous_outbound_compiler_identity_not_persisted_and_evaluates_empty_for_co
         .unwrap();
     assert_eq!(costs.len(), 1);
     assert_eq!(costs[0]["value"], 42);
+}
+
+#[test]
+fn explicit_empty_tag_outbound_persistence_and_selector_exclusion_roundtrip() {
+    let mut ob_empty = server("node-empty");
+    ob_empty["tag"] = "".into();
+
+    let raw = json!({
+        "outbounds": [ob_empty, server("node-named")],
+        "routing": {
+            "balancers": [{
+                "tag": "lb",
+                "selector": [""],
+                "strategy": {
+                    "type": "leastLoad",
+                    "settings": {
+                        "costs": [
+                            { "match": "node-named", "value": 7 }
+                        ]
+                    }
+                },
+                "fallbackTag": "node-named"
+            }],
+            "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+        },
+        "observatory": {
+            "subjectSelector": ["node-named"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    // 1. Sanitizer: explicit empty tag outbound is excluded from balancer selector
+    let sanitized = kasumi_core::custom_sanitize::sanitize_provider_xray(&raw).expect("sanitize");
+    let lb = sanitized
+        .fragment
+        .balancers
+        .iter()
+        .find(|b| b.tag == "lb")
+        .unwrap();
+    // Only "node-named" matched; "" was excluded from selector candidates
+    assert_eq!(lb.members, vec!["node-named"]);
+
+    // 2. Persisted JSON strips tag from explicit-empty tag outbound
+    let persisted = sanitized.into_provider_json();
+    assert!(persisted["outbounds"][0].get("tag").is_none());
+
+    // 3. Re-sanitizing persisted JSON preserves untagged state and member set
+    let resanitized =
+        kasumi_core::custom_sanitize::sanitize_provider_xray(&persisted).expect("resanitize");
+    let resanitized_lb = resanitized
+        .fragment
+        .balancers
+        .iter()
+        .find(|b| b.tag == "lb")
+        .unwrap();
+    assert_eq!(resanitized_lb.members, vec!["node-named"]);
+    assert_eq!(resanitized.into_provider_json(), persisted);
 }
 
 #[test]

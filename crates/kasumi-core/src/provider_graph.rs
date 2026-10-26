@@ -50,12 +50,13 @@ pub const ALLOWED_OBSERVATORY_KEYS: [&str; 5] = [
 
 pub const ALLOWED_BURST_OBSERVATORY_KEYS: [&str; 2] = ["subjectSelector", "pingConfig"];
 
-pub const ALLOWED_PING_CONFIG_KEYS: [&str; 5] = [
+pub const ALLOWED_PING_CONFIG_KEYS: [&str; 6] = [
     "destination",
     "interval",
     "connectivity",
     "timeout",
     "sampling",
+    "httpMethod",
 ];
 
 fn parse_duration_unit(u: &str) -> Option<u64> {
@@ -499,7 +500,14 @@ impl ProviderFragment {
 
         let orig_outbound_tags: Vec<String> = raw_outbounds
             .iter()
-            .filter_map(|o| o.get("tag").and_then(Value::as_str).map(str::to_string))
+            .filter_map(|o| {
+                let t = o.get("tag").and_then(Value::as_str)?;
+                if t.is_empty() {
+                    None
+                } else {
+                    Some(t.to_string())
+                }
+            })
             .collect();
         let mut occupied: HashSet<String> = orig_outbound_tags.iter().cloned().collect();
 
@@ -515,7 +523,11 @@ impl ProviderFragment {
 
         // Assign synthetic tags to unnamed outbounds
         for (i, ob) in raw_outbounds.iter_mut().enumerate() {
-            if ob.get("tag").and_then(Value::as_str).is_some() {
+            if ob
+                .get("tag")
+                .and_then(Value::as_str)
+                .is_some_and(|t| !t.is_empty())
+            {
                 continue;
             }
             let mut suffix = 0usize;
@@ -643,7 +655,7 @@ impl ProviderFragment {
 
         let mut fragment_balancers = Vec::new();
         let mut balancer_tags = HashSet::new();
-        let mut total_cost_rules = 0usize;
+        let mut cost_budget = crate::costs::CostBudget::default();
         let raw_balancers = routing
             .and_then(|r| r.get("balancers"))
             .and_then(Value::as_array);
@@ -800,7 +812,7 @@ impl ProviderFragment {
                         costs,
                         &member_orig_tags,
                         &path,
-                        &mut total_cost_rules,
+                        &mut cost_budget,
                     )?)
                 } else {
                     None
@@ -961,6 +973,26 @@ impl ProviderFragment {
                     path: format!("{path}.pingConfig.connectivity"),
                     reason: "unsupported burst connectivity check",
                 });
+            }
+            if let Some(m_val) = ping_cfg.get("httpMethod") {
+                match m_val {
+                    Value::String(s) => {
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() && trimmed != "HEAD" && trimmed != "GET" {
+                            return Err(SanitizeError::Incompatible {
+                                path: format!("{path}.pingConfig.httpMethod"),
+                                reason: "unsupported probe HTTP method",
+                            });
+                        }
+                    }
+                    Value::Null => {}
+                    _ => {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{path}.pingConfig.httpMethod"),
+                            reason: "httpMethod must be a string",
+                        });
+                    }
+                }
             }
             let dest = ping_cfg
                 .get("destination")
@@ -1525,6 +1557,27 @@ impl ProviderFragment {
                 },
                 reason: "the profile's default route is not a proxy",
             });
+        }
+
+        // Validate that no balancer contains primary candidates that only reach service outbounds
+        for (b_idx, b) in fragment_balancers.iter().enumerate() {
+            for m in &b.members {
+                let m_idx = fragment_outbounds.iter().position(|o| o.tag == *m).unwrap();
+                if !node_has_proxy(
+                    m_idx,
+                    n_ob,
+                    n_bal,
+                    &fragment_outbounds,
+                    &fragment_balancers,
+                    &fragment_contexts,
+                    &mut proxy_memo,
+                ) {
+                    return Err(SanitizeError::Incompatible {
+                        path: format!("routing.balancers[{b_idx}].selector"),
+                        reason: "balancer selector matches service outbound",
+                    });
+                }
+            }
         }
 
         let plain_entry = match &entry {

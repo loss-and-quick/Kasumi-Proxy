@@ -11,15 +11,22 @@ use serde_json::Value;
 pub const ALLOWED_COST_KEYS: [&str; 3] = ["match", "regexp", "value"];
 pub const MAX_COST_RULES_PER_BALANCER: usize = 64;
 pub const MAX_PROFILE_COST_RULES: usize = 1024;
-const REGEX_SIZE_LIMIT: usize = 64 * 1024; // 64 KiB
+pub const MAX_PROFILE_MATCHING_BYTES: usize = 64 * 1024 * 1024; // 64 MiB
+pub const MAX_REGEX_SIZE_LIMIT: usize = 64 * 1024; // 64 KiB
 const MAX_REGEX_AST_DEPTH: usize = 64;
 const MAX_REPEAT_PRODUCT: u32 = 1000;
 
+#[derive(Debug, Clone, Default)]
+pub struct CostBudget {
+    pub total_rules: usize,
+    pub matching_bytes: usize,
+}
+
 #[derive(Debug, Clone)]
-pub struct ParsedCostRule {
-    pub match_str: String,
-    pub is_regexp: bool,
-    pub explicit_value: Option<serde_json::Number>,
+pub(crate) struct ParsedCostRule {
+    pub(crate) match_str: String,
+    pub(crate) is_regexp: bool,
+    pub(crate) explicit_value: Option<serde_json::Number>,
 }
 
 enum CompiledMatcher {
@@ -117,6 +124,7 @@ fn validate_class_set(
     pattern: &str,
     cost_path: &str,
     depth: usize,
+    class_span: Option<regex_syntax::ast::Span>,
 ) -> Result<(), SanitizeError> {
     if depth > MAX_REGEX_AST_DEPTH {
         return Err(SanitizeError::Incompatible {
@@ -128,11 +136,42 @@ fn validate_class_set(
         ClassSet::Item(item) => match item {
             ClassSetItem::Literal(lit) => {
                 let text = &pattern[lit.span.start.offset..lit.span.end.offset];
-                validate_escape(text, cost_path)
+                validate_escape(text, cost_path)?;
+                if lit.c == '-'
+                    && text == "-"
+                    && let Some(cs) = class_span
+                {
+                    let is_first = lit.span.start.offset == cs.start.offset + 1
+                        || (pattern.as_bytes().get(cs.start.offset + 1) == Some(&b'^')
+                            && lit.span.start.offset == cs.start.offset + 2);
+                    let is_last = lit.span.end.offset == cs.end.offset - 1;
+                    if !is_first && !is_last {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{cost_path}.match"),
+                            reason: "unsupported regex character class syntax",
+                        });
+                    }
+                    if is_first
+                        && lit.span.end.offset < cs.end.offset - 1
+                        && pattern.as_bytes()[lit.span.end.offset] == b'-'
+                    {
+                        return Err(SanitizeError::Incompatible {
+                            path: format!("{cost_path}.match"),
+                            reason: "unsupported regex character class syntax",
+                        });
+                    }
+                }
+                Ok(())
             }
             ClassSetItem::Range(range) => {
                 let start_text =
                     &pattern[range.start.span.start.offset..range.start.span.end.offset];
+                if start_text == "-" {
+                    return Err(SanitizeError::Incompatible {
+                        path: format!("{cost_path}.match"),
+                        reason: "unsupported regex character class syntax",
+                    });
+                }
                 validate_escape(start_text, cost_path)?;
                 let end_text = &pattern[range.end.span.start.offset..range.end.span.end.offset];
                 validate_escape(end_text, cost_path)
@@ -165,6 +204,7 @@ fn validate_class_set(
                         pattern,
                         cost_path,
                         depth + 1,
+                        class_span,
                     )?;
                 }
                 Ok(())
@@ -230,7 +270,16 @@ fn validate_ast(
             path: format!("{cost_path}.match"),
             reason: "unsupported regex syntax: unicode classes",
         }),
-        Ast::ClassBracketed(cb) => validate_class_set(&cb.kind, pattern, cost_path, depth + 1),
+        Ast::ClassBracketed(cb) => {
+            let class_slice = &pattern[cb.span.start.offset..cb.span.end.offset];
+            if class_slice.starts_with("[--") || class_slice.starts_with("[^--") {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("{cost_path}.match"),
+                    reason: "unsupported regex character class syntax",
+                });
+            }
+            validate_class_set(&cb.kind, pattern, cost_path, depth + 1, Some(cb.span))
+        }
         Ast::Group(group) => {
             match &group.kind {
                 GroupKind::CaptureIndex(_) => {}
@@ -357,7 +406,7 @@ fn validate_ast(
 }
 
 /// Normalizes Go-compatible ASCII regex pattern into Rust non-unicode regex.
-pub fn validate_and_normalize_regex(
+pub(crate) fn validate_and_normalize_regex(
     pattern: &str,
     cost_path: &str,
 ) -> Result<String, SanitizeError> {
@@ -451,7 +500,7 @@ pub fn validate_and_normalize_regex(
 }
 
 /// Extracts the first ASCII `\d+(\.\d+)?` from `s` and parses it as `f64`.
-pub fn first_ascii_number(s: &str) -> Option<f64> {
+pub(crate) fn first_ascii_number(s: &str) -> Option<f64> {
     let bytes = s.as_bytes();
     let len = bytes.len();
     let mut i = 0;
@@ -481,7 +530,7 @@ pub fn first_ascii_number(s: &str) -> Option<f64> {
 }
 
 #[inline]
-pub fn is_exact_f32(val: f64) -> bool {
+pub(crate) fn is_exact_f32(val: f64) -> bool {
     let as_f32 = val as f32;
     as_f32.is_finite() && (as_f32 as f64) == val
 }
@@ -490,7 +539,7 @@ pub fn resolve_leastload_costs(
     costs_val: &Value,
     member_orig_tags: &[(&str, &str)],
     path: &str,
-    total_cost_rules: &mut usize,
+    budget: &mut CostBudget,
 ) -> Result<Vec<(String, serde_json::Number)>, SanitizeError> {
     let costs_arr = costs_val
         .as_array()
@@ -506,11 +555,23 @@ pub fn resolve_leastload_costs(
         });
     }
 
-    *total_cost_rules += costs_arr.len();
-    if *total_cost_rules > MAX_PROFILE_COST_RULES {
+    budget.total_rules += costs_arr.len();
+    if budget.total_rules > MAX_PROFILE_COST_RULES {
         return Err(SanitizeError::Incompatible {
             path: format!("{path}.strategy.settings.costs"),
             reason: "profile costs exceeds total rule limit",
+        });
+    }
+
+    let member_tag_bytes: usize = member_orig_tags.iter().map(|(_, orig)| orig.len()).sum();
+    let balancer_matching_bytes = member_tag_bytes.saturating_mul(costs_arr.len());
+    budget.matching_bytes = budget
+        .matching_bytes
+        .saturating_add(balancer_matching_bytes);
+    if budget.matching_bytes > MAX_PROFILE_MATCHING_BYTES {
+        return Err(SanitizeError::Incompatible {
+            path: format!("{path}.strategy.settings.costs"),
+            reason: "profile costs exceeds matching text budget",
         });
     }
 
@@ -618,8 +679,8 @@ pub fn resolve_leastload_costs(
             let re = regex::bytes::RegexBuilder::new(&normalized)
                 .unicode(false)
                 .octal(true)
-                .size_limit(REGEX_SIZE_LIMIT)
-                .dfa_size_limit(REGEX_SIZE_LIMIT)
+                .size_limit(MAX_REGEX_SIZE_LIMIT)
+                .dfa_size_limit(MAX_REGEX_SIZE_LIMIT)
                 .build()
                 .map_err(|_| SanitizeError::Incompatible {
                     path: format!("{cost_path}.match"),
