@@ -743,3 +743,32 @@ fn synthetic_cascade_profile_preserves_structure_and_adds_explicit_fallback() {
     );
     assert_eq!(rendered.rules.len(), 4);
 }
+
+#[test]
+fn a_bare_string_balancer_strategy_is_rejected() {
+    let cfg = json!({
+        "outbounds": [server("node-a")],
+        "routing": {
+            "balancers": [{ "tag": "lb", "selector": ["node-"], "strategy": "random" }],
+            "rules": [{ "type": "field", "network": "tcp,udp", "balancerTag": "lb" }]
+        }
+    });
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert!(
+        matches!(err, SanitizeError::Incompatible { ref path, .. } if path == "routing.balancers[0].strategy"),
+        "expected rejection of a string strategy, got: {err:?}"
+    );
+}
+
+#[test]
+fn an_outbound_naming_two_dialer_hops_is_rejected() {
+    let mut chained = server("node-a");
+    chained["streamSettings"]["sockopt"] = json!({ "dialerProxy": "hop-1" });
+    chained["proxySettings"] = json!({ "tag": "hop-2" });
+    let cfg = json!({ "outbounds": [chained, server("hop-1"), server("hop-2")] });
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert!(
+        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "both dialerProxy and proxySettings.tag are set"),
+        "expected rejection of two dialer hops, got: {err:?}"
+    );
+}

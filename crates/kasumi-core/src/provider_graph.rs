@@ -572,6 +572,23 @@ impl ProviderFragment {
             }
 
             let mut dialer_proxy = None;
+            // Xray dials through only one of these. With both set, the graph would
+            // record one hop while the core might take the other.
+            let has_dialer_proxy = ob
+                .get("streamSettings")
+                .and_then(|ss| ss.get("sockopt"))
+                .and_then(|so| so.get("dialerProxy"))
+                .is_some();
+            let has_proxy_settings_tag = ob
+                .get("proxySettings")
+                .and_then(|ps| ps.get("tag"))
+                .is_some();
+            if has_dialer_proxy && has_proxy_settings_tag {
+                return Err(SanitizeError::Incompatible {
+                    path: format!("outbounds[{i}].proxySettings.tag"),
+                    reason: "both dialerProxy and proxySettings.tag are set",
+                });
+            }
             let dp_opt = ob
                 .get("streamSettings")
                 .and_then(|ss| ss.get("sockopt"))
@@ -645,8 +662,9 @@ impl ProviderFragment {
                 }
 
                 let strat_val = b_obj.get("strategy");
+                // Xray reads the strategy as an object with a `type`; a bare string
+                // does not parse there, so it is not passed on either.
                 let strat_type = match strat_val {
-                    Some(Value::String(s)) => Some(s.as_str()),
                     Some(Value::Object(o)) => {
                         if let Some(costs) = o.get("settings").and_then(|s| s.get("costs")) {
                             let non_empty = match costs {
@@ -1664,11 +1682,7 @@ pub fn compile_custom_profile(
 /// Whether a balancer strategy picks from observation results, and so can
 /// come back empty when no member is currently qualified.
 fn is_observation_strategy(strategy: Option<&Value>) -> bool {
-    let kind = match strategy {
-        Some(Value::String(s)) => Some(s.as_str()),
-        Some(Value::Object(o)) => o.get("type").and_then(Value::as_str),
-        _ => None,
-    };
+    let kind = strategy.and_then(|s| s.get("type")).and_then(Value::as_str);
     matches!(kind, Some("leastPing" | "leastLoad"))
 }
 
