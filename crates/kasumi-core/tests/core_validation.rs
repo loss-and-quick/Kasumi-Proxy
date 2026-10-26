@@ -1954,23 +1954,40 @@ fn provider_custom_fixtures_and_modes_all_build_and_preserve_controls() {
     let (flagship_name, flagship_cfg) = &built_configs[0];
     assert_eq!(flagship_name, "provider-custom/global");
 
-    // 1. Ingress metadata: verify the original fixture declared an inbound tag
-    // and that the built routing rules mapped that ingress to Kasumi's entry tags.
+    // The provider's ingress-only dispatch targets its balancer without any
+    // destination/network filter. Client DNS/final rules must not satisfy this check.
     let rules = flagship_cfg["routing"]["rules"]
         .as_array()
         .expect("routing.rules array");
-    let ingress_mapped_rules: Vec<&Value> = rules
+    let provider_balancer = flagship_cfg["routing"]["balancers"][0]["tag"]
+        .as_str()
+        .expect("provider balancer tag");
+    let provider_ingress_rules: Vec<&Value> = rules
         .iter()
-        .filter(|r| {
-            r.get("inboundTag")
-                .and_then(Value::as_array)
-                .is_some_and(|tags| tags.iter().any(|t| t == "socks-in" || t == "http-in"))
+        .filter(|rule| {
+            rule["balancerTag"].as_str() == Some(provider_balancer)
+                && rule["inboundTag"] != json!(["proxy-select"])
+                && [
+                    "domain",
+                    "domains",
+                    "ip",
+                    "port",
+                    "sourcePort",
+                    "network",
+                    "protocol",
+                ]
+                .iter()
+                .all(|condition| rule.get(*condition).is_none())
         })
         .collect();
-    assert!(
-        ingress_mapped_rules.len() >= 2,
-        "expected at least 2 ingress-mapped rules in {flagship_name}, got {}",
-        ingress_mapped_rules.len()
+    assert_eq!(
+        provider_ingress_rules.len(),
+        1,
+        "expected the provider's ingress-only balancer dispatch in {flagship_name}"
+    );
+    assert_eq!(
+        provider_ingress_rules[0]["inboundTag"],
+        json!(["socks-in", "http-in"])
     );
 
     // 2. Supported controls: balancers preserved with roundRobin strategy
