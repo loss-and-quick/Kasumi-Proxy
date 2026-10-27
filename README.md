@@ -104,6 +104,42 @@ gpg --verify squashfs-root/.appimage_signature Kasumi*.AppImage
 
 </details>
 
+<details>
+<summary><b>Linux AppImage: helper and authorization</b></summary>
+
+Only the small `kasumi-helper` needs data-path privileges; the GUI stays unprivileged. An
+AppImage cannot retain file capabilities on its temporary mount, so it normally elevates the
+bundled helper for each session. When `pkexec` needs interactive authorization, a
+desktop-launched app needs a running graphical polkit agent. The `/dev/tty` authentication
+error means pkexec could not use its textual fallback; it does not by itself mean a special
+AppImage policy is missing. If Kasumi selects `sudo` instead, it relies on sudo's own policy:
+authorization already valid for that launch context, a configured non-interactive mechanism,
+or an accessible controlling terminal. Kasumi does not collect passwords and closes the
+helper's standard input.
+
+An administrator can instead install a matching helper with file capabilities. After the
+explicit `KASUMI_HELPER_BIN` override, NixOS wrapper and capped bundled helper, Kasumi checks
+`/usr/local/bin/kasumi-helper` and `/usr/bin/kasumi-helper`. These implicit installed paths
+must resolve to a root-owned executable with protected parent directories; group/other write
+permission is not accepted. Kasumi does not install or elevate these fallback candidates.
+
+Prefer the native package when available: its install hooks provision the helper. For a manual
+installation, use the helper from the same trusted release, with its runtime dependencies
+available on the host. Do not assume a binary copied out of an AppImage is standalone.
+For example, after obtaining a suitable helper:
+
+```sh
+sudo install -o root -g root -m 0755 /path/to/kasumi-helper /usr/local/bin/kasumi-helper
+sudo setcap cap_net_admin,cap_net_raw,cap_chown,cap_dac_override+ep /usr/local/bin/kasumi-helper
+getcap /usr/local/bin/kasumi-helper
+```
+
+Keep the installed helper updated with the app. A missing or mismatched helper protocol is
+rejected; replace the installed helper rather than bypassing the compatibility check. If no
+eligible installed helper exists, the AppImage retains the bundled-helper authorization path.
+
+</details>
+
 ## Development
 
 Build steps, checks and the repository layout are in [CONTRIBUTING.md](CONTRIBUTING.md). Nix is
