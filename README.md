@@ -109,9 +109,13 @@ gpg --verify squashfs-root/.appimage_signature Kasumi*.AppImage
 
 Only the small `kasumi-helper` needs data-path privileges; the GUI stays unprivileged. An
 AppImage cannot retain file capabilities on its temporary mount, so it normally elevates the
-bundled helper for each session. A desktop-launched app needs a running graphical polkit
-agent for the authorization dialog. The `/dev/tty` authentication error means pkexec could
-not use its textual fallback; it does not by itself mean a special AppImage policy is missing.
+bundled helper for each session. When `pkexec` needs interactive authorization, a
+desktop-launched app needs a running graphical polkit agent. The `/dev/tty` authentication
+error means pkexec could not use its textual fallback; it does not by itself mean a special
+AppImage policy is missing. If Kasumi selects `sudo` instead, it relies on sudo's own policy:
+authorization already valid for that launch context, a configured non-interactive mechanism,
+or an accessible controlling terminal. Kasumi does not collect passwords and closes the
+helper's standard input.
 
 An administrator can instead install a matching helper with file capabilities. After the
 explicit `KASUMI_HELPER_BIN` override, NixOS wrapper and capped bundled helper, Kasumi checks
