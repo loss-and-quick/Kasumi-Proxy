@@ -440,15 +440,18 @@ textarea.input { resize: vertical; min-height: 60px; line-height: 1.5; }
 }
 .select-empty { padding: 12px; font-size: 13px; color: var(--on-surface-faint); text-align: center; }
 
-/* Settings rows: title + hint on the left, compact control on the right. */
-.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+/* Settings rows: title + hint on the left, compact control on the right.
+   The row wraps when the title and the control do not fit on one line (a two-option segmented
+   on a phone), so the control drops under the title instead of overflowing the card. */
+.setting-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 0; }
 .setting-row + .setting-row { border-top: 1px solid var(--outline-variant); }
 .setting-row.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
-.setting-row .sr-main { flex: 1 1 auto; min-width: 0; }
+.setting-row .sr-main { flex: 1 1 6rem; min-width: 0; }
+.setting-row.stacked .sr-main { flex: none; }
 .setting-row .sr-title { font-size: var(--fs-title); font-weight: 500; color: var(--on-surface); }
 .setting-row .sr-hint { font-size: var(--fs-support); color: var(--on-surface-variant); margin-top: 2px; line-height: 1.4; }
-.setting-row .sr-control { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; max-width: 60%; }
-.setting-row.stacked .sr-control { max-width: none; }
+.setting-row .sr-control { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; max-width: 100%; margin-left: auto; }
+.setting-row.stacked .sr-control { margin-left: 0; }
 .setting-group { padding: 0 4px 12px 54px; }
 .hint { font-size: var(--fs-support); color: var(--on-surface-faint); line-height: 1.45; }
 .hint.error { color: var(--error); }
