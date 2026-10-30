@@ -58,6 +58,12 @@ pub struct Service {
     /// A connectivity probe is running. It runs on its own task so the watchdog never
     /// waits on it; this keeps the next tick from starting a second probe.
     probe_in_flight: AtomicBool,
+    /// Numbers each probe as it starts, and the number of the newest one whose verdict
+    /// was stored. An explicit `ProbeConnection` can run alongside the watchdog's, and
+    /// with a long timeout the one that started first can finish last: its answer is
+    /// older, so it must not replace a verdict a later-started probe already gave.
+    probe_seq: AtomicU64,
+    stored_probe_seq: AtomicU64,
     /// The exact post-tune build, proxy mode and profile the running data path was
     /// started with — the baseline settings mutations are diffed against. `None` while
     /// stopped. Deliberately in-memory (not the on-disk config): the start path
@@ -95,6 +101,8 @@ impl Service {
             connectivity: StdMutex::new(ProbeVerdict::default()),
             data_path_generation: AtomicU64::new(0),
             probe_in_flight: AtomicBool::new(false),
+            probe_seq: AtomicU64::new(0),
+            stored_probe_seq: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
             assets_stale: AtomicBool::new(false),

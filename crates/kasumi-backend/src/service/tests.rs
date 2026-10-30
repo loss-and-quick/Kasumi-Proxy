@@ -899,6 +899,33 @@ async fn probe_in_flight_across_a_saved_switch_is_not_reported_for_the_new_profi
 }
 
 #[tokio::test]
+async fn a_probe_that_started_first_cannot_overwrite_a_later_verdict() {
+    let (_d, svc, core) = running_first_of_two().await;
+
+    // The watchdog's probe parks inside the core...
+    core.hold.store(true, Ordering::SeqCst);
+    let older = tokio::spawn({
+        let svc = Arc::clone(&svc);
+        async move { svc.probe_and_store().await }
+    });
+    tokio::time::timeout(Duration::from_secs(5), core.entered.notified())
+        .await
+        .expect("the first probe reached the core");
+    // ...while an explicit check starts later and answers first.
+    core.hold.store(false, Ordering::SeqCst);
+    let newer = probe(&svc).await;
+    let stored = svc.current_status().await.unwrap().latency_ms;
+    assert_eq!(stored, newer.latency_ms);
+
+    // The first probe now finishes, slower: its older answer is dropped.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    core.release.notify_one();
+    let (_, changed) = older.await.unwrap();
+    assert!(!changed, "an older probe must not replace a newer verdict");
+    assert_eq!(svc.current_status().await.unwrap().latency_ms, stored);
+}
+
+#[tokio::test]
 async fn check_off_trusts_the_process_state() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;

@@ -171,17 +171,27 @@ impl Service {
     }
 
     /// Probe now and store the verdict, unless the data path was stopped or
-    /// restarted while the probe ran (its answer would describe the old core).
+    /// restarted while the probe ran (its answer would describe the old core), or a
+    /// probe that started later already stored its answer (this one is older news).
     /// Returns the verdict and whether the stored one changed, so a caller only
     /// re-emits status when there's something new.
     pub(super) async fn probe_and_store(&self) -> (ProbeVerdict, bool) {
         let generation = self.data_path_generation.load(Ordering::SeqCst);
+        let seq = self.probe_seq.fetch_add(1, Ordering::SeqCst) + 1;
         let verdict = ProbeVerdict {
             profile_id: self.probed_profile().await,
             connectivity: self.probe_connectivity().await,
         };
+        // Both checks and the store happen under the verdict lock, so two probes
+        // finishing together can't interleave between the check and the write.
         let mut guard = self.connectivity.lock().unwrap();
-        if self.data_path_generation.load(Ordering::SeqCst) != generation || *guard == verdict {
+        if self.data_path_generation.load(Ordering::SeqCst) != generation
+            || seq < self.stored_probe_seq.load(Ordering::SeqCst)
+        {
+            return (verdict, false);
+        }
+        self.stored_probe_seq.store(seq, Ordering::SeqCst);
+        if *guard == verdict {
             return (verdict, false);
         }
         *guard = verdict.clone();
