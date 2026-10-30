@@ -9,7 +9,7 @@ use tokio::sync::broadcast;
 use kasumi_core::contract::{ConnectionProbe, FetchMode, PushFrame, RunState, ServiceStatus};
 use kasumi_core::state::{DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS, DEFAULT_DELAY_TEST_URL};
 
-use crate::net::{FetchUrlOptions, fetch_url};
+use crate::net::{BodyMode, FetchUrlOptions, PROBE_BODY_CAP, fetch_url};
 use kasumi_log::{Area, ks_debug, ks_warn};
 
 use super::Service;
@@ -146,6 +146,9 @@ impl Service {
             FetchUrlOptions {
                 mode: FetchMode::Proxy,
                 proxy: Some(proxy),
+                // The probe uses only that the request came back, never the body.
+                max_body_bytes: Some(PROBE_BODY_CAP),
+                body_mode: BodyMode::Count,
                 ..Default::default()
             }
             .with_timeout_budget(timeout),

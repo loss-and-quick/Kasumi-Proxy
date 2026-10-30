@@ -45,6 +45,8 @@ pub struct FetchUrlOptions {
     pub headers: Vec<(String, String)>,
     /// Stop reading once the body exceeds this; `None` = unbounded.
     pub max_body_bytes: Option<usize>,
+    /// What to do with the response body; see [`BodyMode`].
+    pub body_mode: BodyMode,
     /// Cookies kept across fetches, keyed by host. A jar holding cookies for the URL
     /// replaces a `Cookie` in `headers`, as OkHttp's jar does for Happ.
     pub cookie_jar: Option<Arc<SubCookies>>,
@@ -93,12 +95,32 @@ fn guarded_redirects() -> reqwest::redirect::Policy {
     })
 }
 
+/// What [`fetch`] does with a response body.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BodyMode {
+    /// Keep it in [`FetchResponse::body`]. Past `max_body_bytes` the fetch fails with
+    /// [`BodyTooLarge`]: for a subscription or an asset an oversized body is an error.
+    #[default]
+    Keep,
+    /// Count it into [`FetchResponse::body_len`] without keeping it, and stop reading
+    /// once `max_body_bytes` arrived. For a latency probe or a speed test only how much
+    /// came back and how fast matters; holding the body would let a custom test URL
+    /// decide how much memory the backend uses, and a body past the cap says nothing
+    /// bad about the connection, so it ends the read rather than failing it.
+    Count,
+}
+
 #[derive(Debug)]
 pub struct FetchResponse {
     pub status: u16,
     /// Every header occurrence, values as lossy UTF-8.
     pub headers: Vec<(String, String)>,
+    /// The body, empty under [`BodyMode::Count`].
     pub body: Vec<u8>,
+    /// Body bytes read, decoded. Equals `body.len()` under [`BodyMode::Keep`]; under
+    /// [`BodyMode::Count`] it is everything read, which can pass the cap by the last
+    /// chunk that crossed it.
+    pub body_len: usize,
     pub final_url: String,
 }
 
@@ -142,6 +164,16 @@ impl std::error::Error for OutOfTime {}
 /// a deadline. Whoever asked is waiting: the request must end with its own error
 /// well before the caller gives up on it.
 pub const FETCH_BUDGET: Duration = Duration::from_secs(60);
+
+/// The most of a response a latency/connectivity probe reads. The body is not used —
+/// only that something came back — so a custom test URL must not be able to make the
+/// probe read a large response to the timeout.
+pub const PROBE_BODY_CAP: usize = 64 * 1024;
+
+/// Where one speed test stops reading. The rate is established long before this much
+/// has arrived; a larger test file is measured on its first part instead of running
+/// into the (user-configurable) timeout and failing.
+pub const SPEED_TEST_BODY_CAP: usize = 32 * 1024 * 1024;
 
 /// A fresh deadline [`FETCH_BUDGET`] from now.
 pub fn fetch_deadline() -> tokio::time::Instant {
@@ -240,18 +272,26 @@ async fn fetch_once(
         .collect();
     let final_url = res.url().to_string();
     let mut body = Vec::new();
+    let mut body_len = 0usize;
     while let Some(chunk) = res.chunk().await? {
-        body.extend_from_slice(&chunk);
+        body_len += chunk.len();
+        if opts.body_mode == BodyMode::Keep {
+            body.extend_from_slice(&chunk);
+        }
         if let Some(max) = opts.max_body_bytes
-            && body.len() > max
+            && body_len > max
         {
-            return Err(BodyTooLarge(max).into());
+            match opts.body_mode {
+                BodyMode::Keep => return Err(BodyTooLarge(max).into()),
+                BodyMode::Count => break,
+            }
         }
     }
     Ok(FetchResponse {
         status,
         headers,
         body,
+        body_len,
         final_url,
     })
 }
@@ -567,6 +607,31 @@ mod tests {
         assert_eq!(res.final_url, format!("{base}/sub"));
         let sent = requests.lock().unwrap()[0].to_ascii_lowercase();
         assert!(sent.contains("x-probe: 1"), "{sent}");
+    }
+
+    #[tokio::test]
+    async fn a_counted_body_is_not_kept_and_stops_at_the_cap() {
+        // A probe or speed test counts the body instead of holding it, and the cap ends
+        // the read instead of failing it: a big test file still gives a measurement.
+        let (base, _) = serve(vec![http_response(200, &[], &[b'a'; 4096])]).await;
+        let opts = FetchUrlOptions {
+            max_body_bytes: Some(1024),
+            body_mode: BodyMode::Count,
+            ..direct()
+        };
+        let res = fetch(&base, opts).await.unwrap();
+        assert!(res.body.is_empty(), "a counted body is not kept");
+        assert!(
+            res.body_len > 1024,
+            "the read stops after the cap, not before"
+        );
+
+        let (base, _) = serve(vec![http_response(200, &[], &[b'a'; 4096])]).await;
+        let opts = FetchUrlOptions {
+            body_mode: BodyMode::Count,
+            ..direct()
+        };
+        assert_eq!(fetch(&base, opts).await.unwrap().body_len, 4096);
     }
 
     #[tokio::test]

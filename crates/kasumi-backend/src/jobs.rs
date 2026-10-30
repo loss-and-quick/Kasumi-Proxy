@@ -21,7 +21,10 @@ use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL, RoutingMode};
 use kasumi_core::xray_config::build_xray_probe_config;
 
-use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
+use crate::net::{
+    BodyMode, FetchUrlOptions, PROBE_BODY_CAP, ProxyStatus, SPEED_TEST_BODY_CAP, fetch, fetch_url,
+    lease_ports, tcp_ping,
+};
 use crate::platform::{Engine, Platform};
 use kasumi_log::{Area, ks_debug, ks_info, ks_warn};
 
@@ -442,6 +445,9 @@ async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i
                 FetchUrlOptions {
                     mode: FetchMode::Proxy,
                     proxy: Some(test_proxy(test_port)),
+                    // Only the round trip matters, not a custom URL's body.
+                    max_body_bytes: Some(PROBE_BODY_CAP),
+                    body_mode: BodyMode::Count,
                     ..Default::default()
                 }
                 .with_timeout_budget(timeout),
@@ -525,23 +531,28 @@ async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<
         test_port,
         || async move {
             let t0 = Instant::now();
-            match fetch_url(
+            match fetch(
                 &url,
                 FetchUrlOptions {
                     mode: FetchMode::Proxy,
                     proxy: Some(test_proxy(test_port)),
+                    // Count the bytes rather than hold them, so a custom URL can't
+                    // decide how much memory the test takes; the cap ends the read
+                    // once the rate is known.
+                    max_body_bytes: Some(SPEED_TEST_BODY_CAP),
+                    body_mode: BodyMode::Count,
                     ..Default::default()
                 }
                 .with_timeout_budget(timeout),
             )
             .await
             {
-                Ok(body) => {
+                Ok(res) => {
                     let sec = t0.elapsed().as_secs_f64();
-                    if body.is_empty() || sec <= 0.0 {
+                    if res.body_len == 0 || sec <= 0.0 {
                         None
                     } else {
-                        Some((body.len() as f64 / sec).round() as i64)
+                        Some((res.body_len as f64 / sec).round() as i64)
                     }
                 }
                 Err(_) => None,
