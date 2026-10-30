@@ -1,4 +1,12 @@
 import { Card, Field, RowToggle, SectionLabel } from "../../../components";
+import {
+  DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS,
+  DEFAULT_SPEED_TEST_TIMEOUT_MS,
+  MAX_CONNECTIVITY_CHECK_TIMEOUT_MS,
+  MAX_SPEED_TEST_TIMEOUT_MS,
+  MIN_CONNECTIVITY_CHECK_TIMEOUT_MS,
+  MIN_SPEED_TEST_TIMEOUT_MS,
+} from "../../../generated/defaults";
 import { useT } from "../../../i18n";
 import type { AdvancedSettings } from "../../../lib/bridge";
 
@@ -44,10 +52,16 @@ export function AdvancedSection({
           commitOnBlur
           label={t("settings.connectivityCheckTimeout")}
           hint={t("settings.connectivityCheckTimeoutSub")}
-          value={settings.connectivityCheckTimeoutMs ?? 8000}
+          value={settings.connectivityCheckTimeoutMs ?? DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS}
           type="number"
           onChange={(value) =>
-            set("connectivityCheckTimeoutMs", Math.min(60000, Math.max(1000, Number(value))))
+            set(
+              "connectivityCheckTimeoutMs",
+              Math.min(
+                MAX_CONNECTIVITY_CHECK_TIMEOUT_MS,
+                Math.max(MIN_CONNECTIVITY_CHECK_TIMEOUT_MS, Number(value)),
+              ),
+            )
           }
         />
         <Field
@@ -70,10 +84,16 @@ export function AdvancedSection({
           commitOnBlur
           label={t("settings.speedTestTimeout")}
           hint={t("settings.speedTestTimeoutSub")}
-          value={settings.speedTestTimeoutMs ?? 15000}
+          value={settings.speedTestTimeoutMs ?? DEFAULT_SPEED_TEST_TIMEOUT_MS}
           type="number"
           onChange={(value) =>
-            set("speedTestTimeoutMs", Math.min(120000, Math.max(5000, Number(value))))
+            set(
+              "speedTestTimeoutMs",
+              Math.min(
+                MAX_SPEED_TEST_TIMEOUT_MS,
+                Math.max(MIN_SPEED_TEST_TIMEOUT_MS, Number(value)),
+              ),
+            )
           }
         />
       </Card>

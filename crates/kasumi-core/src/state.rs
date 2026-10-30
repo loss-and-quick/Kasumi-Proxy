@@ -835,6 +835,49 @@ mod tests {
     }
 
     #[test]
+    fn check_timeouts_default_and_clamp_to_their_bounds() {
+        // An old state file has neither field: both fall back to the defaults.
+        let s: AdvancedSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            s.connectivity_check_timeout(),
+            Duration::from_millis(DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS as u64)
+        );
+        assert_eq!(
+            s.speed_test_timeout(),
+            Duration::from_millis(DEFAULT_SPEED_TEST_TIMEOUT_MS as u64)
+        );
+        // A hand-edited 0, negative or huge value can't disable or stall a check.
+        for (raw, connectivity, speed) in [
+            (
+                0,
+                MIN_CONNECTIVITY_CHECK_TIMEOUT_MS,
+                MIN_SPEED_TEST_TIMEOUT_MS,
+            ),
+            (
+                -5,
+                MIN_CONNECTIVITY_CHECK_TIMEOUT_MS,
+                MIN_SPEED_TEST_TIMEOUT_MS,
+            ),
+            (
+                i64::MAX,
+                MAX_CONNECTIVITY_CHECK_TIMEOUT_MS,
+                MAX_SPEED_TEST_TIMEOUT_MS,
+            ),
+        ] {
+            let s = AdvancedSettings {
+                connectivity_check_timeout_ms: raw,
+                speed_test_timeout_ms: raw,
+                ..Default::default()
+            };
+            assert_eq!(
+                s.connectivity_check_timeout(),
+                Duration::from_millis(connectivity as u64)
+            );
+            assert_eq!(s.speed_test_timeout(), Duration::from_millis(speed as u64));
+        }
+    }
+
+    #[test]
     fn advanced_settings_defaults_from_empty() {
         let s: AdvancedSettings = serde_json::from_str("{}").unwrap();
         assert_eq!(s, AdvancedSettings::default());
