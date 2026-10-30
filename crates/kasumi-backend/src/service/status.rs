@@ -146,9 +146,9 @@ impl Service {
             FetchUrlOptions {
                 mode: FetchMode::Proxy,
                 proxy: Some(proxy),
-                timeout: Some(timeout),
                 ..Default::default()
-            },
+            }
+            .with_timeout_budget(timeout),
         )
         .await
         {

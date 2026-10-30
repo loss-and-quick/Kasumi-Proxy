@@ -442,9 +442,9 @@ async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i
                 FetchUrlOptions {
                     mode: FetchMode::Proxy,
                     proxy: Some(test_proxy(test_port)),
-                    timeout: Some(timeout),
                     ..Default::default()
-                },
+                }
+                .with_timeout_budget(timeout),
             )
             .await
             {
@@ -530,9 +530,9 @@ async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<
                 FetchUrlOptions {
                     mode: FetchMode::Proxy,
                     proxy: Some(test_proxy(test_port)),
-                    timeout: Some(timeout),
                     ..Default::default()
-                },
+                }
+                .with_timeout_budget(timeout),
             )
             .await
             {

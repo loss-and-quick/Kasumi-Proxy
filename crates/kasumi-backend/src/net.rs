@@ -65,6 +65,19 @@ pub struct FetchUrlOptions {
     pub redirect_guard: bool,
 }
 
+impl FetchUrlOptions {
+    /// Bound the fetch by `timeout` and widen the deadline to match. Setting
+    /// [`Self::timeout`] alone leaves the deadline at [`FETCH_BUDGET`], which would
+    /// cut any longer timeout short — so a caller that configures one sets both here.
+    pub fn with_timeout_budget(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        // A second of slack so a request that uses its whole timeout is ended by the
+        // attempt's own limit, not by the deadline measured a hair earlier.
+        self.deadline = Some(tokio::time::Instant::now() + timeout + Duration::from_secs(1));
+        self
+    }
+}
+
 /// Most redirects one fetch follows, as reqwest's default policy.
 const MAX_REDIRECTS: usize = 10;
 
@@ -397,6 +410,22 @@ pub async fn tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
 mod tests {
     use super::*;
     use crate::testutil::{fixture_response, http_response, serve, serve_tls};
+
+    #[test]
+    fn a_configured_timeout_outlives_the_default_fetch_budget() {
+        // A speed test may be configured well past FETCH_BUDGET (60 s). The deadline
+        // has to widen with the timeout, or `fetch` would cut the attempt at the
+        // default budget and the setting would silently do nothing past a minute.
+        let timeout = Duration::from_secs(120);
+        let opts = FetchUrlOptions::default().with_timeout_budget(timeout);
+        assert_eq!(opts.timeout, Some(timeout));
+        let left = opts.deadline.expect("deadline is set") - tokio::time::Instant::now();
+        assert!(left >= timeout, "deadline {left:?} must reach the timeout");
+        assert!(
+            timeout > FETCH_BUDGET,
+            "the test must exceed the default budget"
+        );
+    }
 
     #[tokio::test]
     async fn free_port_skips_a_used_port() {
