@@ -184,9 +184,21 @@ impl Service {
                     continue;
                 }
                 last_probe = Some(Instant::now());
-                if this.probe_and_store().await.1 {
-                    this.emit_status().await;
+                // Probe on its own task, not inline: it can take as long as the user's
+                // connectivity timeout, and the watchdog has to keep checking the data
+                // path meanwhile — a dead core must be torn down within a tick, not
+                // after a stalled probe. One probe at a time; a verdict that the data
+                // path changed under is dropped by `probe_and_store` itself.
+                if this.probe_in_flight.swap(true, Ordering::SeqCst) {
+                    continue;
                 }
+                let probe = Arc::clone(&this);
+                tokio::spawn(async move {
+                    if probe.probe_and_store().await.1 {
+                        probe.emit_status().await;
+                    }
+                    probe.probe_in_flight.store(false, Ordering::SeqCst);
+                });
             }
         });
     }
