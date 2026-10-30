@@ -42,6 +42,16 @@ export function AdvancedSection({
         />
         <Field
           commitOnBlur
+          label={t("settings.connectivityCheckTimeout")}
+          hint={t("settings.connectivityCheckTimeoutSub")}
+          value={settings.connectivityCheckTimeoutMs ?? 8000}
+          type="number"
+          onChange={(value) =>
+            set("connectivityCheckTimeoutMs", Math.min(60000, Math.max(1000, Number(value))))
+          }
+        />
+        <Field
+          commitOnBlur
           label={t("settings.speedTestUrl")}
           mono={false}
           value={settings.speedTestUrl ?? ""}
@@ -55,6 +65,16 @@ export function AdvancedSection({
           value={settings.speedConcurrency ?? 1}
           type="number"
           onChange={(value) => set("speedConcurrency", Math.min(5, Math.max(1, Number(value))))}
+        />
+        <Field
+          commitOnBlur
+          label={t("settings.speedTestTimeout")}
+          hint={t("settings.speedTestTimeoutSub")}
+          value={settings.speedTestTimeoutMs ?? 15000}
+          type="number"
+          onChange={(value) =>
+            set("speedTestTimeoutMs", Math.min(120000, Math.max(5000, Number(value))))
+          }
         />
       </Card>
     </>

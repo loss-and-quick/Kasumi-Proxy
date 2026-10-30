@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 
 use kasumi_core::contract::{ConnectionProbe, FetchMode, PushFrame, RunState, ServiceStatus};
-use kasumi_core::state::DEFAULT_DELAY_TEST_URL;
+use kasumi_core::state::{DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS, DEFAULT_DELAY_TEST_URL};
 
 use crate::net::{FetchUrlOptions, fetch_url};
 use kasumi_log::{Area, ks_debug, ks_warn};
@@ -128,18 +128,25 @@ impl Service {
             Ok(p) if p.running => p,
             _ => return Connectivity::Unknown,
         };
-        let url = crate::state::read_state_shell(&self.platform.paths().app_state)
-            .await
-            .and_then(|s| s.settings.delay_test_url)
+        let state = crate::state::read_state_shell(&self.platform.paths().app_state).await;
+        let url = state
+            .as_ref()
+            .and_then(|s| s.settings.delay_test_url.clone())
             .filter(|u| !u.is_empty())
             .unwrap_or_else(|| DEFAULT_DELAY_TEST_URL.to_owned());
+        // The user's connectivity-check timeout; fall back to the default when the
+        // state can't be read at all.
+        let timeout = state
+            .as_ref()
+            .map(|s| s.settings.connectivity_check_timeout())
+            .unwrap_or_else(|| Duration::from_millis(DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS as u64));
         let t0 = Instant::now();
         match fetch_url(
             &url,
             FetchUrlOptions {
                 mode: FetchMode::Proxy,
                 proxy: Some(proxy),
-                timeout: Some(Duration::from_secs(5)),
+                timeout: Some(timeout),
                 ..Default::default()
             },
         )

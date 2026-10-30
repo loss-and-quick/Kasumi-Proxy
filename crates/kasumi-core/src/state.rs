@@ -3,6 +3,7 @@
 //! persisted `app-state.json` shape so old data round-trips on read.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -108,6 +109,26 @@ impl AdvancedSettings {
                 })
         })
     }
+
+    /// The timeout for a connectivity/latency check — the per-profile ping/latency
+    /// test and the background "Check connection" probe — clamped to
+    /// [`MIN_CONNECTIVITY_CHECK_TIMEOUT_MS`]..[`MAX_CONNECTIVITY_CHECK_TIMEOUT_MS`]
+    /// so a hand-edited state file can't give 0 or a runaway value.
+    pub fn connectivity_check_timeout(&self) -> Duration {
+        Duration::from_millis(self.connectivity_check_timeout_ms.clamp(
+            MIN_CONNECTIVITY_CHECK_TIMEOUT_MS,
+            MAX_CONNECTIVITY_CHECK_TIMEOUT_MS,
+        ) as u64)
+    }
+
+    /// The timeout for a speed test, clamped to
+    /// [`MIN_SPEED_TEST_TIMEOUT_MS`]..[`MAX_SPEED_TEST_TIMEOUT_MS`].
+    pub fn speed_test_timeout(&self) -> Duration {
+        Duration::from_millis(
+            self.speed_test_timeout_ms
+                .clamp(MIN_SPEED_TEST_TIMEOUT_MS, MAX_SPEED_TEST_TIMEOUT_MS) as u64,
+        )
+    }
 }
 
 // Default probe URLs used when delayTestUrl/speedTestUrl are unset.
@@ -127,6 +148,17 @@ pub const DEFAULT_ASSET_UPDATE_INTERVAL: i64 = 1440;
 // Geo data changes slowly and each fetch is multi-megabyte, so the updater clamps
 // to this rather than honouring a smaller value from a hand-edited state file.
 pub const MIN_ASSET_UPDATE_INTERVAL: i64 = 360;
+
+// Default (ms) and clamp bounds for the connectivity/latency-check timeout (the
+// per-profile ping/latency test and the background "Check connection" probe) and
+// the speed-test timeout. The accessors clamp to these so a hand-edited state
+// file can't give 0 or a runaway value.
+pub const DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS: i64 = 8_000;
+pub const MIN_CONNECTIVITY_CHECK_TIMEOUT_MS: i64 = 1_000;
+pub const MAX_CONNECTIVITY_CHECK_TIMEOUT_MS: i64 = 60_000;
+pub const DEFAULT_SPEED_TEST_TIMEOUT_MS: i64 = 15_000;
+pub const MIN_SPEED_TEST_TIMEOUT_MS: i64 = 5_000;
+pub const MAX_SPEED_TEST_TIMEOUT_MS: i64 = 120_000;
 
 /// The base group that must always exist (default `groupId`, can't be deleted).
 pub const BASE_GROUP_ID: &str = "g-main";
@@ -461,6 +493,10 @@ pub struct AdvancedSettings {
     /// Connected from NoInternet and keep the active profile's ping fresh. Off, the
     /// status trusts the process state alone and nothing is sent in the background.
     pub connectivity_check: bool,
+    /// Timeout (ms) for a connectivity/latency check — the per-profile ping/latency
+    /// test and the background "Check connection" probe. See
+    /// [`connectivity_check_timeout`](Self::connectivity_check_timeout).
+    pub connectivity_check_timeout_ms: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mux_xudp_concurrency: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -504,6 +540,8 @@ pub struct AdvancedSettings {
     pub delay_test_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub speed_test_url: Option<String>,
+    /// Timeout (ms) for a speed test. See [`speed_test_timeout`](Self::speed_test_timeout).
+    pub speed_test_timeout_ms: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub custom_routing: Option<String>,
     pub core_by_protocol: BTreeMap<Protocol, CoreEngine>,
@@ -571,6 +609,7 @@ impl Default for AdvancedSettings {
             speed_concurrency: 1,
             auto_start: true,
             connectivity_check: true,
+            connectivity_check_timeout_ms: DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS,
             mux_xudp_concurrency: None,
             mux_xudp443: None,
             fragment: false,
@@ -592,6 +631,7 @@ impl Default for AdvancedSettings {
             socks_password: None,
             delay_test_url: None,
             speed_test_url: None,
+            speed_test_timeout_ms: DEFAULT_SPEED_TEST_TIMEOUT_MS,
             custom_routing: None,
             core_by_protocol: BTreeMap::new(),
             app_capture_mode: AppCaptureMode::All,

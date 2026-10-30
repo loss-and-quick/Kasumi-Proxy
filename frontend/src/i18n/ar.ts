@@ -640,6 +640,9 @@ const ar = {
   "settings.socksPass": "كلمة المرور",
   "settings.advanced": "متقدم",
   "settings.delayTestUrl": "رابط اختبار التأخير",
+  "settings.connectivityCheckTimeout": "مهلة فحص الاتصال (مللي ثانية)",
+  "settings.connectivityCheckTimeoutSub":
+    "المدة التي قد يستغرقها فحص الاتصال أو الكمون قبل الإخفاق",
   "settings.connectivityCheck": "فحص الاتصال",
   "settings.connectivityCheckSub":
     "كل دقيقة، يميّز طلب عبر الوكيل بين «متصل» و«لا يوجد إنترنت» ويحدّث زمن الاستجابة. عند الإيقاف: لا يُرسل شيء في الخلفية وتعتمد الحالة على النواة العاملة فقط.",
@@ -1355,6 +1358,8 @@ const ar = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "رابط اختبار السرعة",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "مهلة اختبار السرعة (مللي ثانية)",
+  "settings.speedTestTimeoutSub": "المدة التي قد يستغرقها اختبار السرعة قبل الإخفاق",
   "routingSheet.outbound.profiles": "الملفات",
   "routingSheet.outboundProfileHint":
     "يتم التوجيه عبر هذا الملف عندما يستخدم الملف النشط النواة نفسها؛ وإلا يعود إلى الوكيل الرئيسي.",
