@@ -22,6 +22,17 @@ const WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 /// the proxy, so it runs rarely — a fixed few-second rhythm of tiny requests to the
 /// server is a traffic pattern of its own and keeps a phone's radio awake.
 const PROBE_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Clears `probe_in_flight` when the probe task ends — on success, error or
+/// unwind. Without it a panicking probe would leave the flag set and silently stop the
+/// background connectivity checks for the rest of the process's life.
+struct ProbeSlot(Arc<Service>);
+
+impl Drop for ProbeSlot {
+    fn drop(&mut self) {
+        self.0.probe_in_flight.store(false, Ordering::SeqCst);
+    }
+}
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
 /// How often the log files are trimmed to `settings.log_rotate_max_kb`. A phone can
 /// run for days between app launches, and nothing else bounds a log that only this
@@ -194,10 +205,10 @@ impl Service {
                 }
                 let probe = Arc::clone(&this);
                 tokio::spawn(async move {
+                    let _slot = ProbeSlot(Arc::clone(&probe));
                     if probe.probe_and_store().await.1 {
                         probe.emit_status().await;
                     }
-                    probe.probe_in_flight.store(false, Ordering::SeqCst);
                 });
             }
         });
