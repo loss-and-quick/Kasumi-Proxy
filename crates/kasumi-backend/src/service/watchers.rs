@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use kasumi_core::contract::{AssetsUpdatedEvent, PushFrame, RunState, SubAppliedEvent};
+use kasumi_core::contract::{
+    AssetsUpdatedEvent, PushFrame, RunState, ServiceState, SubAppliedEvent,
+};
 
 use kasumi_log::{Area, ks_warn};
 
@@ -27,6 +29,15 @@ const STATUS_INTERVAL: Duration = Duration::from_secs(1);
 /// run for days between app launches, and nothing else bounds a log that only this
 /// process writes.
 const TRIM_INTERVAL: Duration = Duration::from_secs(300);
+
+/// Whether a recorded state means a data-path was brought up (or is coming up) and
+/// not yet stopped; `Stopped` and `Failed` leave nothing running to reap.
+fn recorded_running(state: RunState) -> bool {
+    matches!(
+        state,
+        RunState::Connecting | RunState::Connected | RunState::NoInternet
+    )
+}
 
 impl Service {
     /// Start the active profile once on boot, if `autoStart` allows. Caller holds
@@ -125,6 +136,62 @@ impl Service {
         });
     }
 
+    /// Tear down a data-path whose processes died, so the UI doesn't show a zombie
+    /// "connected" and the tun, routing rules and firewall don't black-hole the
+    /// device's traffic. Returns whether it did, from the watchdog's `state` sample.
+    ///
+    /// Two shapes of dead. A core still running with a vanished tun helper is caught
+    /// by [`Platform::data_path_healthy`]. A vanished core reads as `engine: None`,
+    /// the same as a data-path nobody started, so it is told apart by the recorded
+    /// state still claiming to run.
+    ///
+    /// Either verdict is confirmed again under the lifecycle lock before anything is
+    /// stopped. A start in flight records `Connecting` before it spawns the core, and
+    /// a restart replaces the data path while holding the lock, so whatever the
+    /// watchdog saw before waiting for it may be gone: a data path that came up
+    /// meanwhile is healthy and left alone.
+    pub(super) async fn reap_dead_data_path(&self, state: &ServiceState) -> bool {
+        if !Self::claims_a_data_path(state)
+            || self.platform.data_path_healthy().await != Some(false)
+        {
+            return false;
+        }
+        let g = self.serialize.lock().await;
+        let still_dead = self
+            .platform
+            .service_state()
+            .await
+            .is_ok_and(|s| Self::claims_a_data_path(&s))
+            && self.platform.data_path_healthy().await == Some(false);
+        if !still_dead {
+            return false;
+        }
+        self.tear_down_dead_data_path(g).await;
+        true
+    }
+
+    /// Whether a data path is running or recorded as running: a live core, or a
+    /// record that still claims one after the core vanished.
+    fn claims_a_data_path(state: &ServiceState) -> bool {
+        state.engine.is_some() || recorded_running(state.state)
+    }
+
+    /// Tears down under the lifecycle lock `guard`, then releases it before the status
+    /// push: building a status can probe the network.
+    async fn tear_down_dead_data_path(&self, guard: tokio::sync::MutexGuard<'_, ()>) {
+        // Teardown that fails leaves the zombie the watchdog is here to clear, and
+        // nothing else would say so.
+        if let Err(e) = self.platform.stop_data_path(StopDataPath::default()).await {
+            ks_warn!(
+                Area::Lifecycle,
+                "could not tear the dead data path down: {e}"
+            );
+        }
+        self.note_data_path_stopped();
+        drop(guard);
+        self.emit_status().await;
+    }
+
     pub(super) fn spawn_watchdog(self: &Arc<Self>) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
@@ -135,32 +202,20 @@ impl Service {
                 let state = this.platform.service_state().await.ok();
                 let up = state.as_ref().is_some_and(|s| s.engine.is_some());
                 // The platform raises this on its own schedule; push it when it flips.
-                let offload_bypass = state.is_some_and(|s| s.tether_offload_bypass);
+                let offload_bypass = state.as_ref().is_some_and(|s| s.tether_offload_bypass);
                 if offload_bypass != last_offload_bypass {
                     last_offload_bypass = offload_bypass;
                     this.emit_status().await;
+                }
+                if let Some(state) = &state
+                    && this.reap_dead_data_path(state).await
+                {
+                    continue;
                 }
                 if !up {
                     if this.reset_connectivity() {
                         this.emit_status().await;
                     }
-                    continue;
-                }
-                // A dead data-path (core/tun2socks pid gone) is torn down so the UI
-                // doesn't show a zombie "connected".
-                if this.platform.data_path_healthy().await == Some(false) {
-                    let _g = this.serialize.lock().await;
-                    // Teardown that fails leaves the zombie the watchdog is here to
-                    // clear, and nothing else would say so.
-                    if let Err(e) = this.platform.stop_data_path(StopDataPath::default()).await {
-                        ks_warn!(
-                            Area::Lifecycle,
-                            "could not tear the dead data path down: {e}"
-                        );
-                    }
-                    drop(_g);
-                    this.note_data_path_stopped();
-                    this.emit_status().await;
                     continue;
                 }
                 // Process is up: probe end-to-end connectivity (outside the lifecycle
