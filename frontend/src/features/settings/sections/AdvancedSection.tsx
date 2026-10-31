@@ -59,7 +59,7 @@ export function AdvancedSection({
               "connectivityCheckTimeoutMs",
               Math.min(
                 MAX_CONNECTIVITY_CHECK_TIMEOUT_MS,
-                Math.max(MIN_CONNECTIVITY_CHECK_TIMEOUT_MS, Number(value)),
+                Math.max(MIN_CONNECTIVITY_CHECK_TIMEOUT_MS, Math.round(Number(value))),
               ),
             )
           }
@@ -91,7 +91,7 @@ export function AdvancedSection({
               "speedTestTimeoutMs",
               Math.min(
                 MAX_SPEED_TEST_TIMEOUT_MS,
-                Math.max(MIN_SPEED_TEST_TIMEOUT_MS, Number(value)),
+                Math.max(MIN_SPEED_TEST_TIMEOUT_MS, Math.round(Number(value))),
               ),
             )
           }
