@@ -278,12 +278,14 @@ async fn fetch_once(
         if opts.body_mode == BodyMode::Keep {
             body.extend_from_slice(&chunk);
         }
-        if let Some(max) = opts.max_body_bytes
-            && body_len > max
-        {
+        if let Some(max) = opts.max_body_bytes {
             match opts.body_mode {
-                BodyMode::Keep => return Err(BodyTooLarge(max).into()),
-                BodyMode::Count => break,
+                // A kept body exactly at the cap is still whole and allowed.
+                BodyMode::Keep if body_len > max => return Err(BodyTooLarge(max).into()),
+                // A counted read has what it needs once the cap is reached; waiting for
+                // one more chunk would let a stream that pauses there run into the timeout.
+                BodyMode::Count if body_len >= max => break,
+                _ => {}
             }
         }
     }
@@ -622,8 +624,8 @@ mod tests {
         let res = fetch(&base, opts).await.unwrap();
         assert!(res.body.is_empty(), "a counted body is not kept");
         assert!(
-            res.body_len > 1024,
-            "the read stops after the cap, not before"
+            res.body_len >= 1024,
+            "the read stops at the cap, not before"
         );
 
         let (base, _) = serve(vec![http_response(200, &[], &[b'a'; 4096])]).await;
@@ -632,6 +634,33 @@ mod tests {
             ..direct()
         };
         assert_eq!(fetch(&base, opts).await.unwrap().body_len, 4096);
+    }
+
+    #[tokio::test]
+    async fn a_counted_read_ends_at_the_cap_even_when_the_stream_stalls_there() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        // The server promises more than it sends: exactly the cap, then nothing.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (mut s, _) = listener.accept().await.unwrap();
+            let _ = s.read(&mut [0u8; 1024]).await;
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
+                .await
+                .unwrap();
+            s.write_all(&[b'a'; 1024]).await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        let opts = FetchUrlOptions {
+            max_body_bytes: Some(1024),
+            body_mode: BodyMode::Count,
+            ..direct()
+        };
+        let res = tokio::time::timeout(Duration::from_secs(3), fetch(&base, opts))
+            .await
+            .expect("the read ends at the cap instead of waiting for the timeout")
+            .unwrap();
+        assert_eq!(res.body_len, 1024);
     }
 
     #[tokio::test]
