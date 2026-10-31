@@ -32,6 +32,9 @@ struct RecordingPlatform {
     uplink_restarts: AtomicBool,
     /// When set, `stop_data_path` fails and leaves the data path running.
     fail_stop: AtomicBool,
+    /// The recorded data path still claims to run but its core process is gone, as
+    /// after a crash or an OOM kill.
+    core_dead: AtomicBool,
 }
 
 impl RecordingPlatform {
@@ -63,6 +66,7 @@ impl RecordingPlatform {
                 network: StdMutex::new(None),
                 uplink_restarts: AtomicBool::new(true),
                 fail_stop: AtomicBool::new(false),
+                core_dead: AtomicBool::new(false),
             }),
             dir,
         )
@@ -118,9 +122,12 @@ impl Platform for RecordingPlatform {
             upload_bytes: 0,
             download_bytes: 0,
             uptime_sec: 0,
-            engine: running.then_some(CoreEngine::Xray),
+            engine: (running && !self.core_dead.load(Ordering::SeqCst)).then_some(CoreEngine::Xray),
             tether_offload_bypass: false,
         })
+    }
+    async fn data_path_healthy(&self) -> Option<bool> {
+        self.core_dead.load(Ordering::SeqCst).then_some(false)
     }
     async fn capabilities(&self) -> anyhow::Result<PlatformCapabilities> {
         Ok(PlatformCapabilities {
@@ -982,4 +989,68 @@ async fn app_filter_reload_restarts_a_running_data_path() {
         .unwrap();
     svc.dispatch(Command::ReloadAppFilter).await.unwrap();
     assert_eq!(starts(), 2);
+}
+
+/// One watchdog sample of the platform, as `spawn_watchdog` takes it.
+async fn watchdog_sample(svc: &Service) -> ServiceState {
+    svc.platform.service_state().await.unwrap()
+}
+
+#[tokio::test]
+async fn watchdog_tears_down_a_data_path_whose_core_died() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+    svc.dispatch(Command::Start { profile_id: None })
+        .await
+        .unwrap();
+    platform.calls.lock().unwrap().clear();
+
+    // The core is killed; the record still says the data path runs.
+    platform.core_dead.store(true, Ordering::SeqCst);
+    let sample = watchdog_sample(&svc).await;
+    assert!(sample.engine.is_none());
+    assert_eq!(sample.state, RunState::Connecting);
+
+    assert!(svc.reap_dead_data_path(&sample).await);
+    assert_eq!(*platform.calls.lock().unwrap(), ["stop:keep=false"]);
+    assert!(svc.running_config.lock().unwrap().is_none());
+}
+
+#[tokio::test]
+async fn watchdog_leaves_a_stopped_data_path_alone() {
+    let (platform, _d) = RecordingPlatform::new();
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+
+    let sample = watchdog_sample(&svc).await;
+    assert_eq!(sample.state, RunState::Stopped);
+    assert!(!svc.reap_dead_data_path(&sample).await);
+    assert!(platform.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn watchdog_leaves_a_start_in_progress_alone() {
+    let (platform, _d) = RecordingPlatform::new();
+    seed_active(&platform).await;
+    let svc = Service::new(platform.clone() as Arc<dyn Platform>).await;
+
+    // Mid-start the data path is recorded as connecting but the core is not up yet.
+    platform.running.store(true, Ordering::SeqCst);
+    platform.core_dead.store(true, Ordering::SeqCst);
+    let sample = watchdog_sample(&svc).await;
+    let start = svc.serialize.lock().await;
+
+    let reaping = tokio::spawn({
+        let svc = Arc::clone(&svc);
+        async move { svc.reap_dead_data_path(&sample).await }
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(!reaping.is_finished(), "the watchdog waits for the start");
+
+    // The start finishes with a live core and releases the lifecycle lock.
+    platform.core_dead.store(false, Ordering::SeqCst);
+    drop(start);
+    assert!(!reaping.await.unwrap());
+    assert!(platform.calls.lock().unwrap().is_empty());
+    assert!(platform.running.load(Ordering::SeqCst));
 }
