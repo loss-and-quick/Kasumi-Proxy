@@ -926,6 +926,34 @@ async fn a_probe_that_started_first_cannot_overwrite_a_later_verdict() {
 }
 
 #[tokio::test]
+async fn a_replaced_data_path_gets_its_own_probe_slot() {
+    let (platform, _d) = RecordingPlatform::new();
+    let svc = Service::new(platform as Arc<dyn Platform>).await;
+
+    let old = svc.claim_probe_slot().expect("a free slot is claimed");
+    assert!(
+        svc.claim_probe_slot().is_none(),
+        "one probe per data path at a time"
+    );
+
+    // The data path is replaced while the old probe still runs: the new one need
+    // not wait for it, and the old probe ending must not free the new one's slot.
+    svc.reset_connectivity();
+    let new = svc
+        .claim_probe_slot()
+        .expect("the new data path probes at once");
+    drop(old);
+    assert!(
+        svc.claim_probe_slot().is_none(),
+        "the old probe released the new data path's slot"
+    );
+
+    // Once the new probe ends, the slot is free again.
+    drop(new);
+    assert!(svc.claim_probe_slot().is_some());
+}
+
+#[tokio::test]
 async fn check_off_trusts_the_process_state() {
     let (platform, _d) = RecordingPlatform::new();
     seed_active(&platform).await;
