@@ -55,6 +55,17 @@ pub struct Service {
     /// Bumped each time the data path stops or is replaced, so a probe that was in
     /// flight across the change drops its (now stale) verdict.
     data_path_generation: AtomicU64,
+    /// The data path whose watchdog probe is running, as `data_path_generation + 1`;
+    /// 0 when none is. The probe runs on its own task so the watchdog never waits on
+    /// it; this keeps the next tick from starting a second one for the same data path,
+    /// while a replaced data path gets its own probe without waiting for the old one.
+    probe_slot: AtomicU64,
+    /// Numbers each probe as it starts, and the number of the newest one whose verdict
+    /// was stored. An explicit `ProbeConnection` can run alongside the watchdog's, and
+    /// with a long timeout the one that started first can finish last: its answer is
+    /// older, so it must not replace a verdict a later-started probe already gave.
+    probe_seq: AtomicU64,
+    stored_probe_seq: AtomicU64,
     /// The exact post-tune build, proxy mode and profile the running data path was
     /// started with — the baseline settings mutations are diffed against. `None` while
     /// stopped. Deliberately in-memory (not the on-disk config): the start path
@@ -91,6 +102,9 @@ impl Service {
             auto_started: AtomicBool::new(false),
             connectivity: StdMutex::new(ProbeVerdict::default()),
             data_path_generation: AtomicU64::new(0),
+            probe_slot: AtomicU64::new(0),
+            probe_seq: AtomicU64::new(0),
+            stored_probe_seq: AtomicU64::new(0),
             running_config: StdMutex::new(None),
             pending_restart: AtomicBool::new(false),
             assets_stale: AtomicBool::new(false),

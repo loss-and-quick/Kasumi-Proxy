@@ -109,6 +109,12 @@ export type AdvancedSettings_Deserialize = {
 	 *  status trusts the process state alone and nothing is sent in the background.
 	 */
 	connectivityCheck?: boolean,
+	/**
+	 *  Timeout (ms) for a connectivity/latency check — the per-profile ping/latency
+	 *  test and the background "Check connection" probe. See
+	 *  [`connectivity_check_timeout`](Self::connectivity_check_timeout).
+	 */
+	connectivityCheckTimeoutMs?: number,
 	muxXudpConcurrency?: number | null,
 	muxXudp443?: MuxXudp443 | null,
 	fragment?: boolean,
@@ -137,6 +143,8 @@ export type AdvancedSettings_Deserialize = {
 	socksPassword?: string | null,
 	delayTestUrl?: string | null,
 	speedTestUrl?: string | null,
+	/**  Timeout (ms) for a speed test. See [`speed_test_timeout`](Self::speed_test_timeout). */
+	speedTestTimeoutMs?: number,
 	customRouting?: string | null,
 	coreByProtocol?: Partial<{ [key in Protocol]: CoreEngine }>,
 	appCaptureMode?: AppCaptureMode,
@@ -225,6 +233,12 @@ export type AdvancedSettings_Serialize = {
 	 *  status trusts the process state alone and nothing is sent in the background.
 	 */
 	connectivityCheck: boolean,
+	/**
+	 *  Timeout (ms) for a connectivity/latency check — the per-profile ping/latency
+	 *  test and the background "Check connection" probe. See
+	 *  [`connectivity_check_timeout`](Self::connectivity_check_timeout).
+	 */
+	connectivityCheckTimeoutMs: number,
 	muxXudpConcurrency?: number | null,
 	muxXudp443?: MuxXudp443 | null,
 	fragment: boolean,
@@ -253,6 +267,8 @@ export type AdvancedSettings_Serialize = {
 	socksPassword?: string | null,
 	delayTestUrl?: string | null,
 	speedTestUrl?: string | null,
+	/**  Timeout (ms) for a speed test. See [`speed_test_timeout`](Self::speed_test_timeout). */
+	speedTestTimeoutMs: number,
 	customRouting?: string | null,
 	coreByProtocol: Partial<{ [key in Protocol]: CoreEngine }>,
 	appCaptureMode: AppCaptureMode,

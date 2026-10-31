@@ -45,6 +45,8 @@ pub struct FetchUrlOptions {
     pub headers: Vec<(String, String)>,
     /// Stop reading once the body exceeds this; `None` = unbounded.
     pub max_body_bytes: Option<usize>,
+    /// What to do with the response body; see [`BodyMode`].
+    pub body_mode: BodyMode,
     /// Cookies kept across fetches, keyed by host. A jar holding cookies for the URL
     /// replaces a `Cookie` in `headers`, as OkHttp's jar does for Happ.
     pub cookie_jar: Option<Arc<SubCookies>>,
@@ -65,6 +67,19 @@ pub struct FetchUrlOptions {
     pub redirect_guard: bool,
 }
 
+impl FetchUrlOptions {
+    /// Bound the fetch by `timeout` and widen the deadline to match. Setting
+    /// [`Self::timeout`] alone leaves the deadline at [`FETCH_BUDGET`], which would
+    /// cut any longer timeout short — so a caller that configures one sets both here.
+    pub fn with_timeout_budget(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        // A second of slack so a request that uses its whole timeout is ended by the
+        // attempt's own limit, not by the deadline measured a hair earlier.
+        self.deadline = Some(tokio::time::Instant::now() + timeout + Duration::from_secs(1));
+        self
+    }
+}
+
 /// Most redirects one fetch follows, as reqwest's default policy.
 const MAX_REDIRECTS: usize = 10;
 
@@ -80,12 +95,32 @@ fn guarded_redirects() -> reqwest::redirect::Policy {
     })
 }
 
+/// What [`fetch`] does with a response body.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BodyMode {
+    /// Keep it in [`FetchResponse::body`]. Past `max_body_bytes` the fetch fails with
+    /// [`BodyTooLarge`]: for a subscription or an asset an oversized body is an error.
+    #[default]
+    Keep,
+    /// Count it into [`FetchResponse::body_len`] without keeping it, and stop reading
+    /// once `max_body_bytes` arrived. For a latency probe or a speed test only how much
+    /// came back and how fast matters; holding the body would let a custom test URL
+    /// decide how much memory the backend uses, and a body past the cap says nothing
+    /// bad about the connection, so it ends the read rather than failing it.
+    Count,
+}
+
 #[derive(Debug)]
 pub struct FetchResponse {
     pub status: u16,
     /// Every header occurrence, values as lossy UTF-8.
     pub headers: Vec<(String, String)>,
+    /// The body, empty under [`BodyMode::Count`].
     pub body: Vec<u8>,
+    /// Body bytes read, decoded. Equals `body.len()` under [`BodyMode::Keep`]; under
+    /// [`BodyMode::Count`] it is everything read, which can pass the cap by the last
+    /// chunk that crossed it.
+    pub body_len: usize,
     pub final_url: String,
 }
 
@@ -129,6 +164,16 @@ impl std::error::Error for OutOfTime {}
 /// a deadline. Whoever asked is waiting: the request must end with its own error
 /// well before the caller gives up on it.
 pub const FETCH_BUDGET: Duration = Duration::from_secs(60);
+
+/// The most of a response a latency/connectivity probe reads. The body is not used —
+/// only that something came back — so a custom test URL must not be able to make the
+/// probe read a large response to the timeout.
+pub const PROBE_BODY_CAP: usize = 64 * 1024;
+
+/// Where one speed test stops reading. The rate is established long before this much
+/// has arrived; a larger test file is measured on its first part instead of running
+/// into the (user-configurable) timeout and failing.
+pub const SPEED_TEST_BODY_CAP: usize = 32 * 1024 * 1024;
 
 /// A fresh deadline [`FETCH_BUDGET`] from now.
 pub fn fetch_deadline() -> tokio::time::Instant {
@@ -227,18 +272,28 @@ async fn fetch_once(
         .collect();
     let final_url = res.url().to_string();
     let mut body = Vec::new();
+    let mut body_len = 0usize;
     while let Some(chunk) = res.chunk().await? {
-        body.extend_from_slice(&chunk);
-        if let Some(max) = opts.max_body_bytes
-            && body.len() > max
-        {
-            return Err(BodyTooLarge(max).into());
+        body_len += chunk.len();
+        if opts.body_mode == BodyMode::Keep {
+            body.extend_from_slice(&chunk);
+        }
+        if let Some(max) = opts.max_body_bytes {
+            match opts.body_mode {
+                // A kept body exactly at the cap is still whole and allowed.
+                BodyMode::Keep if body_len > max => return Err(BodyTooLarge(max).into()),
+                // A counted read has what it needs once the cap is reached; waiting for
+                // one more chunk would let a stream that pauses there run into the timeout.
+                BodyMode::Count if body_len >= max => break,
+                _ => {}
+            }
         }
     }
     Ok(FetchResponse {
         status,
         headers,
         body,
+        body_len,
         final_url,
     })
 }
@@ -398,6 +453,22 @@ mod tests {
     use super::*;
     use crate::testutil::{fixture_response, http_response, serve, serve_tls};
 
+    #[test]
+    fn a_configured_timeout_outlives_the_default_fetch_budget() {
+        // A speed test may be configured well past FETCH_BUDGET (60 s). The deadline
+        // has to widen with the timeout, or `fetch` would cut the attempt at the
+        // default budget and the setting would silently do nothing past a minute.
+        let timeout = Duration::from_secs(120);
+        let opts = FetchUrlOptions::default().with_timeout_budget(timeout);
+        assert_eq!(opts.timeout, Some(timeout));
+        let left = opts.deadline.expect("deadline is set") - tokio::time::Instant::now();
+        assert!(left >= timeout, "deadline {left:?} must reach the timeout");
+        assert!(
+            timeout > FETCH_BUDGET,
+            "the test must exceed the default budget"
+        );
+    }
+
     #[tokio::test]
     async fn free_port_skips_a_used_port() {
         // Bind a real listener; its port must be reported used and skipped.
@@ -538,6 +609,58 @@ mod tests {
         assert_eq!(res.final_url, format!("{base}/sub"));
         let sent = requests.lock().unwrap()[0].to_ascii_lowercase();
         assert!(sent.contains("x-probe: 1"), "{sent}");
+    }
+
+    #[tokio::test]
+    async fn a_counted_body_is_not_kept_and_stops_at_the_cap() {
+        // A probe or speed test counts the body instead of holding it, and the cap ends
+        // the read instead of failing it: a big test file still gives a measurement.
+        let (base, _) = serve(vec![http_response(200, &[], &[b'a'; 4096])]).await;
+        let opts = FetchUrlOptions {
+            max_body_bytes: Some(1024),
+            body_mode: BodyMode::Count,
+            ..direct()
+        };
+        let res = fetch(&base, opts).await.unwrap();
+        assert!(res.body.is_empty(), "a counted body is not kept");
+        assert!(
+            res.body_len >= 1024,
+            "the read stops at the cap, not before"
+        );
+
+        let (base, _) = serve(vec![http_response(200, &[], &[b'a'; 4096])]).await;
+        let opts = FetchUrlOptions {
+            body_mode: BodyMode::Count,
+            ..direct()
+        };
+        assert_eq!(fetch(&base, opts).await.unwrap().body_len, 4096);
+    }
+
+    #[tokio::test]
+    async fn a_counted_read_ends_at_the_cap_even_when_the_stream_stalls_there() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        // The server promises more than it sends: exactly the cap, then nothing.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (mut s, _) = listener.accept().await.unwrap();
+            let _ = s.read(&mut [0u8; 1024]).await;
+            s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4096\r\n\r\n")
+                .await
+                .unwrap();
+            s.write_all(&[b'a'; 1024]).await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        let opts = FetchUrlOptions {
+            max_body_bytes: Some(1024),
+            body_mode: BodyMode::Count,
+            ..direct()
+        };
+        let res = tokio::time::timeout(Duration::from_secs(3), fetch(&base, opts))
+            .await
+            .expect("the read ends at the cap instead of waiting for the timeout")
+            .unwrap();
+        assert_eq!(res.body_len, 1024);
     }
 
     #[tokio::test]

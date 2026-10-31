@@ -22,6 +22,28 @@ const WATCHDOG_INTERVAL: Duration = Duration::from_secs(5);
 /// the proxy, so it runs rarely — a fixed few-second rhythm of tiny requests to the
 /// server is a traffic pattern of its own and keeps a phone's radio awake.
 const PROBE_INTERVAL: Duration = Duration::from_secs(60);
+
+/// The watchdog's claim on `probe_slot` for one data path, released when the probe
+/// task ends: on success, error or unwind. Without it a panicking probe would hold the
+/// slot and silently stop the background connectivity checks for good. Release only
+/// clears the slot while it still names this data path, so a probe of a replaced data
+/// path can't free the slot the new one's probe holds.
+pub(super) struct ProbeSlot {
+    service: Arc<Service>,
+    tag: u64,
+}
+
+impl Drop for ProbeSlot {
+    fn drop(&mut self) {
+        let _ = self.service.probe_slot.compare_exchange(
+            self.tag,
+            0,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        );
+    }
+}
+
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
 /// How often the log files are trimmed to `settings.log_rotate_max_kb`. A phone can
 /// run for days between app launches, and nothing else bounds a log that only this
@@ -29,6 +51,21 @@ const STATUS_INTERVAL: Duration = Duration::from_secs(1);
 const TRIM_INTERVAL: Duration = Duration::from_secs(300);
 
 impl Service {
+    /// Claim the watchdog's probe slot for the current data path, or `None` while a
+    /// probe of this same data path is still running. A probe left over from a
+    /// replaced data path does not count: its answer will be dropped anyway, and the
+    /// new one should not sit unprobed until that probe's timeout runs out.
+    pub(super) fn claim_probe_slot(self: &Arc<Self>) -> Option<ProbeSlot> {
+        let tag = self.data_path_generation.load(Ordering::SeqCst) + 1;
+        if self.probe_slot.swap(tag, Ordering::SeqCst) == tag {
+            return None;
+        }
+        Some(ProbeSlot {
+            service: Arc::clone(self),
+            tag,
+        })
+    }
+
     /// Start the active profile once on boot, if `autoStart` allows. Caller holds
     /// the lifecycle lock.
     pub(super) async fn maybe_auto_start(&self) {
@@ -184,9 +221,21 @@ impl Service {
                     continue;
                 }
                 last_probe = Some(Instant::now());
-                if this.probe_and_store().await.1 {
-                    this.emit_status().await;
-                }
+                // Probe on its own task, not inline: it can take as long as the user's
+                // connectivity timeout, and the watchdog has to keep checking the data
+                // path meanwhile — a dead core must be torn down within a tick, not
+                // after a stalled probe. One probe per data path; a verdict that the
+                // data path changed under is dropped by `probe_and_store` itself.
+                let Some(slot) = this.claim_probe_slot() else {
+                    continue;
+                };
+                let probe = Arc::clone(&this);
+                tokio::spawn(async move {
+                    let _slot = slot;
+                    if probe.probe_and_store().await.1 {
+                        probe.emit_status().await;
+                    }
+                });
             }
         });
     }
