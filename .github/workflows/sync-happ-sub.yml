@@ -1,0 +1,149 @@
+name: Sync happ-sub
+
+# Automated synchronization of the happ-sub dependency.
+# Periodically checks for new commits on main in loss-and-quick/happ-sub.
+# If drift is detected, updates Cargo.toml, Cargo.lock, runs codegen to keep
+# generated frontend defaults in step, tests the change, and opens a Pull Request.
+
+on:
+  schedule:
+    # Daily at 07:00 UTC (runs 1h after happ-key-extractor's Monday 06:00 UTC extraction)
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [happ-sub-updated]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-happ-sub
+  cancel-in-progress: true
+
+jobs:
+  check-and-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for upstream drift
+        id: drift
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_REV=$(grep -E 'happ-sub\s*=.*rev\s*=' Cargo.toml | sed -E 's/.*rev = "([^"]+)".*/\1/')
+          echo "Current pinned rev: $CURRENT_REV"
+          LATEST_REV=$(gh api repos/loss-and-quick/happ-sub/commits/main --jq .sha)
+          echo "Latest upstream rev: $LATEST_REV"
+          if [ -z "$LATEST_REV" ]; then
+            echo "::error::Could not determine latest commit of loss-and-quick/happ-sub"
+            exit 1
+          fi
+          if [ "$CURRENT_REV" = "$LATEST_REV" ]; then
+            echo "happ-sub is already in sync ($CURRENT_REV). Nothing to do."
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "drift=true"
+            echo "current_rev=$CURRENT_REV"
+            echo "latest_rev=$LATEST_REV"
+            echo "short_rev=${LATEST_REV:0:7}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install Nix
+        if: steps.drift.outputs.drift == 'true'
+        uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
+
+      - name: Stub the libcronet bundle resource
+        if: steps.drift.outputs.drift == 'true'
+        run: |
+          mkdir -p src-tauri/binaries
+          : > src-tauri/binaries/libcronet.so
+
+      - name: Update happ-sub and regenerate files
+        if: steps.drift.outputs.drift == 'true'
+        env:
+          CURRENT_REV: ${{ steps.drift.outputs.current_rev }}
+          LATEST_REV: ${{ steps.drift.outputs.latest_rev }}
+        run: |
+          sed -i -E "s|rev = \"${CURRENT_REV}\"|rev = \"${LATEST_REV}\"|g" Cargo.toml
+          nix develop --command bash -euo pipefail -c '
+            cargo update -p happ-sub
+            cargo run -p kasumi-desktop --example codegen
+            cargo fmt --all
+            cargo test -p kasumi-core -p kasumi-backend
+          '
+
+      - name: Open or update Pull Request
+        if: steps.drift.outputs.drift == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST_REV: ${{ steps.drift.outputs.latest_rev }}
+          SHORT_REV: ${{ steps.drift.outputs.short_rev }}
+        run: |
+          BRANCH="ci/sync-happ-sub"
+          COMMIT_MSG=$(gh api "repos/loss-and-quick/happ-sub/commits/${LATEST_REV}" --jq '.commit.message | split("\n")[0]')
+          cat <<EOF > pr-body.md
+          ## Summary
+
+          Bump \`happ-sub\` to \`${SHORT_REV}\` (\`${COMMIT_MSG}\`).
+          Synchronizes subscription request identity, encryption tables, and release constants with upstream.
+
+          ## Affected layer
+
+          - [ ] \`frontend/\` — React Web UI
+          - [x] \`crates/\` · \`src-tauri/\` — Rust core / backend / Tauri desktop
+          - [ ] \`module/\` — Android installable zip (thin launcher over the Rust daemon)
+          - [ ] \`scripts/\` — build / release helpers
+          - [ ] CI / \`.github/\`
+          - [ ] Docs only
+
+          ## Verification
+
+          Rust (\`crates/\` · \`src-tauri/\`):
+
+          - [x] \`cargo fmt --all --check\`
+          - [x] \`cargo test -p kasumi-core -p kasumi-backend\`
+          - [x] Codegen: \`cargo run -p kasumi-desktop --example codegen\` generated bindings and defaults
+
+          Web UI (\`frontend/\`):
+
+          - [x] Checked generated defaults match updated constants
+
+          ## Checklist
+
+          - [x] Title is a scoped Conventional Commit; commits are logically split
+          - [x] No build artifacts committed
+          - [x] Generated \`frontend/src/generated/\` was regenerated from Rust, not hand-edited
+
+          ## Notes for reviewers
+
+          Automated dependency synchronization from \`https://github.com/loss-and-quick/happ-sub\` commit \`${LATEST_REV}\`.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add Cargo.toml Cargo.lock frontend/src/generated/
+          if git diff --cached --quiet; then
+            echo "No changes staged. Nothing to commit."
+            exit 0
+          fi
+          git commit -m "build(deps): bump happ-sub to ${SHORT_REV}"
+          git push --force origin "$BRANCH"
+
+          open_pr=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$open_pr" ]; then
+            echo "PR #$open_pr already exists on branch $BRANCH. Updating body."
+            gh pr edit "$open_pr" --title "build(deps): bump happ-sub to ${SHORT_REV}" --body-file pr-body.md
+          else
+            echo "Creating new PR..."
+            gh pr create --base main --head "$BRANCH" \
+              --title "build(deps): bump happ-sub to ${SHORT_REV}" \
+              --body-file pr-body.md
+          fi
