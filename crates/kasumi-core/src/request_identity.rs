@@ -884,10 +884,11 @@ mod tests {
     #[test]
     fn incy_sends_its_own_header_set_and_order() {
         let r = resolve(&incy(), &facts(), &incy_auto(), None, &[], DAY);
+        let expected_ua = format!("INCY/{INCY_VERSION}/android Dalvik/2.1.0");
         assert_eq!(
             headers(&r),
             [
-                ("User-Agent", "INCY/3.7.0/android Dalvik/2.1.0"),
+                ("User-Agent", expected_ua.as_str()),
                 ("Accept", "*/*"),
                 ("Accept-Language", "ru-RU"),
                 ("x-hwid", "0123ABCD-0000-1111-2222-333344445555"),
@@ -912,10 +913,8 @@ mod tests {
         d.defaults.os_version = Some("15".into());
         d.request.locale = Some("en_GB".into());
         let r = resolve(&d, &facts(), &incy_auto(), None, &[], DAY);
-        assert_eq!(
-            header(&r, "User-Agent"),
-            Some("INCY/3.7.0/android Dalvik/2.1.0")
-        );
+        let expected_ua = format!("INCY/{INCY_VERSION}/android Dalvik/2.1.0");
+        assert_eq!(header(&r, "User-Agent"), Some(expected_ua.as_str()));
         assert_eq!(r.view.hwid, incy_auto().value);
         assert_eq!(header(&r, "x-ver-os"), Some("15"));
         assert_eq!(header(&r, "Accept-Language"), Some("en-GB"));
@@ -959,10 +958,8 @@ mod tests {
         ]);
         let consented = ["change-user-agent".to_owned()];
         let r = resolve(&incy(), &facts(), &incy_auto(), Some(&m), &consented, DAY);
-        assert_eq!(
-            header(&r, "User-Agent"),
-            Some("INCY/3.7.0/android Dalvik/2.1.0")
-        );
+        let expected_ua = format!("INCY/{INCY_VERSION}/android Dalvik/2.1.0");
+        assert_eq!(header(&r, "User-Agent"), Some(expected_ua.as_str()));
         assert_eq!(r.view.locks, ProviderLocks::default());
     }
 
