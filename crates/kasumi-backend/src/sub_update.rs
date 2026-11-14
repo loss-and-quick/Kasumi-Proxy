@@ -1140,7 +1140,11 @@ mod tests {
             ]
         );
         let value = |name: &str| sent.iter().find(|(n, _)| *n == name).unwrap().1;
-        assert_eq!(value("user-agent"), "INCY/3.7.0/android Dalvik/2.1.0");
+        let expected_ua = format!(
+            "INCY/{}/android Dalvik/2.1.0",
+            kasumi_core::request_identity::INCY_VERSION
+        );
+        assert_eq!(value("user-agent"), expected_ua.as_str());
         assert_eq!(value("x-client"), "INCY");
         assert_eq!(value("x-device-locale"), "ru_RU");
         assert_eq!(value("x-hwid").len(), 36);
