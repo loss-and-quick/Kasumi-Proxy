@@ -569,6 +569,9 @@ const vi = {
   "settings.socksPass": "Mật khẩu",
   "settings.advanced": "Nâng cao",
   "settings.delayTestUrl": "URL kiểm tra độ trễ",
+  "settings.connectivityCheckTimeout": "Thời gian chờ kiểm tra kết nối (ms)",
+  "settings.connectivityCheckTimeoutSub":
+    "Kiểm tra kết nối hoặc độ trễ có thể mất bao lâu trước khi bỏ qua",
   "settings.connectivityCheck": "Kiểm tra kết nối",
   "settings.connectivityCheckSub":
     'Mỗi phút, một yêu cầu qua proxy phân biệt "Đã kết nối" với "Không có internet" và cập nhật ping. Tắt: không gửi gì trong nền, trạng thái chỉ dựa vào lõi đang chạy.',
@@ -1122,6 +1125,8 @@ const vi = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL kiểm tra tốc độ",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "Thời gian chờ kiểm tra tốc độ (ms)",
+  "settings.speedTestTimeoutSub": "Kiểm tra tốc độ có thể mất bao lâu trước khi bỏ qua",
   "routingSheet.outbound.profiles": "Hồ sơ",
   "routingSheet.outboundProfileHint":
     "Định tuyến qua hồ sơ này khi hồ sơ đang chạy dùng cùng lõi; nếu không sẽ quay về proxy chính.",

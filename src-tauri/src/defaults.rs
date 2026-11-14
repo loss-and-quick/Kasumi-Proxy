@@ -111,7 +111,7 @@ pub fn render() -> String {
     );
     // Test-core ports are backend-internal now (the daemon leases them from one
     // shared pool); the frontend just names a profile, so they're not exported.
-    let nums: [(&str, i64); 6] = [
+    let nums: [(&str, i64); 12] = [
         (
             "DEFAULT_LOCAL_SOCKS_PORT",
             state::DEFAULT_LOCAL_SOCKS_PORT as i64,
@@ -125,6 +125,32 @@ pub fn render() -> String {
             state::DEFAULT_LOCAL_PAC_PORT as i64,
         ),
         ("DEFAULT_LOG_ROTATE_KB", state::DEFAULT_LOG_ROTATE_KB),
+        // Probe and speed-test timeouts: the settings fields fall back to these and
+        // clamp to the bounds, so the UI offers the same range the backend honours.
+        (
+            "DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS",
+            state::DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS,
+        ),
+        (
+            "MIN_CONNECTIVITY_CHECK_TIMEOUT_MS",
+            state::MIN_CONNECTIVITY_CHECK_TIMEOUT_MS,
+        ),
+        (
+            "MAX_CONNECTIVITY_CHECK_TIMEOUT_MS",
+            state::MAX_CONNECTIVITY_CHECK_TIMEOUT_MS,
+        ),
+        (
+            "DEFAULT_SPEED_TEST_TIMEOUT_MS",
+            state::DEFAULT_SPEED_TEST_TIMEOUT_MS,
+        ),
+        (
+            "MIN_SPEED_TEST_TIMEOUT_MS",
+            state::MIN_SPEED_TEST_TIMEOUT_MS,
+        ),
+        (
+            "MAX_SPEED_TEST_TIMEOUT_MS",
+            state::MAX_SPEED_TEST_TIMEOUT_MS,
+        ),
         // Stamped on exported backups so a restore runs the right migrations.
         (
             "SCHEMA_VERSION",

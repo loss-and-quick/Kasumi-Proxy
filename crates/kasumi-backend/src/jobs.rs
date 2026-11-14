@@ -21,7 +21,10 @@ use kasumi_core::singbox_config::{SingboxBuildOpts, build_singbox_config};
 use kasumi_core::state::{AppState, DEFAULT_DELAY_TEST_URL, DEFAULT_SPEED_TEST_URL, RoutingMode};
 use kasumi_core::xray_config::build_xray_probe_config;
 
-use crate::net::{FetchUrlOptions, ProxyStatus, fetch_url, lease_ports, tcp_ping};
+use crate::net::{
+    BodyMode, FetchUrlOptions, PROBE_BODY_CAP, ProxyStatus, SPEED_TEST_BODY_CAP, fetch, fetch_url,
+    lease_ports, tcp_ping,
+};
 use crate::platform::{Engine, Platform};
 use kasumi_log::{Area, ks_debug, ks_info, ks_warn};
 
@@ -423,6 +426,13 @@ async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i
         .clone()
         .filter(|u| !u.is_empty())
         .unwrap_or_else(|| DEFAULT_DELAY_TEST_URL.to_owned());
+    // The user's connectivity-check timeout bounds the fetch; the cap sits just
+    // above it so a hung probe is killed by the fetch's own timeout first and the
+    // cap is only a backstop. A freshly-spawned core's first request pays the full
+    // cold-start (asset load + the outbound handshake), which is why the default is
+    // generous rather than tight.
+    let timeout = loaded.state.settings.connectivity_check_timeout();
+    let cap = timeout + Duration::from_secs(2);
     with_test_core(
         platform,
         engine,
@@ -435,13 +445,12 @@ async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i
                 FetchUrlOptions {
                     mode: FetchMode::Proxy,
                     proxy: Some(test_proxy(test_port)),
-                    // Generous: a freshly-spawned core's first request pays the full
-                    // cold-start (asset load + the outbound handshake). gRPC/XHTTP in
-                    // particular can take a few seconds to deliver the first byte, so a
-                    // tight cap would false-None a perfectly working node.
-                    timeout: Some(Duration::from_secs(8)),
+                    // Only the round trip matters, not a custom URL's body.
+                    max_body_bytes: Some(PROBE_BODY_CAP),
+                    body_mode: BodyMode::Count,
                     ..Default::default()
-                },
+                }
+                .with_timeout_budget(timeout),
             )
             .await
             {
@@ -449,7 +458,7 @@ async fn real_ping(platform: &dyn Platform, profile_id: &str) -> Result<Option<i
                 Err(_) => None,
             }
         },
-        Duration::from_secs(10),
+        cap,
         Some((profile_id, TestKind::RealPing)),
     )
     .await
@@ -510,6 +519,11 @@ async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<
         .clone()
         .filter(|u| !u.is_empty())
         .unwrap_or_else(|| DEFAULT_SPEED_TEST_URL.to_owned());
+    // The user's speed-test timeout bounds the fetch; the cap sits just above it
+    // so a hung download is killed by the fetch's own timeout first and the cap is
+    // only a backstop.
+    let timeout = loaded.state.settings.speed_test_timeout();
+    let cap = timeout + Duration::from_secs(3);
     with_test_core(
         platform,
         engine,
@@ -517,29 +531,34 @@ async fn speed_test(platform: &dyn Platform, profile_id: &str) -> Result<Option<
         test_port,
         || async move {
             let t0 = Instant::now();
-            match fetch_url(
+            match fetch(
                 &url,
                 FetchUrlOptions {
                     mode: FetchMode::Proxy,
                     proxy: Some(test_proxy(test_port)),
-                    timeout: Some(Duration::from_secs(15)),
+                    // Count the bytes rather than hold them, so a custom URL can't
+                    // decide how much memory the test takes; the cap ends the read
+                    // once the rate is known.
+                    max_body_bytes: Some(SPEED_TEST_BODY_CAP),
+                    body_mode: BodyMode::Count,
                     ..Default::default()
-                },
+                }
+                .with_timeout_budget(timeout),
             )
             .await
             {
-                Ok(body) => {
+                Ok(res) => {
                     let sec = t0.elapsed().as_secs_f64();
-                    if body.is_empty() || sec <= 0.0 {
+                    if res.body_len == 0 || sec <= 0.0 {
                         None
                     } else {
-                        Some((body.len() as f64 / sec).round() as i64)
+                        Some((res.body_len as f64 / sec).round() as i64)
                     }
                 }
                 Err(_) => None,
             }
         },
-        Duration::from_secs(18),
+        cap,
         Some((profile_id, TestKind::Speed)),
     )
     .await

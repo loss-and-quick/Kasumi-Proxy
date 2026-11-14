@@ -639,6 +639,9 @@ const ru = {
   "settings.socksPass": "Пароль",
   "settings.advanced": "Дополнительно",
   "settings.delayTestUrl": "URL для теста задержки",
+  "settings.connectivityCheckTimeout": "Таймаут проверки подключения (мс)",
+  "settings.connectivityCheckTimeoutSub":
+    "Сколько может длиться проверка подключения или задержки, прежде чем сдаться",
   "settings.connectivityCheck": "Проверка подключения",
   "settings.connectivityCheckSub":
     "Раз в минуту запрос через прокси отличает «Подключено» от «Нет интернета» и обновляет пинг. Если выключить, в фоне ничего не отправляется, а статус опирается только на запущенное ядро.",
@@ -1284,6 +1287,8 @@ const ru = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL для теста скорости",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "Таймаут теста скорости (мс)",
+  "settings.speedTestTimeoutSub": "Сколько может длиться тест скорости, прежде чем сдаться",
   "routingSheet.outbound.profiles": "Профили",
   "routingSheet.outboundProfileHint":
     "Трафик пойдёт через этот профиль, если активный профиль использует то же ядро; иначе — через основной прокси.",

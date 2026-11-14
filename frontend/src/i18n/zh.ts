@@ -546,6 +546,8 @@ const zh = {
   "settings.socksPass": "密码",
   "settings.advanced": "高级",
   "settings.delayTestUrl": "延迟测试 URL",
+  "settings.connectivityCheckTimeout": "连接检查超时（毫秒）",
+  "settings.connectivityCheckTimeoutSub": "连接或延迟检查在放弃前最多可花费的时间",
   "settings.connectivityCheck": "连接检查",
   "settings.connectivityCheckSub":
     "每分钟通过代理发送一次请求，以区分“已连接”和“无网络”并刷新延迟。关闭后不会在后台发送任何请求，状态仅依据正在运行的核心。",
@@ -1082,6 +1084,8 @@ const zh = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "测速 URL",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "速度测试超时（毫秒）",
+  "settings.speedTestTimeoutSub": "速度测试在放弃前最多可花费的时间",
   "routingSheet.outbound.profiles": "配置",
   "routingSheet.outboundProfileHint": "当活动配置使用相同内核时通过此配置路由；否则回退到主代理。",
   "settings.routingImportExport": "导入 / 导出",

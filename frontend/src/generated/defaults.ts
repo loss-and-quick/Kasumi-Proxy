@@ -539,6 +539,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "assetUpdateMode": "auto",
   "autoStart": true,
   "connectivityCheck": true,
+  "connectivityCheckTimeoutMs": 8000,
   "coreByProtocol": {},
   "dedupOnUpdate": false,
   "dnsViaProxy": true,
@@ -568,6 +569,7 @@ export const DEFAULT_ADVANCED_SETTINGS = {
   "singboxFragment": "record",
   "singboxStack": "gvisor",
   "speedConcurrency": 1,
+  "speedTestTimeoutMs": 15000,
   "strictRoute": false,
   "tunByCore": {},
   "tunConnectTimeoutMs": 10000,
@@ -583,6 +585,12 @@ export const DEFAULT_LOCAL_SOCKS_PORT = 10808;
 export const DEFAULT_LOCAL_HTTP_PORT = 10809;
 export const DEFAULT_LOCAL_PAC_PORT = 10811;
 export const DEFAULT_LOG_ROTATE_KB = 512;
+export const DEFAULT_CONNECTIVITY_CHECK_TIMEOUT_MS = 8000;
+export const MIN_CONNECTIVITY_CHECK_TIMEOUT_MS = 1000;
+export const MAX_CONNECTIVITY_CHECK_TIMEOUT_MS = 60000;
+export const DEFAULT_SPEED_TEST_TIMEOUT_MS = 15000;
+export const MIN_SPEED_TEST_TIMEOUT_MS = 5000;
+export const MAX_SPEED_TEST_TIMEOUT_MS = 120000;
 export const SCHEMA_VERSION = 4;
 export const WS_HEARTBEAT_MS = 10000;
 export const DEFAULT_DELAY_TEST_URL = "https://www.gstatic.com/generate_204";

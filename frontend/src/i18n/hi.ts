@@ -558,6 +558,8 @@ const hi = {
   "settings.socksPass": "पासवर्ड",
   "settings.advanced": "उन्नत",
   "settings.delayTestUrl": "लेटेंसी टेस्ट URL",
+  "settings.connectivityCheckTimeout": "कनेक्टिविटी जाँच टाइमआउट (मिस)",
+  "settings.connectivityCheckTimeoutSub": "कनेक्टिविटी या विलंबता जाँच छोड़ने से पहले कितना समय ले सकती है",
   "settings.connectivityCheck": "कनेक्शन जाँच",
   "settings.connectivityCheckSub":
     'हर मिनट प्रॉक्सी के ज़रिए एक अनुरोध "कनेक्टेड" और "इंटरनेट नहीं" में फ़र्क़ करता है और पिंग अपडेट करता है। बंद होने पर बैकग्राउंड में कुछ नहीं भेजा जाता और स्थिति केवल चल रहे कोर पर निर्भर रहती है।',
@@ -1115,6 +1117,8 @@ const hi = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "स्पीड टेस्ट URL",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "स्पीड टेस्ट टाइमआउट (मिस)",
+  "settings.speedTestTimeoutSub": "स्पीड टेस्ट छोड़ने से पहले कितना समय ले सकता है",
   "routingSheet.outbound.profiles": "प्रोफ़ाइल",
   "routingSheet.outboundProfileHint":
     "जब सक्रिय प्रोफ़ाइल समान कोर का उपयोग करती है तब इस प्रोफ़ाइल से रूट होता है; अन्यथा मुख्य प्रॉक्सी पर वापस आ जाता है।",

@@ -588,6 +588,9 @@ const en = {
   "settings.connectivityCheck": "Check connection",
   "settings.connectivityCheckSub":
     'Every minute, a request through the proxy tells "Connected" from "No internet" and refreshes the ping. Off: nothing is sent in the background, and the status trusts the running core.',
+  "settings.connectivityCheckTimeout": "Connectivity check timeout (ms)",
+  "settings.connectivityCheckTimeoutSub":
+    "How long a connectivity or latency check may take before giving up",
   "settings.customRouting": "Custom routing rules (JSON)",
   "settings.customRoutingPh":
     '[ { "type": "field", "domain": ["geosite:ads"], "outboundTag": "block" } ]',
@@ -1147,6 +1150,8 @@ const en = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "Speed test URL",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "Speed test timeout (ms)",
+  "settings.speedTestTimeoutSub": "How long a speed test may take before giving up",
   "routingSheet.outbound.profiles": "Profiles",
   "routingSheet.outboundProfileHint":
     "Routes via this profile when the active profile uses the same core; otherwise it falls back to the main proxy.",

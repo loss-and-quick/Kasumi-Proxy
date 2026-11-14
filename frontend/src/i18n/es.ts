@@ -587,6 +587,9 @@ const es = {
   "settings.socksPass": "Contraseña",
   "settings.advanced": "Avanzado",
   "settings.delayTestUrl": "URL de prueba de latencia",
+  "settings.connectivityCheckTimeout": "Tiempo de espera del chequeo de conectividad (ms)",
+  "settings.connectivityCheckTimeoutSub":
+    "Cuánto puede tardar un chequeo de conectividad o latencia antes de abandonar",
   "settings.connectivityCheck": "Comprobar conexión",
   "settings.connectivityCheckSub":
     "Cada minuto, una solicitud a través del proxy distingue «Conectado» de «Sin internet» y actualiza el ping. Desactivado: no se envía nada en segundo plano y el estado se basa solo en el núcleo en ejecución.",
@@ -1164,6 +1167,8 @@ const es = {
   "settings.delayTestUrlPh": "https://www.gstatic.com/generate_204",
   "settings.speedTestUrl": "URL de prueba de velocidad",
   "settings.speedTestUrlPh": "http://speed.cloudflare.com/__down?bytes=10000000",
+  "settings.speedTestTimeout": "Tiempo de espera del test de velocidad (ms)",
+  "settings.speedTestTimeoutSub": "Cuánto puede tardar un test de velocidad antes de abandonar",
   "routingSheet.outbound.profiles": "Perfiles",
   "routingSheet.outboundProfileHint":
     "Se enruta por este perfil cuando el perfil activo usa el mismo núcleo; de lo contrario, usa el proxy principal.",
