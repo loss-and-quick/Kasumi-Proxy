@@ -3,7 +3,8 @@ name: Sync happ-sub
 # Automated synchronization of the happ-sub dependency.
 # Periodically checks for new commits on main in loss-and-quick/happ-sub.
 # If drift is detected, updates Cargo.toml, Cargo.lock, runs codegen to keep
-# generated frontend defaults in step, tests the change, and opens a Pull Request.
+# generated frontend defaults in step, tests the change in a sandboxed read-only
+# job without credentials, and publishes the update via a dedicated publishing job.
 
 on:
   schedule:
@@ -13,25 +14,31 @@ on:
   repository_dispatch:
     types: [happ-sub-updated]
 
-permissions:
-  contents: write
-  pull-requests: write
-
 concurrency:
   group: sync-happ-sub
   cancel-in-progress: true
 
 jobs:
-  check-and-sync:
+  check-and-build:
     runs-on: ubuntu-latest
+    # Upstream code execution must remain strictly read-only with no write credentials.
+    permissions:
+      contents: read
+    outputs:
+      drift: ${{ steps.check.outputs.drift }}
+      latest_rev: ${{ steps.check.outputs.latest_rev }}
+      short_rev: ${{ steps.check.outputs.short_rev }}
+      commit_msg: ${{ steps.check.outputs.commit_msg }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          ref: main
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Check for upstream drift
-        id: drift
+        id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -48,28 +55,30 @@ jobs:
             echo "drift=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          COMMIT_MSG=$(gh api "repos/loss-and-quick/happ-sub/commits/${LATEST_REV}" --jq '.commit.message | split("\n")[0]')
           {
             echo "drift=true"
             echo "current_rev=$CURRENT_REV"
             echo "latest_rev=$LATEST_REV"
             echo "short_rev=${LATEST_REV:0:7}"
+            echo "commit_msg=$COMMIT_MSG"
           } >> "$GITHUB_OUTPUT"
 
       - name: Install Nix
-        if: steps.drift.outputs.drift == 'true'
+        if: steps.check.outputs.drift == 'true'
         uses: DeterminateSystems/nix-installer-action@da36cb69b1c3247ad7a1f931ebfd954a1105ef14 # v14
 
       - name: Stub the libcronet bundle resource
-        if: steps.drift.outputs.drift == 'true'
+        if: steps.check.outputs.drift == 'true'
         run: |
           mkdir -p src-tauri/binaries
           : > src-tauri/binaries/libcronet.so
 
       - name: Update happ-sub and regenerate files
-        if: steps.drift.outputs.drift == 'true'
+        if: steps.check.outputs.drift == 'true'
         env:
-          CURRENT_REV: ${{ steps.drift.outputs.current_rev }}
-          LATEST_REV: ${{ steps.drift.outputs.latest_rev }}
+          CURRENT_REV: ${{ steps.check.outputs.current_rev }}
+          LATEST_REV: ${{ steps.check.outputs.latest_rev }}
         run: |
           sed -i -E "s|rev = \"${CURRENT_REV}\"|rev = \"${LATEST_REV}\"|g" Cargo.toml
           nix develop --command bash -euo pipefail -c '
@@ -79,16 +88,18 @@ jobs:
             cargo test -p kasumi-core -p kasumi-backend
           '
 
-      - name: Open or update Pull Request
-        if: steps.drift.outputs.drift == 'true'
+      - name: Stage artifacts for publishing
+        if: steps.check.outputs.drift == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LATEST_REV: ${{ steps.drift.outputs.latest_rev }}
-          SHORT_REV: ${{ steps.drift.outputs.short_rev }}
+          LATEST_REV: ${{ steps.check.outputs.latest_rev }}
+          SHORT_REV: ${{ steps.check.outputs.short_rev }}
+          COMMIT_MSG: ${{ steps.check.outputs.commit_msg }}
         run: |
-          BRANCH="ci/sync-happ-sub"
-          COMMIT_MSG=$(gh api "repos/loss-and-quick/happ-sub/commits/${LATEST_REV}" --jq '.commit.message | split("\n")[0]')
-          cat <<EOF > pr-body.md
+          mkdir -p /tmp/sync-artifacts
+          # Create git patch of verified changes so the publishing job does not execute any code
+          git diff -- Cargo.toml Cargo.lock frontend/src/generated/ > /tmp/sync-artifacts/sync.patch
+
+          cat <<EOF > /tmp/sync-artifacts/pr-body.md
           ## Summary
 
           Bump \`happ-sub\` to \`${SHORT_REV}\` (\`${COMMIT_MSG}\`).
@@ -126,12 +137,49 @@ jobs:
           Automated dependency synchronization from \`https://github.com/loss-and-quick/happ-sub\` commit \`${LATEST_REV}\`.
           EOF
 
+      - name: Upload sync bundle
+        if: steps.check.outputs.drift == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sync-patch
+          path: /tmp/sync-artifacts/
+          retention-days: 1
+
+  publish-pr:
+    name: Publish sync Pull Request
+    needs: check-and-build
+    if: needs.check-and-build.outputs.drift == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download sync bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: sync-patch
+          path: /tmp/sync-artifacts
+
+      - name: Apply changes and open or update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHORT_REV: ${{ needs.check-and-build.outputs.short_rev }}
+        run: |
+          BRANCH="ci/sync-happ-sub"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git checkout -B "$BRANCH"
+          git apply /tmp/sync-artifacts/sync.patch
           git add Cargo.toml Cargo.lock frontend/src/generated/
           if git diff --cached --quiet; then
-            echo "No changes staged. Nothing to commit."
+            echo "No changes applied. Nothing to commit."
             exit 0
           fi
           git commit -m "build(deps): bump happ-sub to ${SHORT_REV}"
@@ -140,10 +188,10 @@ jobs:
           open_pr=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$open_pr" ]; then
             echo "PR #$open_pr already exists on branch $BRANCH. Updating body."
-            gh pr edit "$open_pr" --title "build(deps): bump happ-sub to ${SHORT_REV}" --body-file pr-body.md
+            gh pr edit "$open_pr" --title "build(deps): bump happ-sub to ${SHORT_REV}" --body-file /tmp/sync-artifacts/pr-body.md
           else
             echo "Creating new PR..."
             gh pr create --base main --head "$BRANCH" \
               --title "build(deps): bump happ-sub to ${SHORT_REV}" \
-              --body-file pr-body.md
+              --body-file /tmp/sync-artifacts/pr-body.md
           fi
