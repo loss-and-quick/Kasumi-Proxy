@@ -1679,3 +1679,219 @@ fn profile_costs_matching_text_budget_exceeded_rejected() {
         "expected the profile-wide matching budget to reject repeated scanning: {err:?}"
     );
 }
+
+#[test]
+fn balancer_strategy_type_is_matched_case_insensitively() {
+    // Stateless strategies work in any ASCII casing without an observatory, and
+    // drop an explicit fallback without one.
+    for strategy_type in ["random", "RANDOM", "roundrobin", "ROUNDROBIN"] {
+        let cfg = json!({
+            "outbounds": [server("node-a"), server("node-b"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["node-"],
+                    "strategy": { "type": strategy_type },
+                    "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            }
+        });
+        let sanitized = sanitize_provider_xray(&cfg)
+            .unwrap_or_else(|e| panic!("strategy {strategy_type}: {e:?}"));
+        assert!(
+            sanitized
+                .dropped
+                .iter()
+                .any(|d| d == "routing.balancers[0].fallbackTag"),
+            "strategy {strategy_type} should drop fallbackTag without observatory"
+        );
+    }
+
+    // Observation strategies require an observatory in any casing.
+    for strategy_type in ["leastping", "LEASTPING", "leastload", "LEASTLOAD"] {
+        let without_obs = json!({
+            "outbounds": [server("node-a"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["node-"],
+                    "strategy": { "type": strategy_type }
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            }
+        });
+        assert_eq!(
+            sanitize_provider_xray(&without_obs).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy".into(),
+                reason: "balancer members not covered by observatory",
+            },
+            "strategy {strategy_type} must require an observatory"
+        );
+
+        let with_obs = json!({
+            "outbounds": [server("node-a"), server("node-b")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["node-"],
+                    "strategy": { "type": strategy_type }
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "observatory": {
+                "subjectSelector": ["node-"],
+                "probeURL": "https://example.org/generate_204",
+                "probeInterval": "10s"
+            }
+        });
+        let sanitized = sanitize_provider_xray(&with_obs)
+            .unwrap_or_else(|e| panic!("strategy {strategy_type} with observatory: {e:?}"));
+        assert_eq!(
+            sanitized.fragment.balancers[0].fallback_tag.as_deref(),
+            Some("node-a"),
+            "observation strategy {strategy_type} should record implicit default fallback"
+        );
+    }
+
+    // Lowercase and uppercase leastLoad resolve `costs` into opaque member tags.
+    for strategy_type in ["leastload", "LEASTLOAD"] {
+        let cfg = json!({
+            "outbounds": [server("proxys-at"), server("proxys-wl4"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["proxys"],
+                    "strategy": {
+                        "type": strategy_type,
+                        "settings": {
+                            "costs": [
+                                { "match": "^proxys-at", "value": 0.3, "regexp": true },
+                                { "match": "^proxys-wl4", "value": 0.6, "regexp": true }
+                            ],
+                            "maxRTT": "3200ms",
+                            "expected": 2,
+                            "tolerance": 0.01
+                        }
+                    },
+                    "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "burstObservatory": {
+                "pingConfig": {
+                    "destination": "http://www.gstatic.com/generate_204",
+                    "interval": "1m",
+                    "timeout": "5s",
+                    "sampling": 2
+                },
+                "subjectSelector": ["proxys"]
+            }
+        });
+        let sanitized = sanitize_provider_xray(&cfg)
+            .unwrap_or_else(|e| panic!("strategy {strategy_type} with costs: {e:?}"));
+        let rendered = sanitized
+            .fragment
+            .render(&cfg.to_string())
+            .expect("render balancer");
+        let costs = rendered.balancers[0]["strategy"]["settings"]["costs"]
+            .as_array()
+            .expect("rendered costs");
+        assert_eq!(costs.len(), 2);
+        assert!(costs.iter().all(|c| c["regexp"] == false));
+    }
+}
+
+#[test]
+fn empty_and_null_balancer_strategy_default_to_random_and_invalid_types_reject() {
+    for strategy in [
+        Value::Null,
+        json!({}),
+        json!({ "type": "" }),
+        json!({ "type": null }),
+    ] {
+        let cfg = json!({
+            "outbounds": [server("node-a")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["node-"],
+                    "strategy": strategy
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            }
+        });
+        let sanitized = sanitize_provider_xray(&cfg)
+            .unwrap_or_else(|e| panic!("strategy {strategy} should default to random: {e:?}"));
+        let rendered = sanitized
+            .fragment
+            .render(&cfg.to_string())
+            .expect("render balancer");
+        if strategy.is_null() {
+            assert!(rendered.balancers[0].get("strategy").is_none());
+        }
+    }
+
+    for invalid in [
+        json!({ "type": 123 }),
+        json!({ "type": true }),
+        json!({ "type": "weighted" }),
+    ] {
+        let cfg = json!({
+            "outbounds": [server("node-a")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["node-"],
+                    "strategy": invalid
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            }
+        });
+        assert_eq!(
+            sanitize_provider_xray(&cfg).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy".into(),
+                reason: "unknown balancer strategy",
+            },
+            "invalid strategy {invalid} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn costs_on_case_folded_non_leastload_strategies_are_rejected() {
+    for strat in ["", "RANDOM", "roundrobin", "leastping"] {
+        let cfg = json!({
+            "outbounds": [server("node-1"), freedom("direct")],
+            "routing": {
+                "balancers": [{
+                    "tag": "lb",
+                    "selector": ["node-"],
+                    "strategy": {
+                        "type": strat,
+                        "settings": {
+                            "costs": [{ "match": "node-1", "value": 2 }]
+                        }
+                    },
+                    "fallbackTag": "direct"
+                }],
+                "rules": [{ "network": "tcp,udp", "balancerTag": "lb" }]
+            },
+            "observatory": {
+                "subjectSelector": ["node-"],
+                "probeURL": "https://example.org/generate_204",
+                "probeInterval": "10s"
+            }
+        });
+        assert_eq!(
+            sanitize_provider_xray(&cfg).unwrap_err(),
+            SanitizeError::Incompatible {
+                path: "routing.balancers[0].strategy.settings.costs".into(),
+                reason: "leastLoad costs is not supported",
+            },
+            "costs on strategy {strat:?} must be rejected"
+        );
+    }
+}
