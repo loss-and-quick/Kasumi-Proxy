@@ -21,6 +21,62 @@ use crate::profile::{Custom, CustomOrigin, Profile};
 use crate::xray_config::{BuildKind, XRAY_RULE_CONDITIONS, parse_json_safe};
 
 pub const BALANCER_STRATEGIES: [&str; 4] = ["random", "roundRobin", "leastPing", "leastLoad"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BalancerStrategy {
+    Random,
+    RoundRobin,
+    LeastPing,
+    LeastLoad,
+}
+
+impl BalancerStrategy {
+    /// Xray lowercases `strategy.type` (`strings.ToLower`) and treats an
+    /// empty string as `random`.
+    fn parse(raw: &str) -> Option<Self> {
+        if raw.is_empty() || raw.eq_ignore_ascii_case("random") {
+            Some(Self::Random)
+        } else if raw.eq_ignore_ascii_case("roundRobin") {
+            Some(Self::RoundRobin)
+        } else if raw.eq_ignore_ascii_case("leastPing") {
+            Some(Self::LeastPing)
+        } else if raw.eq_ignore_ascii_case("leastLoad") {
+            Some(Self::LeastLoad)
+        } else {
+            None
+        }
+    }
+
+    fn is_observation(self) -> bool {
+        matches!(self, Self::LeastPing | Self::LeastLoad)
+    }
+}
+
+/// Xray reads `strategy` as an object with a `type` (lowercased, with empty,
+/// omitted, or null defaulting to `random`); a bare string does not parse there,
+/// so it is rejected here too.
+fn parse_balancer_strategy<'a>(
+    strat_val: Option<&'a Value>,
+    path: &str,
+) -> Result<(BalancerStrategy, Option<&'a Value>), SanitizeError> {
+    let unknown = || SanitizeError::Incompatible {
+        path: format!("{path}.strategy"),
+        reason: "unknown balancer strategy",
+    };
+    match strat_val {
+        Some(Value::Object(o)) => {
+            let kind = match o.get("type") {
+                None | Some(Value::Null) => BalancerStrategy::Random,
+                Some(Value::String(s)) => BalancerStrategy::parse(s).ok_or_else(unknown)?,
+                Some(_) => return Err(unknown()),
+            };
+            let costs = o.get("settings").and_then(|s| s.get("costs"));
+            Ok((kind, costs))
+        }
+        None | Some(Value::Null) => Ok((BalancerStrategy::Random, None)),
+        _ => Err(unknown()),
+    }
+}
 pub const MAX_SELECTOR_MEMBERS: usize = 64;
 pub const MAX_GRAPH_NODES: usize = 1024;
 pub const MAX_GRAPH_DEPTH: usize = 256;
@@ -691,30 +747,7 @@ impl ProviderFragment {
                 }
 
                 let strat_val = b_obj.get("strategy");
-                // Xray reads the strategy as an object with a `type`; a bare string
-                // does not parse there, so it is not passed on either.
-                let (strat_type, raw_costs) = match strat_val {
-                    Some(Value::Object(o)) => {
-                        let st = o.get("type").and_then(Value::as_str);
-                        let costs = o.get("settings").and_then(|s| s.get("costs"));
-                        (st, costs)
-                    }
-                    None => (None, None),
-                    _ => {
-                        return Err(SanitizeError::Incompatible {
-                            path: format!("{path}.strategy"),
-                            reason: "unknown balancer strategy",
-                        });
-                    }
-                };
-                if let Some(st) = strat_type
-                    && !BALANCER_STRATEGIES.contains(&st)
-                {
-                    return Err(SanitizeError::Incompatible {
-                        path: format!("{path}.strategy"),
-                        reason: "unknown balancer strategy",
-                    });
-                }
+                let (strat_kind, raw_costs) = parse_balancer_strategy(strat_val, &path)?;
                 if let Some(costs) = raw_costs
                     && !costs.is_null()
                 {
@@ -724,7 +757,7 @@ impl ProviderFragment {
                             reason: "balancer costs must be an array",
                         });
                     }
-                    if strat_type != Some("leastLoad")
+                    if strat_kind != BalancerStrategy::LeastLoad
                         && costs.as_array().is_some_and(|a| !a.is_empty())
                     {
                         return Err(SanitizeError::Incompatible {
@@ -791,12 +824,12 @@ impl ProviderFragment {
                             (Some(fb.to_string()), true)
                         }
                         None => (
-                            is_observation_strategy(strat_val).then(|| default_handler.clone()),
+                            strat_kind.is_observation().then(|| default_handler.clone()),
                             false,
                         ),
                     };
 
-                let resolved_costs = if strat_type == Some("leastLoad")
+                let resolved_costs = if strat_kind == BalancerStrategy::LeastLoad
                     && let Some(costs) = raw_costs
                     && !costs.is_null()
                     && costs.as_array().is_some_and(|a| !a.is_empty())
@@ -820,7 +853,7 @@ impl ProviderFragment {
 
                 fragment_balancers.push(FragmentBalancer {
                     tag,
-                    strategy: strat_val.cloned(),
+                    strategy: strat_val.filter(|v| !v.is_null()).cloned(),
                     members,
                     fallback_tag,
                     has_explicit_fallback,
@@ -1875,8 +1908,11 @@ pub fn compile_custom_profile(
 /// Whether a balancer strategy picks from observation results, and so can
 /// come back empty when no member is currently qualified.
 fn is_observation_strategy(strategy: Option<&Value>) -> bool {
-    let kind = strategy.and_then(|s| s.get("type")).and_then(Value::as_str);
-    matches!(kind, Some("leastPing" | "leastLoad"))
+    strategy
+        .and_then(|s| s.get("type"))
+        .and_then(Value::as_str)
+        .and_then(BalancerStrategy::parse)
+        .is_some_and(BalancerStrategy::is_observation)
 }
 
 fn retarget(v: Option<&mut Value>, renames: &BTreeMap<String, String>) {
