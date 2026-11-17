@@ -661,6 +661,8 @@ const ru = {
   "settings.updateDownloading": "Загрузка… {percent}%",
   "settings.updateError": "Не удалось проверить обновления",
   "settings.updateInstallError": "Не удалось установить обновление",
+  "settings.updateManagedExternally": "Управляется пакетным менеджером системы",
+  "settings.updatePortable": "Обновляется вручную (портативная сборка)",
   "settings.system": "Система",
   "settings.backup": "Резервная копия и восстановление",
   "settings.backupSub": "Экспорт или импорт вашей конфигурации",
