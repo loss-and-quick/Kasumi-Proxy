@@ -115,3 +115,6 @@ tempfile = "3"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+# Set by distro / package-manager builds (Fedora COPR RPM, Nix flake, etc.)
+# where updates come from the package manager rather than the in-app updater.
+externally-managed = []
