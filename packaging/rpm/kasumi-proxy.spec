@@ -64,8 +64,12 @@ bun install --frozen-lockfile
 # 4. Fetch desktop cores and binaries
 scripts/fetch-binaries.sh desktop x86_64-unknown-linux-gnu
 
-# 5. Build binaries via Cargo with embedded frontend assets (custom-protocol)
-cargo build --release -p kasumi-desktop --bin kasumi-desktop --bin kasumi-helper --features tauri/custom-protocol
+# 5. Build binaries via Cargo with embedded frontend assets (custom-protocol),
+#    real package version (overriding the 0.0.0 placeholder in tauri.conf.json),
+#    and the externally-managed flag so in-app self-updates stay disabled.
+TAURI_CONFIG='{"version":"%{version}"}' \
+cargo build --release -p kasumi-desktop --bin kasumi-desktop --bin kasumi-helper \
+    --features tauri/custom-protocol,externally-managed
 
 %install
 rm -rf %{buildroot}
