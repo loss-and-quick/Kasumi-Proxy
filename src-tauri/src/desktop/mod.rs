@@ -4,6 +4,7 @@
 //! Neutral lifecycle steps (config build, geo sync, core/tun2socks spawn, liveness
 //! verify) come from `kasumi-backend`.
 
+pub mod install;
 pub mod net;
 pub mod pac;
 pub mod singbox;

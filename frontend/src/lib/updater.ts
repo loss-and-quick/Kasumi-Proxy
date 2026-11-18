@@ -1,28 +1,42 @@
 // ============================================================
 // src/lib/updater.ts
-// Desktop auto-update — a thin wrapper over @tauri-apps/plugin-updater +
-// @tauri-apps/plugin-process. Only the Tauri shell has these plugins; the
-// Android module is updated by the root manager, so `updateSupported()` gates the
-// whole UI. Plugins are lazy-imported so the Android/web bundle never pulls them.
+// Desktop version + auto-update — a thin wrapper over @tauri-apps/plugin-updater
+// + @tauri-apps/plugin-process. Only the Tauri desktop shell exposes app version
+// and update policy; in-app self-update is additionally restricted to builds
+// whose `updatePolicy()` is `"selfUpdate"` (Linux AppImage and installed Windows
+// builds). Externally managed packages (RPM, DEB, Nix) and portable zips never
+// invoke the updater plugin. Plugins are lazy-imported so the Android/web bundle
+// never pulls them.
 // ============================================================
 
 import type { Update } from "@tauri-apps/plugin-updater";
+import type { UpdatePolicy } from "../generated/bindings";
 
-/** True only inside the Tauri desktop webview (the plugins exist there). */
+export type { UpdatePolicy };
+
+/** True only inside the Tauri desktop webview (the desktop commands exist there). */
 export function updateSupported(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-/** The running app's version (from the backend), or null where unsupported. */
+/** The running app's version (from the backend), or null outside desktop. */
 export async function currentVersion(): Promise<string | null> {
   if (!updateSupported()) return null;
   const { commands } = await import("../generated/bindings");
   return commands.appVersion();
 }
 
-/** Query the release endpoint; returns the pending update or null if up to date. */
-export async function checkForUpdate(): Promise<Update | null> {
+/** Whether the running installation can self-update, or why the updater is off. */
+export async function getUpdatePolicy(): Promise<UpdatePolicy | null> {
   if (!updateSupported()) return null;
+  const { commands } = await import("../generated/bindings");
+  return commands.updatePolicy();
+}
+
+/** Query the release endpoint; returns the pending update or null if up to date
+ * or if the running installation does not support self-update. */
+export async function checkForUpdate(): Promise<Update | null> {
+  if ((await getUpdatePolicy()) !== "selfUpdate") return null;
   const { check } = await import("@tauri-apps/plugin-updater");
   return check();
 }

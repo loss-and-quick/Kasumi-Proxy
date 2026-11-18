@@ -13,6 +13,11 @@ export const commands = {
 	 *  the config but not the binary's baked-in `CARGO_PKG_VERSION` (a 0.0.0 placeholder).
 	 */
 	appVersion: () => __TAURI_INVOKE<string>("app_version"),
+	/**
+	 *  Whether the running desktop installation supports in-app self-updates, or
+	 *  why the updater is disabled (externally managed package, portable zip, etc.).
+	 */
+	updatePolicy: () => __TAURI_INVOKE<UpdatePolicy>("update_policy"),
 	/**  Whether the app is registered to start on login. */
 	autostartEnabled: () => __TAURI_INVOKE<boolean>("autostart_enabled"),
 	/**
@@ -2333,6 +2338,20 @@ export type UnsupportedLink = {
 	text: string,
 	kind: UnsupportedInput,
 };
+
+/**
+ *  Whether the running desktop installation can self-update through the bundled
+ *  updater plugin, or why in-app updates are disabled.
+ */
+export type UpdatePolicy = 
+/**  Self-updating bundle (Linux AppImage or installed Windows build). */
+"selfUpdate" | 
+/**  Installed and updated by a system package manager (RPM, DEB, Nix, etc.). */
+"externallyManaged" | 
+/**  Portable zip (`portable.dat` beside the executable); updated manually. */
+"portable" | 
+/**  Build without a matching self-update artifact (e.g. local dev build). */
+"unsupported";
 
 export type Vless = {
 	meta: Meta,

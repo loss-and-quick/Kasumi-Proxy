@@ -607,6 +607,8 @@ const en = {
   "settings.updateDownloading": "Downloading… {percent}%",
   "settings.updateError": "Couldn't check for updates",
   "settings.updateInstallError": "Couldn't install the update",
+  "settings.updateManagedExternally": "Managed by your system package manager",
+  "settings.updatePortable": "Update manually (portable build)",
   "settings.system": "System",
   "settings.backup": "Backup & restore",
   "settings.backupSub": "Export or import your configuration",

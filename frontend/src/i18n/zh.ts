@@ -566,6 +566,8 @@ const zh = {
   "settings.updateDownloading": "正在下载… {percent}%",
   "settings.updateError": "无法检查更新",
   "settings.updateInstallError": "无法安装更新",
+  "settings.updateManagedExternally": "由系统包管理器管理",
+  "settings.updatePortable": "请手动更新（便携版）",
   "settings.system": "系统",
   "settings.backup": "备份与恢复",
   "settings.backupSub": "导出或导入你的配置",

@@ -201,6 +201,14 @@ fn app_version(app: tauri::AppHandle) -> String {
     app.package_info().version.to_string()
 }
 
+/// Whether the running desktop installation supports in-app self-updates, or
+/// why the updater is disabled (externally managed package, portable zip, etc.).
+#[tauri::command]
+#[specta::specta]
+fn update_policy() -> desktop::install::UpdatePolicy {
+    desktop::install::current_update_policy()
+}
+
 /// The single entry every UI action funnels through: run one typed [`Command`] and
 /// return its typed [`Response`]. Lifecycle commands serialize inside the Service;
 /// everything else is the stateless dispatch. Mirrors the daemon's WS envelope, so
@@ -557,6 +565,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             app_version,
+            update_policy,
             autostart_enabled,
             set_autostart,
             dispatch,
@@ -628,7 +637,6 @@ pub fn run() {
                     )
                     .build(),
             )
-            .plugin(tauri_plugin_updater::Builder::new().build())
             // A native error modal for a fatal startup failure (see the setup hook),
             // plus the open/save file pickers the UI uses for backup & routing
             // import-export.
@@ -639,6 +647,9 @@ pub fn run() {
             // Native clipboard for the UI's copy / paste helpers (with a
             // navigator.clipboard fallback in the non-Tauri shells).
             .plugin(tauri_plugin_clipboard_manager::init());
+        if desktop::install::current_update_policy().can_self_update() {
+            tb = tb.plugin(tauri_plugin_updater::Builder::new().build());
+        }
         // Linux keeps its own XDG entry (desktop::autostart): the plugin's entry
         // runs the absolute exe path, which on NixOS is the unwrapped store binary.
         #[cfg(not(target_os = "linux"))]

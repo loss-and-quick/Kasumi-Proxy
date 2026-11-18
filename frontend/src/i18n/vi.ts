@@ -591,6 +591,8 @@ const vi = {
   "settings.updateDownloading": "Đang tải… {percent}%",
   "settings.updateError": "Không thể kiểm tra cập nhật",
   "settings.updateInstallError": "Không thể cài đặt bản cập nhật",
+  "settings.updateManagedExternally": "Được quản lý bởi trình quản lý gói hệ thống",
+  "settings.updatePortable": "Cập nhật thủ công (bản không cần cài đặt)",
   "settings.system": "Hệ thống",
   "settings.backup": "Sao lưu và khôi phục",
   "settings.backupSub": "Xuất hoặc nhập cấu hình của bạn",

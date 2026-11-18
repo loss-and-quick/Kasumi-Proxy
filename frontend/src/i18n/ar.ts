@@ -662,6 +662,8 @@ const ar = {
   "settings.updateDownloading": "جارٍ التنزيل… {percent}%",
   "settings.updateError": "تعذر التحقق من التحديثات",
   "settings.updateInstallError": "تعذر تثبيت التحديث",
+  "settings.updateManagedExternally": "تُدار عبر مدير حزم النظام",
+  "settings.updatePortable": "يُحدَّث يدويًا (إصدار محمول)",
   "settings.system": "النظام",
   "settings.backup": "نسخ احتياطي واستعادة",
   "settings.backupSub": "تصدير إعداداتك أو استيرادها",

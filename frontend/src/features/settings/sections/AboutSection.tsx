@@ -5,11 +5,13 @@ import { useT } from "../../../i18n";
 import {
   checkForUpdate,
   currentVersion,
+  getUpdatePolicy,
   installUpdate,
+  type UpdatePolicy,
   updateSupported,
 } from "../../../lib/updater";
 
-type Status =
+export type UpdateStatus =
   | "idle"
   | "checking"
   | "uptodate"
@@ -19,13 +21,92 @@ type Status =
   // The download or the install failed; the update can be tried again.
   | "installError";
 
-/** Desktop-only version + auto-update controls. Android is updated by the root
- * manager, so this renders nothing where the updater isn't supported. */
-export function AboutSection() {
+export function AboutCard({
+  version,
+  policy,
+  status,
+  availableVersion,
+  percent,
+  onCheck,
+  onInstall,
+}: {
+  version: string;
+  policy: UpdatePolicy | null;
+  status: UpdateStatus;
+  availableVersion: string | null;
+  percent: number;
+  onCheck: () => void;
+  onInstall: () => void;
+}) {
   const t = useT();
+  const busy = status === "checking" || status === "downloading";
+  const canInstall =
+    availableVersion !== null && (status === "available" || status === "installError");
+  const statusText =
+    status === "checking"
+      ? t("settings.updateChecking")
+      : status === "uptodate"
+        ? t("settings.updateUpToDate")
+        : status === "available"
+          ? t("settings.updateAvailable", { version: availableVersion ?? "" })
+          : status === "downloading"
+            ? t("settings.updateDownloading", { percent })
+            : status === "error"
+              ? t("settings.updateError")
+              : status === "installError"
+                ? t("settings.updateInstallError")
+                : undefined;
+
+  const passiveReason =
+    policy === "externallyManaged"
+      ? t("settings.updateManagedExternally")
+      : policy === "portable"
+        ? t("settings.updatePortable")
+        : null;
+
+  return (
+    <>
+      <SectionLabel>
+        {policy === "selfUpdate" ? t("settings.updates") : t("settings.page.about")}
+      </SectionLabel>
+      <Card style={{ padding: "4px 14px" }}>
+        <ListRow icon="info" title={t("settings.appVersion")} sub={version || "—"} />
+        {policy === "selfUpdate" && (
+          <ListRow
+            icon="system_update"
+            title={t("settings.checkUpdates")}
+            sub={statusText}
+            onClick={busy || canInstall ? undefined : onCheck}
+            right={
+              canInstall ? (
+                <Btn sm onClick={onInstall}>
+                  {t("settings.updateInstall")}
+                </Btn>
+              ) : (
+                <Icon
+                  name="refresh"
+                  style={{ color: "var(--on-surface-faint)", opacity: busy ? 0.4 : 1 }}
+                />
+              )
+            }
+          />
+        )}
+        {passiveReason && (
+          <ListRow icon="system_update" title={t("settings.updates")} sub={passiveReason} />
+        )}
+      </Card>
+    </>
+  );
+}
+
+/** Desktop-only version + auto-update controls. Android is updated by the root
+ * manager, so this renders nothing outside the desktop shell. Externally managed
+ * packages and portable zips show their version without an active updater action. */
+export function AboutSection() {
   const [version, setVersion] = useState("");
+  const [policy, setPolicy] = useState<UpdatePolicy | null>(null);
   const [update, setUpdate] = useState<Update | null>(null);
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<UpdateStatus>("idle");
   const [percent, setPercent] = useState(0);
 
   const runCheck = useCallback(async () => {
@@ -35,16 +116,36 @@ export function AboutSection() {
       setUpdate(u);
       setStatus(u ? "available" : "uptodate");
     } catch {
-      setStatus("installError");
+      setStatus("error");
     }
   }, []);
 
   useEffect(() => {
     if (!updateSupported()) return;
-    void currentVersion().then((v) => {
-      if (v) setVersion(v);
-    });
-    void runCheck();
+    let alive = true;
+    void currentVersion().then(
+      (v) => {
+        if (alive && v) setVersion(v);
+      },
+      () => {
+        // Leave the version blank if the desktop shell call fails.
+      },
+    );
+    void getUpdatePolicy().then(
+      (p) => {
+        if (!alive) return;
+        setPolicy(p);
+        if (p === "selfUpdate") {
+          void runCheck();
+        }
+      },
+      () => {
+        // Policy stays unknown; update actions remain hidden.
+      },
+    );
+    return () => {
+      alive = false;
+    };
   }, [runCheck]);
 
   if (!updateSupported()) return null;
@@ -63,47 +164,15 @@ export function AboutSection() {
     }
   }
 
-  const busy = status === "checking" || status === "downloading";
-  const canInstall = status === "available" || status === "installError";
-  const statusText =
-    status === "checking"
-      ? t("settings.updateChecking")
-      : status === "uptodate"
-        ? t("settings.updateUpToDate")
-        : status === "available"
-          ? t("settings.updateAvailable", { version: update?.version ?? "" })
-          : status === "downloading"
-            ? t("settings.updateDownloading", { percent })
-            : status === "error"
-              ? t("settings.updateError")
-              : status === "installError"
-                ? t("settings.updateInstallError")
-                : undefined;
-
   return (
-    <>
-      <SectionLabel>{t("settings.updates")}</SectionLabel>
-      <Card style={{ padding: "4px 14px" }}>
-        <ListRow icon="info" title={t("settings.appVersion")} sub={version || "—"} />
-        <ListRow
-          icon="system_update"
-          title={t("settings.checkUpdates")}
-          sub={statusText}
-          onClick={busy || canInstall ? undefined : () => void runCheck()}
-          right={
-            canInstall ? (
-              <Btn sm onClick={() => void doInstall()}>
-                {t("settings.updateInstall")}
-              </Btn>
-            ) : (
-              <Icon
-                name="refresh"
-                style={{ color: "var(--on-surface-faint)", opacity: busy ? 0.4 : 1 }}
-              />
-            )
-          }
-        />
-      </Card>
-    </>
+    <AboutCard
+      version={version}
+      policy={policy}
+      status={status}
+      availableVersion={update?.version ?? null}
+      percent={percent}
+      onCheck={() => void runCheck()}
+      onInstall={() => void doInstall()}
+    />
   );
 }

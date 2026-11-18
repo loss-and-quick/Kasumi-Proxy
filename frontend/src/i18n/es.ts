@@ -609,6 +609,8 @@ const es = {
   "settings.updateDownloading": "Descargando… {percent}%",
   "settings.updateError": "No se pudieron buscar actualizaciones",
   "settings.updateInstallError": "No se pudo instalar la actualización",
+  "settings.updateManagedExternally": "Gestionado por el gestor de paquetes del sistema",
+  "settings.updatePortable": "Actualización manual (versión portátil)",
   "settings.system": "Sistema",
   "settings.backup": "Copia y restauración",
   "settings.backupSub": "Exporta o importa tu configuración",

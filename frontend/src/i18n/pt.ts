@@ -609,6 +609,8 @@ const pt = {
   "settings.updateDownloading": "Baixando… {percent}%",
   "settings.updateError": "Não foi possível verificar atualizações",
   "settings.updateInstallError": "Não foi possível instalar a atualização",
+  "settings.updateManagedExternally": "Gerenciado pelo gerenciador de pacotes do sistema",
+  "settings.updatePortable": "Atualize manualmente (versão portátil)",
   "settings.system": "Sistema",
   "settings.backup": "Backup e restauração",
   "settings.backupSub": "Exporte ou importe sua configuração",

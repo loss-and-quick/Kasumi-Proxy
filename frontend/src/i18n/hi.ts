@@ -579,6 +579,8 @@ const hi = {
   "settings.updateDownloading": "डाउनलोड हो रहा है… {percent}%",
   "settings.updateError": "अपडेट जांच नहीं सके",
   "settings.updateInstallError": "अपडेट इंस्टॉल नहीं हो सका",
+  "settings.updateManagedExternally": "सिस्टम पैकेज मैनेजर द्वारा प्रबंधित",
+  "settings.updatePortable": "मैन्युअल रूप से अपडेट करें (पोर्टेबल बिल्ड)",
   "settings.system": "सिस्टम",
   "settings.backup": "बैकअप और पुनर्स्थापना",
   "settings.backupSub": "अपना कॉन्फ़िगरेशन निर्यात या आयात करें",

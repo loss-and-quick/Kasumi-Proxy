@@ -39,6 +39,11 @@
       cargoRoot = ../.;
       binaryName = "kasumi-desktop";
       inherit frontend;
+      # Updates are managed by Nix, not the in-app Tauri updater.
+      tauriFeatures = [
+        "tauri/custom-protocol"
+        "externally-managed"
+      ];
       # src-tauri/tauri.conf.json pins version to a "0.0.0" placeholder; override
       # it with the real appVersion so the built app reports the right version.
       extraTauriConfig = {
