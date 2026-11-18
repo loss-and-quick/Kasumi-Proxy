@@ -616,6 +616,8 @@ pub fn run() {
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 show_main(app);
             }))
+            // Relaunches the app after an in-app update (`@tauri-apps/plugin-process`).
+            .plugin(tauri_plugin_process::init())
             // Visibility is decided at startup (shown, or left in the tray when the
             // login entry started the app), so the window state must not restore it.
             .plugin(
