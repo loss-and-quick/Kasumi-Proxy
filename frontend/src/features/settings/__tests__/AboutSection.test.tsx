@@ -63,12 +63,11 @@ describe("AboutCard", () => {
       status: "available",
       availableVersion: "0.5.0",
     });
-    expect(available).toContain("settings.updateInstall");
-    expect(available).toContain("<button");
+    expect(available).toMatch(/<button[^>]*>settings\.updateInstall<\/button>/);
 
     const checkFailed = renderAbout({ policy: "selfUpdate", status: "error" });
     expect(checkFailed).toContain("settings.updateError");
-    expect(checkFailed).not.toContain("settings.updateInstall");
+    expect(checkFailed).not.toMatch(/<button[^>]*>settings\.updateInstall<\/button>/);
 
     const installFailed = renderAbout({
       policy: "selfUpdate",
@@ -76,6 +75,6 @@ describe("AboutCard", () => {
       availableVersion: "0.5.0",
     });
     expect(installFailed).toContain("settings.updateInstallError");
-    expect(installFailed).toContain("settings.updateInstall");
+    expect(installFailed).toMatch(/<button[^>]*>settings\.updateInstall<\/button>/);
   });
 });

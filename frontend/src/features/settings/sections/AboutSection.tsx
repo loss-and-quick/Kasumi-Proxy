@@ -123,16 +123,26 @@ export function AboutSection() {
   useEffect(() => {
     if (!updateSupported()) return;
     let alive = true;
-    void currentVersion().then((v) => {
-      if (alive && v) setVersion(v);
-    });
-    void getUpdatePolicy().then((p) => {
-      if (!alive) return;
-      setPolicy(p);
-      if (p === "selfUpdate") {
-        void runCheck();
-      }
-    });
+    void currentVersion().then(
+      (v) => {
+        if (alive && v) setVersion(v);
+      },
+      () => {
+        // Leave the version blank if the desktop shell call fails.
+      },
+    );
+    void getUpdatePolicy().then(
+      (p) => {
+        if (!alive) return;
+        setPolicy(p);
+        if (p === "selfUpdate") {
+          void runCheck();
+        }
+      },
+      () => {
+        // Policy stays unknown; update actions remain hidden.
+      },
+    );
     return () => {
       alive = false;
     };

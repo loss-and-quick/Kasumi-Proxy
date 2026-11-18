@@ -9,6 +9,7 @@
 //! read-only `/nix/store` binary.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::Serialize;
 use tauri::utils::config::BundleType;
@@ -42,6 +43,10 @@ struct InstallFacts {
     portable: bool,
     bundle: Option<BundleType>,
     has_appimage_env: bool,
+    /// `uninstall.exe` beside the executable (written by Tauri's NSIS installer
+    /// in `$INSTDIR`). Preserves NSIS self-update even if bundle-type patching
+    /// did not stamp the binary.
+    has_nsis_uninstaller: bool,
     exe_path: Option<PathBuf>,
     os: &'static str,
 }
@@ -78,10 +83,21 @@ fn detect_update_policy(facts: &InstallFacts) -> UpdatePolicy {
         Some(BundleType::Msi | BundleType::App | BundleType::Dmg) => UpdatePolicy::Unsupported,
         None => match facts.os {
             "linux" => {
-                if facts.has_appimage_env {
-                    UpdatePolicy::SelfUpdate
-                } else if facts.exe_path.as_deref().is_some_and(is_linux_managed_path) {
+                // Check managed prefixes before an inherited `$APPIMAGE` env var so a
+                // system-installed binary launched from another AppImage cannot treat
+                // that unrelated file as its own update target. Genuine AppImages run
+                // from a mount point (e.g. `/tmp/.mount_…/usr/bin/kasumi-desktop`).
+                if facts.exe_path.as_deref().is_some_and(is_linux_managed_path) {
                     UpdatePolicy::ExternallyManaged
+                } else if facts.has_appimage_env {
+                    UpdatePolicy::SelfUpdate
+                } else {
+                    UpdatePolicy::Unsupported
+                }
+            }
+            "windows" => {
+                if facts.has_nsis_uninstaller {
+                    UpdatePolicy::SelfUpdate
                 } else {
                     UpdatePolicy::Unsupported
                 }
@@ -91,22 +107,27 @@ fn detect_update_policy(facts: &InstallFacts) -> UpdatePolicy {
     }
 }
 
-/// Inspect the running process and return its [`UpdatePolicy`].
+/// Compute the running process's [`UpdatePolicy`] once and cache it for the
+/// lifetime of the process so plugin registration and IPC queries always agree.
 pub fn current_update_policy() -> UpdatePolicy {
-    let exe_path = std::env::current_exe().ok();
-    let portable = exe_path
-        .as_deref()
-        .and_then(Path::parent)
-        .is_some_and(|dir| dir.join("portable.dat").exists());
-    let has_appimage_env = std::env::var_os("APPIMAGE").is_some_and(|v| !v.is_empty());
+    static POLICY: OnceLock<UpdatePolicy> = OnceLock::new();
+    *POLICY.get_or_init(|| {
+        let exe_path = std::env::current_exe().ok();
+        let exe_dir = exe_path.as_deref().and_then(Path::parent);
+        let portable = exe_dir.is_some_and(|dir| dir.join("portable.dat").exists());
+        let has_nsis_uninstaller = cfg!(target_os = "windows")
+            && exe_dir.is_some_and(|dir| dir.join("uninstall.exe").exists());
+        let has_appimage_env = std::env::var_os("APPIMAGE").is_some_and(|v| !v.is_empty());
 
-    detect_update_policy(&InstallFacts {
-        externally_managed_feature: cfg!(feature = "externally-managed"),
-        portable,
-        bundle: tauri::utils::platform::bundle_type(),
-        has_appimage_env,
-        exe_path,
-        os: std::env::consts::OS,
+        detect_update_policy(&InstallFacts {
+            externally_managed_feature: cfg!(feature = "externally-managed"),
+            portable,
+            bundle: tauri::utils::platform::bundle_type(),
+            has_appimage_env,
+            has_nsis_uninstaller,
+            exe_path,
+            os: std::env::consts::OS,
+        })
     })
 }
 
@@ -120,6 +141,7 @@ mod tests {
             portable: false,
             bundle: None,
             has_appimage_env: false,
+            has_nsis_uninstaller: false,
             exe_path: Some(PathBuf::from(
                 "/home/user/project/target/debug/kasumi-desktop",
             )),
@@ -133,6 +155,7 @@ mod tests {
             portable: false,
             bundle: None,
             has_appimage_env: false,
+            has_nsis_uninstaller: false,
             exe_path: Some(PathBuf::from(
                 r"C:\Program Files\Kasumi Proxy\kasumi-desktop.exe",
             )),
@@ -166,6 +189,7 @@ mod tests {
         let mut win = windows_facts();
         win.portable = true;
         win.bundle = Some(BundleType::Nsis);
+        win.has_nsis_uninstaller = true;
         assert_eq!(detect_update_policy(&win), UpdatePolicy::Portable);
     }
 
@@ -183,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn linux_system_and_nix_paths_fall_back_to_externally_managed() {
+    fn linux_system_and_nix_paths_stay_externally_managed_even_with_inherited_appimage() {
         for exe in [
             "/usr/bin/kasumi-desktop",
             "/usr/local/bin/kasumi-desktop",
@@ -191,13 +215,16 @@ mod tests {
             "/opt/kasumi-proxy/kasumi-desktop",
             "/app/bin/kasumi-desktop",
         ] {
-            let mut facts = linux_facts();
-            facts.exe_path = Some(PathBuf::from(exe));
-            assert_eq!(
-                detect_update_policy(&facts),
-                UpdatePolicy::ExternallyManaged,
-                "exe {exe}"
-            );
+            for has_appimage_env in [false, true] {
+                let mut facts = linux_facts();
+                facts.exe_path = Some(PathBuf::from(exe));
+                facts.has_appimage_env = has_appimage_env;
+                assert_eq!(
+                    detect_update_policy(&facts),
+                    UpdatePolicy::ExternallyManaged,
+                    "exe {exe} (APPIMAGE={has_appimage_env})"
+                );
+            }
         }
     }
 
@@ -208,6 +235,17 @@ mod tests {
         mounted.has_appimage_env = true;
         assert_eq!(detect_update_policy(&mounted), UpdatePolicy::SelfUpdate);
 
+        // Untagged genuine AppImage mount point under /tmp/.mount_…
+        let mut untagged_mounted = linux_facts();
+        untagged_mounted.exe_path = Some(PathBuf::from(
+            "/tmp/.mount_Kasumi1234/usr/bin/kasumi-desktop",
+        ));
+        untagged_mounted.has_appimage_env = true;
+        assert_eq!(
+            detect_update_policy(&untagged_mounted),
+            UpdatePolicy::SelfUpdate
+        );
+
         let mut extracted = linux_facts();
         extracted.bundle = Some(BundleType::AppImage);
         extracted.has_appimage_env = false;
@@ -215,10 +253,19 @@ mod tests {
     }
 
     #[test]
-    fn windows_nsis_self_updates_while_msi_and_unbundled_builds_do_not() {
+    fn windows_nsis_self_updates_with_tag_or_uninstaller_while_msi_and_dev_do_not() {
         let mut nsis = windows_facts();
         nsis.bundle = Some(BundleType::Nsis);
         assert_eq!(detect_update_policy(&nsis), UpdatePolicy::SelfUpdate);
+
+        // Untagged NSIS installation (e.g. if bundle-type patching was skipped)
+        // still carries Tauri's `uninstall.exe` beside the app binary.
+        let mut untagged_nsis = windows_facts();
+        untagged_nsis.has_nsis_uninstaller = true;
+        assert_eq!(
+            detect_update_policy(&untagged_nsis),
+            UpdatePolicy::SelfUpdate
+        );
 
         let mut msi = windows_facts();
         msi.bundle = Some(BundleType::Msi);
