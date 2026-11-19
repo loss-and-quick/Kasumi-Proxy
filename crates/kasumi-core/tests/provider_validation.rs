@@ -1500,7 +1500,52 @@ fn loopback_service_primary_candidate_rejected() {
     });
 
     let err = sanitize_provider_xray(&cfg).unwrap_err();
-    assert_eq!(err, SanitizeError::NoProxyEntry);
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].selector".into(),
+            reason: "balancer selector matches service outbound",
+        }
+    );
+}
+
+#[test]
+fn direct_entry_with_invalid_balancer_member_fails_as_incompatible() {
+    let cfg = json!({
+        "outbounds": [
+            server("proxy-node"),
+            loopback(Some("loop-srv"), "v-srv"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "bal-srv",
+                    "selector": ["loop-srv"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-srv"], "outboundTag": "direct" },
+                { "type": "field", "network": "tcp,udp", "outboundTag": "direct" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["loop-srv"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].selector".into(),
+            reason: "balancer selector matches service outbound",
+        }
+    );
 }
 
 #[test]
