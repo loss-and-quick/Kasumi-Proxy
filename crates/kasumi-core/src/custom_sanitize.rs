@@ -104,6 +104,7 @@ pub enum SanitizeError {
     NotObject,
     NoOutbounds,
     NoProxyOutbound,
+    NoProxyEntry,
     TooLarge,
     Incompatible { path: String, reason: &'static str },
 }
@@ -114,6 +115,9 @@ impl fmt::Display for SanitizeError {
             SanitizeError::NotObject => f.write_str("not a JSON object"),
             SanitizeError::NoOutbounds => f.write_str("no outbounds"),
             SanitizeError::NoProxyOutbound => f.write_str("no proxy outbound"),
+            SanitizeError::NoProxyEntry => {
+                f.write_str("the profile's default route is not a proxy")
+            }
             SanitizeError::TooLarge => f.write_str("too large"),
             SanitizeError::Incompatible { path, reason } => write!(f, "{path}: {reason}"),
         }

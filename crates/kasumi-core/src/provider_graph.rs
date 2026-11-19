@@ -1583,13 +1583,7 @@ impl ProviderFragment {
             &fragment_contexts,
             &mut proxy_memo,
         ) {
-            return Err(SanitizeError::Incompatible {
-                path: match &entry {
-                    TargetRef::Outbound(_) => "routing".into(),
-                    TargetRef::Balancer(_) => "routing.balancers".into(),
-                },
-                reason: "the profile's default route is not a proxy",
-            });
+            return Err(SanitizeError::NoProxyEntry);
         }
 
         // Validate that no balancer contains primary candidates that only reach service outbounds

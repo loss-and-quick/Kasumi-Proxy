@@ -136,8 +136,9 @@ fn loopback_entry_resolving_to_a_service_is_rejected() {
         ] }
     });
     let err = sanitize_provider_xray(&cfg).unwrap_err();
-    assert!(
-        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "the profile's default route is not a proxy"),
+    assert_eq!(
+        err,
+        SanitizeError::NoProxyEntry,
         "expected rejection of a loopback entry that ends in a service, got: {err:?}"
     );
 }
@@ -185,8 +186,9 @@ fn service_entry_rejected() {
         "outbounds": [freedom("direct"), server("proxy-node")]
     });
     let err = sanitize_provider_xray(&freedom_first).unwrap_err();
-    assert!(
-        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "the profile's default route is not a proxy"),
+    assert_eq!(
+        err,
+        SanitizeError::NoProxyEntry,
         "expected rejection of service entry outbound, got: {err:?}"
     );
 
@@ -1498,13 +1500,28 @@ fn loopback_service_primary_candidate_rejected() {
     });
 
     let err = sanitize_provider_xray(&cfg).unwrap_err();
-    assert_eq!(
-        err,
-        SanitizeError::Incompatible {
-            path: "routing.balancers".into(),
-            reason: "the profile's default route is not a proxy",
+    assert_eq!(err, SanitizeError::NoProxyEntry);
+}
+
+#[test]
+fn split_routing_client_config_with_direct_fallback_returns_no_proxy_entry() {
+    let cfg = json!({
+        "outbounds": [
+            server("proxy-node"),
+            freedom("direct"),
+            blackhole("block")
+        ],
+        "routing": {
+            "rules": [
+                { "type": "field", "domain": ["geosite:youtube"], "outboundTag": "proxy-node" },
+                { "type": "field", "port": "9339", "outboundTag": "proxy-node" },
+                { "type": "field", "network": "tcp,udp", "outboundTag": "direct" }
+            ]
         }
-    );
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(err, SanitizeError::NoProxyEntry);
 }
 
 #[test]
