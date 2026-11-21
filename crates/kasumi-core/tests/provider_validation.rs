@@ -136,8 +136,9 @@ fn loopback_entry_resolving_to_a_service_is_rejected() {
         ] }
     });
     let err = sanitize_provider_xray(&cfg).unwrap_err();
-    assert!(
-        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "the profile's default route is not a proxy"),
+    assert_eq!(
+        err,
+        SanitizeError::NoProxyEntry,
         "expected rejection of a loopback entry that ends in a service, got: {err:?}"
     );
 }
@@ -185,8 +186,9 @@ fn service_entry_rejected() {
         "outbounds": [freedom("direct"), server("proxy-node")]
     });
     let err = sanitize_provider_xray(&freedom_first).unwrap_err();
-    assert!(
-        matches!(err, SanitizeError::Incompatible { reason, .. } if reason == "the profile's default route is not a proxy"),
+    assert_eq!(
+        err,
+        SanitizeError::NoProxyEntry,
         "expected rejection of service entry outbound, got: {err:?}"
     );
 
@@ -1501,10 +1503,70 @@ fn loopback_service_primary_candidate_rejected() {
     assert_eq!(
         err,
         SanitizeError::Incompatible {
-            path: "routing.balancers".into(),
-            reason: "the profile's default route is not a proxy",
+            path: "routing.balancers[0].selector".into(),
+            reason: "balancer selector matches service outbound",
         }
     );
+}
+
+#[test]
+fn direct_entry_with_invalid_balancer_member_fails_as_incompatible() {
+    let cfg = json!({
+        "outbounds": [
+            server("proxy-node"),
+            loopback(Some("loop-srv"), "v-srv"),
+            freedom("direct")
+        ],
+        "routing": {
+            "balancers": [
+                {
+                    "tag": "bal-srv",
+                    "selector": ["loop-srv"],
+                    "strategy": { "type": "leastLoad" },
+                    "fallbackTag": "direct"
+                }
+            ],
+            "rules": [
+                { "inboundTag": ["v-srv"], "outboundTag": "direct" },
+                { "type": "field", "network": "tcp,udp", "outboundTag": "direct" }
+            ]
+        },
+        "observatory": {
+            "subjectSelector": ["loop-srv"],
+            "probeURL": "https://example.org/generate_204",
+            "probeInterval": "10s"
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(
+        err,
+        SanitizeError::Incompatible {
+            path: "routing.balancers[0].selector".into(),
+            reason: "balancer selector matches service outbound",
+        }
+    );
+}
+
+#[test]
+fn split_routing_client_config_with_direct_fallback_returns_no_proxy_entry() {
+    let cfg = json!({
+        "outbounds": [
+            server("proxy-node"),
+            freedom("direct"),
+            blackhole("block")
+        ],
+        "routing": {
+            "rules": [
+                { "type": "field", "domain": ["geosite:youtube"], "outboundTag": "proxy-node" },
+                { "type": "field", "port": "9339", "outboundTag": "proxy-node" },
+                { "type": "field", "network": "tcp,udp", "outboundTag": "direct" }
+            ]
+        }
+    });
+
+    let err = sanitize_provider_xray(&cfg).unwrap_err();
+    assert_eq!(err, SanitizeError::NoProxyEntry);
 }
 
 #[test]

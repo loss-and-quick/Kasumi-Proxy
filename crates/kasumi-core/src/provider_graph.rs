@@ -1573,25 +1573,6 @@ impl ProviderFragment {
             ans
         }
 
-        let entry_u = target_idx(&entry);
-        if !node_has_proxy(
-            entry_u,
-            n_ob,
-            n_bal,
-            &fragment_outbounds,
-            &fragment_balancers,
-            &fragment_contexts,
-            &mut proxy_memo,
-        ) {
-            return Err(SanitizeError::Incompatible {
-                path: match &entry {
-                    TargetRef::Outbound(_) => "routing".into(),
-                    TargetRef::Balancer(_) => "routing.balancers".into(),
-                },
-                reason: "the profile's default route is not a proxy",
-            });
-        }
-
         // Validate that no balancer contains primary candidates that only reach service outbounds
         for (b_idx, b) in fragment_balancers.iter().enumerate() {
             for m in &b.members {
@@ -1641,6 +1622,19 @@ impl ProviderFragment {
                     });
                 }
             }
+        }
+
+        let entry_u = target_idx(&entry);
+        if !node_has_proxy(
+            entry_u,
+            n_ob,
+            n_bal,
+            &fragment_outbounds,
+            &fragment_balancers,
+            &fragment_contexts,
+            &mut proxy_memo,
+        ) {
+            return Err(SanitizeError::NoProxyEntry);
         }
 
         let plain_entry = match &entry {

@@ -1024,4 +1024,44 @@ pub(crate) mod tests {
             other => panic!("expected IncompatibleProviderConfig, got {other:?}"),
         }
     }
+
+    #[test]
+    fn config_with_direct_default_route_is_skipped_as_rejected_in_batch() {
+        let split_routing = serde_json::json!({
+            "remarks": "Split Routing Gaming",
+            "outbounds": [
+                { "tag": "proxy", "protocol": "trojan", "settings": { "servers": [{ "address": "g.example", "port": 443, "password": "pw" }] } },
+                { "tag": "direct", "protocol": "freedom" }
+            ],
+            "routing": {
+                "rules": [
+                    { "type": "field", "domain": ["geosite:youtube"], "outboundTag": "proxy" },
+                    { "type": "field", "network": "tcp,udp", "outboundTag": "direct" }
+                ]
+            }
+        });
+        let body = serde_json::json!([
+            xray_config(Some("Normal Proxy"), "a.example"),
+            split_routing,
+        ])
+        .to_string();
+
+        let ing = ingest(&allowed(body.as_bytes())).unwrap();
+        assert_eq!(ing.profiles.len(), 1);
+        assert_eq!(ing.profiles[0].meta().remarks, "Normal Proxy");
+        assert!(
+            ing.warnings
+                .iter()
+                .any(|w| matches!(w, SubWarning::RejectedConfigs { count: 1 })),
+            "expected RejectedConfigs warning: {:?}",
+            ing.warnings
+        );
+
+        // A batch containing only direct-default profiles returns NoProfiles
+        let only_split = serde_json::json!([split_routing]).to_string();
+        assert_eq!(
+            ingest(&allowed(only_split.as_bytes())).unwrap_err(),
+            IngestError::NoProfiles
+        );
+    }
 }
