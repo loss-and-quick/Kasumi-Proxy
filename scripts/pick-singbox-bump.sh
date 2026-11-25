@@ -27,6 +27,30 @@ if [ "$(line "$pinned")" != "$(line "$latest")" ]; then
 fi
 
 # Same line: take the newer of the two, never a release older than the pin.
+# `sort -V` ranks a prerelease above its own final release (1.15.0-alpha.13 >
+# 1.15.0) — the opposite of semver — so a pin on an alpha line would ignore the
+# stable release it was waiting for, and a stable pin would step back onto a
+# prerelease. Settle those two cases first, then let `sort -V` order the rest.
+core() { sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/' <<<"$1"; }
+pre() {
+	local v="${1#v}"
+	case "$v" in
+	*-*) printf '%s' "${v#*-}" ;;
+	*) printf '' ;;
+	esac
+}
+
+if [ "$(core "$pinned")" = "$(core "$latest")" ]; then
+	if [ -n "$(pre "$pinned")" ] && [ -z "$(pre "$latest")" ]; then
+		echo "$latest"
+		exit 0
+	fi
+	if [ -z "$(pre "$pinned")" ] && [ -n "$(pre "$latest")" ]; then
+		echo "$pinned"
+		exit 0
+	fi
+fi
+
 if [ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -1)" = "$pinned" ]; then
 	echo "$pinned"
 else
