@@ -1009,6 +1009,13 @@ fn userinfo(username: &str, password: &str) -> String {
     }
 }
 
+/// Whether a link may say "skip the certificate check". Only alongside a pin the
+/// link can carry: a public-key pin has no share-link field, and a link that skips
+/// verification without a pin hands the importer an unauthenticated dial.
+fn export_insecure(tls: &Tls) -> bool {
+    tls.allow_insecure && (tls.pcs.is_empty() || tls.pcs_kind == PinKind::Cert)
+}
+
 fn build_vmess(p: &Vmess) -> String {
     let t = &p.transport;
     let mut c = serde_json::Map::new();
@@ -1218,7 +1225,7 @@ fn build_url_based(p: &Profile) -> String {
     if tls.fingerprint != Fingerprint::Empty {
         q.set("fp", wire(&tls.fingerprint));
     }
-    if tls.allow_insecure {
+    if export_insecure(tls) {
         q.set("allowInsecure", "1");
     }
     if tls.security == Security::Reality {
@@ -1409,7 +1416,7 @@ fn build_anytls(p: &Anytls) -> String {
     if p.tls.fingerprint != Fingerprint::Empty {
         q.set("fp", wire(&p.tls.fingerprint));
     }
-    if p.tls.allow_insecure {
+    if export_insecure(&p.tls) {
         q.set("allowInsecure", "1");
     }
     if !p.tls.ech.is_empty() {
@@ -1448,7 +1455,7 @@ fn build_naive(p: &Naive) -> String {
     if p.tls.fingerprint != Fingerprint::Empty {
         q.set("fp", wire(&p.tls.fingerprint));
     }
-    if p.tls.allow_insecure {
+    if export_insecure(&p.tls) {
         q.set("allowInsecure", "1");
     }
     if !p.tls.ech.is_empty() {
@@ -1776,6 +1783,26 @@ mod tests {
             checked >= 20,
             "expected most cases parseable, got {checked}"
         );
+    }
+
+    #[test]
+    fn a_link_never_skips_verification_without_the_pin_it_carries() {
+        // The link can't carry a public-key pin, so exporting `allowInsecure` alone
+        // would hand the importer a dial with no certificate check at all.
+        let mut profile = parse_share_link(
+            "vless://11111111-1111-1111-1111-111111111111@e.x:443?security=tls&sni=e.x&pcs=aabb&allowInsecure=1",
+            None,
+        )
+        .unwrap();
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let link = build_share_link(&profile);
+        assert!(!link.contains("allowInsecure"), "{link}");
+        assert!(!link.contains("pcs="), "{link}");
+        // A certificate pin still travels with the flag.
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Cert;
+        let link = build_share_link(&profile);
+        assert!(link.contains("allowInsecure=1"), "{link}");
+        assert!(link.contains("pcs=aabb"), "{link}");
     }
 
     #[test]
