@@ -15,6 +15,8 @@ export function coreConflictText(t: Translate, conflict: CoreConflict): string {
         insecure: "allowInsecure",
         pin: "pinnedPeerCertSha256",
       });
+    case "spkiPinNeedsSingBox":
+      return t("profiles.conflict.spkiPinNeedsSingBox");
     case "chainCoreConflict":
       return t("editor.engineChainConflict", {
         xray: conflict.xray,

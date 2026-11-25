@@ -838,6 +838,8 @@ const ar = {
     "لا يمكن التشغيل: هذا الملف الشخصي يعمل فقط على xray، الذي لم يعد يتخطى التحقق من الشهادة. املأ «{pin}» أو أوقف «{insecure}».",
   "profiles.conflict.customAllowInsecure":
     "لا يمكن التشغيل: هذا الإعداد يستخدم «{insecure}»، الذي لم يعد xray يقبله. أضف «{pin}» بجانبه أو احذفه.",
+  "profiles.conflict.spkiPinNeedsSingBox":
+    "لا يمكن التشغيل: البصمة المثبتة هي المفتاح العام للشهادة، ولا يتحقق منها إلا sing-box، وهذا الملف يحتاج xray. ثبّت بصمة الشهادة نفسها (SHA-256).",
   // subscriptions extra
   "subs.saved": "تم حفظ الاشتراك",
   "subs.deleted": "تم حذف الاشتراك",

@@ -13,7 +13,7 @@ use crate::core::{core_conflict, xray_builds};
 use crate::custom_sanitize::drop_pinned_allow_insecure;
 use crate::custom_target::Target;
 use crate::enums::{Fingerprint, HeaderType, Security};
-use crate::mixins::Transport;
+use crate::mixins::{PinKind, Transport};
 use crate::profile::{CustomOrigin, Profile, WG_DEFAULT_LOCAL_ADDRESS};
 use crate::provider_graph::{ActiveOutbounds, compile_custom_profile};
 use crate::state::{
@@ -250,7 +250,9 @@ fn build_tls_security(p: &Profile) -> Value {
     if tls.disable_system_root || has_certs {
         m.insert("disableSystemRoot".into(), true.into());
     }
-    if !tls.pcs.is_empty() {
+    // Xray's `pinnedPeerCertSha256` matches the hash of a certificate in the chain,
+    // never a public key, so an SPKI pin has no field here (see `core` selection).
+    if !tls.pcs.is_empty() && tls.pcs_kind == PinKind::Cert {
         m.insert("pinnedPeerCertSha256".into(), tls.pcs.clone().into());
     }
     if !tls.ech.is_empty() {
@@ -1260,6 +1262,21 @@ mod tests {
             err,
             crate::contract::CoreConflict::UnpinnedInsecureTls.to_string()
         );
+    }
+
+    #[test]
+    fn a_public_key_pin_is_not_written_as_a_certificate_pin() {
+        // Xray matches `pinnedPeerCertSha256` against a certificate in the chain, so
+        // an SPKI hash there would never match and the node would silently die.
+        let mut pinned = crate::share::parse_share_link(
+            "vless://u@e.ex:443?type=ws&security=tls&sni=e.ex&pcs=aabb",
+            None,
+        )
+        .unwrap();
+        pinned.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let cfg = build_xray_config(&pinned, &AdvancedSettings::default(), &[], &[]).unwrap();
+        let tls = &cfg["outbounds"][0]["streamSettings"]["tlsSettings"];
+        assert!(tls.get("pinnedPeerCertSha256").is_none(), "{tls}");
     }
 
     #[test]

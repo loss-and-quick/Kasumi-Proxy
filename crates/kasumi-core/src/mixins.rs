@@ -229,7 +229,20 @@ pub struct Tls {
     pub ech: String,
     pub vcn: String,
     pub pcs: String,
+    /// What [`Tls::pcs`] hashes. Share links (`pcs`, `pinSHA256`) and Xray pin the
+    /// whole DER certificate; only sing-box can check an SPKI public-key pin, which
+    /// arrives solely by importing a sing-box config.
+    pub pcs_kind: PinKind,
     pub pqv: String,
+}
+
+/// What a TLS pin's SHA-256 is taken over. See [`Tls::pcs_kind`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum PinKind {
+    #[default]
+    Cert,
+    Spki,
 }
 
 impl Tls {

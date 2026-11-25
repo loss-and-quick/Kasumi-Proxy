@@ -746,6 +746,11 @@ export type CoreConflict =
  */
 { kind: "customAllowInsecure" } | 
 /**
+ *  A pin over the certificate's public key, on a profile whose protocol or
+ *  transport xray alone can run: only sing-box checks an SPKI pin.
+ */
+{ kind: "spkiPinNeedsSingBox" } | 
+/**
  *  A proxy chain that no single core can build: every hop is an outbound of the
  *  one config, and these two profiles of it each run on a different core only.
  */
@@ -1337,6 +1342,9 @@ export type PendingChange_Serialize = {
 	digest: string,
 	seenAt: string,
 };
+
+/**  What a TLS pin's SHA-256 is taken over. See [`Tls::pcs_kind`]. */
+export type PinKind = "cert" | "spki";
 
 /**  Two local listeners set to one port: only one of them could bind it. */
 export type PortCollision = {
@@ -2199,6 +2207,12 @@ export type Tls = {
 	ech?: string,
 	vcn?: string,
 	pcs?: string,
+	/**
+	 *  What [`Tls::pcs`] hashes. Share links (`pcs`, `pinSHA256`) and Xray pin the
+	 *  whole DER certificate; only sing-box can check an SPKI public-key pin, which
+	 *  arrives solely by importing a sing-box config.
+	 */
+	pcsKind?: PinKind,
 	pqv?: string,
 };
 

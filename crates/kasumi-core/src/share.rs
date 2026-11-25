@@ -28,8 +28,8 @@ use crate::enums::{
     Security, SsMethod, VmessEnc,
 };
 use crate::mixins::{
-    Endpoint, GrpcTransport, H2Transport, HttpUpgradeTransport, KcpTransport, Meta, QuicTransport,
-    TcpTransport, Tls, Transport, WsTransport, XhttpTransport,
+    Endpoint, GrpcTransport, H2Transport, HttpUpgradeTransport, KcpTransport, Meta, PinKind,
+    QuicTransport, TcpTransport, Tls, Transport, WsTransport, XhttpTransport,
 };
 use crate::profile::{
     Anytls, Http, Hysteria2, Naive, Profile, Shadowsocks, Shadowtls, Socks, Trojan, Tuic, Vless,
@@ -1238,7 +1238,7 @@ fn build_url_based(p: &Profile) -> String {
     if !tls.vcn.is_empty() {
         q.set("vcn", tls.vcn.clone());
     }
-    if !tls.pcs.is_empty() {
+    if !tls.pcs.is_empty() && tls.pcs_kind == PinKind::Cert {
         q.set("pcs", tls.pcs.clone());
     }
     if !tls.pqv.is_empty() {
@@ -1415,7 +1415,7 @@ fn build_anytls(p: &Anytls) -> String {
     if !p.tls.ech.is_empty() {
         q.set("ech", p.tls.ech.clone());
     }
-    if !p.tls.pcs.is_empty() {
+    if !p.tls.pcs.is_empty() && p.tls.pcs_kind == PinKind::Cert {
         q.set("pcs", p.tls.pcs.clone());
     }
     let qs = q.finish();
@@ -1454,7 +1454,7 @@ fn build_naive(p: &Naive) -> String {
     if !p.tls.ech.is_empty() {
         q.set("ech", p.tls.ech.clone());
     }
-    if !p.tls.pcs.is_empty() {
+    if !p.tls.pcs.is_empty() && p.tls.pcs_kind == PinKind::Cert {
         q.set("pcs", p.tls.pcs.clone());
     }
     let qs = q.finish();
@@ -1776,6 +1776,23 @@ mod tests {
             checked >= 20,
             "expected most cases parseable, got {checked}"
         );
+    }
+
+    #[test]
+    fn an_spki_pin_is_not_written_into_a_share_link() {
+        // `pcs` and `pinSHA256` mean "hash of the certificate"; writing an SPKI hash
+        // there would make the link pin something else than the profile does.
+        let mut profile = parse_share_link(
+            "vless://11111111-1111-1111-1111-111111111111@e.x:443?security=tls&sni=e.x&pcs=aabb",
+            None,
+        )
+        .unwrap();
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let link = build_share_link(&profile);
+        assert!(!link.contains("pcs="), "{link}");
+        // The certificate-pin default still round-trips.
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Cert;
+        assert!(build_share_link(&profile).contains("pcs=aabb"));
     }
 
     #[test]

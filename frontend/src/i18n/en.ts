@@ -737,6 +737,8 @@ const en = {
     "Can't start: this profile runs only on xray, which no longer skips certificate checks. Fill in “{pin}” or turn off “{insecure}”.",
   "profiles.conflict.customAllowInsecure":
     "Can't start: this config sets “{insecure}”, which xray no longer accepts. Add “{pin}” beside it or remove it.",
+  "profiles.conflict.spkiPinNeedsSingBox":
+    "Can’t start: the pinned hash is the certificate’s public key, which only sing-box checks, and this profile needs xray. Pin the certificate itself (SHA-256) instead.",
   // subscriptions extra
   "subs.saved": "Subscription saved",
   "subs.deleted": "Subscription deleted",
