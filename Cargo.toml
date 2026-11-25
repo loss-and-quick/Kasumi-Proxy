@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.dependencies]
-happ-sub = { git = "https://github.com/loss-and-quick/happ-sub", rev = "a0909f22258b618d00999c39020f127308d87b42", default-features = false, features = ["body-crypt"] }
+happ-sub = { git = "https://github.com/loss-and-quick/happ-sub", rev = "456a0a6189705f6a06c0275b7849bb84f44d04c5", default-features = false, features = ["body-crypt"] }
 
 [workspace.package]
 # Placeholder — the real product version is module/module.prop (single source of
