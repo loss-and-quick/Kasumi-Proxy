@@ -275,6 +275,8 @@ const vi = {
   "editor.fetchCertFailed": "Không thể lấy chứng chỉ TLS",
   "editor.tofu.title": "Tin cậy chứng chỉ TLS",
   "editor.tofu.description": "Xác minh vân tay chứng chỉ này trước khi ghim:",
+  "editor.tofu.endpoint": "Điểm cuối",
+  "editor.tofu.targetMismatch": "Địa chỉ máy chủ hoặc SNI đã thay đổi; hãy lấy lại chứng chỉ",
   "editor.tofu.subject": "Chủ thể",
   "editor.tofu.issuer": "Tổ chức phát hành",
   "editor.tofu.validUntil": "Có giá trị đến",

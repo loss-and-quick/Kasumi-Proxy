@@ -38,7 +38,12 @@ export function SecuritySection({
   const t = useT();
   const notify = useAppStore((s) => s.notify);
   const [probing, setProbing] = useState(false);
-  const [probedCert, setProbedCert] = useState<TlsCertInfo | null>(null);
+  const [probed, setProbed] = useState<{
+    cert: TlsCertInfo;
+    host: string;
+    port: number;
+    sni: string | null;
+  } | null>(null);
 
   const handleProbeCert = async () => {
     const host = endpoint?.address?.trim();
@@ -47,23 +52,36 @@ export function SecuritySection({
       notify(t("editor.fetchCertMissingEndpoint"));
       return;
     }
+    const sni = tls.disableSni ? null : tls.sni?.trim() || null;
     setProbing(true);
     try {
       const cert = await bridge.probeTlsCert({
         host,
         port,
-        // A profile that disables SNI sends no server name, so the probe must
-        // reach the same certificate the core will.
-        sni: tls.disableSni ? null : tls.sni?.trim() || null,
+        sni,
         insecure: true,
         disableSni: !!tls.disableSni,
       });
-      setProbedCert(cert);
+      setProbed({ cert, host, port, sni });
     } catch (e) {
       notify(e instanceof Error ? e.message : t("editor.fetchCertFailed"));
     } finally {
       setProbing(false);
     }
+  };
+
+  const handleApply = () => {
+    if (!probed) return;
+    const currentHost = endpoint?.address?.trim() ?? "";
+    const currentPort = endpoint?.port ?? 0;
+    const currentSni = tls.disableSni ? null : tls.sni?.trim() || null;
+    if (currentHost !== probed.host || currentPort !== probed.port || currentSni !== probed.sni) {
+      notify(t("editor.tofu.targetMismatch"));
+      setProbed(null);
+      return;
+    }
+    setTls({ pcs: probed.cert.sha256Hex });
+    setProbed(null);
   };
 
   return (
@@ -212,31 +230,23 @@ export function SecuritySection({
       )}
 
       <Dialog
-        open={!!probedCert}
+        open={!!probed}
         icon="fingerprint"
         iconColor={{ bg: "var(--primary-container)", fg: "var(--primary)" }}
         title={t("editor.tofu.title")}
-        onClose={() => setProbedCert(null)}
+        onClose={() => setProbed(null)}
         actions={
           <>
-            <Btn variant="text" onClick={() => setProbedCert(null)}>
+            <Btn variant="text" onClick={() => setProbed(null)}>
               {t("editor.tofu.cancel")}
             </Btn>
-            <Btn
-              variant="filled"
-              onClick={() => {
-                if (probedCert) {
-                  setTls({ pcs: probedCert.sha256Hex });
-                  setProbedCert(null);
-                }
-              }}
-            >
+            <Btn variant="filled" onClick={handleApply}>
               {t("editor.tofu.apply")}
             </Btn>
           </>
         }
       >
-        {probedCert && (
+        {probed && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <p style={{ margin: 0, fontSize: 13, color: "var(--on-surface-variant)" }}>
               {t("editor.tofu.description")}
@@ -251,10 +261,33 @@ export function SecuritySection({
                     textTransform: "uppercase",
                   }}
                 >
+                  {t("editor.tofu.endpoint")}
+                </div>
+                <div
+                  style={{
+                    color: "var(--on-surface)",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: 12,
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {probed.host}:{probed.port}
+                  {probed.sni ? ` (${probed.sni})` : ""}
+                </div>
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color: "var(--on-surface-variant)",
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                  }}
+                >
                   {t("editor.tofu.subject")}
                 </div>
                 <div style={{ color: "var(--on-surface)", wordBreak: "break-all" }}>
-                  {probedCert.subject}
+                  {probed.cert.subject}
                 </div>
               </div>
               <div>
@@ -269,10 +302,10 @@ export function SecuritySection({
                   {t("editor.tofu.issuer")}
                 </div>
                 <div style={{ color: "var(--on-surface)", wordBreak: "break-all" }}>
-                  {probedCert.issuer}
+                  {probed.cert.issuer}
                 </div>
               </div>
-              {probedCert.validUntil && (
+              {probed.cert.validUntil && (
                 <div>
                   <div
                     style={{
@@ -284,7 +317,7 @@ export function SecuritySection({
                   >
                     {t("editor.tofu.validUntil")}
                   </div>
-                  <div style={{ color: "var(--on-surface)" }}>{probedCert.validUntil}</div>
+                  <div style={{ color: "var(--on-surface)" }}>{probed.cert.validUntil}</div>
                 </div>
               )}
               <div>
@@ -310,7 +343,7 @@ export function SecuritySection({
                     userSelect: "all",
                   }}
                 >
-                  {probedCert.sha256Hex}
+                  {probed.cert.sha256Hex}
                 </div>
               </div>
             </div>

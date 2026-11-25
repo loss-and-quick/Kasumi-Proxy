@@ -277,6 +277,8 @@ const en = {
   "editor.fetchCertFailed": "Failed to fetch TLS certificate",
   "editor.tofu.title": "Trust TLS Certificate",
   "editor.tofu.description": "Verify this certificate fingerprint before pinning:",
+  "editor.tofu.endpoint": "Endpoint",
+  "editor.tofu.targetMismatch": "Server address or SNI changed; fetch certificate again",
   "editor.tofu.subject": "Subject",
   "editor.tofu.issuer": "Issuer",
   "editor.tofu.validUntil": "Valid until",

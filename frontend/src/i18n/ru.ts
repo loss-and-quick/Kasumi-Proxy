@@ -289,6 +289,8 @@ const ru = {
   "editor.fetchCertFailed": "Не удалось получить TLS-сертификат",
   "editor.tofu.title": "Доверие TLS-сертификату",
   "editor.tofu.description": "Проверьте отпечаток сертификата перед сохранением:",
+  "editor.tofu.endpoint": "Эндпоинт",
+  "editor.tofu.targetMismatch": "Адрес сервера или SNI изменился; запросите сертификат снова",
   "editor.tofu.subject": "Субъект",
   "editor.tofu.issuer": "Издатель",
   "editor.tofu.validUntil": "Действителен до",

@@ -272,6 +272,8 @@ const zh = {
   "editor.fetchCertFailed": "获取 TLS 证书失败",
   "editor.tofu.title": "信任 TLS 证书",
   "editor.tofu.description": "固定前请验证此证书指纹：",
+  "editor.tofu.endpoint": "节点地址",
+  "editor.tofu.targetMismatch": "服务器地址或 SNI 已更改，请重新获取证书",
   "editor.tofu.subject": "使用者",
   "editor.tofu.issuer": "颁发者",
   "editor.tofu.validUntil": "有效期至",

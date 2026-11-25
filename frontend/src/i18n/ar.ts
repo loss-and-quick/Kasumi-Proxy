@@ -314,6 +314,8 @@ const ar = {
   "editor.fetchCertFailed": "فشل في جلب شهادة TLS",
   "editor.tofu.title": "الوثوق بشهادة TLS",
   "editor.tofu.description": "تحقق من بصمة الشهادة قبل التثبيت:",
+  "editor.tofu.endpoint": "نقطة النهاية",
+  "editor.tofu.targetMismatch": "تغير عنوان الخادم أو SNI؛ احصل على الشهادة مرة أخرى",
   "editor.tofu.subject": "الموضوع",
   "editor.tofu.issuer": "الجهة المصدرة",
   "editor.tofu.validUntil": "صالح حتى",

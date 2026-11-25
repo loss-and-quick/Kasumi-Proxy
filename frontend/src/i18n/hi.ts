@@ -274,6 +274,8 @@ const hi = {
   "editor.fetchCertFailed": "TLS प्रमाणपत्र प्राप्त करने में विफल",
   "editor.tofu.title": "TLS प्रमाणपत्र पर भरोसा करें",
   "editor.tofu.description": "पिन करने से पहले इस प्रमाणपत्र फ़िंगरप्रिंट को सत्यापित करें:",
+  "editor.tofu.endpoint": "एंडपॉइंट",
+  "editor.tofu.targetMismatch": "सर्वर का पता या SNI बदल गया; प्रमाणपत्र फिर से प्राप्त करें",
   "editor.tofu.subject": "विषय",
   "editor.tofu.issuer": "जारीकर्ता",
   "editor.tofu.validUntil": "तक वैध",

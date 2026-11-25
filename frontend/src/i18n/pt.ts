@@ -278,6 +278,9 @@ const pt = {
   "editor.fetchCertFailed": "Falha ao obter o certificado TLS",
   "editor.tofu.title": "Confiar no certificado TLS",
   "editor.tofu.description": "Verifique a impressão digital do certificado antes de fixar:",
+  "editor.tofu.endpoint": "Ponto de extremidade",
+  "editor.tofu.targetMismatch":
+    "O endereço do servidor ou SNI mudou; obtenha o certificado novamente",
   "editor.tofu.subject": "Sujeito",
   "editor.tofu.issuer": "Emissor",
   "editor.tofu.validUntil": "Válido até",
