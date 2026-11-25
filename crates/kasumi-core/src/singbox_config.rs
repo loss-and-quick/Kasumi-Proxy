@@ -192,17 +192,14 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
         Profile::Hysteria2(h) => h.pin_sha256.clone(),
         _ => String::new(),
     };
-    let pin = if !pin_sha256.is_empty() {
-        pin_sha256
+    // One source decides both the hash and what it hashes: share-link pins
+    // (`pinSHA256`, `pcs`) are always whole certificates, and only an imported
+    // `certificate_public_key_sha256` is an SPKI pin. Reading the two from different
+    // fields would pin a certificate hash as if it were a public key.
+    let (pin, pin_kind) = if !pin_sha256.is_empty() {
+        (pin_sha256, PinKind::Cert)
     } else {
-        tls.pcs.clone()
-    };
-    // Share-link pins (`pinSHA256`, `pcs`) always hash the whole certificate; only
-    // an imported `certificate_public_key_sha256` is an SPKI pin.
-    let pin_kind = if !pin.is_empty() && tls.pcs.is_empty() {
-        PinKind::Cert
-    } else {
-        tls.pcs_kind
+        (tls.pcs.clone(), tls.pcs_kind)
     };
     let pin_base64 = normalize_cert_pin_base64(&pin);
     // A pin the user configured but we cannot normalise must not become an unpinned
@@ -2656,6 +2653,29 @@ mod tests {
             json!(["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="])
         );
         assert!(tls.get("certificate_sha256").is_none());
+    }
+
+    #[test]
+    fn the_share_link_pin_wins_over_a_stale_tls_pin() {
+        // A hysteria2 profile can hold a link pin and a leftover TLS pin at once; the
+        // hash and its kind must come from the same source, or a certificate hash is
+        // written into the public-key field and never matches.
+        let mut p = crate::share::parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&pinSHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .unwrap();
+        if let crate::profile::Profile::Hysteria2(h) = &mut p {
+            h.tls.pcs = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".into();
+            h.tls.pcs_kind = PinKind::Spki;
+        }
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert_eq!(
+            tls["certificate_sha256"],
+            json!(["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="])
+        );
+        assert!(tls.get("certificate_public_key_sha256").is_none());
     }
 
     #[test]
