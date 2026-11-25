@@ -136,6 +136,7 @@ export type ProbeTlsCertRequest = {
   port: number;
   sni?: string | null;
   insecure?: boolean;
+  disableSni?: boolean;
 };
 
 export type BatchProgress = (profileId: string, value: number) => void;

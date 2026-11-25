@@ -52,8 +52,11 @@ export function SecuritySection({
       const cert = await bridge.probeTlsCert({
         host,
         port,
-        sni: tls.sni?.trim() || null,
+        // A profile that disables SNI sends no server name, so the probe must
+        // reach the same certificate the core will.
+        sni: tls.disableSni ? null : tls.sni?.trim() || null,
         insecure: true,
+        disableSni: !!tls.disableSni,
       });
       setProbedCert(cert);
     } catch (e) {

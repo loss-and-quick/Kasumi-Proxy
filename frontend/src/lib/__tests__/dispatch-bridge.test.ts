@@ -517,6 +517,7 @@ describe("dispatch-bridge subscription filter and security", () => {
       port: 443,
       sni: "example.com",
       insecure: true,
+      disableSni: false,
     });
     expect(res).toEqual(certInfo);
     expect(dispatch).toHaveBeenCalledWith({
@@ -525,6 +526,7 @@ describe("dispatch-bridge subscription filter and security", () => {
       port: 443,
       sni: "example.com",
       insecure: true,
+      disableSni: false,
     });
   });
 });

@@ -386,6 +386,7 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
         port: req.port,
         sni: req.sni ?? null,
         insecure: req.insecure ?? true,
+        disableSni: req.disableSni ?? false,
       });
       return r.kind === "tlsCert" ? r.value : wrongKind(r, "tlsCert");
     },

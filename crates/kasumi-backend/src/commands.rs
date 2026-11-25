@@ -312,6 +312,8 @@ pub enum Command {
         sni: Option<String>,
         #[serde(default)]
         insecure: bool,
+        #[serde(default, rename = "disableSni")]
+        disable_sni: bool,
     },
 }
 
@@ -927,9 +929,10 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             port,
             sni,
             insecure,
+            disable_sni,
         } => {
             let cert_info = platform
-                .probe_tls_cert(&host, port, sni.as_deref(), insecure)
+                .probe_tls_cert(&host, port, sni.as_deref(), insecure, disable_sni)
                 .await?;
             Ok(Response::TlsCert(Box::new(cert_info)))
         }
@@ -2233,6 +2236,7 @@ mod tests {
                 port: u.port().unwrap(),
                 sni: Some("localhost".into()),
                 insecure: true,
+                disable_sni: false,
             },
         )
         .await

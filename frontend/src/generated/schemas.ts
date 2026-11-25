@@ -1517,6 +1517,7 @@ export const Command_SerializeSchema = z.union([z.object({
 	port: z.number(),
 	sni: z.string().nullable(),
 	insecure: z.boolean(),
+	disableSni: z.boolean(),
 }), z.object({
 	cmd: z.literal("readState"),
 }), z.object({
@@ -1821,6 +1822,7 @@ export const Command_DeserializeSchema = z.union([z.object({
 	port: z.number(),
 	sni: z.string().nullable().optional(),
 	insecure: z.boolean().optional(),
+	disableSni: z.boolean().optional(),
 }), z.object({
 	cmd: z.literal("readState"),
 }), z.object({

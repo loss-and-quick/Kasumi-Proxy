@@ -77,10 +77,11 @@ pub async fn probe_tls_cert(
     port: u16,
     sni: Option<&str>,
     insecure: bool,
+    disable_sni: bool,
 ) -> Result<TlsCertInfo, CommandError> {
     tokio::time::timeout(
         Duration::from_secs(5),
-        probe_tls_cert_inner(host, port, sni, insecure),
+        probe_tls_cert_inner(host, port, sni, insecure, disable_sni),
     )
     .await
     .map_err(|_| {
@@ -95,13 +96,14 @@ async fn probe_tls_cert_inner(
     port: u16,
     sni: Option<&str>,
     insecure: bool,
+    disable_sni: bool,
 ) -> Result<TlsCertInfo, CommandError> {
     let target_name = sni.map(str::trim).filter(|s| !s.is_empty()).unwrap_or(host);
 
     let server_name = ServerName::try_from(target_name.to_string())
         .map_err(|e| CommandError(format!("invalid server name '{target_name}': {e}")))?;
 
-    let config = if insecure {
+    let mut config = if insecure {
         ClientConfig::builder_with_provider(ring::default_provider().into())
             .with_safe_default_protocol_versions()
             .map_err(|e| CommandError(format!("TLS config error: {e}")))?
@@ -117,6 +119,10 @@ async fn probe_tls_cert_inner(
             .with_root_certificates(root_store)
             .with_no_client_auth()
     };
+
+    if disable_sni {
+        config.enable_sni = false;
+    }
 
     let tcp_stream = tokio::net::TcpStream::connect((host, port))
         .await
@@ -171,7 +177,7 @@ mod tests {
         let host = parsed.host_str().unwrap();
         let port = parsed.port().unwrap();
 
-        let cert = probe_tls_cert(host, port, Some("localhost"), true)
+        let cert = probe_tls_cert(host, port, Some("localhost"), true, false)
             .await
             .expect("probe with insecure=true should succeed");
 
@@ -188,13 +194,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn probe_without_sni_succeeds() {
+        let (url, _reqs) = crate::testutil::serve_tls(b"ok").await;
+        let parsed = reqwest::Url::parse(&url).unwrap();
+        let host = parsed.host_str().unwrap();
+        let port = parsed.port().unwrap();
+
+        let cert = probe_tls_cert(host, port, None, true, true)
+            .await
+            .expect("probe with disable_sni=true should succeed");
+
+        assert_eq!(cert.sha256_hex.len(), 64);
+    }
+
+    #[tokio::test]
     async fn probe_self_signed_cert_fails_when_secure() {
         let (url, _reqs) = crate::testutil::serve_tls(b"ok").await;
         let parsed = reqwest::Url::parse(&url).unwrap();
         let host = parsed.host_str().unwrap();
         let port = parsed.port().unwrap();
 
-        let res = probe_tls_cert(host, port, Some("localhost"), false).await;
+        let res = probe_tls_cert(host, port, Some("localhost"), false, false).await;
         assert!(
             res.is_err(),
             "probe with insecure=false should reject self-signed cert"
@@ -203,7 +223,7 @@ mod tests {
 
     #[tokio::test]
     async fn probe_unreachable_endpoint_fails() {
-        let res = probe_tls_cert("127.0.0.1", 1, None, true).await;
+        let res = probe_tls_cert("127.0.0.1", 1, None, true, false).await;
         assert!(res.is_err());
     }
 }
