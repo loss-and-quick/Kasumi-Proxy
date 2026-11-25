@@ -16,6 +16,7 @@
 //!    it fails over to the explicit default handler and terminates without infinite loopback
 //!    recursion.
 
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -995,17 +996,23 @@ fn test_real_xray_traffic_unreachable_balancer_without_fallback_terminates_witho
         .lines()
         .filter(|line| line.contains("taking detour [proxy]"))
         .count();
-    let proxy_select_routes = log_content
+    // The same accepted connection is logged once per inbound layer that handles it,
+    // so counting lines would depend on how many layers Xray routes it through. A
+    // loopback re-entry loop instead shows up as *more client connections*: count the
+    // source addresses the routed accept lines name.
+    let routed_sources: BTreeSet<&str> = log_content
         .lines()
         .filter(|line| line.contains("[proxy-select ->"))
-        .count();
+        .filter_map(|line| line.split_once("from "))
+        .filter_map(|(_, rest)| rest.split_whitespace().next())
+        .collect();
     assert!(
-        force_to_proxy >= 1 && proxy_select_routes >= 1,
+        force_to_proxy >= 1 && !routed_sources.is_empty(),
         "expected info-level force-in and proxy-select routing records. Log:\n{log_content}"
     );
     assert!(
-        force_to_proxy <= 1 && proxy_select_routes <= 1,
-        "expected no proxy re-entry, but saw {force_to_proxy} proxy detours and {proxy_select_routes} proxy-select routes. Log:\n{log_content}"
+        force_to_proxy <= 1 && routed_sources.len() == 1,
+        "expected no proxy re-entry, but saw {force_to_proxy} proxy detours and {routed_sources:?} routed through. Log:\n{log_content}"
     );
     assert!(
         log_content.contains("app/router: fallback to ["),
