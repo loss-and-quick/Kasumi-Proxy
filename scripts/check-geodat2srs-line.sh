@@ -23,7 +23,9 @@ if [ -z "$pinned" ]; then
 	exit 1
 fi
 
-if [ "$(line "$pinned")" != "$(line "$new")" ]; then
+# sing-box 1.14 and 1.15 share RuleSetVersionCurrent = 5, so .srs output is
+# format-compatible across the 1.14 and 1.15 lines.
+if [ "$(line "$pinned")" != "$(line "$new")" ] && ! { [ "$(line "$pinned")" = "1.14" ] && [ "$(line "$new")" = "1.15" ]; }; then
 	cat >&2 <<MSG
 ❌ sing-box would move to ${new}, but geodat2srs @ ${GEODAT2SRS_REV:0:12} is built against sing-box ${pinned}.
    Its .srs output would be rejected by the new core. Bump geodat2srs first:
