@@ -928,8 +928,9 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
             sni,
             insecure,
         } => {
-            let cert_info =
-                crate::tls_probe::probe_tls_cert(&host, port, sni.as_deref(), insecure).await?;
+            let cert_info = platform
+                .probe_tls_cert(&host, port, sni.as_deref(), insecure)
+                .await?;
             Ok(Response::TlsCert(Box::new(cert_info)))
         }
 

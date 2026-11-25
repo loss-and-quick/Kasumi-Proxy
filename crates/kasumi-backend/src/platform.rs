@@ -381,6 +381,19 @@ pub trait Platform: Send + Sync {
         crate::net::tcp_ping(host, port, timeout).await
     }
 
+    /// Leaf certificate fingerprint and subject of `host:port`. The probe
+    /// handshakes over the same uplink as `tcp_ping`, so a platform overrides it
+    /// together with the connect.
+    async fn probe_tls_cert(
+        &self,
+        host: &str,
+        port: u16,
+        sni: Option<&str>,
+        insecure: bool,
+    ) -> Result<crate::commands::TlsCertInfo, crate::commands::CommandError> {
+        crate::tls_probe::probe_tls_cert(host, port, sni, insecure).await
+    }
+
     /// Whether the core binary for `engine` exists on the host.
     async fn core_exists(&self, engine: Engine) -> bool {
         crate::fs::exists(self.core_path(engine)).await
