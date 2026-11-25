@@ -44,6 +44,10 @@ export function SecuritySection({
     host: string;
     port: number;
     sni: string | null;
+    // Kept apart from `sni`: a profile with no SNI text and `disableSni` off sends
+    // the server's own name, which is a different certificate than the probe without
+    // one reaches.
+    disableSni: boolean;
   } | null>(null);
 
   const handleProbeCert = async () => {
@@ -53,6 +57,7 @@ export function SecuritySection({
       notify(t("editor.fetchCertMissingEndpoint"));
       return;
     }
+    const disableSni = !!tls.disableSni;
     const sni = tls.disableSni ? null : tls.sni?.trim() || null;
     setProbing(true);
     try {
@@ -63,7 +68,7 @@ export function SecuritySection({
         insecure: true,
         disableSni: !!tls.disableSni,
       });
-      setProbed({ cert, host, port, sni });
+      setProbed({ cert, host, port, sni, disableSni });
     } catch (e) {
       notify(e instanceof Error ? e.message : t("editor.fetchCertFailed"));
     } finally {
@@ -75,8 +80,14 @@ export function SecuritySection({
     if (!probed) return;
     const currentHost = endpoint?.address?.trim() ?? "";
     const currentPort = endpoint?.port ?? 0;
+    const currentDisableSni = !!tls.disableSni;
     const currentSni = tls.disableSni ? null : tls.sni?.trim() || null;
-    if (currentHost !== probed.host || currentPort !== probed.port || currentSni !== probed.sni) {
+    if (
+      currentHost !== probed.host ||
+      currentPort !== probed.port ||
+      currentSni !== probed.sni ||
+      currentDisableSni !== probed.disableSni
+    ) {
       notify(t("editor.tofu.targetMismatch"));
       setProbed(null);
       return;
