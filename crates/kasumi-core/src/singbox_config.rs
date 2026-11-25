@@ -205,6 +205,10 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
         tls.pcs_kind
     };
     let pin_base64 = normalize_cert_pin_base64(&pin);
+    // A pin the user configured but we cannot normalise must not become an unpinned
+    // insecure dial — sing-box would then trust any certificate. Leaving verification
+    // on fails closed at handshake time instead.
+    let pin_unusable = !pin.trim().is_empty() && pin_base64.is_none();
     let certs = parse_pem_chain(&tls.cert);
     let address = p.endpoint().map(|e| e.address.clone()).unwrap_or_default();
     let server_name = if !tls.sni.is_empty() {
@@ -220,7 +224,7 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
     let mut t = json!({
         "enabled": true,
         "server_name": server_name,
-        "insecure": tls.allow_insecure,
+        "insecure": tls.allow_insecure && !pin_unusable,
     });
     if tls.disable_sni {
         t["disable_sni"] = true.into();
@@ -2654,4 +2658,31 @@ mod tests {
         assert!(tls.get("certificate_sha256").is_none());
     }
 
+    #[test]
+    fn unreadable_pin_keeps_certificate_verification_on() {
+        // A pin we can't normalise must not leave an insecure dial with no pin:
+        // sing-box would then accept any certificate. Verification stays on.
+        let p = crate::share::parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&insecure=1&pinSHA256=invalid-pin-not-32-bytes",
+            None,
+        )
+        .unwrap();
+        assert!(p.tls().unwrap().allow_insecure, "the link sets insecure");
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert!(tls.get("certificate_sha256").is_none());
+        assert!(tls.get("certificate_public_key_sha256").is_none());
+        assert_eq!(tls["insecure"], json!(false));
+    }
+
+    #[test]
+    fn insecure_without_a_pin_stays_insecure() {
+        let p = crate::share::parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&insecure=1",
+            None,
+        )
+        .unwrap();
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        assert_eq!(out["tls"]["insecure"], json!(true));
+    }
 }
