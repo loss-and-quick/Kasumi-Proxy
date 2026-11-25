@@ -80,6 +80,7 @@ export type {
   SubRequestOverrides_Serialize as SubRequestOverrides,
   Subscription_Serialize as Subscription,
   TestKind,
+  TlsCertInfo,
   TunnelSetting,
 } from "../generated/bindings";
 
@@ -87,6 +88,7 @@ import type {
   AppState_Serialize,
   MutationIntent_Serialize,
   SubscriptionUrlSecurity,
+  TlsCertInfo,
 } from "../generated/bindings";
 import { PROTOCOL_OPTS } from "../generated/defaults";
 
@@ -128,6 +130,13 @@ export interface ServiceStatus extends Omit<WireServiceStatus, "state"> {
 export type ResourceUpdateMode = FetchMode;
 
 export type { SubscriptionUrlSecurity } from "../generated/bindings";
+
+export type ProbeTlsCertRequest = {
+  host: string;
+  port: number;
+  sni?: string | null;
+  insecure?: boolean;
+};
 
 export type BatchProgress = (profileId: string, value: number) => void;
 
@@ -249,6 +258,9 @@ export interface Bridge {
   // Routing rule parsing and block analysis
   analyzeRuleBlocks(blocks: RuleBlock[]): Promise<BlockCatchAllReport[]>;
   parseRoutingRules(text: string): Promise<RoutingRule[]>;
+
+  // Probe TLS certificate fingerprint and leaf certificate info
+  probeTlsCert(req: ProbeTlsCertRequest): Promise<TlsCertInfo>;
 
   // Subscription filter regex and URL security policy
   validateFilterRegex(pattern: string): Promise<boolean>;

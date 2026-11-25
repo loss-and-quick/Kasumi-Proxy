@@ -229,6 +229,13 @@ function createBridgeMock(): BridgeMock {
       namesProfiles: false,
     })),
     parseRoutePackage: vi.fn<Bridge["parseRoutePackage"]>(async () => null),
+    probeTlsCert: vi.fn<Bridge["probeTlsCert"]>(async (req) => ({
+      sha256Hex: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      sha256Base64: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+      subject: `CN=${req.sni || req.host}`,
+      issuer: `CN=${req.sni || req.host}`,
+      validUntil: "2030-01-01T00:00:00Z",
+    })),
     parseShareLinks: vi.fn(async (_text: string) => []),
     resolveImportInput: vi.fn(async (_text: string) => ({
       subscriptions: [],

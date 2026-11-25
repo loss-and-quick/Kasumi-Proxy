@@ -48,6 +48,8 @@ use kasumi_core::state::{
 };
 use kasumi_core::sub_changes::consented_keys;
 use kasumi_core::sub_ingest::stored_for_url;
+
+pub use crate::tls_probe::TlsCertInfo;
 use kasumi_core::sub_policy::safe_provider_link;
 use kasumi_log::{Area, ks_warn};
 
@@ -301,6 +303,16 @@ pub enum Command {
         #[serde(default)]
         input: Option<Box<IdentityInput>>,
     },
+    /// Probe a remote TLS endpoint and retrieve its certificate fingerprint and info.
+    #[serde(rename_all = "camelCase")]
+    ProbeTlsCert {
+        host: String,
+        port: u16,
+        #[serde(default)]
+        sni: Option<String>,
+        #[serde(default)]
+        insecure: bool,
+    },
 }
 
 /// One reply. The tag `kind` selects the payload shape under `value`.
@@ -346,6 +358,7 @@ pub enum Response {
     RoutingRules(Vec<RoutingRule>),
     FilterRegexValid(bool),
     SubscriptionUrlSecurity(kasumi_core::sub_policy::SubscriptionUrlSecurity),
+    TlsCert(Box<TlsCertInfo>),
 }
 
 /// A restored backup: the new state and how many of its profiles were left out.
@@ -908,6 +921,16 @@ pub async fn dispatch(platform: &dyn Platform, cmd: Command) -> Result<Response,
         Command::CheckReadiness { profile_id } => {
             let report = check_readiness(platform, profile_id.as_deref()).await?;
             Ok(Response::Readiness(Box::new(report)))
+        }
+        Command::ProbeTlsCert {
+            host,
+            port,
+            sni,
+            insecure,
+        } => {
+            let cert_info =
+                crate::tls_probe::probe_tls_cert(&host, port, sni.as_deref(), insecure).await?;
+            Ok(Response::TlsCert(Box::new(cert_info)))
         }
 
         Command::Mutate { .. }
@@ -2199,5 +2222,25 @@ mod tests {
         assert!(sec.is_insecure_http);
         assert!(sec.is_local_or_private);
         assert!(sec.suggest_allow_insecure);
+
+        let (url, _) = crate::testutil::serve_tls(b"test").await;
+        let u = reqwest::Url::parse(&url).unwrap();
+        let res_tls = dispatch(
+            &p,
+            Command::ProbeTlsCert {
+                host: u.host_str().unwrap().to_string(),
+                port: u.port().unwrap(),
+                sni: Some("localhost".into()),
+                insecure: true,
+            },
+        )
+        .await
+        .unwrap();
+        let Response::TlsCert(info) = res_tls else {
+            panic!("expected TlsCert response");
+        };
+        assert_eq!(info.sha256_hex.len(), 64);
+        assert_eq!(info.sha256_base64.len(), 44);
+        assert!(info.subject.contains("localhost"));
     }
 }

@@ -366,6 +366,7 @@ export default function Editor({
           isTls={isTls}
           isReality={isReality}
           isQuic={isQuic}
+          endpoint={"endpoint" in draft && draft.endpoint ? draft.endpoint : undefined}
         />
       )}
 
