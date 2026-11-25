@@ -644,7 +644,9 @@ fn build_profile_outbounds(
                 continue;
             }
             match profiles.iter().find(|p| p.meta().id == id) {
-                Some(profile) => match build_outbound(profile, s) {
+                Some(profile) => match build_outbound(profile, s)
+                    .filter(|_| !crate::core::spki_pinned(profile))
+                {
                     Some(mut ob) => {
                         if let Some(obj) = ob.as_object_mut() {
                             obj.insert("tag".into(), id.clone().into());
@@ -1475,6 +1477,47 @@ mod tests {
             fell_back.push(falls_back);
         }
         assert_eq!(fell_back, [true, true, true, true, false, false, true]);
+    }
+
+    #[test]
+    fn a_public_key_pinned_rule_target_falls_back_to_the_proxy() {
+        // The outbound xray would build from this target carries no pin, so routing
+        // traffic to it would silently drop the user's pin. The rule goes through the
+        // active proxy instead, and no bare outbound is left behind for anything else
+        // to select.
+        let settings = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let p = sample();
+        let mut target = crate::share::parse_share_link(
+            "vless://u@e.x:443?type=ws&security=tls&sni=e.x&pcs=aabb",
+            None,
+        )
+        .unwrap();
+        target.meta_mut().id = "pinned".into();
+        target.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let rules = [RoutingRule {
+            domain: Some(vec!["example.com".into()]),
+            ..source_rule("pinned")
+        }];
+        let all = [target.clone(), p.clone()];
+        let cfg = build_xray_config(&p, &settings, &rules, &all).unwrap();
+        let rule = cfg["routing"]["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r.get("domain").is_some())
+            .unwrap_or_else(|| panic!("no domain rule in {cfg}"));
+        assert_eq!(rule["outboundTag"], "proxy");
+        assert!(
+            cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|o| o["tag"] != "pinned"),
+            "no outbound for the pinned target: {cfg}"
+        );
     }
 
     #[test]

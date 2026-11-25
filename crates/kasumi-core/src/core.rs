@@ -128,7 +128,10 @@ pub fn rule_target_fallback(target: &Profile, core: CoreEngine) -> Option<Target
     if let Profile::Custom(_) = target {
         return Some(TargetFallback::CustomConfig);
     }
-    (core == CoreEngine::Xray && !xray_builds(target)).then(|| match core_conflict(target) {
+    // A public-key pin has no xray field, so the outbound would dial on ordinary
+    // certificate verification with the user's pin silently unenforced.
+    let xray_cannot = !xray_builds(target) || spki_pinned(target);
+    (core == CoreEngine::Xray && xray_cannot).then(|| match core_conflict(target) {
         Some(conflict) => TargetFallback::CantStart { conflict },
         None => TargetFallback::SingBoxOnly,
     })
@@ -596,6 +599,18 @@ mod tests {
         assert_eq!(
             core_conflict(&xhttp),
             Some(CoreConflict::SpkiPinNeedsSingBox)
+        );
+    }
+
+    #[test]
+    fn a_public_key_pinned_rule_target_falls_back() {
+        // Xray can build the transport, but it has no field for the pin, so the
+        // outbound would dial without it — the same answer as a sing-box-only target.
+        let mut target = p("vless://u@e.x:443?type=ws&security=tls&sni=e.x&pcs=aabb");
+        target.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        assert_eq!(
+            rule_target_fallbacks(&target),
+            BTreeMap::from([(CoreEngine::Xray, TargetFallback::SingBoxOnly)])
         );
     }
 
