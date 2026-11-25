@@ -154,18 +154,38 @@ jobs:
           restore-keys: |
             cargo-target-${{ runner.os }}-${{ hashFiles('flake.lock') }}-
 
+      # ── The real-core tests (provider routing traffic under a real xray, config
+      #    validation against xray and sing-box) skip themselves when no core is
+      #    staged, which is how a broken assertion in them reached main. Stage the two
+      #    cores they run — nothing else — so every PR exercises them. ~120 MB per
+      #    run, so cache the staged pair on the pins. ──
+      - name: Cache the staged cores
+        id: cores
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: src-tauri/binaries
+          key: cores-${{ runner.os }}-${{ hashFiles('scripts/binary-versions.sh', 'scripts/binaries.json') }}
+
+      - name: Stage the cores for the real-core tests
+        if: steps.cores.outputs.cache-hit != 'true'
+        # Through the devshell: the fetcher needs curl, jq, unzip and go on PATH.
+        run: nix develop --command scripts/fetch-binaries.sh test-cores
+
       - name: Stub the libcronet bundle resource (clippy/codegen build the app)
         run: |
           # clippy/codegen compile kasumi-desktop, whose tauri.linux.conf.json
           # declares the libcronet.so resource; tauri-build checks the path exists.
           # The real lib is fetched only for the bundle — a placeholder suffices.
           mkdir -p src-tauri/binaries
-          : > src-tauri/binaries/libcronet.so
+          [ -s src-tauri/binaries/libcronet.so ] || : > src-tauri/binaries/libcronet.so
 
       - name: clippy + test + codegen drift
         run: |
           nix develop --command bash -euo pipefail -c '
             cargo clippy --workspace --all-targets -- -D warnings
+            # Fail rather than silently skip when the staged cores are missing: a
+            # skipped real-core suite is exactly the blind spot this job closes.
+            ls src-tauri/binaries/xray-* src-tauri/binaries/sing-box-* >/dev/null
             cargo test --workspace
             # The generated frontend bindings/schemas/defaults must match the Rust
             # source — regenerate and fail on any diff.
