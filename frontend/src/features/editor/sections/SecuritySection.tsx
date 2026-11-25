@@ -12,7 +12,7 @@ import {
 } from "../../../components";
 import type { Endpoint, Security, Tls, TlsCertInfo } from "../../../generated/bindings";
 import { FINGERPRINT_OPTS, SECURITY_OPTS } from "../../../generated/defaults";
-import { useT } from "../../../i18n";
+import { useFormatters, useT } from "../../../i18n";
 import { bridge } from "../../../lib/bridge-provider";
 import { normalizeList, toText } from "../../../lib/utils";
 import { useAppStore } from "../../../store/useAppStore";
@@ -36,6 +36,7 @@ export function SecuritySection({
   endpoint?: Endpoint;
 }) {
   const t = useT();
+  const { formatDateTime } = useFormatters();
   const notify = useAppStore((s) => s.notify);
   const [probing, setProbing] = useState(false);
   const [probed, setProbed] = useState<{
@@ -317,7 +318,9 @@ export function SecuritySection({
                   >
                     {t("editor.tofu.validUntil")}
                   </div>
-                  <div style={{ color: "var(--on-surface)" }}>{probed.cert.validUntil}</div>
+                  <div style={{ color: "var(--on-surface)" }}>
+                    {formatDateTime(new Date(probed.cert.validUntil))}
+                  </div>
                 </div>
               )}
               <div>
