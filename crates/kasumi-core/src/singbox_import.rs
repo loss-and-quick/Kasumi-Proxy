@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 use happ_sub::meta::{normalize_untrusted_text, single_line};
 use serde_json::Value;
 
-use crate::config_shared::parse_ws_early_data;
+use crate::config_shared::{normalize_cert_pin_hex, parse_ws_early_data};
 use crate::enums::{Flow, HeaderType, Hysteria2Obfs, PacketEncoding, Security, VmessEnc};
 use crate::mixins::{
     Endpoint, GrpcTransport, H2Transport, HttpUpgradeTransport, Meta, QuicTransport, TcpTransport,
@@ -171,11 +171,23 @@ fn server(o: &Value) -> Option<Profile> {
                 hop_interval: seconds(&text(o, "hop_interval")),
                 up_mbps: number(o, "up_mbps"),
                 down_mbps: number(o, "down_mbps"),
-                pin_sha256: o
-                    .get("tls")
-                    .map(|t| strings(t, "certificate_public_key_sha256"))
-                    .and_then(|pins| pins.into_iter().next())
-                    .unwrap_or_default(),
+                pin_sha256: if !tls.pcs.is_empty() {
+                    tls.pcs.clone()
+                } else {
+                    o.get("tls")
+                        .and_then(|t| {
+                            let cert_pins = strings(t, "certificate_sha256");
+                            let pins = if !cert_pins.is_empty() {
+                                cert_pins
+                            } else {
+                                strings(t, "certificate_public_key_sha256")
+                            };
+                            pins.into_iter().next().map(|p| {
+                                normalize_cert_pin_hex(&p).unwrap_or_else(|| p.trim().to_string())
+                            })
+                        })
+                        .unwrap_or_default()
+                },
                 tls: Tls {
                     pcs: String::new(),
                     ..tls
@@ -307,9 +319,16 @@ fn tls(o: &Value, always: bool) -> Tls {
     tls.tls_cipher_suites = strings(t, "cipher_suites");
     tls.tls_curve_preferences = strings(t, "curve_preferences");
     tls.cert = strings(t, "certificate").join("\n");
-    tls.pcs = strings(t, "certificate_public_key_sha256")
+    let cert_pins = strings(t, "certificate_sha256");
+    let pins = if !cert_pins.is_empty() {
+        cert_pins
+    } else {
+        strings(t, "certificate_public_key_sha256")
+    };
+    tls.pcs = pins
         .into_iter()
         .next()
+        .map(|p| normalize_cert_pin_hex(&p).unwrap_or_else(|| p.trim().to_string()))
         .unwrap_or_default();
     if let Some(u) = t.get("utls").filter(|u| flag(u, "enabled")) {
         tls.fingerprint = as_fingerprint(Some(&text(u, "fingerprint")));
@@ -789,5 +808,129 @@ mod tests {
             "plugin": "v2ray-plugin", "plugin_opts": "mode=websocket;host=cdn.example;path=/ws" }),
         );
         assert_eq!(ws.tls.security, Security::None);
+    }
+
+    #[test]
+    fn import_singbox_outbound_with_certificate_sha256_base64_normalizes_to_hex() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "vless",
+                "tag": "vl-pin",
+                "server": "vl.example",
+                "server_port": 443,
+                "uuid": UUID,
+                "tls": {
+                    "enabled": true,
+                    "server_name": "vl.example",
+                    "certificate_sha256": ["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="]
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let tls = imported.profiles[0].tls().unwrap();
+        assert_eq!(
+            tls.pcs,
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+    }
+
+    #[test]
+    fn import_singbox_hysteria2_with_certificate_sha256_base64_normalizes_to_hex() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "hysteria2",
+                "tag": "hy-pin",
+                "server": "hy.example",
+                "server_port": 443,
+                "password": "pw",
+                "tls": {
+                    "enabled": true,
+                    "server_name": "hy.example",
+                    "certificate_sha256": "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let Profile::Hysteria2(h) = &imported.profiles[0] else {
+            panic!("expected Hysteria2 profile");
+        };
+        assert_eq!(
+            h.pin_sha256,
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        assert!(h.tls.pcs.is_empty());
+    }
+
+    #[test]
+    fn import_singbox_outbound_falls_back_to_certificate_public_key_sha256() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "vless",
+                "tag": "vl-spki",
+                "server": "vl.example",
+                "server_port": 443,
+                "uuid": UUID,
+                "tls": {
+                    "enabled": true,
+                    "server_name": "vl.example",
+                    "certificate_public_key_sha256": ["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="]
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let tls = imported.profiles[0].tls().unwrap();
+        assert_eq!(
+            tls.pcs,
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+    }
+
+    #[test]
+    fn import_singbox_outbound_prefers_certificate_sha256_over_public_key_sha256() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "vless",
+                "tag": "vl-both",
+                "server": "vl.example",
+                "server_port": 443,
+                "uuid": UUID,
+                "tls": {
+                    "enabled": true,
+                    "server_name": "vl.example",
+                    "certificate_sha256": ["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="],
+                    "certificate_public_key_sha256": ["//////////////////////////////////////////8="]
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let tls = imported.profiles[0].tls().unwrap();
+        assert_eq!(
+            tls.pcs,
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+    }
+
+    #[test]
+    fn import_singbox_outbound_with_colon_separated_hex_pin_normalizes_to_hex() {
+        let imported = import_singbox(&json!({
+            "outbounds": [{
+                "type": "vless",
+                "tag": "vl-colon",
+                "server": "vl.example",
+                "server_port": 443,
+                "uuid": UUID,
+                "tls": {
+                    "enabled": true,
+                    "server_name": "vl.example",
+                    "certificate_sha256": ["01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF"]
+                }
+            }]
+        }));
+        assert_eq!(imported.profiles.len(), 1);
+        let tls = imported.profiles[0].tls().unwrap();
+        assert_eq!(
+            tls.pcs,
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
     }
 }

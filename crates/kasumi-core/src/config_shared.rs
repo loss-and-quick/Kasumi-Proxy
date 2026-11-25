@@ -126,6 +126,66 @@ pub fn build_ws_path(path: &str, ws_early_data: i64, ws_early_data_header: &str)
     format!("{base}{sep}{qs}")
 }
 
+fn decode_hex_32(s: &str) -> Option<[u8; 32]> {
+    let clean: String = s.chars().filter(|c| *c != ':' && *c != '-').collect();
+    if clean.len() != 64 || !clean.is_ascii() {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        let hi = (clean.as_bytes()[i * 2] as char).to_digit(16)?;
+        let lo = (clean.as_bytes()[i * 2 + 1] as char).to_digit(16)?;
+        *byte = ((hi << 4) | lo) as u8;
+    }
+    Some(out)
+}
+
+fn decode_base64_32(s: &str) -> Option<[u8; 32]> {
+    use base64::Engine;
+    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
+
+    let trimmed = s.trim();
+    let try_decode = |engine: &base64::engine::GeneralPurpose| -> Option<[u8; 32]> {
+        let vec = engine.decode(trimmed).ok()?;
+        vec.try_into().ok()
+    };
+
+    try_decode(&STANDARD)
+        .or_else(|| try_decode(&URL_SAFE))
+        .or_else(|| try_decode(&STANDARD_NO_PAD))
+        .or_else(|| try_decode(&URL_SAFE_NO_PAD))
+}
+
+/// Decode a 32-byte certificate pin from either a 64-char hex string (with optional
+/// `:` or `-` delimiters) or a base64-encoded string.
+pub fn decode_cert_pin_32(s: &str) -> Option<[u8; 32]> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    decode_hex_32(trimmed).or_else(|| decode_base64_32(trimmed))
+}
+
+/// Normalizes a certificate pin to 64 lowercase hex characters.
+/// Returns None if `s` is not a valid 32-byte pin.
+pub fn normalize_cert_pin_hex(s: &str) -> Option<String> {
+    let bytes = decode_cert_pin_32(s)?;
+    let mut out = String::with_capacity(64);
+    for b in bytes {
+        use std::fmt::Write;
+        let _ = write!(out, "{b:02x}");
+    }
+    Some(out)
+}
+
+/// Normalizes a certificate pin to standard padded Base64 (44 characters).
+/// Returns None if `s` is not a valid 32-byte pin.
+pub fn normalize_cert_pin_base64(s: &str) -> Option<String> {
+    use base64::Engine;
+    let bytes = decode_cert_pin_32(s)?;
+    Some(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,5 +295,86 @@ mod tests {
         assert_eq!(w.path, "/ws");
         assert_eq!(w.ws_early_data, 2048);
         assert_eq!(w.ws_early_data_header, "Sec-WebSocket-Protocol");
+    }
+
+    #[test]
+    fn cert_pin_normalization_handles_hex_and_base64_variants() {
+        // 32 bytes: 0x01, 0x23, 0x45, 0x67, ...
+        let hex_lower = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let hex_upper = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
+        let hex_colon = "01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:ab:cd:ef";
+        let hex_hyphen = "01-23-45-67-89-AB-CD-EF-01-23-45-67-89-AB-CD-EF-01-23-45-67-89-AB-CD-EF-01-23-45-67-89-AB-CD-EF";
+
+        let expected_b64 = "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8=";
+
+        assert_eq!(
+            normalize_cert_pin_hex(hex_lower),
+            Some(hex_lower.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_hex(hex_upper),
+            Some(hex_lower.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_hex(hex_colon),
+            Some(hex_lower.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_hex(hex_hyphen),
+            Some(hex_lower.to_string())
+        );
+
+        assert_eq!(
+            normalize_cert_pin_base64(hex_lower),
+            Some(expected_b64.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_base64(hex_upper),
+            Some(expected_b64.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_base64(hex_colon),
+            Some(expected_b64.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_base64(hex_hyphen),
+            Some(expected_b64.to_string())
+        );
+
+        // Standard Base64 roundtrip
+        assert_eq!(
+            normalize_cert_pin_hex(expected_b64),
+            Some(hex_lower.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_base64(expected_b64),
+            Some(expected_b64.to_string())
+        );
+
+        // Unpadded Base64
+        let unpadded_b64 = "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8";
+        assert_eq!(
+            normalize_cert_pin_hex(unpadded_b64),
+            Some(hex_lower.to_string())
+        );
+        assert_eq!(
+            normalize_cert_pin_base64(unpadded_b64),
+            Some(expected_b64.to_string())
+        );
+
+        // URL-safe Base64: test with bytes that contain + and / in standard b64
+        // bytes: [0xfb, 0xff, 0xfe, ...] -> standard: `+//+...` url-safe: `-_/-...`
+        let all_ff = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let b64_ff = "//////////////////////////////////////////8=";
+        assert_eq!(normalize_cert_pin_hex(b64_ff), Some(all_ff.to_string()));
+        assert_eq!(normalize_cert_pin_base64(all_ff), Some(b64_ff.to_string()));
+
+        // Invalid inputs
+        assert_eq!(normalize_cert_pin_hex(""), None);
+        assert_eq!(normalize_cert_pin_hex("   "), None);
+        assert_eq!(normalize_cert_pin_hex("not-hex-or-b64!"), None);
+        assert_eq!(normalize_cert_pin_hex("123456"), None); // too short
+        assert_eq!(normalize_cert_pin_base64(""), None);
+        assert_eq!(normalize_cert_pin_base64("short"), None);
     }
 }

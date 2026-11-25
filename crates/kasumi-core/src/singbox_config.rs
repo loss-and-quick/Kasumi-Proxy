@@ -6,7 +6,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
-use crate::config_shared::{parse_pem_chain, split_csv, split_list};
+use crate::config_shared::{normalize_cert_pin_base64, parse_pem_chain, split_csv, split_list};
 use crate::core::rule_target_fallback;
 use crate::enums::{CoreEngine, Fingerprint, HeaderType, Security, SsMethod};
 use crate::mixins::Transport;
@@ -251,8 +251,13 @@ fn build_singbox_tls(p: &Profile, force: bool, s: &AdvancedSettings) -> Option<V
     if !tls.alpn.is_empty() {
         t["alpn"] = tls.alpn.clone().into();
     }
-    if !pin.is_empty() {
-        t["certificate_public_key_sha256"] = json!([pin]);
+    // `pin_sha256` (from Hysteria2 `pinSHA256`) and `tls.pcs` (from VLESS/Trojan
+    // `pcs`) are SHA-256 hashes of the full X.509 leaf certificate (DER), not SPKI.
+    // sing-box uses `certificate_sha256` for full-certificate pinning (since 1.15.0),
+    // expecting base64-encoded 32-byte hashes. `certificate_public_key_sha256` only
+    // pins SPKI and causes handshake failures when given a leaf certificate hash.
+    if let Some(pin_b64) = normalize_cert_pin_base64(&pin) {
+        t["certificate_sha256"] = json!([pin_b64]);
     }
     if let Some(ech_val) = build_singbox_ech(&tls.ech) {
         t["ech"] = ech_val;
@@ -2556,5 +2561,79 @@ mod tests {
             "xchacha20-ietf-poly1305"
         );
         assert_eq!(method(SsMethod::Aes256Gcm), "aes-256-gcm");
+    }
+
+    #[test]
+    fn hysteria2_with_hex_pin_emits_base64_certificate_sha256() {
+        let p = crate::share::parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&pinSHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .unwrap();
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert_eq!(
+            tls["certificate_sha256"],
+            json!(["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="])
+        );
+        assert!(tls.get("certificate_public_key_sha256").is_none());
+    }
+
+    #[test]
+    fn hysteria2_with_colon_separated_hex_pin_emits_base64_certificate_sha256() {
+        let p = crate::share::parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&pinSHA256=01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF",
+            None,
+        )
+        .unwrap();
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert_eq!(
+            tls["certificate_sha256"],
+            json!(["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="])
+        );
+        assert!(tls.get("certificate_public_key_sha256").is_none());
+    }
+
+    #[test]
+    fn vless_with_hex_pcs_emits_base64_certificate_sha256() {
+        let mut p = crate::share::parse_share_link(
+            "vless://11111111-1111-1111-1111-111111111111@vl.example:443?security=tls&sni=vl.example",
+            None,
+        )
+        .unwrap();
+        p.tls_mut().unwrap().pcs =
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into();
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert_eq!(
+            tls["certificate_sha256"],
+            json!(["ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8="])
+        );
+        assert!(tls.get("certificate_public_key_sha256").is_none());
+    }
+
+    #[test]
+    fn empty_pin_omits_certificate_sha256_and_public_key_fields() {
+        let p =
+            crate::share::parse_share_link("hysteria2://pw@hy.example:443?sni=hy.example", None)
+                .unwrap();
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert!(tls.get("certificate_sha256").is_none());
+        assert!(tls.get("certificate_public_key_sha256").is_none());
+    }
+
+    #[test]
+    fn invalid_pin_omits_certificate_sha256() {
+        let p = crate::share::parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&pinSHA256=invalid-pin-not-32-bytes",
+            None,
+        )
+        .unwrap();
+        let out = build_singbox_outbound(&p, &AdvancedSettings::default());
+        let tls = &out["tls"];
+        assert!(tls.get("certificate_sha256").is_none());
+        assert!(tls.get("certificate_public_key_sha256").is_none());
     }
 }
