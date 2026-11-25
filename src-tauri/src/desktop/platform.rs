@@ -728,6 +728,21 @@ impl Platform for DesktopPlatform {
         spawn_local_test_core(&bin, cfg_path, log_path, &dat).await
     }
 
+    async fn probe_tls_dial(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> std::io::Result<tokio::net::TcpStream> {
+        // Same escape as `tcp_ping`: with the tun up, an unbound connect reaches the
+        // server through the tunnel, and the certificate it answers with is not the
+        // node's — a pin taken from that probe would belong to the wrong server.
+        if can_bind_uplink() {
+            crate::desktop::net::uplink_connect(host, port).await
+        } else {
+            tokio::net::TcpStream::connect((host, port)).await
+        }
+    }
+
     async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
         // Same escape as the test cores above; an unprivileged in-process run has
         // no managed tun to escape.

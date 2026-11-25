@@ -11,26 +11,34 @@ use serde_json::Value;
 
 use kasumi_log::{Area, ks_warn};
 
-/// TCP-connect latency to `host:port` in ms, with the socket bound to the
-/// physical uplink the way test cores bind their outbounds, so an active tun
-/// can't capture the connect. Without a resolvable uplink it connects unbound.
+/// Connect to `host:port` with the socket bound to the physical uplink the way test
+/// cores bind their outbounds, so an active tun can't capture it. Without a
+/// resolvable uplink it connects unbound.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-pub async fn uplink_tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
-    let addr = tokio::net::lookup_host((host, port)).await.ok()?.next()?;
+pub async fn uplink_connect(host: &str, port: u16) -> std::io::Result<tokio::net::TcpStream> {
+    let addr = tokio::net::lookup_host((host, port))
+        .await?
+        .next()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no address"))?;
     let socket = if addr.is_ipv4() {
         tokio::net::TcpSocket::new_v4()
     } else {
         tokio::net::TcpSocket::new_v6()
-    }
-    .ok()?;
+    }?;
     if let Err(e) = super::routing::bind_uplink(&socket, addr.ip()).await {
         ks_warn!(
             Area::Net,
-            "tcp-ping {host}: uplink bind failed, connecting unbound: {e}"
+            "uplink connect {host}: uplink bind failed, connecting unbound: {e}"
         );
     }
+    socket.connect(addr).await
+}
+
+/// TCP-connect latency to `host:port` in ms, over [`uplink_connect`].
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub async fn uplink_tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
     let start = std::time::Instant::now();
-    match tokio::time::timeout(timeout, socket.connect(addr)).await {
+    match tokio::time::timeout(timeout, uplink_connect(host, port)).await {
         Ok(Ok(_stream)) => Some(start.elapsed().as_millis() as u64),
         _ => None,
     }

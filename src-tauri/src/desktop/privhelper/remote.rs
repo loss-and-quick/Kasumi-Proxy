@@ -212,6 +212,42 @@ impl Platform for RemotePlatform {
         }))
     }
 
+    async fn probe_tls_cert(
+        &self,
+        host: &str,
+        port: u16,
+        sni: Option<&str>,
+        insecure: bool,
+        disable_sni: bool,
+    ) -> Result<kasumi_backend::commands::TlsCertInfo, kasumi_backend::commands::CommandError> {
+        // Linux binds the uplink with `SO_BINDTODEVICE` (`CAP_NET_RAW`), so the probe
+        // runs where the capability is, the same reason `tcp_ping` goes through the
+        // helper. A helper too old for the op falls back to the local dial.
+        #[cfg(unix)]
+        {
+            let req = PrivRequest::ProbeTlsCert {
+                host: host.to_owned(),
+                port,
+                sni: sni.map(str::to_owned),
+                insecure,
+                disable_sni,
+            };
+            match self.client.call_oneshot(req).await {
+                Ok(PrivReply::TlsCert { cert: Some(cert) }) => return Ok(*cert),
+                Ok(PrivReply::TlsCert { cert: None }) => {
+                    return Err(kasumi_backend::commands::CommandError(format!(
+                        "TLS probe of {host}:{port} failed in the privileged helper"
+                    )));
+                }
+                Ok(other) => ks_warn!(Area::Helper, "unexpected reply to ProbeTlsCert: {other:?}"),
+                Err(e) => ks_warn!(Area::Helper, "TLS probe through the helper failed: {e}"),
+            }
+        }
+        self.local
+            .probe_tls_cert(host, port, sni, insecure, disable_sni)
+            .await
+    }
+
     async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
         // Linux: the uplink bind needs CAP_NET_RAW, so the helper connects, the way
         // it runs test cores. A helper too old for the op falls back to the plain

@@ -26,7 +26,7 @@ use kasumi_core::enums::CoreEngine;
 /// request or reply changes in a way the other side can't read, so a helper left
 /// over from another build is refused at the handshake instead of failing later on
 /// a request it doesn't know.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// A privileged operation the GUI asks the helper to perform. Mirrors the
 /// privilege-needing methods of `Platform`.
@@ -68,6 +68,16 @@ pub enum PrivRequest {
         port: u16,
         timeout_ms: u64,
     },
+    /// Read a server's leaf certificate with the socket bound to the physical uplink
+    /// (same `CAP_NET_RAW` reason as `TcpPing`), so the probe reaches the node rather
+    /// than whatever the GUI's own tun terminates.
+    ProbeTlsCert {
+        host: String,
+        port: u16,
+        sni: Option<String>,
+        insecure: bool,
+        disable_sni: bool,
+    },
 }
 
 /// The helper's reply to one [`PrivRequest`]. `ProxyStatus` is flattened to
@@ -104,6 +114,10 @@ pub enum PrivReply {
     /// A `TcpPing` result in ms; `None` when the server didn't answer.
     Latency {
         ms: Option<u64>,
+    },
+    /// A `ProbeTlsCert` result; `None` when the handshake or connect failed.
+    TlsCert {
+        cert: Option<Box<kasumi_backend::commands::TlsCertInfo>>,
     },
     /// An operation failed; carries the reason (a stringified `anyhow::Error`).
     Err {

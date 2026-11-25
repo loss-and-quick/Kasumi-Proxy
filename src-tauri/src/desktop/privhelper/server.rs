@@ -144,6 +144,20 @@ impl Server {
                     .tcp_ping(&host, port, Duration::from_millis(timeout_ms))
                     .await,
             },
+            PrivRequest::ProbeTlsCert {
+                host,
+                port,
+                sni,
+                insecure,
+                disable_sni,
+            } => PrivReply::TlsCert {
+                cert: self
+                    .platform
+                    .probe_tls_cert(&host, port, sni.as_deref(), insecure, disable_sni)
+                    .await
+                    .ok()
+                    .map(Box::new),
+            },
         };
         #[cfg(target_os = "linux")]
         self.hand_files_to_owner(handoff).await;

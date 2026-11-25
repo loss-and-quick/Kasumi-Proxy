@@ -1,6 +1,7 @@
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_rustls::rustls::{
@@ -72,6 +73,9 @@ impl ServerCertVerifier for NoVerifier {
     }
 }
 
+/// Probe with a plain, unbound connect. A platform whose own tun would capture that
+/// connect escapes it through [`Platform::probe_tls_dial`] instead; this stays for
+/// callers that already hold the socket semantics they want (and for the tests).
 pub async fn probe_tls_cert(
     host: &str,
     port: u16,
@@ -79,10 +83,34 @@ pub async fn probe_tls_cert(
     insecure: bool,
     disable_sni: bool,
 ) -> Result<TlsCertInfo, CommandError> {
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        probe_tls_cert_inner(host, port, sni, insecure, disable_sni),
+    probe_with(
+        host,
+        port,
+        sni,
+        insecure,
+        disable_sni,
+        tokio::net::TcpStream::connect((host, port)),
     )
+    .await
+}
+
+/// Run the probe over a socket the caller opened, applying the shared deadline. The
+/// platform decides how that socket reaches the server (see
+/// [`Platform::probe_tls_dial`]).
+pub async fn probe_with(
+    host: &str,
+    port: u16,
+    sni: Option<&str>,
+    insecure: bool,
+    disable_sni: bool,
+    dial: impl Future<Output = std::io::Result<tokio::net::TcpStream>>,
+) -> Result<TlsCertInfo, CommandError> {
+    tokio::time::timeout(Duration::from_secs(5), async move {
+        let stream = dial
+            .await
+            .map_err(|e| CommandError(format!("failed to connect to {host}:{port}: {e}")))?;
+        probe_over_stream(stream, host, port, sni, insecure, disable_sni).await
+    })
     .await
     .map_err(|_| {
         CommandError(format!(
@@ -91,7 +119,9 @@ pub async fn probe_tls_cert(
     })?
 }
 
-async fn probe_tls_cert_inner(
+/// Handshake over an already-connected stream and read the leaf certificate.
+pub async fn probe_over_stream(
+    tcp_stream: tokio::net::TcpStream,
     host: &str,
     port: u16,
     sni: Option<&str>,
@@ -123,10 +153,6 @@ async fn probe_tls_cert_inner(
     if disable_sni {
         config.enable_sni = false;
     }
-
-    let tcp_stream = tokio::net::TcpStream::connect((host, port))
-        .await
-        .map_err(|e| CommandError(format!("failed to connect to {host}:{port}: {e}")))?;
 
     let connector = tokio_rustls::TlsConnector::from(Arc::new(config));
     let tls_stream = connector
