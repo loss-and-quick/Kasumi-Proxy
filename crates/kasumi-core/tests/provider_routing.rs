@@ -16,6 +16,7 @@
 //!    it fails over to the explicit default handler and terminates without infinite loopback
 //!    recursion.
 
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -398,11 +399,27 @@ fn send_socks5_http_request(
                     break;
                 }
             }
+            // A read that times out is a hang, not a failed connection: the proxy
+            // never finished the hand-off. Callers distinguish the two, because a
+            // re-entry loop looks exactly like this.
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                return Err(format!("timeout: no answer within {:?}", e));
+            }
             Err(e) => return Err(format!("read error: {e}")),
         }
     }
     Ok(resp)
 }
+
+/// Loopback hand-offs one request may take: exactly one, the explicit fallback. A
+/// re-entry loop adds one per turn — this is the count that shows it directly, since
+/// the loop reuses the same inbound link and only the hand-offs pile up.
+const LOOPBACK_OPENS: usize = 1;
 
 fn build_synthetic_custom_profile(
     decoy_port: u16,
@@ -974,10 +991,18 @@ fn test_real_xray_traffic_unreachable_balancer_without_fallback_terminates_witho
     let res = send_socks5_http_request(force_port, "target.example", 80, "/test");
     let duration = req_start.elapsed();
 
-    // The request should fail/close because all nodes are unreachable, and fail quickly
+    // The request should fail/close because all nodes are unreachable, and fail quickly.
     assert!(
         duration < Duration::from_secs(5),
         "request took too long: {duration:?}"
+    );
+    // A hang is not a failure. The client gives up after three seconds, below that
+    // bound, so the timing alone cannot tell a refusal from a loop that never
+    // answers; require an actual closed or refused connection.
+    assert!(
+        !matches!(&res, Err(e) if e.starts_with("timeout")),
+        "the request hung instead of failing: {res:?}\nLog tail:\n{}",
+        read_log_tail(&log_path, 40)
     );
     // When the proxy fails to connect to the upstream, it closes the connection (returns EOF -> empty resp or Err)
     if let Ok(ref s) = res {
@@ -995,17 +1020,27 @@ fn test_real_xray_traffic_unreachable_balancer_without_fallback_terminates_witho
         .lines()
         .filter(|line| line.contains("taking detour [proxy]"))
         .count();
-    let proxy_select_routes = log_content
+    // The same accepted connection is logged once per inbound layer that handles it,
+    // so counting lines would depend on how many layers Xray routes it through. A
+    // loopback re-entry loop instead shows up as *more client connections*: count the
+    // source addresses the routed accept lines name.
+    let routed_sources: BTreeSet<&str> = log_content
         .lines()
         .filter(|line| line.contains("[proxy-select ->"))
-        .count();
+        .filter_map(|line| line.split_once("from "))
+        .filter_map(|(_, rest)| rest.split_whitespace().next())
+        .collect();
     assert!(
-        force_to_proxy >= 1 && proxy_select_routes >= 1,
+        force_to_proxy >= 1 && !routed_sources.is_empty(),
         "expected info-level force-in and proxy-select routing records. Log:\n{log_content}"
     );
+    let loopback_opens = log_content
+        .lines()
+        .filter(|line| line.contains("proxy/loopback:"))
+        .count();
     assert!(
-        force_to_proxy <= 1 && proxy_select_routes <= 1,
-        "expected no proxy re-entry, but saw {force_to_proxy} proxy detours and {proxy_select_routes} proxy-select routes. Log:\n{log_content}"
+        force_to_proxy <= 1 && routed_sources.len() == 1 && loopback_opens <= LOOPBACK_OPENS,
+        "expected no proxy re-entry, but saw {force_to_proxy} proxy detours, {routed_sources:?} routed through, and {loopback_opens} loopback hand-offs. Log:\n{log_content}"
     );
     assert!(
         log_content.contains("app/router: fallback to ["),

@@ -8,6 +8,10 @@
 #   fetch-binaries.sh android
 #     → module/bin/{arm64-v8a,x86_64}/<binary>        (Magisk module payload)
 #
+#   fetch-binaries.sh test-cores [target-triple]      (default: host triple)
+#     → src-tauri/binaries/{xray,sing-box}-<triple>   (no sidecars: only what the
+#       real-core test harness runs, so CI can stage it on every PR)
+#
 #   fetch-binaries.sh desktop [target-triple]         (default: host triple)
 #     → src-tauri/binaries/<binary>-<triple>[.exe]    (Tauri externalBin sidecars)
 #       plus the desktop-only extras next to the cores: libcronet (sing-box naive
@@ -121,6 +125,20 @@ build_geodat2srs() { # <goos> <goarch> <dest>
 
 CORES="xray tun2socks sing-box hev-socks5-tunnel"
 
+# Desktop target → arch key in scripts/binaries.json, binary suffix, cronet library,
+# whether the Windows tun sidecars apply, and geodat2srs' GOOS/GOARCH.
+target_parts() { # <target-triple>
+	case "$1" in
+	x86_64-unknown-linux-gnu) echo "linux-amd64||libcronet.so|0|linux|amd64" ;;
+	x86_64-pc-windows-msvc) echo "windows-amd64|.exe|libcronet.dll|1|windows|amd64" ;;
+	*) return 1 ;;
+	esac
+}
+
+host_target() {
+	rustc -vV 2>/dev/null | sed -n 's/^host: //p'
+}
+
 fetch_android() {
 	local out="$ROOT/module/bin"
 	echo "→ android binaries → module/bin/"
@@ -147,23 +165,18 @@ fetch_android() {
 }
 
 fetch_desktop() {
-	local target="${1:-$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')}"
+	local target="${1:-$(host_target)}"
 	[ -n "$target" ] || {
 		echo "❌ no target triple given and rustc not on PATH" >&2
 		exit 1
 	}
-	local arch ext cronet wintun g2s_goos g2s_goarch
-	case "$target" in
-	x86_64-unknown-linux-gnu)
-		arch="linux-amd64" ext="" cronet="libcronet.so" wintun=0 g2s_goos="linux" g2s_goarch="amd64" ;;
-	x86_64-pc-windows-msvc)
-		arch="windows-amd64" ext=".exe" cronet="libcronet.dll" wintun=1 g2s_goos="windows" g2s_goarch="amd64" ;;
-	*)
+	local parts arch ext cronet wintun g2s_goos g2s_goarch
+	if ! parts=$(target_parts "$target"); then
 		echo "❌ unsupported desktop target: $target" >&2
 		echo "   supported: x86_64-unknown-linux-gnu, x86_64-pc-windows-msvc" >&2
 		exit 1
-		;;
-	esac
+	fi
+	IFS='|' read -r arch ext cronet wintun g2s_goos g2s_goarch <<<"$parts"
 
 	local out="$ROOT/src-tauri/binaries"
 	mkdir -p "$out"
@@ -212,11 +225,44 @@ fetch_desktop() {
 	fi
 }
 
+# Only the cores the config/traffic harness runs. The real-core tests find them under
+# src-tauri/binaries and skip when absent, so a plain CI checkout never exercised them
+# — only a developer who had staged the sidecars did.
+fetch_test_cores() {
+	local target="${1:-$(host_target)}"
+	[ -n "$target" ] || {
+		echo "❌ no target triple given and rustc not on PATH" >&2
+		exit 1
+	}
+	local parts arch ext cronet
+	if ! parts=$(target_parts "$target"); then
+		echo "❌ unsupported target for test cores: $target" >&2
+		exit 1
+	fi
+	IFS='|' read -r arch ext cronet _ <<<"$parts"
+	local out="$ROOT/src-tauri/binaries"
+	mkdir -p "$out"
+	echo "→ test cores for $target → src-tauri/binaries/"
+	local sbdir=""
+	for core in xray sing-box; do
+		local d
+		d=$(stage_core "$core" "$arch" "$out/$core-$target$ext" "$ext")
+		[ "$core" = "sing-box" ] && sbdir="$d"
+		[ -n "$ext" ] || chmod 755 "$out/$core-$target"
+		printf '   %-22s %s\n' "$core-$target" "$(du -h "$out/$core-$target$ext" | cut -f1)"
+	done
+	# sing-box dlopen()s cronet for its naive outbound, and the config sweep
+	# validates a naive node — without the real library sing-box refuses to start.
+	cp "$(locate "$sbdir" "$cronet" "")" "$out/$cronet"
+	printf '   %-22s %s\n' "$cronet" "$(du -h "$out/$cronet" | cut -f1)"
+}
+
 case "${1:-}" in
 android) fetch_android ;;
+test-cores) shift; fetch_test_cores "${1:-}" ;;
 desktop) shift; fetch_desktop "${1:-}" ;;
 *)
-	echo "usage: fetch-binaries.sh android | desktop [target-triple]" >&2
+	echo "usage: fetch-binaries.sh android | desktop [target-triple] | test-cores [target-triple]" >&2
 	exit 2
 	;;
 esac
