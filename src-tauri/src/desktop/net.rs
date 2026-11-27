@@ -27,6 +27,11 @@ pub async fn uplink_connect_bound(host: &str, port: u16) -> std::io::Result<toki
     connect_uplink(host, port, true).await
 }
 
+/// How long one address may hold the connect before the next is tried. The TLS
+/// probe allows five seconds for the whole dial, so three addresses still fit.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+const PER_ADDRESS_BUDGET: Duration = Duration::from_millis(1600);
+
 /// Try every resolved address in turn, each over its own socket, so a host whose
 /// first record is unreachable (a stale AAAA, say) still connects. The caller's
 /// deadline bounds the whole sequence.
@@ -45,9 +50,19 @@ async fn connect_uplink(
     }
     let mut last = None;
     for addr in addrs {
-        match connect_one(host, addr, require_bound).await {
-            Ok(stream) => return Ok(stream),
-            Err(e) => last = Some(e),
+        // Each attempt gets a slice: a family that black-holes SYNs would otherwise
+        // consume the probe's whole deadline and the working address never gets tried.
+        let attempt =
+            tokio::time::timeout(PER_ADDRESS_BUDGET, connect_one(host, addr, require_bound));
+        match attempt.await {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(e)) => last = Some(e),
+            Err(_) => {
+                last = Some(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("no answer from {host} ({addr})"),
+                ));
+            }
         }
     }
     Err(last.unwrap_or_else(|| {
@@ -69,16 +84,24 @@ async fn connect_one(
     } else {
         tokio::net::TcpSocket::new_v6()
     }?;
-    if let Err(e) = super::routing::bind_uplink(&socket, addr.ip()).await {
-        if require_bound {
+    match super::routing::bind_uplink(&socket, addr.ip()).await {
+        // `false`: no route named an uplink. Unbound is then simply the best the
+        // stack offers, which a caller reading the peer's identity cannot accept.
+        Ok(false) if require_bound => {
+            return Err(std::io::Error::other(format!(
+                "no uplink to bind for {host} ({addr})"
+            )));
+        }
+        Ok(_) => {}
+        Err(e) if require_bound => {
             return Err(std::io::Error::other(format!(
                 "uplink bind for {host} ({addr}) failed: {e}"
             )));
         }
-        ks_warn!(
+        Err(e) => ks_warn!(
             Area::Net,
             "uplink connect {host}: uplink bind failed, connecting unbound: {e}"
-        );
+        ),
     }
     socket.connect(addr).await
 }
