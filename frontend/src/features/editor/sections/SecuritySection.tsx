@@ -26,6 +26,7 @@ export function SecuritySection({
   isReality,
   isQuic,
   endpoint,
+  transportName,
 }: {
   tls: Tls;
   setTls: TlsSetter;
@@ -34,11 +35,14 @@ export function SecuritySection({
   isReality: boolean;
   isQuic: boolean;
   endpoint?: Endpoint;
+  /** The transport's authority/host: the SNI fallback the config builders use. */
+  transportName: string;
 }) {
   const t = useT();
   const { formatDateTime } = useFormatters();
   const notify = useAppStore((s) => s.notify);
   const [probing, setProbing] = useState(false);
+  const security = tls.security ?? "none";
   const [probed, setProbed] = useState<{
     cert: TlsCertInfo;
     host: string;
@@ -48,6 +52,8 @@ export function SecuritySection({
     // the server's own name, which is a different certificate than the probe without
     // one reaches.
     disableSni: boolean;
+    /** TLS vs Reality: the same endpoint asks for different certificates. */
+    security: Security;
   } | null>(null);
 
   const handleProbeCert = async () => {
@@ -58,7 +64,11 @@ export function SecuritySection({
       return;
     }
     const disableSni = !!tls.disableSni;
-    const sni = tls.disableSni ? null : tls.sni?.trim() || null;
+    // The name the core will put in its ClientHello, resolved the way the config
+    // builders resolve it: an explicit SNI, then the transport's authority/host, then
+    // the endpoint. Probing a different name reads a different certificate — the
+    // wrong virtual host on a shared address.
+    const sni = disableSni ? null : tls.sni?.trim() || transportName || host;
     setProbing(true);
     try {
       const cert = await bridge.probeTlsCert({
@@ -68,7 +78,7 @@ export function SecuritySection({
         insecure: true,
         disableSni: !!tls.disableSni,
       });
-      setProbed({ cert, host, port, sni, disableSni });
+      setProbed({ cert, host, port, sni, disableSni, security });
     } catch (e) {
       notify(e instanceof Error ? e.message : t("editor.fetchCertFailed"));
     } finally {
@@ -81,12 +91,13 @@ export function SecuritySection({
     const currentHost = endpoint?.address?.trim() ?? "";
     const currentPort = endpoint?.port ?? 0;
     const currentDisableSni = !!tls.disableSni;
-    const currentSni = tls.disableSni ? null : tls.sni?.trim() || null;
+    const currentSni = tls.disableSni ? null : tls.sni?.trim() || transportName || currentHost;
     if (
       currentHost !== probed.host ||
       currentPort !== probed.port ||
       currentSni !== probed.sni ||
-      currentDisableSni !== probed.disableSni
+      currentDisableSni !== probed.disableSni ||
+      (tls.security ?? "none") !== probed.security
     ) {
       notify(t("editor.tofu.targetMismatch"));
       setProbed(null);
@@ -179,15 +190,20 @@ export function SecuritySection({
                 hint={t("settings.pinnedCertHint")}
               />
             </div>
-            <div style={{ marginTop: 22 }}>
-              <IconBtn
-                name="download"
-                title={t("editor.fetchCert")}
-                spinning={probing}
-                disabled={probing}
-                onClick={handleProbeCert}
-              />
-            </div>
+            {/* A QUIC protocol's pin is its own (Hysteria2 `pinSHA256`), and a TCP
+                probe of the same numeric port reads a certificate from a service that
+                has nothing to do with the node. */}
+            {!isQuic && (
+              <div style={{ marginTop: 22 }}>
+                <IconBtn
+                  name="download"
+                  title={t("editor.fetchCert")}
+                  spinning={probing}
+                  disabled={probing}
+                  onClick={handleProbeCert}
+                />
+              </div>
+            )}
           </div>
           <SettingRow title={t("editor.allowInsecure")}>
             <Switch

@@ -288,6 +288,16 @@ export default function Editor({
   const isTls = security === "tls";
   const isQuic = proto === "hysteria2" || proto === "tuic";
   const network = "transport" in draft && draft.transport ? draft.transport.kind : "tcp";
+  // The name the core sends when the profile leaves SNI blank: gRPC's authority, else
+  // the transport's Host. Resolved here so the certificate probe asks for the same
+  // name the connection will use.
+  const transportName = (() => {
+    if (!("transport" in draft) || !draft.transport) return "";
+    const t = draft.transport;
+    const authority = "authority" in t ? (t.authority ?? "") : "";
+    const host = "host" in t ? (t.host ?? "") : "";
+    return authority.trim() || host.trim();
+  })();
   const needsHostPath = ["ws", "grpc", "httpupgrade", "xhttp", "h2"].includes(network);
   const engineForced = coreResolution?.forced ?? null;
   const forcedByHop = coreResolution?.forcedByHop ?? null;
@@ -367,6 +377,7 @@ export default function Editor({
           isReality={isReality}
           isQuic={isQuic}
           endpoint={"endpoint" in draft && draft.endpoint ? draft.endpoint : undefined}
+          transportName={transportName}
         />
       )}
 
