@@ -67,12 +67,34 @@ pub(crate) fn skips_cert_check_unpinned(p: &Profile) -> bool {
         .is_some_and(|t| t.security == Security::Tls && t.allow_insecure && t.pcs.is_empty())
 }
 
+/// The pin a profile records, with what it hashes. Two fields can carry one:
+/// Hysteria2 has its own `pinSHA256`, which is always a certificate hash, and the
+/// TLS mixin holds `pcs` — a certificate hash from a share link unless an import
+/// marked it as a public key. Reading them in different builders (or reading the
+/// hash from one and the kind from the other) is how a certificate hash ends up
+/// compared as a public key, so every builder asks here.
+pub(crate) fn recorded_pin(p: &Profile) -> Option<(&str, crate::mixins::PinKind)> {
+    use crate::mixins::PinKind;
+    // Emptiness is tested on the raw value: a pin of spaces is a pin the user
+    // configured and we cannot read, which every builder must treat as fail-closed,
+    // not as the absence of a pin.
+    if let Profile::Hysteria2(h) = p
+        && !h.pin_sha256.is_empty()
+    {
+        return Some((&h.pin_sha256, PinKind::Cert));
+    }
+    let tls = p.tls()?;
+    if tls.pcs.is_empty() {
+        return None;
+    }
+    Some((&tls.pcs, tls.pcs_kind))
+}
+
 /// A pin over the certificate's public key rather than the certificate itself.
 /// Only sing-box has that field, and shipping it to Xray would either pin a hash
 /// Xray never matches or drop the pin silently, so the profile takes sing-box.
 pub(crate) fn spki_pinned(p: &Profile) -> bool {
-    p.tls()
-        .is_some_and(|t| !t.pcs.is_empty() && t.pcs_kind == crate::mixins::PinKind::Spki)
+    recorded_pin(p).is_some_and(|(_, kind)| kind == crate::mixins::PinKind::Spki)
 }
 
 /// Why no core can run the profile as configured, if none can.

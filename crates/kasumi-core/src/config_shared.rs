@@ -157,13 +157,18 @@ fn decode_base64_32(s: &str) -> Option<[u8; 32]> {
 }
 
 /// Decode a 32-byte certificate pin from either a 64-char hex string (with optional
-/// `:` or `-` delimiters) or a base64-encoded string.
+/// `:` or `-` delimiters) or a base64-encoded string. A `sha256-` / `sha256/`
+/// prefix — how pinning specs spell "SHA-256 of the certificate" — is dropped.
 pub fn decode_cert_pin_32(s: &str) -> Option<[u8; 32]> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
         return None;
     }
-    decode_hex_32(trimmed).or_else(|| decode_base64_32(trimmed))
+    let bare = trimmed
+        .strip_prefix("sha256-")
+        .or_else(|| trimmed.strip_prefix("sha256/"))
+        .unwrap_or(trimmed);
+    decode_hex_32(bare).or_else(|| decode_base64_32(bare))
 }
 
 /// Normalizes a certificate pin to 64 lowercase hex characters.
@@ -189,6 +194,15 @@ pub fn normalize_cert_pin_base64(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pin_decoding_accepts_the_spec_prefixes() {
+        let digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        assert_eq!(decode_cert_pin_32(digest).map(|b| b[0]), Some(0x01));
+        assert!(decode_cert_pin_32(&format!("sha256-{digest}")).is_some());
+        assert!(decode_cert_pin_32(&format!("sha256/{digest}")).is_some());
+        assert!(decode_cert_pin_32("  ").is_none());
+    }
 
     #[test]
     fn extracts_ed_and_eh() {
