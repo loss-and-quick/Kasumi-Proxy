@@ -458,9 +458,28 @@ fn is_stream(p: &Profile) -> bool {
     p.transport().is_some()
 }
 
+/// Why xray can't build an outbound for `p`, for the error a refused build returns.
+/// `core_conflict` speaks for a profile no core can run as configured; the rest are
+/// profiles sing-box runs and xray doesn't.
+fn xray_refusal(p: &Profile) -> String {
+    if let Some(conflict) = core_conflict(p) {
+        return conflict.to_string();
+    }
+    if crate::core::spki_pinned(p) {
+        return "the pinned hash is a certificate public key, which only sing-box checks: \
+                pin the certificate itself (SHA-256) instead, or run the profile on sing-box"
+            .to_string();
+    }
+    format!("{:?} requires sing-box", p.protocol())
+}
+
 /// Build the outbound `proxy` object for a profile (None if it can't run on xray).
 fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
-    if !xray_builds(p) {
+    // Xray has no public-key pin, so a profile pinned that way would build an
+    // outbound that checks the certificate ordinarily: the pin the user set would
+    // be silently unenforced. Refuse it here, where every outbound of this config
+    // is built — the active one, a routing target and a chain hop alike.
+    if !xray_builds(p) || crate::core::spki_pinned(p) {
         return None;
     }
     let mut outbound = build_outbound_base(p)?;
@@ -644,9 +663,7 @@ fn build_profile_outbounds(
                 continue;
             }
             match profiles.iter().find(|p| p.meta().id == id) {
-                Some(profile) => match build_outbound(profile, s)
-                    .filter(|_| !crate::core::spki_pinned(profile))
-                {
+                Some(profile) => match build_outbound(profile, s) {
                     Some(mut ob) => {
                         if let Some(obj) = ob.as_object_mut() {
                             obj.insert("tag".into(), id.clone().into());
@@ -707,13 +724,12 @@ fn attach_chain(
         if !emitted.insert(tag.clone()) {
             continue;
         }
-        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| match core_conflict(hop) {
-            Some(c) => format!("proxy chain hop \"{}\": {c}", hop.meta().remarks),
-            None => format!(
-                "proxy chain hop \"{}\" ({:?}) requires sing-box",
+        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| {
+            format!(
+                "proxy chain hop \"{}\": {}",
                 hop.meta().remarks,
-                hop.protocol()
-            ),
+                xray_refusal(hop)
+            )
         })?;
         hop_ob["tag"] = tag.as_str().into();
         if let Some(next) = hops.get(i + 1) {
@@ -891,10 +907,7 @@ fn build_config(
         // Sanitised on every build, not only at import: stored state can be edited.
         (Profile::Custom(c), _) => compile_custom_profile(c, profiles, kind)?,
         _ => ActiveOutbounds {
-            outbounds: vec![build_outbound(p, s).ok_or_else(|| match core_conflict(p) {
-                Some(c) => c.to_string(),
-                None => format!("{:?} requires sing-box", p.protocol()),
-            })?],
+            outbounds: vec![build_outbound(p, s).ok_or_else(|| xray_refusal(p))?],
             rules: Vec::new(),
             balancers: Vec::new(),
             target: Target::Outbound("proxy".into()),
@@ -1267,18 +1280,58 @@ mod tests {
     }
 
     #[test]
-    fn a_public_key_pin_is_not_written_as_a_certificate_pin() {
-        // Xray matches `pinnedPeerCertSha256` against a certificate in the chain, so
-        // an SPKI hash there would never match and the node would silently die.
+    fn a_public_key_pinned_profile_is_refused() {
+        // Xray matches `pinnedPeerCertSha256` against a certificate in the chain, so an
+        // SPKI hash there would never match. It has no public-key field either, so the
+        // only honest answer is to refuse: a config built without the pin would dial
+        // on ordinary verification with the user's pin unenforced.
         let mut pinned = crate::share::parse_share_link(
             "vless://u@e.ex:443?type=ws&security=tls&sni=e.ex&pcs=aabb",
             None,
         )
         .unwrap();
         pinned.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
-        let cfg = build_xray_config(&pinned, &AdvancedSettings::default(), &[], &[]).unwrap();
-        let tls = &cfg["outbounds"][0]["streamSettings"]["tlsSettings"];
-        assert!(tls.get("pinnedPeerCertSha256").is_none(), "{tls}");
+        let err = build_xray_config(&pinned, &AdvancedSettings::default(), &[], &[]).unwrap_err();
+        assert!(err.contains("public key"), "{err}");
+    }
+
+    #[test]
+    fn a_public_key_pinned_hop_is_refused() {
+        // A hop is built by the same `build_outbound`, so a pinned one must stop the
+        // build rather than join the chain as an ordinary-verification outbound.
+        let mut exit = crate::share::parse_share_link(
+            "vless://u@e.ex:443?type=tcp&security=tls&sni=e.ex",
+            None,
+        )
+        .unwrap();
+        exit.meta_mut().via = Some("hop".into());
+        let mut hop = crate::share::parse_share_link(
+            "vless://u@h.ex:443?type=ws&security=tls&sni=h.ex&pcs=aabb#hop",
+            None,
+        )
+        .unwrap();
+        hop.meta_mut().id = "hop".into();
+        hop.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let profiles = [exit.clone(), hop.clone()];
+        let err =
+            build_xray_config(&exit, &AdvancedSettings::default(), &[], &profiles).unwrap_err();
+        assert!(err.contains("hop"), "{err}");
+        assert!(err.contains("public key"), "{err}");
+        // The same hop pinned by the certificate itself is fine.
+        let mut cert_pinned = hop;
+        cert_pinned.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Cert;
+        let profiles = [exit.clone(), cert_pinned];
+        let cfg = build_xray_config(&exit, &AdvancedSettings::default(), &[], &profiles).unwrap();
+        let hop_ob = cfg["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["tag"] == "hop")
+            .unwrap_or_else(|| panic!("no hop outbound in {cfg}"));
+        assert_eq!(
+            hop_ob["streamSettings"]["tlsSettings"]["pinnedPeerCertSha256"],
+            "aabb"
+        );
     }
 
     #[test]
