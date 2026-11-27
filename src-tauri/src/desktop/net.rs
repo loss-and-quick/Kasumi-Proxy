@@ -13,19 +13,68 @@ use kasumi_log::{Area, ks_warn};
 
 /// Connect to `host:port` with the socket bound to the physical uplink the way test
 /// cores bind their outbounds, so an active tun can't capture it. Without a
-/// resolvable uplink it connects unbound.
+/// resolvable uplink it connects unbound, which is right for a latency probe.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub async fn uplink_connect(host: &str, port: u16) -> std::io::Result<tokio::net::TcpStream> {
-    let addr = tokio::net::lookup_host((host, port))
-        .await?
-        .next()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no address"))?;
+    connect_uplink(host, port, false).await
+}
+
+/// [`uplink_connect`] where the bind has to hold: a dial that slips into the tunnel
+/// answers with whatever the proxy terminates, so a caller reading the server's
+/// identity (the TLS probe) must fail instead of connecting unbound.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub async fn uplink_connect_bound(host: &str, port: u16) -> std::io::Result<tokio::net::TcpStream> {
+    connect_uplink(host, port, true).await
+}
+
+/// Try every resolved address in turn, each over its own socket, so a host whose
+/// first record is unreachable (a stale AAAA, say) still connects. The caller's
+/// deadline bounds the whole sequence.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+async fn connect_uplink(
+    host: &str,
+    port: u16,
+    require_bound: bool,
+) -> std::io::Result<tokio::net::TcpStream> {
+    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host, port)).await?.collect();
+    if addrs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("no address for {host}"),
+        ));
+    }
+    let mut last = None;
+    for addr in addrs {
+        match connect_one(host, addr, require_bound).await {
+            Ok(stream) => return Ok(stream),
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("no address for {host}"),
+        )
+    }))
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+async fn connect_one(
+    host: &str,
+    addr: std::net::SocketAddr,
+    require_bound: bool,
+) -> std::io::Result<tokio::net::TcpStream> {
     let socket = if addr.is_ipv4() {
         tokio::net::TcpSocket::new_v4()
     } else {
         tokio::net::TcpSocket::new_v6()
     }?;
     if let Err(e) = super::routing::bind_uplink(&socket, addr.ip()).await {
+        if require_bound {
+            return Err(std::io::Error::other(format!(
+                "uplink bind for {host} ({addr}) failed: {e}"
+            )));
+        }
         ks_warn!(
             Area::Net,
             "uplink connect {host}: uplink bind failed, connecting unbound: {e}"
