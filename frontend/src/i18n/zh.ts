@@ -695,6 +695,8 @@ const zh = {
     "无法启动：此配置只能在 xray 上运行，而 xray 已不再跳过证书校验。请填写「{pin}」或关闭「{insecure}」。",
   "profiles.conflict.customAllowInsecure":
     "无法启动：此配置设置了「{insecure}」，而 xray 已不再接受该字段。请在旁边添加「{pin}」或将其删除。",
+  "profiles.conflict.spkiPinNeedsSingBox":
+    "无法启动：固定的是证书公钥指纹，只有 sing-box 会校验它，而此配置需要 xray。请改为固定证书本身的 SHA-256 指纹。",
   // subscriptions extra
   "subs.saved": "订阅已保存",
   "subs.deleted": "订阅已删除",

@@ -8,12 +8,14 @@ use std::collections::HashSet;
 use serde_json::{Map, Value, json};
 
 use crate::chain::chain_hops;
-use crate::config_shared::{build_ws_path, parse_pem_chain, split_delimited, split_list};
+use crate::config_shared::{
+    build_ws_path, normalize_cert_pin_hex, parse_pem_chain, split_delimited, split_list,
+};
 use crate::core::{core_conflict, xray_builds};
 use crate::custom_sanitize::drop_pinned_allow_insecure;
 use crate::custom_target::Target;
 use crate::enums::{Fingerprint, HeaderType, Security};
-use crate::mixins::Transport;
+use crate::mixins::{PinKind, Transport};
 use crate::profile::{CustomOrigin, Profile, WG_DEFAULT_LOCAL_ADDRESS};
 use crate::provider_graph::{ActiveOutbounds, compile_custom_profile};
 use crate::state::{
@@ -250,8 +252,14 @@ fn build_tls_security(p: &Profile) -> Value {
     if tls.disable_system_root || has_certs {
         m.insert("disableSystemRoot".into(), true.into());
     }
-    if !tls.pcs.is_empty() {
-        m.insert("pinnedPeerCertSha256".into(), tls.pcs.clone().into());
+    // Xray's `pinnedPeerCertSha256` matches the hash of a certificate in the chain,
+    // never a public key, so an SPKI pin has no field here (see `core` selection).
+    // It also takes hex, so a share link's base64 pin is rewritten; an unusable pin
+    // never reaches here (`build_outbound` refuses the profile).
+    if let Some((pin, PinKind::Cert)) = crate::core::recorded_pin(p)
+        && let Some(hex) = normalize_cert_pin_hex(pin)
+    {
+        m.insert("pinnedPeerCertSha256".into(), hex.into());
     }
     if !tls.ech.is_empty() {
         m.insert("echConfigList".into(), tls.ech.clone().into());
@@ -456,9 +464,47 @@ fn is_stream(p: &Profile) -> bool {
     p.transport().is_some()
 }
 
+/// Why xray can't build an outbound for `p`, for the error a refused build returns.
+/// `core_conflict` speaks for a profile no core can run as configured; the rest are
+/// profiles sing-box runs and xray doesn't.
+fn xray_refusal(p: &Profile) -> String {
+    if let Some(conflict) = core_conflict(p) {
+        return conflict.to_string();
+    }
+    match crate::core::recorded_pin(p) {
+        Some((_, PinKind::Spki)) => {
+            return "the pinned hash is a certificate public key, which only sing-box checks: \
+                    pin the certificate itself (SHA-256) instead, or run the profile on sing-box"
+                .to_string();
+        }
+        Some((pin, PinKind::Cert)) if normalize_cert_pin_hex(pin).is_none() => {
+            return "the pinned certificate hash is not a SHA-256 digest: fix the pin in the \
+                    editor, or run the profile on sing-box"
+                .to_string();
+        }
+        _ => {}
+    }
+    format!("{:?} requires sing-box", p.protocol())
+}
+
+/// Whether xray can carry the profile's pin: none, or a certificate hash it can
+/// compare (hex). An unusable pin must stop the build — dropping it would dial with
+/// the user's pin silently unenforced.
+fn pin_fits_xray(p: &Profile) -> bool {
+    match crate::core::recorded_pin(p) {
+        None => true,
+        Some((pin, PinKind::Cert)) => normalize_cert_pin_hex(pin).is_some(),
+        Some((_, PinKind::Spki)) => false,
+    }
+}
+
 /// Build the outbound `proxy` object for a profile (None if it can't run on xray).
 fn build_outbound(p: &Profile, s: &AdvancedSettings) -> Option<Value> {
-    if !xray_builds(p) {
+    // Xray has no public-key pin, so a profile pinned that way would build an
+    // outbound that checks the certificate ordinarily: the pin the user set would
+    // be silently unenforced. Refuse it here, where every outbound of this config
+    // is built — the active one, a routing target and a chain hop alike.
+    if !xray_builds(p) || !pin_fits_xray(p) {
         return None;
     }
     let mut outbound = build_outbound_base(p)?;
@@ -703,13 +749,12 @@ fn attach_chain(
         if !emitted.insert(tag.clone()) {
             continue;
         }
-        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| match core_conflict(hop) {
-            Some(c) => format!("proxy chain hop \"{}\": {c}", hop.meta().remarks),
-            None => format!(
-                "proxy chain hop \"{}\" ({:?}) requires sing-box",
+        let mut hop_ob = build_outbound(hop, s).ok_or_else(|| {
+            format!(
+                "proxy chain hop \"{}\": {}",
                 hop.meta().remarks,
-                hop.protocol()
-            ),
+                xray_refusal(hop)
+            )
         })?;
         hop_ob["tag"] = tag.as_str().into();
         if let Some(next) = hops.get(i + 1) {
@@ -887,10 +932,7 @@ fn build_config(
         // Sanitised on every build, not only at import: stored state can be edited.
         (Profile::Custom(c), _) => compile_custom_profile(c, profiles, kind)?,
         _ => ActiveOutbounds {
-            outbounds: vec![build_outbound(p, s).ok_or_else(|| match core_conflict(p) {
-                Some(c) => c.to_string(),
-                None => format!("{:?} requires sing-box", p.protocol()),
-            })?],
+            outbounds: vec![build_outbound(p, s).ok_or_else(|| xray_refusal(p))?],
             rules: Vec::new(),
             balancers: Vec::new(),
             target: Target::Outbound("proxy".into()),
@@ -1125,6 +1167,10 @@ pub fn hijack_inbound_dns(cfg: &mut Value) {
 mod tests {
     use super::*;
 
+    /// A real 64-hex certificate digest: xray rejects a pin that isn't one, so a
+    /// short fixture would test a config the core would refuse to load.
+    const DIG: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
     #[test]
     fn hijacks_inbound_dns_into_the_dns_module() {
         let s = AdvancedSettings {
@@ -1248,10 +1294,16 @@ mod tests {
     fn allow_insecure_is_never_written() {
         let insecure = "vless://u@x.ex:443?type=xhttp&security=tls&sni=x.ex&allowInsecure=1";
         // With a pin, xray checks the certificate against it instead.
-        let pinned = crate::share::parse_share_link(&format!("{insecure}&pcs=aabb"), None).unwrap();
+        let pinned = crate::share::parse_share_link(
+            &format!(
+                "{insecure}&pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            ),
+            None,
+        )
+        .unwrap();
         let cfg = build_xray_config(&pinned, &AdvancedSettings::default(), &[], &[]).unwrap();
         let tls = &cfg["outbounds"][0]["streamSettings"]["tlsSettings"];
-        assert_eq!(tls["pinnedPeerCertSha256"], "aabb");
+        assert_eq!(tls["pinnedPeerCertSha256"], DIG);
         assert!(tls.get("allowInsecure").is_none(), "{tls}");
         // Without one the build is refused rather than run with the check back on.
         let unpinned = crate::share::parse_share_link(insecure, None).unwrap();
@@ -1259,6 +1311,113 @@ mod tests {
         assert_eq!(
             err,
             crate::contract::CoreConflict::UnpinnedInsecureTls.to_string()
+        );
+    }
+
+    #[test]
+    fn a_public_key_pinned_profile_is_refused() {
+        // Xray matches `pinnedPeerCertSha256` against a certificate in the chain, so an
+        // SPKI hash there would never match. It has no public-key field either, so the
+        // only honest answer is to refuse: a config built without the pin would dial
+        // on ordinary verification with the user's pin unenforced.
+        let mut pinned = crate::share::parse_share_link(
+            "vless://u@e.ex:443?type=ws&security=tls&sni=e.ex&pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .unwrap();
+        pinned.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let err = build_xray_config(&pinned, &AdvancedSettings::default(), &[], &[]).unwrap_err();
+        assert!(err.contains("public key"), "{err}");
+    }
+
+    #[test]
+    fn a_hysteria2_pin_reaches_xray_as_a_certificate_pin() {
+        // Hysteria2 keeps its pin in `pinSHA256`, not the TLS mixin, so a builder that
+        // reads only `tls.pcs` drops it — and xray would then accept any valid
+        // certificate, or reject the self-signed one the pin exists for.
+        let p = crate::share::parse_share_link(
+            &format!("hysteria2://pw@hy.example:443?sni=hy.example&pinSHA256={DIG}"),
+            None,
+        )
+        .unwrap();
+        assert!(
+            p.tls().unwrap().pcs.is_empty(),
+            "the pin is not in the mixin"
+        );
+        let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+        let tls = &cfg["outbounds"][0]["streamSettings"]["tlsSettings"];
+        assert_eq!(tls["pinnedPeerCertSha256"], DIG);
+    }
+
+    #[test]
+    fn a_base64_pin_is_rewritten_as_hex_for_xray() {
+        // Share links may carry the hash in base64; xray compares hex, so the same
+        // digest has to be spelled the way xray reads it.
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode([
+            0x01u8, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
+            0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67,
+            0x89, 0xab, 0xcd, 0xef,
+        ]);
+        let p = crate::share::parse_share_link(
+            &format!("vless://u@p.ex:443?type=ws&security=tls&sni=p.ex&pcs={b64}"),
+            None,
+        )
+        .unwrap();
+        let cfg = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap();
+        let tls = &cfg["outbounds"][0]["streamSettings"]["tlsSettings"];
+        assert_eq!(tls["pinnedPeerCertSha256"], DIG);
+    }
+
+    #[test]
+    fn an_unreadable_pin_stops_the_xray_build() {
+        // Writing a pin xray can't parse does not enforce it: the core refuses the
+        // config or, worse, a truncated hash never matches. Fail instead.
+        let p = crate::share::parse_share_link(
+            "vless://u@p.ex:443?type=ws&security=tls&sni=p.ex&pcs=aabb",
+            None,
+        )
+        .unwrap();
+        let err = build_xray_config(&p, &AdvancedSettings::default(), &[], &[]).unwrap_err();
+        assert!(err.contains("not a SHA-256 digest"), "{err}");
+    }
+
+    #[test]
+    fn a_public_key_pinned_hop_is_refused() {
+        // A hop is built by the same `build_outbound`, so a pinned one must stop the
+        // build rather than join the chain as an ordinary-verification outbound.
+        let mut exit = crate::share::parse_share_link(
+            "vless://u@e.ex:443?type=tcp&security=tls&sni=e.ex",
+            None,
+        )
+        .unwrap();
+        exit.meta_mut().via = Some("hop".into());
+        let mut hop = crate::share::parse_share_link(
+            "vless://u@h.ex:443?type=ws&security=tls&sni=h.ex&pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef#hop",
+            None,
+        )
+        .unwrap();
+        hop.meta_mut().id = "hop".into();
+        hop.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let profiles = [exit.clone(), hop.clone()];
+        let err =
+            build_xray_config(&exit, &AdvancedSettings::default(), &[], &profiles).unwrap_err();
+        assert!(err.contains("hop"), "{err}");
+        assert!(err.contains("public key"), "{err}");
+        // The same hop pinned by the certificate itself is fine.
+        let mut cert_pinned = hop;
+        cert_pinned.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Cert;
+        let profiles = [exit.clone(), cert_pinned];
+        let cfg = build_xray_config(&exit, &AdvancedSettings::default(), &[], &profiles).unwrap();
+        let hop_ob = cfg["outbounds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["tag"] == "hop")
+            .unwrap_or_else(|| panic!("no hop outbound in {cfg}"));
+        assert_eq!(
+            hop_ob["streamSettings"]["tlsSettings"]["pinnedPeerCertSha256"],
+            DIG
         );
     }
 
@@ -1458,6 +1617,47 @@ mod tests {
             fell_back.push(falls_back);
         }
         assert_eq!(fell_back, [true, true, true, true, false, false, true]);
+    }
+
+    #[test]
+    fn a_public_key_pinned_rule_target_falls_back_to_the_proxy() {
+        // The outbound xray would build from this target carries no pin, so routing
+        // traffic to it would silently drop the user's pin. The rule goes through the
+        // active proxy instead, and no bare outbound is left behind for anything else
+        // to select.
+        let settings = AdvancedSettings {
+            routing_mode: crate::state::RoutingMode::Rules,
+            ..Default::default()
+        };
+        let p = sample();
+        let mut target = crate::share::parse_share_link(
+            "vless://u@e.x:443?type=ws&security=tls&sni=e.x&pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .unwrap();
+        target.meta_mut().id = "pinned".into();
+        target.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let rules = [RoutingRule {
+            domain: Some(vec!["example.com".into()]),
+            ..source_rule("pinned")
+        }];
+        let all = [target.clone(), p.clone()];
+        let cfg = build_xray_config(&p, &settings, &rules, &all).unwrap();
+        let rule = cfg["routing"]["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r.get("domain").is_some())
+            .unwrap_or_else(|| panic!("no domain rule in {cfg}"));
+        assert_eq!(rule["outboundTag"], "proxy");
+        assert!(
+            cfg["outbounds"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|o| o["tag"] != "pinned"),
+            "no outbound for the pinned target: {cfg}"
+        );
     }
 
     #[test]

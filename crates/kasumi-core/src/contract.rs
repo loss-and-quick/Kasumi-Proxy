@@ -95,6 +95,9 @@ pub enum CoreConflict {
     /// The same for a custom Xray config: some `tlsSettings` of it sets
     /// `allowInsecure` without a `pinnedPeerCertSha256`.
     CustomAllowInsecure,
+    /// A pin over the certificate's public key, on a profile whose protocol or
+    /// transport xray alone can run: only sing-box checks an SPKI pin.
+    SpkiPinNeedsSingBox,
     /// A proxy chain that no single core can build: every hop is an outbound of the
     /// one config, and these two profiles of it each run on a different core only.
     ChainCoreConflict {
@@ -125,6 +128,11 @@ impl std::fmt::Display for CoreConflict {
             Self::CustomAllowInsecure => f.write_str(
                 "this config sets \"allowInsecure\", which xray no longer accepts: \
                  add \"pinnedPeerCertSha256\" beside it or remove it",
+            ),
+            Self::SpkiPinNeedsSingBox => f.write_str(
+                "the pinned hash is a certificate public key, which only sing-box checks, \
+                 and this profile's protocol or transport needs xray: pin the certificate \
+                 itself (SHA-256) instead",
             ),
             Self::ChainCoreConflict { xray, sing_box } => write!(
                 f,

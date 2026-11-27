@@ -99,7 +99,9 @@ export function SecuritySection({
             label={t("settings.pinnedCert")}
             value={tls.pcs ?? ""}
             placeholder={t("settings.pinnedCertPh")}
-            onChange={(value) => setTls({ pcs: value })}
+            // The field is the certificate's SHA-256, so typing a value re-reads an
+            // imported public-key pin as a certificate pin.
+            onChange={(value) => setTls({ pcs: value, pcsKind: "cert" })}
             hint={t("settings.pinnedCertHint")}
           />
           <SettingRow title={t("editor.allowInsecure")}>

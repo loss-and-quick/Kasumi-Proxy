@@ -738,6 +738,8 @@ const es = {
     "No puede iniciarse: este perfil solo funciona en xray, que ya no omite la verificación de certificados. Rellena «{pin}» o desactiva «{insecure}».",
   "profiles.conflict.customAllowInsecure":
     "No puede iniciarse: esta configuración usa «{insecure}», que xray ya no acepta. Añade «{pin}» junto a él o elimínalo.",
+  "profiles.conflict.spkiPinNeedsSingBox":
+    "No se puede iniciar: la huella fijada es la clave pública del certificado, que solo comprueba sing-box, y este perfil necesita xray. Fija la huella del certificado (SHA-256).",
   // subscriptions extra
   "subs.saved": "Suscripción guardada",
   "subs.deleted": "Suscripción eliminada",

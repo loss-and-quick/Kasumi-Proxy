@@ -104,6 +104,10 @@ jobs:
           latest_xray=$(gh release view --repo XTLS/Xray-core --json tagName -q .tagName)
           latest_t2s=$(gh release view --repo xjasonlyu/tun2socks --json tagName -q .tagName)
           latest_sb=$(gh release view --repo SagerNet/sing-box --json tagName -q .tagName)
+          # Keep the pin unless upstream stays on the same line and moved forward:
+          # the config schema and geodat2srs follow that line, so a cross-line
+          # "newest" would publish a core the rest of the repo doesn't match.
+          latest_sb=$(scripts/pick-singbox-bump.sh "$pinned_sb" "$latest_sb")
 
           bins_changed=false
           [ "$pinned_xray" != "$latest_xray" ] && { skip=false; bins_changed=true; }

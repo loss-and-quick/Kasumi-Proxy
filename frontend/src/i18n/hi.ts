@@ -708,6 +708,8 @@ const hi = {
     "शुरू नहीं हो सकता: यह प्रोफ़ाइल केवल xray पर चलती है, जो अब प्रमाणपत्र जाँच नहीं छोड़ता। “{pin}” भरें या “{insecure}” बंद करें।",
   "profiles.conflict.customAllowInsecure":
     "शुरू नहीं हो सकता: यह कॉन्फ़िग “{insecure}” सेट करता है, जिसे xray अब स्वीकार नहीं करता। इसके साथ “{pin}” जोड़ें या इसे हटा दें।",
+  "profiles.conflict.spkiPinNeedsSingBox":
+    "शुरू नहीं हो सकता: पिन किया गया fingerprint प्रमाणपत्र की सार्वजनिक कुंजी है, जिसे केवल sing-box जाँचता है, और इस प्रोफ़ाइल को xray चाहिए। प्रमाणपत्र का ही SHA-256 पिन करें।",
   // subscriptions extra
   "subs.saved": "सदस्यता सहेज दी गई",
   "subs.deleted": "सदस्यता हटा दी गई",

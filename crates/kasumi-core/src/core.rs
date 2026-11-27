@@ -56,7 +56,8 @@ pub fn default_core_for(proto: Protocol) -> CoreEngine {
 /// if it's selectable. A profile with a [`core_conflict`] keeps the core its
 /// protocol or transport pins.
 pub fn forced_core(p: &Profile) -> Option<CoreEngine> {
-    capability_core(p).or_else(|| skips_cert_check_unpinned(p).then_some(CoreEngine::SingBox))
+    capability_core(p)
+        .or_else(|| (skips_cert_check_unpinned(p) || spki_pinned(p)).then_some(CoreEngine::SingBox))
 }
 
 /// TLS that skips the certificate check without a pinned certificate. Xray no
@@ -66,13 +67,49 @@ pub(crate) fn skips_cert_check_unpinned(p: &Profile) -> bool {
         .is_some_and(|t| t.security == Security::Tls && t.allow_insecure && t.pcs.is_empty())
 }
 
+/// The pin a profile records, with what it hashes. Two fields can carry one:
+/// Hysteria2 has its own `pinSHA256`, which is always a certificate hash, and the
+/// TLS mixin holds `pcs` — a certificate hash from a share link unless an import
+/// marked it as a public key. Reading them in different builders (or reading the
+/// hash from one and the kind from the other) is how a certificate hash ends up
+/// compared as a public key, so every builder asks here.
+pub(crate) fn recorded_pin(p: &Profile) -> Option<(&str, crate::mixins::PinKind)> {
+    use crate::mixins::PinKind;
+    // Emptiness is tested on the raw value: a pin of spaces is a pin the user
+    // configured and we cannot read, which every builder must treat as fail-closed,
+    // not as the absence of a pin.
+    if let Profile::Hysteria2(h) = p
+        && !h.pin_sha256.is_empty()
+    {
+        return Some((&h.pin_sha256, PinKind::Cert));
+    }
+    let tls = p.tls()?;
+    if tls.pcs.is_empty() {
+        return None;
+    }
+    Some((&tls.pcs, tls.pcs_kind))
+}
+
+/// A pin over the certificate's public key rather than the certificate itself.
+/// Only sing-box has that field, and shipping it to Xray would either pin a hash
+/// Xray never matches or drop the pin silently, so the profile takes sing-box.
+pub(crate) fn spki_pinned(p: &Profile) -> bool {
+    recorded_pin(p).is_some_and(|(_, kind)| kind == crate::mixins::PinKind::Spki)
+}
+
 /// Why no core can run the profile as configured, if none can.
 pub fn core_conflict(p: &Profile) -> Option<CoreConflict> {
     if let Profile::Custom(c) = p {
         return custom_allows_insecure_unpinned(c).then_some(CoreConflict::CustomAllowInsecure);
     }
-    (capability_core(p) == Some(CoreEngine::Xray) && skips_cert_check_unpinned(p))
-        .then_some(CoreConflict::UnpinnedInsecureTls)
+    if capability_core(p) != Some(CoreEngine::Xray) {
+        return None;
+    }
+    // Xray can neither skip the certificate check nor compare a public-key hash.
+    if spki_pinned(p) {
+        return Some(CoreConflict::SpkiPinNeedsSingBox);
+    }
+    skips_cert_check_unpinned(p).then_some(CoreConflict::UnpinnedInsecureTls)
 }
 
 /// Checked on what xray would load: a provider config only once sanitised, so an
@@ -113,7 +150,10 @@ pub fn rule_target_fallback(target: &Profile, core: CoreEngine) -> Option<Target
     if let Profile::Custom(_) = target {
         return Some(TargetFallback::CustomConfig);
     }
-    (core == CoreEngine::Xray && !xray_builds(target)).then(|| match core_conflict(target) {
+    // A public-key pin has no xray field, so the outbound would dial on ordinary
+    // certificate verification with the user's pin silently unenforced.
+    let xray_cannot = !xray_builds(target) || spki_pinned(target);
+    (core == CoreEngine::Xray && xray_cannot).then(|| match core_conflict(target) {
         Some(conflict) => TargetFallback::CantStart { conflict },
         None => TargetFallback::SingBoxOnly,
     })
@@ -558,6 +598,42 @@ mod tests {
         assert_eq!(core_conflict(&pinned), None);
         let checked = p("vless://u@e.x:443?type=xhttp&security=tls&sni=e.x");
         assert_eq!(core_conflict(&checked), None);
+    }
+
+    #[test]
+    fn a_public_key_pinned_profile_runs_on_singbox() {
+        use CoreEngine::SingBox;
+        let mut spki = p(&format!(
+            "vless://u@e.x:443?type=ws&security=tls&sni=e.x&{PIN}"
+        ));
+        let tls = spki.tls_mut().unwrap();
+        tls.pcs_kind = crate::mixins::PinKind::Spki;
+        // Only sing-box compares a public-key hash, so the profile takes it.
+        assert_eq!(forced_core(&spki), Some(SingBox));
+        assert_eq!(core_conflict(&spki), None);
+        // Where xray is the only core that can build the transport, no core can
+        // honour the pin, and the reason names the pin rather than `allowInsecure`.
+        let mut xhttp = p(&format!(
+            "vless://u@e.x:443?type=xhttp&security=tls&sni=e.x&{PIN}"
+        ));
+        xhttp.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        assert_eq!(forced_core(&xhttp), Some(CoreEngine::Xray));
+        assert_eq!(
+            core_conflict(&xhttp),
+            Some(CoreConflict::SpkiPinNeedsSingBox)
+        );
+    }
+
+    #[test]
+    fn a_public_key_pinned_rule_target_falls_back() {
+        // Xray can build the transport, but it has no field for the pin, so the
+        // outbound would dial without it — the same answer as a sing-box-only target.
+        let mut target = p("vless://u@e.x:443?type=ws&security=tls&sni=e.x&pcs=aabb");
+        target.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        assert_eq!(
+            rule_target_fallbacks(&target),
+            BTreeMap::from([(CoreEngine::Xray, TargetFallback::SingBoxOnly)])
+        );
     }
 
     #[test]

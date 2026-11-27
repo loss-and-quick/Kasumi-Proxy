@@ -239,6 +239,10 @@ export const SecuritySchema = z.union([z.literal("none"), z.literal("reality"), 
 export type Security = z.infer<typeof SecuritySchema>;
 
 
+export const PinKindSchema = z.union([z.literal("cert"), z.literal("spki")]);
+export type PinKind = z.infer<typeof PinKindSchema>;
+
+
 export const FingerprintSchema = z.string();
 export type Fingerprint = z.infer<typeof FingerprintSchema>;
 
@@ -264,6 +268,7 @@ export const TlsSchema = z.object({
 	ech: z.string().optional(),
 	vcn: z.string().optional(),
 	pcs: z.string().optional(),
+	pcsKind: PinKindSchema.optional(),
 	pqv: z.string().optional(),
 });
 export type Tls = z.infer<typeof TlsSchema>;
@@ -1886,6 +1891,8 @@ export const CoreConflictSchema = z.union([z.object({
 	singBox: z.string(),
 }), z.object({
 	kind: z.literal("customAllowInsecure"),
+}), z.object({
+	kind: z.literal("spkiPinNeedsSingBox"),
 }), z.object({
 	kind: z.literal("unpinnedInsecureTls"),
 })]);

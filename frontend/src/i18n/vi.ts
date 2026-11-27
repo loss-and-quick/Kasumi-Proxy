@@ -720,6 +720,8 @@ const vi = {
     "Không thể khởi động: hồ sơ này chỉ chạy trên xray, mà xray không còn bỏ qua kiểm tra chứng chỉ. Hãy điền “{pin}” hoặc tắt “{insecure}”.",
   "profiles.conflict.customAllowInsecure":
     "Không thể khởi động: cấu hình này đặt “{insecure}”, mà xray không còn chấp nhận. Hãy thêm “{pin}” bên cạnh hoặc xóa nó.",
+  "profiles.conflict.spkiPinNeedsSingBox":
+    "Không khởi động được: dấu vân tay được ghim là khóa công khai của chứng chỉ, chỉ sing-box kiểm tra, còn hồ sơ này cần xray. Hãy ghim dấu vân tay của chính chứng chỉ (SHA-256).",
   // subscriptions extra
   "subs.saved": "Đã lưu đăng ký",
   "subs.deleted": "Đã xóa đăng ký",

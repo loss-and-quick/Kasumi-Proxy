@@ -28,8 +28,8 @@ use crate::enums::{
     Security, SsMethod, VmessEnc,
 };
 use crate::mixins::{
-    Endpoint, GrpcTransport, H2Transport, HttpUpgradeTransport, KcpTransport, Meta, QuicTransport,
-    TcpTransport, Tls, Transport, WsTransport, XhttpTransport,
+    Endpoint, GrpcTransport, H2Transport, HttpUpgradeTransport, KcpTransport, Meta, PinKind,
+    QuicTransport, TcpTransport, Tls, Transport, WsTransport, XhttpTransport,
 };
 use crate::profile::{
     Anytls, Http, Hysteria2, Naive, Profile, Shadowsocks, Shadowtls, Socks, Trojan, Tuic, Vless,
@@ -1009,6 +1009,43 @@ fn userinfo(username: &str, password: &str) -> String {
     }
 }
 
+/// Whether a link may say "skip the certificate check". Only alongside a pin the
+/// link can carry: a public-key pin has no share-link field, and a link that skips
+/// verification without a pin hands the importer an unauthenticated dial. A pin the
+/// link cannot spell is dropped, so it does not license the skip either.
+fn export_insecure(tls: &Tls) -> bool {
+    if !tls.allow_insecure {
+        return false;
+    }
+    // No pin at all: the profile itself checks nothing, and the link says so.
+    if tls.pcs.is_empty() {
+        return true;
+    }
+    // A pin the link cannot carry, or one the importer cannot read, must not license
+    // the skip: the profile it came from fails closed, so the link has to as well.
+    link_pin(tls).is_some()
+}
+
+/// The certificate pin a share link can carry for `tls`: one the fields spell, and
+/// one that decodes to a SHA-256 digest.
+fn link_pin(tls: &Tls) -> Option<&str> {
+    let usable = crate::config_shared::decode_cert_pin_32(&tls.pcs).is_some();
+    (tls.pcs_kind == PinKind::Cert && usable).then_some(tls.pcs.as_str())
+}
+
+/// The pin a Hysteria2 profile records: its own `pinSHA256` (always a certificate
+/// hash) or, for a profile that only has the TLS mixin's field, that one.
+fn hysteria2_pin(h: &Hysteria2) -> Option<(&str, PinKind)> {
+    let (pin, kind): (&str, PinKind) = if !h.pin_sha256.is_empty() {
+        (&h.pin_sha256, PinKind::Cert)
+    } else {
+        (&h.tls.pcs, h.tls.pcs_kind)
+    };
+    // Same rule as [`link_pin`]: an unreadable or public-key pin is not written.
+    let usable = crate::config_shared::decode_cert_pin_32(pin).is_some();
+    (kind == PinKind::Cert && usable).then_some((pin, kind))
+}
+
 fn build_vmess(p: &Vmess) -> String {
     let t = &p.transport;
     let mut c = serde_json::Map::new();
@@ -1218,7 +1255,7 @@ fn build_url_based(p: &Profile) -> String {
     if tls.fingerprint != Fingerprint::Empty {
         q.set("fp", wire(&tls.fingerprint));
     }
-    if tls.allow_insecure {
+    if export_insecure(tls) {
         q.set("allowInsecure", "1");
     }
     if tls.security == Security::Reality {
@@ -1238,8 +1275,8 @@ fn build_url_based(p: &Profile) -> String {
     if !tls.vcn.is_empty() {
         q.set("vcn", tls.vcn.clone());
     }
-    if !tls.pcs.is_empty() {
-        q.set("pcs", tls.pcs.clone());
+    if let Some(pin) = link_pin(tls) {
+        q.set("pcs", pin.to_string());
     }
     if !tls.pqv.is_empty() {
         q.set("pqv", tls.pqv.clone());
@@ -1341,7 +1378,11 @@ fn build_hysteria2(p: &Hysteria2) -> String {
     if !p.tls.alpn.is_empty() {
         q.set("alpn", p.tls.alpn.join(","));
     }
-    if p.tls.allow_insecure {
+    // The link may skip the check only with a pin it also carries, or with no pin at
+    // all (the profile checks nothing either).
+    if p.tls.allow_insecure
+        && (hysteria2_pin(p).is_some() || p.pin_sha256.is_empty() && p.tls.pcs.is_empty())
+    {
         q.set("insecure", "1");
     }
     if p.obfs_type == Hysteria2Obfs::Salamander && !p.obfs_password.is_empty() {
@@ -1351,8 +1392,10 @@ fn build_hysteria2(p: &Hysteria2) -> String {
     if !p.ports.is_empty() {
         q.set("mport", p.ports.replace(':', "-"));
     }
-    if !p.pin_sha256.is_empty() {
-        q.set("pinSHA256", p.pin_sha256.clone());
+    // `pinSHA256` is a certificate hash. A public-key pin has no field here, and
+    // writing it there would make Hysteria compare a key hash with a certificate.
+    if let Some((pin, PinKind::Cert)) = hysteria2_pin(p) {
+        q.set("pinSHA256", pin.to_string());
     }
     let qs = q.finish();
     let qs = if qs.is_empty() {
@@ -1409,14 +1452,14 @@ fn build_anytls(p: &Anytls) -> String {
     if p.tls.fingerprint != Fingerprint::Empty {
         q.set("fp", wire(&p.tls.fingerprint));
     }
-    if p.tls.allow_insecure {
+    if export_insecure(&p.tls) {
         q.set("allowInsecure", "1");
     }
     if !p.tls.ech.is_empty() {
         q.set("ech", p.tls.ech.clone());
     }
-    if !p.tls.pcs.is_empty() {
-        q.set("pcs", p.tls.pcs.clone());
+    if let Some(pin) = link_pin(&p.tls) {
+        q.set("pcs", pin.to_string());
     }
     let qs = q.finish();
     let qs = if qs.is_empty() {
@@ -1448,14 +1491,14 @@ fn build_naive(p: &Naive) -> String {
     if p.tls.fingerprint != Fingerprint::Empty {
         q.set("fp", wire(&p.tls.fingerprint));
     }
-    if p.tls.allow_insecure {
+    if export_insecure(&p.tls) {
         q.set("allowInsecure", "1");
     }
     if !p.tls.ech.is_empty() {
         q.set("ech", p.tls.ech.clone());
     }
-    if !p.tls.pcs.is_empty() {
-        q.set("pcs", p.tls.pcs.clone());
+    if let Some(pin) = link_pin(&p.tls) {
+        q.set("pcs", pin.to_string());
     }
     let qs = q.finish();
     let qs = if qs.is_empty() {
@@ -1775,6 +1818,96 @@ mod tests {
         assert!(
             checked >= 20,
             "expected most cases parseable, got {checked}"
+        );
+    }
+
+    #[test]
+    fn a_link_never_skips_verification_without_the_pin_it_carries() {
+        // The link can't carry a public-key pin, so exporting `allowInsecure` alone
+        // would hand the importer a dial with no certificate check at all.
+        let mut profile = parse_share_link(
+            "vless://11111111-1111-1111-1111-111111111111@e.x:443?security=tls&sni=e.x&pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef&allowInsecure=1",
+            None,
+        )
+        .unwrap();
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let link = build_share_link(&profile);
+        assert!(!link.contains("allowInsecure"), "{link}");
+        assert!(!link.contains("pcs="), "{link}");
+        // A certificate pin still travels with the flag.
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Cert;
+        let link = build_share_link(&profile);
+        assert!(link.contains("allowInsecure=1"), "{link}");
+        assert!(
+            link.contains("pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+            "{link}"
+        );
+        // So does an unreadable one, which the link must not accompany with a claim
+        // of skipping verification it cannot back.
+        profile.tls_mut().unwrap().pcs = "not-a-digest".into();
+        let link = build_share_link(&profile);
+        assert!(!link.contains("allowInsecure"), "{link}");
+        assert!(!link.contains("pcs="), "{link}");
+    }
+
+    #[test]
+    fn a_hysteria2_link_never_skips_verification_without_its_pin() {
+        // A profile imported from sing-box can carry a public-key pin, which
+        // `pinSHA256` cannot express. Emitting `insecure=1` anyway would hand the
+        // recipient a link that checks nothing at all.
+        let p = parse_share_link(
+            "hysteria2://pw@hy.example:443?sni=hy.example&insecure=1&pinSHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .unwrap();
+        let link = build_share_link(&p);
+        assert!(link.contains("pinSHA256="), "{link}");
+        assert!(link.contains("insecure=1"), "{link}");
+
+        // The same profile with the pin only as a public key: the skip goes away.
+        let mut spki = p.clone();
+        if let crate::profile::Profile::Hysteria2(h) = &mut spki {
+            h.pin_sha256.clear();
+            h.tls.pcs = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into();
+            h.tls.pcs_kind = crate::mixins::PinKind::Spki;
+        }
+        let link = build_share_link(&spki);
+        assert!(!link.contains("insecure=1"), "{link}");
+        assert!(!link.contains("pinSHA256="), "{link}");
+    }
+
+    #[test]
+    fn a_hysteria2_link_carries_a_certificate_pin_from_the_tls_mixin() {
+        let mut p = parse_share_link("hysteria2://pw@hy.example:443?sni=hy.example", None).unwrap();
+        if let crate::profile::Profile::Hysteria2(h) = &mut p {
+            h.tls.pcs = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into();
+        }
+        let link = build_share_link(&p);
+        assert!(
+            link.contains(
+                "pinSHA256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            ),
+            "{link}"
+        );
+    }
+
+    #[test]
+    fn an_spki_pin_is_not_written_into_a_share_link() {
+        // `pcs` and `pinSHA256` mean "hash of the certificate"; writing an SPKI hash
+        // there would make the link pin something else than the profile does.
+        let mut profile = parse_share_link(
+            "vless://11111111-1111-1111-1111-111111111111@e.x:443?security=tls&sni=e.x&pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            None,
+        )
+        .unwrap();
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Spki;
+        let link = build_share_link(&profile);
+        assert!(!link.contains("pcs="), "{link}");
+        // The certificate-pin default still round-trips.
+        profile.tls_mut().unwrap().pcs_kind = crate::mixins::PinKind::Cert;
+        assert!(
+            build_share_link(&profile)
+                .contains("pcs=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
         );
     }
 
