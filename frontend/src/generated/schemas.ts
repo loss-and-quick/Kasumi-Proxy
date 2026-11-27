@@ -1512,6 +1512,13 @@ export const Command_SerializeSchema = z.union([z.object({
 }), z.object({
 	cmd: z.literal("probeConnection"),
 }), z.object({
+	cmd: z.literal("probeTlsCert"),
+	host: z.string(),
+	port: z.number(),
+	sni: z.string().nullable(),
+	insecure: z.boolean(),
+	disableSni: z.boolean(),
+}), z.object({
 	cmd: z.literal("readState"),
 }), z.object({
 	cmd: z.literal("realPing"),
@@ -1809,6 +1816,13 @@ export const Command_DeserializeSchema = z.union([z.object({
 	profileId: z.string(),
 }), z.object({
 	cmd: z.literal("probeConnection"),
+}), z.object({
+	cmd: z.literal("probeTlsCert"),
+	host: z.string(),
+	port: z.number(),
+	sni: z.string().nullable().optional(),
+	insecure: z.boolean().optional(),
+	disableSni: z.boolean().optional(),
 }), z.object({
 	cmd: z.literal("readState"),
 }), z.object({
@@ -2162,6 +2176,16 @@ export const WsInfoSchema = z.object({
 export type WsInfo = z.infer<typeof WsInfoSchema>;
 
 
+export const TlsCertInfoSchema = z.object({
+	sha256Hex: z.string(),
+	sha256Base64: z.string(),
+	subject: z.string(),
+	issuer: z.string(),
+	validUntil: z.string().nullable(),
+});
+export type TlsCertInfo = z.infer<typeof TlsCertInfoSchema>;
+
+
 export const SubscriptionUrlSecuritySchema = z.object({
 	isInsecureHttp: z.boolean(),
 	isLocalOrPrivate: z.boolean(),
@@ -2284,6 +2308,9 @@ export const Response_SerializeSchema = z.union([z.object({
 	kind: z.literal("text"),
 	value: z.string(),
 }), z.object({
+	kind: z.literal("tlsCert"),
+	value: TlsCertInfoSchema,
+}), z.object({
 	kind: z.literal("wsInfo"),
 	value: WsInfoSchema.nullable(),
 })]);
@@ -2391,6 +2418,9 @@ export const Response_DeserializeSchema = z.union([z.object({
 }), z.object({
 	kind: z.literal("text"),
 	value: z.string(),
+}), z.object({
+	kind: z.literal("tlsCert"),
+	value: TlsCertInfoSchema,
 }), z.object({
 	kind: z.literal("wsInfo"),
 	value: WsInfoSchema.nullable(),

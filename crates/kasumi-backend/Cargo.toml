@@ -41,6 +41,11 @@ reqwest = { version = "0.12", default-features = false, features = [
     "cookies",
 ] }
 cookie_store = { version = "0.22", default-features = false }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "0.26"
+x509-parser = "0.18"
+hex = "0.4"
+base64 = "0.22"
 
 # Process identity is OS-specific: POSIX reads /proc + kill(2) (libc); Windows
 # queries the process image path + TerminateProcess (windows-sys). Children die
@@ -64,9 +69,7 @@ tokio = { version = "1", features = ["test-util"] }
 tempfile = "3"
 # Builds `happ://crypt` links to local test servers.
 rsa = "0.9"
-base64 = "0.22"
 # A local TLS server that agrees HTTP/2 or HTTP/1.1 over ALPN.
-tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 h2 = "0.4"
 http = "1"
 bytes = "1"

@@ -29,6 +29,12 @@ use crate::desktop::DesktopPlatform;
 #[cfg(unix)]
 use kasumi_log::{Area, ks_warn};
 
+/// How long the GUI waits for the helper's answer to a TLS probe. The helper's own
+/// five-second deadline covers the probe; this covers the wait for its reply, so a
+/// silent helper can't hold the request open.
+#[cfg(unix)]
+const HELPER_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+
 pub struct RemotePlatform {
     /// Unprivileged half: paths, config tuning, core probes, watcher.
     local: DesktopPlatform,
@@ -210,6 +216,53 @@ impl Platform for RemotePlatform {
             handle,
             killed: false,
         }))
+    }
+
+    async fn probe_tls_cert(
+        &self,
+        host: &str,
+        port: u16,
+        sni: Option<&str>,
+        insecure: bool,
+        disable_sni: bool,
+    ) -> Result<kasumi_backend::commands::TlsCertInfo, kasumi_backend::commands::CommandError> {
+        // Linux binds the uplink with `SO_BINDTODEVICE` (`CAP_NET_RAW`), so the probe
+        // runs where the capability is, the same reason `tcp_ping` goes through the
+        // helper. A helper that refuses or can't answer falls back to the local dial,
+        // which itself fails rather than dial unbound while a tun is up.
+        #[cfg(unix)]
+        {
+            let req = PrivRequest::ProbeTlsCert {
+                host: host.to_owned(),
+                port,
+                sni: sni.map(str::to_owned),
+                insecure,
+                disable_sni,
+            };
+            // Bounded: a helper that accepts the request but never answers would
+            // otherwise hold the probe open. The deadline inside the helper covers its
+            // own probe, not this wait for the reply.
+            match tokio::time::timeout(HELPER_PROBE_TIMEOUT, self.client.call_oneshot(req)).await {
+                Ok(Ok(PrivReply::TlsCert { cert: Some(cert) })) => return Ok(*cert),
+                Ok(Ok(PrivReply::TlsCert { cert: None })) => {
+                    return Err(kasumi_backend::commands::CommandError(format!(
+                        "TLS probe of {host}:{port} failed in the privileged helper"
+                    )));
+                }
+                Ok(Ok(other)) => {
+                    ks_warn!(Area::Helper, "unexpected reply to ProbeTlsCert: {other:?}")
+                }
+                Ok(Err(e)) => ks_warn!(Area::Helper, "TLS probe through the helper failed: {e}"),
+                Err(_) => ks_warn!(
+                    Area::Helper,
+                    "TLS probe: the helper did not answer in {}s",
+                    HELPER_PROBE_TIMEOUT.as_secs()
+                ),
+            }
+        }
+        self.local
+            .probe_tls_cert(host, port, sni, insecure, disable_sni)
+            .await
     }
 
     async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {

@@ -349,12 +349,15 @@ pub async fn uplink_device() -> Option<String> {
 /// Bind `socket` to the uplink device (`SO_BINDTODEVICE`, needs `CAP_NET_RAW`) and,
 /// when its family matches `dest`, the uplink's source address — the same pair
 /// `bind_uplink_outbounds` pins for test cores. No uplink leaves it unbound.
+/// Bind `socket` to the uplink device (and its source address). `Ok(false)` means
+/// there is no uplink to bind to, so the socket stays free to follow the main
+/// routing table — a caller that needs the bind to hold must treat that as failure.
 pub async fn bind_uplink(
     socket: &tokio::net::TcpSocket,
     dest: std::net::IpAddr,
-) -> std::io::Result<()> {
+) -> std::io::Result<bool> {
     let Some(dev) = uplink_device().await else {
-        return Ok(());
+        return Ok(false);
     };
     socket.bind_device(Some(dev.as_bytes()))?;
     let source = uplink_source(&dev).await;
@@ -365,7 +368,7 @@ pub async fn bind_uplink(
     if let Some(src) = pin.and_then(|s| s.parse::<std::net::IpAddr>().ok()) {
         socket.bind(std::net::SocketAddr::new(src, 0))?;
     }
-    Ok(())
+    Ok(true)
 }
 
 /// The source addresses to pin alongside the uplink device `dev`, so a multi-homed

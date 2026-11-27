@@ -184,6 +184,23 @@ mod tests {
         async fn data_path_healthy(&self) -> Option<bool> {
             Some(true)
         }
+        async fn probe_tls_cert(
+            &self,
+            host: &str,
+            _port: u16,
+            _sni: Option<&str>,
+            _insecure: bool,
+            _disable_sni: bool,
+        ) -> Result<kasumi_backend::commands::TlsCertInfo, kasumi_backend::commands::CommandError>
+        {
+            Ok(kasumi_backend::commands::TlsCertInfo {
+                sha256_hex: format!("{host}-pin"),
+                sha256_base64: String::new(),
+                subject: "CN=probe".into(),
+                issuer: "CN=issuer".into(),
+                valid_until: None,
+            })
+        }
     }
 
     /// End-to-end over a real unix socket: client request → server dispatch → stub
@@ -277,6 +294,22 @@ mod tests {
                 .unwrap(),
             PrivReply::Latency { ms: Some(42) }
         );
+        // The probe runs where the uplink bind is possible, and its result crosses the
+        // socket with the fingerprint intact.
+        match client
+            .call_oneshot(PrivRequest::ProbeTlsCert {
+                host: "p.example".into(),
+                port: 443,
+                sni: Some("p.example".into()),
+                insecure: true,
+                disable_sni: false,
+            })
+            .await
+            .unwrap()
+        {
+            PrivReply::TlsCert { cert: Some(cert) } => assert_eq!(cert.sha256_hex, "p.example-pin"),
+            other => panic!("expected TlsCert, got {other:?}"),
+        }
         assert_eq!(
             client.call(PrivRequest::Ping).await.unwrap(),
             PrivReply::Pong {

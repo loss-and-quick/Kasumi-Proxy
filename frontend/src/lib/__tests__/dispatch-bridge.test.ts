@@ -499,4 +499,34 @@ describe("dispatch-bridge subscription filter and security", () => {
       url: "http://192.168.1.1/sub",
     });
   });
+
+  it("probeTlsCert dispatches command and returns cert info", async () => {
+    const certInfo = {
+      sha256Hex: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      sha256Base64: "q83vASNFZ4mr3vASNFZ4mr3vASNFZ4mr3vASNFZ4mr4=",
+      subject: "CN=example.com",
+      issuer: "CN=example.com",
+      validUntil: "2030-01-01T00:00:00Z",
+    };
+    const dispatch: Dispatch = vi.fn(
+      async () => ({ kind: "tlsCert", value: certInfo }) as Response_Serialize,
+    );
+    const bridge = createBridge(dispatch, noPush);
+    const res = await bridge.probeTlsCert({
+      host: "example.com",
+      port: 443,
+      sni: "example.com",
+      insecure: true,
+      disableSni: false,
+    });
+    expect(res).toEqual(certInfo);
+    expect(dispatch).toHaveBeenCalledWith({
+      cmd: "probeTlsCert",
+      host: "example.com",
+      port: 443,
+      sni: "example.com",
+      insecure: true,
+      disableSni: false,
+    });
+  });
 });

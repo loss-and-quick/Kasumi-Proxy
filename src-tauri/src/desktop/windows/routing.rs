@@ -873,11 +873,12 @@ fn adapter_alias(ifindex: u32) -> Option<String> {
 
 /// Bind `socket` to the uplink adapter with `IP_UNICAST_IF` / `IPV6_UNICAST_IF`,
 /// the option sing-box `bind_interface` sets for test cores; it needs no
-/// privilege. No uplink leaves it unbound.
+/// privilege. `Ok(false)` means no route named an uplink, so the socket stays
+/// unbound — a caller that needs the bind to hold must treat that as failure.
 pub async fn bind_uplink(
     socket: &tokio::net::TcpSocket,
     dest: std::net::IpAddr,
-) -> std::io::Result<()> {
+) -> std::io::Result<bool> {
     use std::os::windows::io::AsRawSocket;
     use windows_sys::Win32::Networking::WinSock::{
         IP_UNICAST_IF, IPPROTO_IP, IPPROTO_IPV6, IPV6_UNICAST_IF, SOCKET, SOCKET_ERROR, setsockopt,
@@ -886,7 +887,7 @@ pub async fn bind_uplink(
     // Take the interface index straight from the best route rather than resolving
     // the alias back through PowerShell.
     let Some(index) = best_route().map(|r| r.ifindex) else {
-        return Ok(());
+        return Ok(false);
     };
     // The IPv4 option takes the index in network byte order, the IPv6 one in host order.
     let (level, name, value) = if dest.is_ipv4() {
@@ -906,7 +907,7 @@ pub async fn bind_uplink(
     if rc == SOCKET_ERROR {
         return Err(std::io::Error::last_os_error());
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Source-address pin for the uplink bind. Windows binds by interface index

@@ -11,26 +11,106 @@ use serde_json::Value;
 
 use kasumi_log::{Area, ks_warn};
 
-/// TCP-connect latency to `host:port` in ms, with the socket bound to the
-/// physical uplink the way test cores bind their outbounds, so an active tun
-/// can't capture the connect. Without a resolvable uplink it connects unbound.
+/// Connect to `host:port` with the socket bound to the physical uplink the way test
+/// cores bind their outbounds, so an active tun can't capture it. Without a
+/// resolvable uplink it connects unbound, which is right for a latency probe.
 #[cfg(any(target_os = "linux", target_os = "windows"))]
-pub async fn uplink_tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
-    let addr = tokio::net::lookup_host((host, port)).await.ok()?.next()?;
+pub async fn uplink_connect(host: &str, port: u16) -> std::io::Result<tokio::net::TcpStream> {
+    connect_uplink(host, port, false).await
+}
+
+/// [`uplink_connect`] where the bind has to hold: a dial that slips into the tunnel
+/// answers with whatever the proxy terminates, so a caller reading the server's
+/// identity (the TLS probe) must fail instead of connecting unbound.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub async fn uplink_connect_bound(host: &str, port: u16) -> std::io::Result<tokio::net::TcpStream> {
+    connect_uplink(host, port, true).await
+}
+
+/// How long one address may hold the connect before the next is tried. The TLS
+/// probe allows five seconds for the whole dial, so three addresses still fit.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+const PER_ADDRESS_BUDGET: Duration = Duration::from_millis(1600);
+
+/// Try every resolved address in turn, each over its own socket, so a host whose
+/// first record is unreachable (a stale AAAA, say) still connects. The caller's
+/// deadline bounds the whole sequence.
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+async fn connect_uplink(
+    host: &str,
+    port: u16,
+    require_bound: bool,
+) -> std::io::Result<tokio::net::TcpStream> {
+    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host, port)).await?.collect();
+    if addrs.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("no address for {host}"),
+        ));
+    }
+    let mut last = None;
+    for addr in addrs {
+        // Each attempt gets a slice: a family that black-holes SYNs would otherwise
+        // consume the probe's whole deadline and the working address never gets tried.
+        let attempt =
+            tokio::time::timeout(PER_ADDRESS_BUDGET, connect_one(host, addr, require_bound));
+        match attempt.await {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(e)) => last = Some(e),
+            Err(_) => {
+                last = Some(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("no answer from {host} ({addr})"),
+                ));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("no address for {host}"),
+        )
+    }))
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+async fn connect_one(
+    host: &str,
+    addr: std::net::SocketAddr,
+    require_bound: bool,
+) -> std::io::Result<tokio::net::TcpStream> {
     let socket = if addr.is_ipv4() {
         tokio::net::TcpSocket::new_v4()
     } else {
         tokio::net::TcpSocket::new_v6()
-    }
-    .ok()?;
-    if let Err(e) = super::routing::bind_uplink(&socket, addr.ip()).await {
-        ks_warn!(
+    }?;
+    match super::routing::bind_uplink(&socket, addr.ip()).await {
+        // `false`: no route named an uplink. Unbound is then simply the best the
+        // stack offers, which a caller reading the peer's identity cannot accept.
+        Ok(false) if require_bound => {
+            return Err(std::io::Error::other(format!(
+                "no uplink to bind for {host} ({addr})"
+            )));
+        }
+        Ok(_) => {}
+        Err(e) if require_bound => {
+            return Err(std::io::Error::other(format!(
+                "uplink bind for {host} ({addr}) failed: {e}"
+            )));
+        }
+        Err(e) => ks_warn!(
             Area::Net,
-            "tcp-ping {host}: uplink bind failed, connecting unbound: {e}"
-        );
+            "uplink connect {host}: uplink bind failed, connecting unbound: {e}"
+        ),
     }
+    socket.connect(addr).await
+}
+
+/// TCP-connect latency to `host:port` in ms, over [`uplink_connect`].
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub async fn uplink_tcp_ping(host: &str, port: u16, timeout: Duration) -> Option<u64> {
     let start = std::time::Instant::now();
-    match tokio::time::timeout(timeout, socket.connect(addr)).await {
+    match tokio::time::timeout(timeout, uplink_connect(host, port)).await {
         Ok(Ok(_stream)) => Some(start.elapsed().as_millis() as u64),
         _ => None,
     }

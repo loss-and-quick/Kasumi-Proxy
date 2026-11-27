@@ -197,6 +197,9 @@ export const bridge: Bridge = {
   async parseRoutingRules(text) {
     return (await loadBridge()).parseRoutingRules(text);
   },
+  async probeTlsCert(req) {
+    return (await loadBridge()).probeTlsCert(req);
+  },
   async validateFilterRegex(pattern) {
     return (await loadBridge()).validateFilterRegex(pattern);
   },

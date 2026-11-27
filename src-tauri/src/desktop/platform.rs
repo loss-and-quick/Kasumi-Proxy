@@ -28,7 +28,7 @@ use kasumi_backend::platform::{
 use kasumi_backend::proc::{kill_if_running, pid_matches_any, pid_matches_bin, read_pidfile};
 use kasumi_core::contract::{LogTarget, RunState, ServiceState};
 use kasumi_core::data_path_plan::{AppRouting, DataPathPlan, HostTraits, TunPlan};
-use kasumi_core::data_path_state::DataPathState;
+use kasumi_core::data_path_state::{DataPathState, TunSelection};
 use kasumi_core::enums::{CoreEngine, wire_value};
 use kasumi_core::request_identity::DeviceFacts;
 use kasumi_core::state::{DEFAULT_LOCAL_HTTP_PORT, ProxyMode, SingboxStack};
@@ -121,6 +121,13 @@ impl DesktopPlatform {
 
     async fn read_state(&self) -> Option<DataPathState> {
         read_data_path_state(&self.p.data_path_state_file).await
+    }
+
+    /// Whether a recorded data path may have its tun up (see [`tun_may_be_active`]).
+    async fn tun_may_be_active(&self) -> bool {
+        self.read_state()
+            .await
+            .is_some_and(|s| tun_may_be_active(&s))
     }
 
     async fn write_state(&self, state: &DataPathState) {
@@ -382,6 +389,14 @@ impl Default for DesktopPlatform {
     fn default() -> Self {
         Self::new().expect("desktop paths resolve")
     }
+}
+
+/// Whether a recorded data path may have its tun up. Anything but a clean `Stopped`
+/// counts: a failed or half-torn-down path can still leave the tun installed, and
+/// that is exactly when an unbound dial must not be trusted with the server's
+/// identity.
+fn tun_may_be_active(state: &DataPathState) -> bool {
+    state.tun != TunSelection::NoTun && state.run != RunState::Stopped
 }
 
 /// Whether a core spawned from *this* process will hold an effective `CAP_NET_RAW`,
@@ -728,6 +743,29 @@ impl Platform for DesktopPlatform {
         spawn_local_test_core(&bin, cfg_path, log_path, &dat).await
     }
 
+    async fn probe_tls_dial(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> std::io::Result<tokio::net::TcpStream> {
+        // Same escape as `tcp_ping`: with the tun up, an unbound connect reaches the
+        // server through the tunnel, and the certificate it answers with is not the
+        // node's — a pin taken from that probe would belong to the wrong server.
+        if can_bind_uplink() {
+            return crate::desktop::net::uplink_connect_bound(host, port).await;
+        }
+        // Unprivileged (or a helper that refused the op): an unbound dial is only
+        // honest while no tun can capture it. With one up, fail the probe — a
+        // fingerprint read through the tunnel would be the proxy's, and a latency
+        // probe is the only caller for whom that mistake is harmless.
+        if self.tun_may_be_active().await {
+            return Err(std::io::Error::other(format!(
+                "cannot bind the uplink to probe {host}:{port} while a tun is active"
+            )));
+        }
+        tokio::net::TcpStream::connect((host, port)).await
+    }
+
     async fn tcp_ping(&self, host: &str, port: u16, timeout: Duration) -> Option<u64> {
         // Same escape as the test cores above; an unprivileged in-process run has
         // no managed tun to escape.
@@ -911,6 +949,42 @@ mod tests {
         }
 
         assert!(rebuild_on_uplink_change(None));
+    }
+
+    #[test]
+    fn only_a_stopped_or_tunless_path_leaves_the_probe_unbound_safe() {
+        use kasumi_core::enums::TunEngine;
+
+        let with = |tun: TunSelection, run: RunState| {
+            let s: DataPathState = serde_json::from_value(serde_json::json!({
+                "version": DataPathState::VERSION,
+                "run": run,
+                "engine": CoreEngine::Xray,
+                "tun": tun,
+                "socks_port": 1,
+            }))
+            .unwrap();
+            tun_may_be_active(&s)
+        };
+        // A tun is up, or was up recently enough that teardown may not have run.
+        assert!(with(
+            TunSelection::Engine(TunEngine::Tun2socks),
+            RunState::Connected
+        ));
+        assert!(with(
+            TunSelection::Engine(TunEngine::Tun2socks),
+            RunState::Connecting
+        ));
+        assert!(with(
+            TunSelection::Engine(TunEngine::Tun2socks),
+            RunState::Failed
+        ));
+        // Nothing to fall into: no tun requested, or a path that stopped cleanly.
+        assert!(!with(
+            TunSelection::Engine(TunEngine::Tun2socks),
+            RunState::Stopped
+        ));
+        assert!(!with(TunSelection::NoTun, RunState::Connected));
     }
 
     #[test]

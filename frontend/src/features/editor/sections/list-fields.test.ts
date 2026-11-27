@@ -16,6 +16,7 @@ const securityMarkup = (tls: Tls) =>
       isTls: true,
       isReality: false,
       isQuic: false,
+      transportName: "",
     }),
   );
 

@@ -381,6 +381,40 @@ pub trait Platform: Send + Sync {
         crate::net::tcp_ping(host, port, timeout).await
     }
 
+    /// Dial `host:port` for the TLS probe. Where the platform's own tun would capture
+    /// a plain connect, it must escape that the way `tcp_ping` does: a probe caught by
+    /// the tunnel answers with whatever the proxy terminates, not the node's
+    /// certificate, and the pin would be taken from the wrong server.
+    async fn probe_tls_dial(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> std::io::Result<tokio::net::TcpStream> {
+        tokio::net::TcpStream::connect((host, port)).await
+    }
+
+    /// Leaf certificate fingerprint and subject of `host:port`, with `disable_sni`
+    /// dropping the server name from the ClientHello to match a profile that sends
+    /// none.
+    async fn probe_tls_cert(
+        &self,
+        host: &str,
+        port: u16,
+        sni: Option<&str>,
+        insecure: bool,
+        disable_sni: bool,
+    ) -> Result<crate::commands::TlsCertInfo, crate::commands::CommandError> {
+        crate::tls_probe::probe_with(
+            host,
+            port,
+            sni,
+            insecure,
+            disable_sni,
+            self.probe_tls_dial(host, port),
+        )
+        .await
+    }
+
     /// Whether the core binary for `engine` exists on the host.
     async fn core_exists(&self, engine: Engine) -> bool {
         crate::fs::exists(self.core_path(engine)).await

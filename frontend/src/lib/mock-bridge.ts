@@ -35,6 +35,7 @@ import type {
   AppState,
   Bridge,
   ConnectionProbe,
+  ProbeTlsCertRequest,
   ReadinessReport,
   ResourceUpdateMode,
   Route,
@@ -42,6 +43,7 @@ import type {
   RouteSharePayload,
   RuleBlock,
   ServiceStatus,
+  TlsCertInfo,
 } from "./bridge";
 import { emptyProfile, type ProfileOf, profileAddress, profilePort } from "./profile-utils";
 import { exportRoutePackage, flattenRoute, parseRoutePackage, routeNamesProfiles } from "./routes";
@@ -767,6 +769,17 @@ ${stamp} [MOCK:${kind}] transport/internet: connection ends, reading error`);
     } catch {
       return [];
     }
+  },
+
+  async probeTlsCert(req: ProbeTlsCertRequest): Promise<TlsCertInfo> {
+    const target = req.sni || req.host || "example.com";
+    return {
+      sha256Hex: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      sha256Base64: "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+      subject: `CN=${target}`,
+      issuer: `CN=${target}`,
+      validUntil: "2030-01-01T00:00:00Z",
+    };
   },
 
   async validateFilterRegex(pattern: string): Promise<boolean> {

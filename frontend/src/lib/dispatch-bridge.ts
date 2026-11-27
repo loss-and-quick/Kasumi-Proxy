@@ -379,6 +379,18 @@ export function createBridge(dispatch: Dispatch, push: PushStreams): Bridge {
       return r.kind === "routingRules" ? r.value : wrongKind(r, "routingRules");
     },
 
+    async probeTlsCert(req) {
+      const r = await dispatch({
+        cmd: "probeTlsCert",
+        host: req.host,
+        port: req.port,
+        sni: req.sni ?? null,
+        insecure: req.insecure ?? true,
+        disableSni: req.disableSni ?? false,
+      });
+      return r.kind === "tlsCert" ? r.value : wrongKind(r, "tlsCert");
+    },
+
     async validateFilterRegex(pattern) {
       const r = await dispatch({ cmd: "validateFilterRegex", pattern });
       return r.kind === "filterRegexValid" ? r.value : wrongKind(r, "filterRegexValid");
